@@ -428,6 +428,8 @@ name = "chillasql"
 version = "0.1.0"
 dependencies = [
  "chilla-core",
+ "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]

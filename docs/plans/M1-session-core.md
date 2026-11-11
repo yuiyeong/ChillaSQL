@@ -934,7 +934,7 @@ impl From<AppError> for CommandError { .. }
 
 `message`는 `AppError`의 `Display`다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 ```rust
 #[test] fn connection_dto_has_no_password_key() {
@@ -957,19 +957,19 @@ impl From<AppError> for CommandError { .. }
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chillasql`
 Expected: FAIL. `commands` module이 없어 compile error가 난다.
 
-- [ ] **Step 3: DTO, `CommandError`, command 구현과 등록**
+- [x] **Step 3: DTO, `CommandError`, command 구현과 등록**
 
 - command는 `#[tauri::command] pub async fn <name>(app: tauri::State<'_, CoreApp>, ..) -> Result<T, CommandError>` 꼴이고, DTO 변환과 `App` method 호출 한 번만 한다. 판단을 넣지 않는다.
 - `set_password`와 `test_connection`은 받은 `String`을 첫 줄에서 `Password::new`로 감싼다.
 - `lib.rs`의 `run`은 `App::new(Arc::new(TomlProjectStore), Arc::new(KeychainPasswordStore::new()..), PgConnector::new())`를 `manage`하고 `invoke_handler(tauri::generate_handler![..])`에 8개를 등록한다. `KeychainPasswordStore::new()`가 실패하면 그 message로 `expect`한다.
 - 앱이 직접 정의한 command라 `capabilities/default.json`은 바꾸지 않는다.
 
-- [ ] **Step 4: 통과 확인과 창 확인**
+- [x] **Step 4: 통과 확인과 창 확인**
 
 Run: `pnpm check`
 Expected: PASS
@@ -977,7 +977,7 @@ Expected: PASS
 Run: `pnpm tauri dev`
 Expected: 이전처럼 `ChillaSQL` 창이 뜬다(시작할 때 panic이 없다). 확인 뒤 종료한다.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
