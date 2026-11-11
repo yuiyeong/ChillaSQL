@@ -611,7 +611,7 @@ impl SessionHandle {
 - **`Close`, 또는 handle이 모두 drop됨**: 쿼리가 있으면 (`Draining`이 아닐 때) cancel을 spawn하고, 결과가 끝나기를 최대 1초 기다린다. 쿼리의 sink에 `Finished`(`Draining(Cancelled)`였으면 `Cancelled`, 아니면 `Discarded`)를, 기다리던 쿼리의 sink에 `Finished(Discarded)`를 보낸 뒤 `connection.close()`를 한다.
 - `elapsed`는 `tokio::time::Instant`로 재고 `Paused`인 동안은 세지 않는다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `domain/query.rs`:
 
@@ -717,21 +717,21 @@ impl SessionHandle {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --lib session_actor`
 Expected: FAIL. `SessionHandle::execute`가 없어 compile error가 난다.
 
-- [ ] **Step 3: `RowBatch`, `QueryEvent`, `QueryOutcome`, `QueryLimits`와 actor 구현**
+- [x] **Step 3: `RowBatch`, `QueryEvent`, `QueryOutcome`, `QueryLimits`와 actor 구현**
 
 위 동작 규칙대로 구현한다. `App::open_session`의 `session_actor::spawn(db)`는 `spawn(db, QueryLimits::default())`로 바꾼다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

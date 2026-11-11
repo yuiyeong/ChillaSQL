@@ -132,8 +132,6 @@ impl FakeLink {
     }
 }
 
-// Task 4의 test가 쓴다.
-#[allow(dead_code)]
 impl FakeLink {
     /// 다음 `start_query`가 돌려줄 결과를 예약한다(FIFO). 예약이 없으면 `Complete { rows: 0 }`만 있는 결과다.
     pub(crate) fn expect_query(&self) -> FakeFeed {
@@ -248,8 +246,6 @@ impl FakeFeed {
     }
 }
 
-// Task 4의 test가 쓴다.
-#[allow(dead_code)]
 impl FakeFeed {
     pub(crate) fn columns(&self, names: &[&str]) {
         let columns = names.iter().map(|name| Column {

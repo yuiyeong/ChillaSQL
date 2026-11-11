@@ -7,6 +7,7 @@ mod session_actor;
 mod test_support;
 
 pub use app::{App, AppError};
+pub use session_actor::QuerySink;
 
 pub use ports::{
     CancelError, ConnectError, Connector, DbConnection, PasswordKey, PasswordStore,

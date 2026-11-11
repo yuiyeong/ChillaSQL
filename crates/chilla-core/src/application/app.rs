@@ -13,7 +13,8 @@ use super::{
     ProjectError, ProjectStore,
 };
 use crate::domain::{
-    ConnectionProfile, Password, ProfileError, Project, SessionId, SessionInfo, SessionState,
+    ConnectionProfile, Password, ProfileError, Project, QueryLimits, SessionId, SessionInfo,
+    SessionState,
 };
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -171,7 +172,9 @@ impl<C: Connector> App<C> {
             connection: profile.name,
             backend_pid: db.backend_pid(),
         };
-        state.sessions.insert(info.id, session_actor::spawn(db));
+        state
+            .sessions
+            .insert(info.id, session_actor::spawn(db, QueryLimits::default()));
         Ok(info)
     }
 

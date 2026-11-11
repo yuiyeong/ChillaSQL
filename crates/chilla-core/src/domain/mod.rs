@@ -10,6 +10,8 @@ mod statement;
 pub use connection::{ConnectionProfile, ProfileError, SslMode};
 pub use password::Password;
 pub use project::Project;
-pub use query::{Column, QueryId, Row, ServerError};
+pub use query::{
+    Column, QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, ServerError,
+};
 pub use session::{SessionId, SessionInfo, SessionState, TxStatus};
 pub use statement::StatementSpan;
