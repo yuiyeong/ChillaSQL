@@ -11,8 +11,11 @@ use tokio::sync::watch;
 use super::{
     CancelError, ConnectError, Connector, DbConnection, PasswordKey, PasswordStore,
     PasswordStoreError, ProjectError, ProjectStore, QueryCancel, QueryError, RowItem, RowSource,
+    SplitError, StatementSplitter,
 };
-use crate::domain::{Column, ConnectionProfile, Password, Project, Row, ServerError, TxStatus};
+use crate::domain::{
+    Column, ConnectionProfile, Password, Project, Row, ServerError, StatementSpan, TxStatus,
+};
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
     ConnectionProfile::fixture(name)
@@ -69,6 +72,29 @@ impl PasswordStore for FakePasswords {
     fn delete(&self, key: &PasswordKey) -> Result<(), PasswordStoreError> {
         self.0.lock().unwrap().remove(key);
         Ok(())
+    }
+}
+
+/// text를 `;`로 잘라 비어 있지 않은 조각마다 span을 만든다. `'`가 홀수 개면 나눌 수 없다.
+pub(crate) struct FakeSplitter;
+
+impl StatementSplitter for FakeSplitter {
+    fn split(&self, sql: &str) -> Result<Vec<StatementSpan>, SplitError> {
+        if sql.matches('\'').count() % 2 == 1 {
+            return Err(SplitError {
+                message: "따옴표가 닫히지 않았다".into(),
+            });
+        }
+        let mut spans = Vec::new();
+        let mut start = 0;
+        for piece in sql.split(';') {
+            let end = start + piece.len();
+            if !piece.trim().is_empty() {
+                spans.push(StatementSpan { start, end });
+            }
+            start = end + 1;
+        }
+        Ok(spans)
     }
 }
 

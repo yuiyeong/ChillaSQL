@@ -3,7 +3,9 @@ mod error;
 
 use std::sync::Arc;
 
-use chilla_core::infrastructure::{KeychainPasswordStore, PgConnector, TomlProjectStore};
+use chilla_core::infrastructure::{
+    KeychainPasswordStore, PgConnector, PgQuerySplitter, TomlProjectStore,
+};
 
 use commands::CoreApp;
 
@@ -13,6 +15,7 @@ pub fn run() {
     let app = CoreApp::new(
         Arc::new(TomlProjectStore),
         Arc::new(passwords),
+        Arc::new(PgQuerySplitter),
         PgConnector::new(),
     );
 

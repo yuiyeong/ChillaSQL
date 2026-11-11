@@ -1,12 +1,21 @@
 //! integration test가 함께 쓰는 것. test DB는 `scripts/test-db.sh up`으로 띄운다.
 #![allow(dead_code)]
 
+use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
-use chilla_core::application::{ConnectError, Connector, QueryError, RowItem, RowSource};
-use chilla_core::domain::{ConnectionProfile, Password, SslMode};
-use chilla_core::infrastructure::{PgConnection, PgConnector};
+use chilla_core::application::{
+    App, ConnectError, Connector, QueryError, QuerySink, RowItem, RowSource,
+};
+use chilla_core::domain::{ConnectionProfile, Password, QueryEvent, QueryOutcome, SslMode};
+use chilla_core::infrastructure::{
+    MemoryPasswordStore, PgConnection, PgConnector, PgQuerySplitter, TomlProjectStore,
+};
+use tempfile::TempDir;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::time::timeout;
 
 pub const TEST_DB_PORT: u16 = 54318;
 /// SSL을 켠 test DB. 서버 인증서의 SAN은 `DNS:localhost`뿐이다.
@@ -146,4 +155,51 @@ pub async fn eventually(mut check: impl AsyncFnMut() -> bool) -> bool {
         tokio::time::sleep(Duration::from_millis(50)).await;
     }
     check().await
+}
+
+/// 실제 구성에서 키체인만 메모리로 바꾼 App과, test DB를 가리키는 접속 `local`이 있는 프로젝트.
+pub async fn app_with_project() -> (App<PgConnector>, TempDir) {
+    let dir = tempfile::tempdir().unwrap();
+    let toml = format!(
+        "[connections.local]\nhost = \"127.0.0.1\"\nport = {TEST_DB_PORT}\ndatabase = \"{DATABASE}\"\nuser = \"{USER}\"\n"
+    );
+    fs::write(dir.path().join("chilla.toml"), toml).unwrap();
+    let app = App::new(
+        Arc::new(TomlProjectStore),
+        Arc::new(MemoryPasswordStore::default()),
+        Arc::new(PgQuerySplitter),
+        PgConnector::new(),
+    );
+    app.open_project(dir.path()).await.unwrap();
+    (app, dir)
+}
+
+pub async fn store_password(app: &App<PgConnector>) {
+    app.set_password("local", password()).await.unwrap();
+}
+
+/// 쿼리의 이벤트를 받는 sink와 그 수신 쪽. 수신 쪽이 drop돼도 sink는 panic하지 않는다.
+pub fn sink() -> (QuerySink, UnboundedReceiver<QueryEvent>) {
+    let (sender, events) = mpsc::unbounded_channel();
+    let sink: QuerySink = Box::new(move |event| {
+        let _ = sender.send(event);
+    });
+    (sink, events)
+}
+
+/// 2초 안에 온 이벤트. 없으면 panic한다.
+pub async fn next(events: &mut UnboundedReceiver<QueryEvent>) -> QueryEvent {
+    timeout(Duration::from_secs(2), events.recv())
+        .await
+        .expect("2초 안에 이벤트가 오지 않았다")
+        .expect("sink가 이벤트 없이 drop됐다")
+}
+
+/// `Finished`가 올 때까지 읽고 그 `QueryOutcome`을 돌려준다.
+pub async fn finished(events: &mut UnboundedReceiver<QueryEvent>) -> QueryOutcome {
+    loop {
+        if let QueryEvent::Finished { outcome, .. } = next(events).await {
+            return outcome;
+        }
+    }
 }

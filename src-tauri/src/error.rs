@@ -20,6 +20,11 @@ impl From<AppError> for CommandError {
             AppError::Project(_) => "project_invalid",
             AppError::InvalidProfile(_) => "invalid_connection",
             AppError::PasswordStore(_) => "password_store",
+            AppError::Split(_) => "split_failed",
+            AppError::EmptyStatement => "empty_statement",
+            AppError::MultipleStatements { .. } => "multiple_statements",
+            AppError::QueryNotActive { .. } => "query_not_active",
+            AppError::Cancel(_) => "cancel_failed",
             AppError::Connect(connect) => match connect {
                 ConnectError::Unreachable { .. } => "unreachable",
                 ConnectError::Timeout => "timeout",
@@ -43,8 +48,10 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::PathBuf;
 
-    use chilla_core::application::{ConnectError, PasswordStoreError, ProjectError};
-    use chilla_core::domain::{ProfileError, SessionId};
+    use chilla_core::application::{
+        CancelError, ConnectError, PasswordStoreError, ProjectError, SplitError,
+    };
+    use chilla_core::domain::{ProfileError, QueryId, SessionId};
 
     use super::*;
 
@@ -63,6 +70,28 @@ mod tests {
         assert_eq!(
             kind(AppError::UnknownSession { id: SessionId(1) }),
             "unknown_session"
+        );
+
+        assert_eq!(
+            kind(SplitError {
+                message: "m".into()
+            }),
+            "split_failed"
+        );
+        assert_eq!(kind(AppError::EmptyStatement), "empty_statement");
+        assert_eq!(
+            kind(AppError::MultipleStatements { count: 2 }),
+            "multiple_statements"
+        );
+        assert_eq!(
+            kind(AppError::QueryNotActive { query: QueryId(1) }),
+            "query_not_active"
+        );
+        assert_eq!(
+            kind(CancelError {
+                message: "m".into()
+            }),
+            "cancel_failed"
         );
 
         let path = PathBuf::from("/p/chilla.toml");

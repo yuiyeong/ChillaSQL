@@ -319,8 +319,6 @@ impl SessionHandle {
     }
 }
 
-// Task 5의 `App`이 쓴다.
-#[allow(dead_code)]
 impl SessionHandle {
     /// 쿼리를 맡기고 바로 돌아온다. 결과는 `sink`로 간다. task가 끝났으면 `None`이다.
     pub(crate) async fn execute(&self, sql: String, sink: QuerySink) -> Option<QueryId> {

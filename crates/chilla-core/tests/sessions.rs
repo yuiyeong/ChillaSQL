@@ -1,35 +1,10 @@
 mod support;
 
-use std::fs;
-use std::sync::Arc;
-
-use chilla_core::application::{App, AppError, ConnectError};
+use chilla_core::application::{AppError, ConnectError};
 use chilla_core::domain::{Password, SessionState, TxStatus};
-use chilla_core::infrastructure::{MemoryPasswordStore, PgConnector, TomlProjectStore};
-use support::{DATABASE, TEST_DB_PORT, USER, admin, backend_exists, eventually, terminate_backend};
-use tempfile::TempDir;
-
-/// 실제 구성에서 키체인만 메모리로 바꾼 App과, test DB를 가리키는 접속 `local`이 있는 프로젝트.
-async fn app_with_project() -> (App<PgConnector>, TempDir) {
-    let dir = tempfile::tempdir().unwrap();
-    let toml = format!(
-        "[connections.local]\nhost = \"127.0.0.1\"\nport = {TEST_DB_PORT}\ndatabase = \"{DATABASE}\"\nuser = \"{USER}\"\n"
-    );
-    fs::write(dir.path().join("chilla.toml"), toml).unwrap();
-    let app = App::new(
-        Arc::new(TomlProjectStore),
-        Arc::new(MemoryPasswordStore::default()),
-        PgConnector::new(),
-    );
-    app.open_project(dir.path()).await.unwrap();
-    (app, dir)
-}
-
-async fn store_password(app: &App<PgConnector>) {
-    app.set_password("local", support::password())
-        .await
-        .unwrap();
-}
+use support::{
+    admin, app_with_project, backend_exists, eventually, store_password, terminate_backend,
+};
 
 const OPEN: SessionState = SessionState::Open { tx: TxStatus::Idle };
 

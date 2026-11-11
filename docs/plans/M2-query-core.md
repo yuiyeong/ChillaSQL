@@ -788,7 +788,7 @@ pub enum AppError {
 - 세 use case 모두 `session_state`처럼 handle을 복사해 lock 밖에서 부른다.
 - `FakeSplitter`(`test_support.rs`): text를 `;`로 잘라 비어 있지 않은 조각마다 span을 만든다. text에 `'`가 홀수 개면 `Err(SplitError)`다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `app.rs`(가짜 port):
 
@@ -881,21 +881,21 @@ pub enum AppError {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --test queries`
 Expected: FAIL. `App::execute`가 없어 compile error가 난다.
 
-- [ ] **Step 3: use case 구현**
+- [x] **Step 3: use case 구현**
 
 `App::new`의 인자가 늘어난다. `sessions.rs`, `app.rs`의 fixture, `src-tauri/src/lib.rs`의 호출을 함께 고친다(`lib.rs`는 `Arc::new(PgQuerySplitter)`).
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

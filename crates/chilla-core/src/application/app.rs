@@ -7,14 +7,14 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 
-use super::session_actor::{self, SessionHandle};
+use super::session_actor::{self, QuerySink, SessionHandle};
 use super::{
-    ConnectError, Connector, DbConnection, PasswordKey, PasswordStore, PasswordStoreError,
-    ProjectError, ProjectStore,
+    CancelError, ConnectError, Connector, DbConnection, PasswordKey, PasswordStore,
+    PasswordStoreError, ProjectError, ProjectStore, SplitError, StatementSplitter,
 };
 use crate::domain::{
-    ConnectionProfile, Password, ProfileError, Project, QueryLimits, SessionId, SessionInfo,
-    SessionState,
+    ConnectionProfile, Password, ProfileError, Project, QueryId, QueryLimits, SessionId,
+    SessionInfo, SessionState, StatementSpan,
 };
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -35,11 +35,22 @@ pub enum AppError {
     PasswordStore(#[from] PasswordStoreError),
     #[error(transparent)]
     Connect(#[from] ConnectError),
+    #[error(transparent)]
+    Split(#[from] SplitError),
+    #[error("실행할 문장이 없습니다")]
+    EmptyStatement,
+    #[error("문장이 {count}개입니다. 한 번에 문장 하나만 실행할 수 있습니다")]
+    MultipleStatements { count: usize },
+    #[error("쿼리 {}은 더 가져올 결과가 없습니다", query.0)]
+    QueryNotActive { query: QueryId },
+    #[error(transparent)]
+    Cancel(#[from] CancelError),
 }
 
 pub struct App<C: Connector> {
     projects: Arc<dyn ProjectStore>,
     passwords: Arc<dyn PasswordStore>,
+    splitter: Arc<dyn StatementSplitter>,
     connector: C,
     state: Mutex<State>,
 }
@@ -57,11 +68,13 @@ impl<C: Connector> App<C> {
     pub fn new(
         projects: Arc<dyn ProjectStore>,
         passwords: Arc<dyn PasswordStore>,
+        splitter: Arc<dyn StatementSplitter>,
         connector: C,
     ) -> Self {
         Self {
             projects,
             passwords,
+            splitter,
             connector,
             state: Mutex::new(State::default()),
         }
@@ -179,13 +192,65 @@ impl<C: Connector> App<C> {
     }
 
     pub async fn session_state(&self, id: SessionId) -> Result<SessionState, AppError> {
-        // 세션이 답하는 동안 다른 세션을 막지 않도록 handle을 복사해 lock 밖에서 묻는다.
-        let handle = {
-            let state = self.state.lock().await;
-            state.sessions.get(&id).cloned()
-        };
-        let handle = handle.ok_or(AppError::UnknownSession { id })?;
-        Ok(handle.state().await)
+        Ok(self.session_handle(id).await?.state().await)
+    }
+
+    /// SQL text를 문장 단위로 나눈다. 프로젝트나 세션이 없어도 된다.
+    pub fn split_statements(&self, sql: &str) -> Result<Vec<StatementSpan>, AppError> {
+        Ok(self.splitter.split(sql)?)
+    }
+
+    /// 문장 하나를 세션에 맡기고 바로 돌아온다. 결과는 `sink`로 간다.
+    ///
+    /// 문장이 하나로 나뉘거나 나눌 수 없을 때(따옴표가 닫히지 않은 경우 등) 받은 `sql`을
+    /// 그대로 보낸다. 나눌 수 없는 text의 오류는 서버가 위치와 함께 알려 준다.
+    pub async fn execute(
+        &self,
+        session: SessionId,
+        sql: String,
+        sink: QuerySink,
+    ) -> Result<QueryId, AppError> {
+        let handle = self.session_handle(session).await?;
+        if let Ok(spans) = self.splitter.split(&sql) {
+            match spans.len() {
+                0 => return Err(AppError::EmptyStatement),
+                1 => {}
+                count => return Err(AppError::MultipleStatements { count }),
+            }
+        }
+        handle
+            .execute(sql, sink)
+            .await
+            .ok_or(AppError::UnknownSession { id: session })
+    }
+
+    /// 받다 만 결과의 다음 batch를 읽게 한다.
+    pub async fn fetch_more(&self, session: SessionId, query: QueryId) -> Result<(), AppError> {
+        let handle = self.session_handle(session).await?;
+        match handle.fetch_more(query).await {
+            Some(true) => Ok(()),
+            Some(false) => Err(AppError::QueryNotActive { query }),
+            None => Err(AppError::UnknownSession { id: session }),
+        }
+    }
+
+    /// 쿼리를 멈춘다. cancel 요청이 서버에 닿은 뒤 돌아온다.
+    pub async fn cancel_query(&self, session: SessionId, query: QueryId) -> Result<(), AppError> {
+        let handle = self.session_handle(session).await?;
+        match handle.cancel(query).await {
+            Some(result) => Ok(result?),
+            None => Err(AppError::UnknownSession { id: session }),
+        }
+    }
+
+    /// 세션이 답하는 동안 다른 세션을 막지 않도록 handle을 복사해 lock 밖에서 쓰게 한다.
+    async fn session_handle(&self, id: SessionId) -> Result<SessionHandle, AppError> {
+        let state = self.state.lock().await;
+        state
+            .sessions
+            .get(&id)
+            .cloned()
+            .ok_or(AppError::UnknownSession { id })
     }
 
     /// 연결이 이미 끊긴(`Lost`) 세션도 정상으로 닫힌다.
@@ -253,10 +318,19 @@ mod tests {
     use std::path::Path;
     use std::sync::Arc;
 
+    use std::time::Duration;
+
+    use tokio::sync::mpsc::{self, UnboundedReceiver};
+    use tokio::time::timeout;
+
     use super::*;
-    use crate::application::test_support::{FakeConnector, FakePasswords, FakeProjects, profile};
-    use crate::application::{PasswordKey, PasswordStore, ProjectError};
-    use crate::domain::{ProfileError, SessionState, SslMode, TxStatus};
+    use crate::application::test_support::{
+        FakeConnector, FakePasswords, FakeProjects, FakeSplitter, profile,
+    };
+    use crate::application::{CancelError, PasswordKey, PasswordStore, ProjectError, SplitError};
+    use crate::domain::{
+        ProfileError, QueryEvent, QueryOutcome, SessionState, SslMode, StatementSpan, TxStatus,
+    };
 
     struct Fixture {
         app: App<FakeConnector>,
@@ -272,7 +346,12 @@ mod tests {
         let passwords = Arc::new(FakePasswords::default());
         let connector = FakeConnector::default();
         Fixture {
-            app: App::new(projects, passwords.clone(), connector.clone()),
+            app: App::new(
+                projects,
+                passwords.clone(),
+                Arc::new(FakeSplitter),
+                connector.clone(),
+            ),
             connector,
             passwords,
         }
@@ -289,6 +368,31 @@ mod tests {
     }
 
     const OPEN: SessionState = SessionState::Open { tx: TxStatus::Idle };
+
+    fn sink() -> (QuerySink, UnboundedReceiver<QueryEvent>) {
+        let (sender, events) = mpsc::unbounded_channel();
+        let sink: QuerySink = Box::new(move |event| {
+            let _ = sender.send(event);
+        });
+        (sink, events)
+    }
+
+    /// `Finished`가 올 때까지 읽고 그 `QueryOutcome`을 돌려준다.
+    async fn finished(events: &mut UnboundedReceiver<QueryEvent>) -> QueryOutcome {
+        loop {
+            let event = timeout(Duration::from_secs(1), events.recv())
+                .await
+                .expect("1초 안에 이벤트가 오지 않았다")
+                .expect("sink가 이벤트 없이 drop됐다");
+            if let QueryEvent::Finished { outcome, .. } = event {
+                return outcome;
+            }
+        }
+    }
+
+    async fn session_of(f: &Fixture) -> SessionId {
+        f.app.open_session("local").await.unwrap().id
+    }
 
     #[tokio::test]
     async fn open_project_returns_the_project() {
@@ -606,5 +710,117 @@ mod tests {
                 ("staging".to_string(), None)
             ]
         );
+    }
+
+    #[tokio::test]
+    async fn execute_refuses_empty_and_multiple_statements() {
+        let f = opened().await;
+        let session = session_of(&f).await;
+
+        assert_eq!(
+            f.app.execute(session, "  ".into(), sink().0).await,
+            Err(AppError::EmptyStatement)
+        );
+        assert_eq!(
+            f.app
+                .execute(session, "SELECT 1; SELECT 2".into(), sink().0)
+                .await,
+            Err(AppError::MultipleStatements { count: 2 })
+        );
+        assert!(f.connector.links()[0].sent().is_empty());
+    }
+
+    #[tokio::test]
+    async fn execute_sends_the_text_as_given() {
+        let f = opened().await;
+        let session = session_of(&f).await;
+        let (sink, mut events) = sink();
+
+        let id = f.app.execute(session, " SELECT 1 ;\n".into(), sink).await;
+
+        assert_eq!(id, Ok(QueryId(1)));
+        finished(&mut events).await;
+        assert_eq!(f.connector.links()[0].sent(), [" SELECT 1 ;\n"]);
+    }
+
+    #[tokio::test]
+    async fn execute_sends_text_that_cannot_be_split() {
+        let f = opened().await;
+        let session = session_of(&f).await;
+        let (sink, mut events) = sink();
+
+        let id = f.app.execute(session, "SELECT 'open".into(), sink).await;
+
+        assert!(id.is_ok());
+        finished(&mut events).await;
+        assert_eq!(f.connector.links()[0].sent(), ["SELECT 'open"]);
+    }
+
+    #[tokio::test]
+    async fn query_use_cases_on_an_unknown_session() {
+        let f = opened().await;
+        let unknown = SessionId(99);
+        let error = || AppError::UnknownSession { id: unknown };
+
+        assert_eq!(
+            f.app.execute(unknown, "SELECT 1".into(), sink().0).await,
+            Err(error())
+        );
+        assert_eq!(f.app.fetch_more(unknown, QueryId(1)).await, Err(error()));
+        assert_eq!(f.app.cancel_query(unknown, QueryId(1)).await, Err(error()));
+    }
+
+    #[tokio::test]
+    async fn fetch_more_on_a_finished_query_is_query_not_active() {
+        let f = opened().await;
+        let session = session_of(&f).await;
+        let (sink, mut events) = sink();
+        let query = f
+            .app
+            .execute(session, "SELECT 1".into(), sink)
+            .await
+            .unwrap();
+        finished(&mut events).await;
+
+        assert_eq!(
+            f.app.fetch_more(session, query).await,
+            Err(AppError::QueryNotActive { query })
+        );
+    }
+
+    #[tokio::test]
+    async fn cancel_failure_is_reported() {
+        let f = opened().await;
+        let session = session_of(&f).await;
+        let link = &f.connector.links()[0];
+        link.fail_cancels();
+        link.expect_query();
+        let query = f
+            .app
+            .execute(session, "SELECT pg_sleep(10)".into(), sink().0)
+            .await
+            .unwrap();
+
+        assert!(matches!(
+            f.app.cancel_query(session, query).await,
+            Err(AppError::Cancel(CancelError { .. }))
+        ));
+    }
+
+    #[tokio::test]
+    async fn split_statements_needs_no_project() {
+        let f = fixture();
+
+        assert_eq!(
+            f.app.split_statements("a; b"),
+            Ok(vec![
+                StatementSpan { start: 0, end: 1 },
+                StatementSpan { start: 2, end: 4 }
+            ])
+        );
+        assert!(matches!(
+            f.app.split_statements("a 'b"),
+            Err(AppError::Split(SplitError { .. }))
+        ));
     }
 }
