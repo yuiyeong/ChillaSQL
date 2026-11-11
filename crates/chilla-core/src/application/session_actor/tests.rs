@@ -555,6 +555,43 @@ async fn cancelled_select_with_dropped_rows_stays_cancelled() {
     assert_eq!(outcome(next(&mut events).await), QueryOutcome::Cancelled);
 }
 
+/// 버리는 중에 도착한 행도 버린 행이다. 버리기 시작할 때 batch는 비어 있었다.
+#[tokio::test]
+async fn rows_that_arrive_after_cancel_keep_the_query_cancelled() {
+    let (handle, link) = session();
+    link.ignore_cancels(1);
+    let feed = link.expect_query();
+    let (sink, mut events) = sink();
+    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+
+    assert_eq!(handle.cancel(query).await, Some(Ok(())));
+    feed.rows(0..3);
+    feed.complete(3);
+    assert_eq!(outcome(next(&mut events).await), QueryOutcome::Cancelled);
+    assert_eq!(events.recv().await, None);
+}
+
+/// 버리기 시작할 때 보내지 않은 batch에 남은 look-ahead 행도 버린 행이다. 버리는 중에는 행이 오지 않는다.
+#[tokio::test]
+async fn look_ahead_row_dropped_by_cancel_keeps_the_query_cancelled() {
+    let (handle, link) = session();
+    link.ignore_cancels(1);
+    let feed = link.expect_query();
+    feed.rows(0..501);
+    let (sink, mut events) = sink();
+    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+
+    assert_eq!(batch(next(&mut events).await).rows.len(), 500);
+    // 501번째 행(look-ahead)을 읽고 Paused가 됐다.
+    quiet(&mut events).await;
+    assert_eq!(feed.unread(), 0);
+
+    assert_eq!(handle.cancel(query).await, Some(Ok(())));
+    feed.complete(501);
+    assert_eq!(outcome(next(&mut events).await), QueryOutcome::Cancelled);
+    assert_eq!(events.recv().await, None);
+}
+
 /// cancel이 아닌 서버 오류(57014가 아닌 것)는 버리는 중에 와도 결과다.
 #[tokio::test]
 async fn real_error_during_drain_is_reported() {
