@@ -350,24 +350,24 @@ git commit -m "chore: ESLint, Prettier, clippy, rustfmt 설정과 구조 규칙 
 - Modify: `docs/progress.md`
 - Modify: `docs/plans/M0-setup.md` (체크박스)
 
-- [ ] **Step 1: 완료 기준 실행**
+- [x] **Step 1: 완료 기준 실행**
 
 Run: `pnpm check && scripts/test-db.sh reset`
 Expected: 모두 PASS. `reset`에 걸린 시간을 적어 둔다.
 
-- [ ] **Step 2: 창 확인**
+- [x] **Step 2: 창 확인**
 
 Run: `pnpm tauri dev`
 Expected: `ChillaSQL` 제목의 창이 뜨고 가운데에 `ChillaSQL` heading이 Tailwind 스타일로 보인다. `screencapture`로 확인한 뒤 종료한다.
 
-- [ ] **Step 3: 진행상황 갱신**
+- [x] **Step 3: 진행상황 갱신**
 
 - M0 상태를 `완료`로 바꾸고 완료 날짜를 적는다.
 - 작업 로그에 남긴다: `pg_query` compile 결과, 추가로 설치한 도구, Step 1의 시간
 - "지금"을 `다음 할 일: M1 계획 작성 → docs/plans/M1-session-core.md`로 바꾼다.
 - 기획서와 다르게 정한 것이 있으면 결정 기록에 남긴다.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs

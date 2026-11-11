@@ -13,6 +13,7 @@ ChillaSQL은 DataGrip을 대신해 혼자 쓰는 PostgreSQL 전용 Mac 데스크
 | 실행 환경 | macOS |
 | 지원 DB | PostgreSQL |
 | 배포 | 로컬 빌드 후 직접 설치 (스토어 배포 없음) |
+| 화면 | dark 테마 고정. 기본 창 크기 1600×1200 |
 
 **만들지 않는 것**
 
