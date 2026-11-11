@@ -400,7 +400,7 @@ impl KeychainPasswordStore { pub fn new() -> Result<Self, PasswordStoreError> }
 
 키체인 항목: service `com.yuiyeong.chillasql`, account `format!("{}::{}", key.project_dir.display(), key.connection)`.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 ```rust
 fn contract(store: &dyn PasswordStore, project_dir: PathBuf) {
@@ -426,21 +426,21 @@ fn keychain_store_follows_the_contract() {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --test password_store`
 Expected: FAIL. `MemoryPasswordStore`가 없어 compile error가 난다.
 
-- [ ] **Step 3: port와 두 구현 작성**
+- [x] **Step 3: port와 두 구현 작성**
 
 `KeychainPasswordStore`는 `apple_native_keyring_store::keychain::Store::new()`를 들고 있다가 `CredentialStoreApi::build(service, account, None)`으로 entry를 만든다. `keyring_core::set_default_store`는 쓰지 않는다. `get_password`의 `keyring_core::Error::NoEntry`는 `Ok(None)`, `delete_credential`의 `NoEntry`는 `Ok(())`다. 그 밖의 오류는 `PasswordStoreError { message: err.to_string() }`다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cargo test -p chilla-core` 그리고 `cargo test -p chilla-core --test password_store -- --ignored`
 Expected: 둘 다 PASS. 두 번째는 Task 1 Step 3이 (b)였다면 확인 창이 뜰 수 있다. 사용자에게 알리고 실행한다.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

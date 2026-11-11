@@ -2,4 +2,4 @@
 
 mod ports;
 
-pub use ports::{ProjectError, ProjectStore};
+pub use ports::{PasswordKey, PasswordStore, PasswordStoreError, ProjectError, ProjectStore};

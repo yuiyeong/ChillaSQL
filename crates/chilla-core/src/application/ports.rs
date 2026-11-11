@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::domain::{ProfileError, Project};
+use crate::domain::{Password, ProfileError, Project};
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽는다.
 pub trait ProjectStore: Send + Sync {
@@ -30,4 +30,25 @@ pub enum ProjectError {
         connection: String,
         source: ProfileError,
     },
+}
+
+/// 키체인 항목 하나를 가리킨다. 프로젝트 디렉토리를 옮기면 다른 항목이 된다.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PasswordKey {
+    pub project_dir: PathBuf,
+    pub connection: String,
+}
+
+/// 접속 비밀번호 저장소. 호출이 blocking일 수 있다 (키체인 확인 창).
+pub trait PasswordStore: Send + Sync {
+    fn get(&self, key: &PasswordKey) -> Result<Option<Password>, PasswordStoreError>;
+    fn set(&self, key: &PasswordKey, password: &Password) -> Result<(), PasswordStoreError>;
+    /// 없는 항목을 지워도 `Ok`다.
+    fn delete(&self, key: &PasswordKey) -> Result<(), PasswordStoreError>;
+}
+
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("키체인에 접근하지 못했습니다: {message}")]
+pub struct PasswordStoreError {
+    pub message: String,
 }
