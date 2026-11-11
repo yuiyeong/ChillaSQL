@@ -1,0 +1,30 @@
+# macOS
+.DS_Store
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+coverage/
+
+# Rust / Tauri
+target/
+src-tauri/gen/schemas/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Editors
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.swp
+
+# Logs
+*.log
+
+# Claude Code local settings
+.claude/settings.local.json
