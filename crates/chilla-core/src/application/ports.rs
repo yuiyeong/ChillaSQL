@@ -112,6 +112,9 @@ pub enum QueryError {
 
 pub trait QueryCancel: Send + 'static {
     /// cancel 요청을 보내고 서버가 처리할 때까지 기다린다. 실행 중인 쿼리가 없으면 서버가 무시한다.
+    ///
+    /// 쿼리가 서버에서 실행을 시작하기 전에 닿은 cancel도 무시된다. 쿼리가 cancel 뒤에도 끝나지
+    /// 않으면 부르는 쪽이 다시 보내야 한다.
     fn cancel(self) -> impl Future<Output = Result<(), CancelError>> + Send;
 }
 

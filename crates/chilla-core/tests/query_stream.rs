@@ -10,7 +10,8 @@ use chilla_core::application::{
 use chilla_core::domain::{Column, ServerError, SslMode, TxStatus};
 use chilla_core::infrastructure::{PgConnection, PgConnector};
 use support::{
-    admin, collect, connect, eventually, password, terminate_backend, tls_admin, tls_profile,
+    admin, collect, connect, password, terminate_backend, tls_admin, tls_profile,
+    wait_until_running,
 };
 
 type Item = Result<RowItem, QueryError>;
@@ -56,20 +57,6 @@ fn has_server_error(items: &[Item], code: &str) -> bool {
 
 fn select_42() -> Vec<Item> {
     vec![columns(&["?column?"]), row(&[Some("42")]), complete(1)]
-}
-
-/// 서버는 쿼리를 읽기 전에 닿은 cancel을 무시한다. cancel이 반드시 닿아야 하는 test는
-/// 실행이 시작될 때까지 기다린다.
-async fn wait_until_running(admin: &tokio_postgres::Client, pid: i32) {
-    let running = eventually(async || {
-        let state = admin
-            .query_one("SELECT state FROM pg_stat_activity WHERE pid = $1", &[&pid])
-            .await
-            .unwrap();
-        state.get::<_, Option<String>>(0).as_deref() == Some("active")
-    })
-    .await;
-    assert!(running, "쿼리가 실행되지 않는다");
 }
 
 /// `Row`를 `count`개 읽는다. 다른 항목은 건너뛴다.
@@ -217,10 +204,12 @@ async fn cancel_ends_a_sleeping_query() {
 /// Review Focus 2
 #[tokio::test]
 async fn cancel_waits_until_the_server_has_handled_it() {
+    let admin = admin().await;
     let conn = connect().await;
 
     for i in 0..50 {
         let mut rows = conn.start_query("SELECT pg_sleep(10)").await.unwrap();
+        wait_until_running(&admin, conn.backend_pid()).await;
         conn.cancel_handle().cancel().await.unwrap();
         collect(&mut rows).await;
         assert_eq!(run(&conn, "SELECT 42").await, select_42(), "{i}번째");

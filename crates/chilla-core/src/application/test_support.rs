@@ -85,7 +85,7 @@ pub(crate) struct FakeLink {
 struct FakeQueries {
     expected: VecDeque<FakeFeed>,
     sent: Vec<String>,
-    /// `start_query`가 돌려준 결과. cancel과 `tx_status`가 끝나지 않은 것을 찾는다.
+    /// `start_query`가 돌려준 결과 가운데 `None`까지 읽히지 않은 것. cancel과 `tx_status`가 본다.
     started: Vec<FakeFeed>,
     cancels: usize,
     fail_cancels: bool,
@@ -116,6 +116,10 @@ impl FakeLink {
     /// 연결이 밖에서 끊긴 것처럼 만든다.
     pub(crate) fn lose(&self) {
         self.lost.store(true, Ordering::SeqCst);
+        // 결과를 기다리는 `tx_status`가 끊긴 것을 보게 깨운다.
+        for feed in &self.queries().started {
+            feed.state.send_modify(|_| {});
+        }
     }
 
     /// 트랜잭션 상태를 기다리는 동안 연결이 끊기게 한다.
@@ -181,6 +185,8 @@ struct FeedState {
     items: VecDeque<Result<RowItem, QueryError>>,
     /// 마지막 항목을 넣었다. 남은 항목을 다 읽으면 `next`가 `None`이다.
     ended: bool,
+    /// `next`가 `None`을 돌려줬다. 실제 연결에서 ReadyForQuery가 지나간 때다.
+    finished: bool,
 }
 
 /// 가짜 결과 하나에 항목을 넣는 손잡이. Clone이다.
@@ -211,14 +217,17 @@ impl FakeFeed {
         });
     }
 
-    fn is_ended(&self) -> bool {
-        self.state.borrow().ended
+    fn is_finished(&self) -> bool {
+        self.state.borrow().finished
     }
 
-    async fn ended(&self) {
+    /// `None`까지 읽히거나 연결이 끊길 때까지 기다린다.
+    async fn finished(&self) {
         let mut state = self.state.subscribe();
         // sender는 `self`가 갖고 있어 닫히지 않는다.
-        let _ = state.wait_for(|state| state.ended).await;
+        let _ = state
+            .wait_for(|state| state.finished || self.link_lost.load(Ordering::SeqCst))
+            .await;
     }
 
     /// 다음 항목. 끝나지 않은 결과에서는 항목이 올 때까지 기다린다.
@@ -230,7 +239,10 @@ impl FakeFeed {
         let mut item = None;
         self.state.send_if_modified(|state| {
             item = state.items.pop_front();
-            false
+            // 끝난 결과의 마지막 `None`. `tx_status`를 기다리는 쪽을 깨운다.
+            let finishing = item.is_none() && !state.finished;
+            state.finished |= item.is_none();
+            finishing
         });
         item
     }
@@ -274,9 +286,10 @@ impl FakeFeed {
 
     /// `Err(ConnectionLost)`를 넣고 결과를 끝낸다. 연결도 끊긴 것으로 만든다(`is_closed` == true).
     pub(crate) fn lose(&self) {
+        // `put`이 깨운 `tx_status`가 끊긴 것을 보도록 먼저 끊는다.
+        self.link_lost.store(true, Ordering::SeqCst);
         let message = "가짜 연결이 끊겼다".to_string();
         self.put(Err(QueryError::ConnectionLost { message }), true);
-        self.link_lost.store(true, Ordering::SeqCst);
     }
 
     /// 넣었지만 아직 읽히지 않은 항목 수.
@@ -329,15 +342,16 @@ impl DbConnection for FakeConnection {
         self.pid
     }
 
-    /// 끝나지 않은 결과가 있으면 끝날 때까지 기다린다. 실제 연결에서 ReadyForQuery가
-    /// socket에 남아 멈추는 것을 흉내 낸다.
+    /// `None`까지 읽히지 않은 결과가 있으면 다 읽힐 때까지 기다린다. 실제 연결에서
+    /// ReadyForQuery가 socket에 남아 멈추는 것을 흉내 낸다. 끊긴 연결에서는 바로 돌아온다
+    /// (실제 연결도 tap이 drop되면 기다리지 않는다).
     async fn tx_status(&self) -> TxStatus {
         if self.link.lost_during_tx_status.load(Ordering::SeqCst) {
             self.link.lose();
         }
         let started = self.link.queries().started.clone();
         for feed in started {
-            feed.ended().await;
+            feed.finished().await;
         }
         self.link.queries().tx
     }
@@ -359,8 +373,8 @@ impl DbConnection for FakeConnection {
             feed.complete(0);
             feed
         });
-        // 끝난 결과는 cancel과 `tx_status`가 볼 일이 없다.
-        queries.started.retain(|feed| !feed.is_ended());
+        // 다 읽힌 결과는 cancel과 `tx_status`가 볼 일이 없다.
+        queries.started.retain(|feed| !feed.is_finished());
         queries.started.push(feed.clone());
         Ok(FakeRows(feed))
     }

@@ -343,4 +343,33 @@ mod tests {
         assert!(matches!(result, Err(CancelError { .. })), "{result:?}");
         conn.close().await;
     }
+
+    /// 서버가 연결을 닫기 전에 돌아오면 늦게 처리된 cancel이 다음 쿼리에 닿을 수 있다.
+    #[tokio::test]
+    async fn cancel_returns_only_after_the_server_closes_the_connection() {
+        use tokio::io::AsyncReadExt;
+
+        let conn = PgConnector::new()
+            .connect(&local_profile(), Some(&Password::new("chilla".into())))
+            .await
+            .expect("scripts/test-db.sh up 을 먼저 실행하세요");
+        let mut cancel = conn.cancel_handle();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        cancel.profile.port = listener.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut request = [0u8; 16];
+            socket.read_exact(&mut request).await.unwrap();
+            tokio::time::sleep(Duration::from_millis(300)).await;
+            drop(socket);
+        });
+
+        let started = std::time::Instant::now();
+        assert_eq!(cancel.cancel().await, Ok(()));
+        let elapsed = started.elapsed();
+
+        assert!(elapsed >= Duration::from_millis(300), "{elapsed:?}");
+        server.await.unwrap();
+        conn.close().await;
+    }
 }

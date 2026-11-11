@@ -123,6 +123,20 @@ pub async fn backend_exists(admin: &tokio_postgres::Client, pid: i32) -> bool {
         == 1
 }
 
+/// backend `pid`가 쿼리를 실행하기 시작할 때까지 기다린다. 서버는 쿼리를 읽기 전에 닿은
+/// cancel을 무시하므로, cancel이 반드시 닿아야 하는 test는 이것을 먼저 부른다.
+pub async fn wait_until_running(admin: &tokio_postgres::Client, pid: i32) {
+    let running = eventually(async || {
+        let state = admin
+            .query_one("SELECT state FROM pg_stat_activity WHERE pid = $1", &[&pid])
+            .await
+            .unwrap();
+        state.get::<_, Option<String>>(0).as_deref() == Some("active")
+    })
+    .await;
+    assert!(running, "쿼리가 실행되지 않는다");
+}
+
 /// `check`가 true가 될 때까지 50ms 간격으로 최대 2초 기다린다.
 pub async fn eventually(mut check: impl AsyncFnMut() -> bool) -> bool {
     for _ in 0..40 {
