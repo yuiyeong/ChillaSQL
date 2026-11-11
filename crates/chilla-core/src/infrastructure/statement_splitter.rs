@@ -12,7 +12,11 @@ pub struct PgQuerySplitter;
 impl StatementSplitter for PgQuerySplitter {
     fn split(&self, sql: &str) -> Result<Vec<StatementSpan>, SplitError> {
         let scanned = pg_query::scan(sql).map_err(|e| SplitError {
-            message: e.to_string(),
+            // `Scan`의 Display는 영어 접두어("Error scanning: ")를 붙이므로 message만 꺼낸다.
+            message: match e {
+                pg_query::Error::Scan(message) => message,
+                other => other.to_string(),
+            },
         })?;
 
         let mut spans = Vec::new();

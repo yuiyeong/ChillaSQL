@@ -107,7 +107,7 @@ fn unterminated_text_cannot_be_split() {
         "SELECT 1 /* open",
     ] {
         let err: SplitError = PgQuerySplitter.split(sql).unwrap_err();
-        assert!(err.message.contains("unterminated"), "{sql:?}: {err}");
+        assert!(err.message.starts_with("unterminated"), "{sql:?}: {err}");
     }
 }
 
