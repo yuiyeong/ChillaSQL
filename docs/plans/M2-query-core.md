@@ -112,7 +112,7 @@ src-tauri/src/
 **Interfaces:**
 - Produces: batch를 JSON으로 보낸다는 결정(Task 6의 `QueryEventDto`가 따른다). 진행상황의 결정 기록
 
-- [ ] **Step 1: probe 작성**
+- [x] **Step 1: probe 작성**
 
 `probe.rs`에 command 2개를 둔다.
 
@@ -147,7 +147,7 @@ pub struct ProbeBatch {
 
 끝나면 `probe_report`에 `{ bytes: JSON.stringify(batch).length, spaced, burst }`를 JSON 문자열로 넘긴다. `src/main.tsx`에서 render 뒤에 한 번 부른다.
 
-- [ ] **Step 2: 측정**
+- [x] **Step 2: 측정**
 
 Run: `pnpm tauri dev` (background). stdout에 `CHANNEL_PROBE`가 나오면 그 줄을 기록하고 process를 끝낸다.
 
@@ -160,20 +160,20 @@ Expected: `CHANNEL_PROBE {"bytes":13…,"spaced":{…},"burst":{…}}`
 | `spaced` median ≤ 20ms 이고 `burst` 전체 ≤ 2,000ms | **JSON으로 확정.** 6장의 "첫 결과 표시 0.1초" 중 Channel이 쓰는 몫이 1/5 이하다 |
 | 그 밖 | 여기서 멈추고 사용자에게 수치를 보고한다. Task 6의 DTO 형식을 다시 정한 뒤 진행한다 |
 
-- [ ] **Step 3: probe 삭제**
+- [x] **Step 3: probe 삭제**
 
 `probe.rs`와 `channelProbe.ts`를 지우고 `lib.rs`와 `main.tsx`를 되돌린다.
 
 Run: `git status --short`
 Expected: `docs/` 밖에 바뀐 파일이 없다.
 
-- [ ] **Step 4: 결정 기록**
+- [x] **Step 4: 결정 기록**
 
 - `docs/progress.md`: M2 상태를 `진행 중`으로 바꾼다. 결정 기록에 "이 계획에서 정한 것"의 항목을 한 줄씩, Step 2의 수치와 결정을 한 줄로 남긴다.
 - `docs/spec.md` 4.5 문장 나누기 행: "pg\_query의 scanner(PostgreSQL의 lexer)로 문장 경계를 판별. `$$` 블록, 문자열, 주석 안의 `;`는 경계로 보지 않음. 문법 오류가 있는 문장도 문장으로 나눔"
 - `docs/spec.md` 4.6 나눠 가져오기 행 끝에 "행이 크면 500행이 되기 전에 끊음(4 MiB)", 보관 상한 행 끝에 "행은 화면이 보관하고, 어디부터 보관할지는 Rust가 알려 줌"을 더한다.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs
