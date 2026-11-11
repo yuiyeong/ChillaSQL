@@ -20,21 +20,10 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::SslMode;
 
     #[test]
     fn connection_finds_by_name() {
-        let profile = ConnectionProfile {
-            name: "local".into(),
-            host: "localhost".into(),
-            port: 5432,
-            database: "app".into(),
-            user: "postgres".into(),
-            sslmode: SslMode::Disable,
-            sslrootcert: None,
-            tunnel: None,
-            color: None,
-        };
+        let profile = ConnectionProfile::fixture("local");
         let project = Project {
             dir: "/p".into(),
             name: "p".into(),

@@ -6,14 +6,14 @@ use std::sync::Arc;
 use chilla_core::application::{App, AppError, ConnectError};
 use chilla_core::domain::{Password, SessionState, TxStatus};
 use chilla_core::infrastructure::{MemoryPasswordStore, PgConnector, TomlProjectStore};
-use support::{TEST_DB_PORT, admin, backend_exists, eventually};
+use support::{DATABASE, TEST_DB_PORT, USER, admin, backend_exists, eventually, terminate_backend};
 use tempfile::TempDir;
 
 /// 실제 구성에서 키체인만 메모리로 바꾼 App과, test DB를 가리키는 접속 `local`이 있는 프로젝트.
 async fn app_with_project() -> (App<PgConnector>, TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let toml = format!(
-        "[connections.local]\nhost = \"127.0.0.1\"\nport = {TEST_DB_PORT}\ndatabase = \"chilla_test\"\nuser = \"chilla\"\n"
+        "[connections.local]\nhost = \"127.0.0.1\"\nport = {TEST_DB_PORT}\ndatabase = \"{DATABASE}\"\nuser = \"{USER}\"\n"
     );
     fs::write(dir.path().join("chilla.toml"), toml).unwrap();
     let app = App::new(
@@ -26,7 +26,7 @@ async fn app_with_project() -> (App<PgConnector>, TempDir) {
 }
 
 async fn store_password(app: &App<PgConnector>) {
-    app.set_password("local", Password::new("chilla".into()))
+    app.set_password("local", support::password())
         .await
         .unwrap();
 }
@@ -77,10 +77,7 @@ async fn terminated_session_is_lost() {
     store_password(&app).await;
     let session = app.open_session("local").await.unwrap();
 
-    admin
-        .execute("SELECT pg_terminate_backend($1)", &[&session.backend_pid])
-        .await
-        .unwrap();
+    terminate_backend(&admin, session.backend_pid).await;
 
     assert!(
         eventually(async || app.session_state(session.id).await == Ok(SessionState::Lost)).await

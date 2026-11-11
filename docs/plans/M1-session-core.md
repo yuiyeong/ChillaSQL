@@ -34,6 +34,16 @@
 - `pnpm check`가 test DB를 먼저 띄운다. `cargo test`가 test DB에 접속하기 때문이다.
 - 화면 쪽 TypeScript wrapper(`src/shared/api/`)와 앱 종료 시 세션 정리는 M1에 넣지 않는다. 각각 M3, M5·M6에서 한다.
 
+## 구현 뒤 정리에서 바뀐 것 (2026-11-11)
+
+아래 task 본문의 interface는 계획 당시의 것이다. `simplify`와 review를 거치며 다음이 바뀌었다.
+
+- `SslMode`의 `FromStr::Err`는 `ProfileError::UnknownSslMode { value }`다. `ProjectError::UnknownSslMode`는 없어지고 `ProjectError::InvalidConnection`으로 나온다. `CommandError`는 그대로 `invalid_connection`이다.
+- `TxStatus::from_wire`는 domain에서 빠져 `tx_tap.rs`의 private 함수가 됐다. `TxStatusCell`은 `tokio::sync::watch`로 구현했다.
+- `ConnectionProfile::same_target`을 더했다. `App::test_connection`은 저장된 접속과 연결 대상이 같을 때만 키체인의 비밀번호를 쓴다(화면이 보낸 host로 저장된 비밀번호가 나가지 않게).
+- `ConnectionProfile::DEFAULT_PORT`, `SslMode::default()`(`Disable`)를 domain에 뒀다.
+- backend pid는 `simple_query`로 묻는다(round trip 1번).
+
 ## Global Constraints
 
 - macOS 전용. 다른 OS 대응 코드를 넣지 않는다.

@@ -4,19 +4,25 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use chilla_core::application::{ConnectError, Connector};
 use chilla_core::domain::{ConnectionProfile, Password, SslMode};
+use chilla_core::infrastructure::PgConnector;
 
 pub const TEST_DB_PORT: u16 = 54318;
 /// SSL을 켠 test DB. 서버 인증서의 SAN은 `DNS:localhost`뿐이다.
 pub const TLS_DB_PORT: u16 = 54319;
+// compose.yaml의 POSTGRES_* 값. 두 test DB가 같이 쓴다.
+pub const USER: &str = "chilla";
+pub const PASSWORD: &str = "chilla";
+pub const DATABASE: &str = "chilla_test";
 
 pub fn local_profile() -> ConnectionProfile {
     ConnectionProfile {
         name: "local".into(),
         host: "127.0.0.1".into(),
         port: TEST_DB_PORT,
-        database: "chilla_test".into(),
-        user: "chilla".into(),
+        database: DATABASE.into(),
+        user: USER.into(),
         sslmode: SslMode::Disable,
         sslrootcert: None,
         tunnel: None,
@@ -44,7 +50,7 @@ pub fn tls_file(name: &str) -> PathBuf {
 }
 
 pub fn password() -> Password {
-    Password::new("chilla".into())
+    Password::new(PASSWORD.into())
 }
 
 /// 확인용 직접 연결. 검사하려는 코드를 거치지 않는다.
@@ -58,7 +64,7 @@ pub async fn tls_admin() -> tokio_postgres::Client {
 
 pub async fn admin_on(port: u16) -> tokio_postgres::Client {
     let config =
-        format!("host=127.0.0.1 port={port} user=chilla password=chilla dbname=chilla_test");
+        format!("host=127.0.0.1 port={port} user={USER} password={PASSWORD} dbname={DATABASE}");
     let (client, connection) = tokio_postgres::connect(&config, tokio_postgres::NoTls)
         .await
         .unwrap_or_else(|e| {
@@ -68,6 +74,24 @@ pub async fn admin_on(port: u16) -> tokio_postgres::Client {
         });
     tokio::spawn(connection);
     client
+}
+
+pub async fn terminate_backend(admin: &tokio_postgres::Client, pid: i32) {
+    admin
+        .execute("SELECT pg_terminate_backend($1)", &[&pid])
+        .await
+        .unwrap();
+}
+
+/// 연결이 실패해야 하는 경우의 오류.
+pub async fn connect_error(
+    profile: &ConnectionProfile,
+    password: Option<Password>,
+) -> ConnectError {
+    match PgConnector::new().connect(profile, password.as_ref()).await {
+        Ok(_) => panic!("연결되면 안 된다"),
+        Err(e) => e,
+    }
 }
 
 pub async fn backend_exists(admin: &tokio_postgres::Client, pid: i32) -> bool {

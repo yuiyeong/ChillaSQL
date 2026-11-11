@@ -3,9 +3,9 @@
 use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use tokio::sync::Mutex;
+use tokio::task::JoinSet;
 
 use super::session_actor::{self, SessionHandle};
 use super::{
@@ -39,13 +39,13 @@ pub struct App<C: Connector> {
     passwords: Arc<dyn PasswordStore>,
     connector: C,
     state: Mutex<State>,
-    next_session_id: AtomicU64,
 }
 
 #[derive(Default)]
 struct State {
     project: Option<Project>,
     sessions: HashMap<SessionId, SessionHandle>,
+    last_session_id: u64,
 }
 
 impl<C: Connector> App<C> {
@@ -59,7 +59,6 @@ impl<C: Connector> App<C> {
             passwords,
             connector,
             state: Mutex::new(State::default()),
-            next_session_id: AtomicU64::new(1),
         }
     }
 
@@ -112,10 +111,7 @@ impl<C: Connector> App<C> {
             project
                 .connection(&profile.name)
                 .filter(|saved| saved.same_target(&profile))
-                .map(|saved| PasswordKey {
-                    project_dir: project.dir.clone(),
-                    connection: saved.name.clone(),
-                })
+                .map(|saved| password_key(project, &saved.name))
         };
         profile.validate()?;
         let password = match (password, stored_key) {
@@ -129,7 +125,7 @@ impl<C: Connector> App<C> {
     }
 
     pub async fn open_session(&self, connection: &str) -> Result<SessionInfo, AppError> {
-        let (profile, project_dir) = {
+        let (profile, key) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
             let profile =
@@ -138,12 +134,9 @@ impl<C: Connector> App<C> {
                     .ok_or_else(|| AppError::UnknownConnection {
                         name: connection.to_string(),
                     })?;
-            (profile.clone(), project.dir.clone())
+            (profile.clone(), password_key(project, &profile.name))
         };
-        let key = PasswordKey {
-            project_dir: project_dir.clone(),
-            connection: profile.name.clone(),
-        };
+        let project_dir = key.project_dir.clone();
         let password = self.stored_password(key).await?;
 
         // 연결은 오래 걸릴 수 있다. 그동안 lock을 잡지 않는다.
@@ -156,8 +149,9 @@ impl<C: Connector> App<C> {
             db.close().await;
             return Err(AppError::NoProject);
         }
+        state.last_session_id += 1;
         let info = SessionInfo {
-            id: SessionId(self.next_session_id.fetch_add(1, Ordering::Relaxed)),
+            id: SessionId(state.last_session_id),
             connection: profile.name,
             backend_pid: db.backend_pid(),
         };
@@ -171,22 +165,15 @@ impl<C: Connector> App<C> {
             let state = self.state.lock().await;
             state.sessions.get(&id).cloned()
         };
-        match handle {
-            Some(handle) => Ok(handle.state().await),
-            None => Err(AppError::UnknownSession { id }),
-        }
+        let handle = handle.ok_or(AppError::UnknownSession { id })?;
+        Ok(handle.state().await)
     }
 
     /// 연결이 이미 끊긴(`Lost`) 세션도 정상으로 닫힌다.
     pub async fn close_session(&self, id: SessionId) -> Result<(), AppError> {
         let handle = self.state.lock().await.sessions.remove(&id);
-        match handle {
-            Some(handle) => {
-                handle.close().await;
-                Ok(())
-            }
-            None => Err(AppError::UnknownSession { id }),
-        }
+        handle.ok_or(AppError::UnknownSession { id })?.close().await;
+        Ok(())
     }
 
     pub async fn close_all_sessions(&self) {
@@ -197,10 +184,7 @@ impl<C: Connector> App<C> {
     async fn password_key(&self, connection: &str) -> Result<PasswordKey, AppError> {
         let state = self.state.lock().await;
         let project = state.project.as_ref().ok_or(AppError::NoProject)?;
-        Ok(PasswordKey {
-            project_dir: project.dir.clone(),
-            connection: connection.to_string(),
-        })
+        Ok(password_key(project, connection))
     }
 
     async fn stored_password(
@@ -212,10 +196,17 @@ impl<C: Connector> App<C> {
     }
 }
 
-async fn close_all(sessions: HashMap<SessionId, SessionHandle>) {
-    for handle in sessions.into_values() {
-        handle.close().await;
+fn password_key(project: &Project, connection: &str) -> PasswordKey {
+    PasswordKey {
+        project_dir: project.dir.clone(),
+        connection: connection.to_string(),
     }
+}
+
+/// 세션들을 한꺼번에 닫는다. 하나가 오래 걸려도 나머지가 기다리지 않는다.
+async fn close_all(sessions: HashMap<SessionId, SessionHandle>) {
+    let mut closing: JoinSet<()> = sessions.into_values().map(SessionHandle::close).collect();
+    while closing.join_next().await.is_some() {}
 }
 
 /// 파일과 키체인 호출은 blocking이다 (키체인은 확인 창이 떠 있는 동안 돌아오지 않는다).

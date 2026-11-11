@@ -37,13 +37,10 @@ const APPLICATION_FORBIDDEN: &[&str] = &[
     "tokio::process",
 ];
 
-fn forbidden(layer: &str) -> &'static [&'static str] {
-    match layer {
-        "domain" => DOMAIN_FORBIDDEN,
-        "application" => APPLICATION_FORBIDDEN,
-        other => panic!("모르는 layer: {other}"),
-    }
-}
+const LAYERS: [(&str, &[&str]); 2] = [
+    ("domain", DOMAIN_FORBIDDEN),
+    ("application", APPLICATION_FORBIDDEN),
+];
 
 /// `token`이 식별자의 일부가 아니라 경로로 쓰였는지 본다 (`<token>::` 또는 `use <token>`).
 fn uses(line: &str, token: &str) -> bool {
@@ -60,11 +57,11 @@ fn uses(line: &str, token: &str) -> bool {
 }
 
 /// 위반한 줄을 돌려준다. 주석 줄은 건너뛴다.
-fn violations(layer: &str, source: &str) -> Vec<String> {
+fn violations(forbidden: &[&str], source: &str) -> Vec<String> {
     source
         .lines()
         .filter(|line| !line.trim_start().starts_with("//"))
-        .filter(|line| forbidden(layer).iter().any(|token| uses(line, token)))
+        .filter(|line| forbidden.iter().any(|token| uses(line, token)))
         .map(str::to_string)
         .collect()
 }
@@ -85,28 +82,30 @@ fn rust_files(dir: &Path) -> Vec<PathBuf> {
 
 #[test]
 fn scanner_catches_a_violation() {
+    let domain = DOMAIN_FORBIDDEN;
+    let application = APPLICATION_FORBIDDEN;
     assert_eq!(
-        violations("domain", "use crate::infrastructure::keychain::X;").len(),
+        violations(domain, "use crate::infrastructure::keychain::X;").len(),
         1
     );
     assert_eq!(
-        violations("application", "let s = tokio::net::TcpStream::connect(a);").len(),
+        violations(application, "let s = tokio::net::TcpStream::connect(a);").len(),
         1
     );
-    assert!(violations("application", "use tokio::sync::mpsc;").is_empty());
-    assert!(violations("domain", "// tokio::net 은 쓰지 않는다").is_empty());
-    assert_eq!(violations("domain", "use tokio;").len(), 1);
-    assert!(violations("domain", "let custom_toml_name = 1;").is_empty());
+    assert!(violations(application, "use tokio::sync::mpsc;").is_empty());
+    assert!(violations(domain, "// tokio::net 은 쓰지 않는다").is_empty());
+    assert_eq!(violations(domain, "use tokio;").len(), 1);
+    assert!(violations(domain, "let custom_toml_name = 1;").is_empty());
 }
 
 #[test]
 fn domain_and_application_follow_the_dependency_rule() {
     let src = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
-    for layer in ["domain", "application"] {
+    for (layer, forbidden) in LAYERS {
         let files = rust_files(&src.join(layer));
         assert!(!files.is_empty(), "{layer}에 .rs 파일이 없다");
         for file in files {
-            let found = violations(layer, &fs::read_to_string(&file).unwrap());
+            let found = violations(forbidden, &fs::read_to_string(&file).unwrap());
             assert!(found.is_empty(), "{}: {found:#?}", file.display());
         }
     }

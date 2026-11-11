@@ -8,15 +8,6 @@ pub struct CommandError {
     pub message: String,
 }
 
-impl CommandError {
-    pub fn invalid_connection(message: String) -> Self {
-        Self {
-            kind: "invalid_connection",
-            message,
-        }
-    }
-}
-
 impl From<AppError> for CommandError {
     fn from(error: AppError) -> Self {
         let kind = match &error {
@@ -91,10 +82,6 @@ mod tests {
             },
             ProjectError::Parse {
                 message: message.clone(),
-            },
-            ProjectError::UnknownSslMode {
-                connection: "local".into(),
-                value: "prefer".into(),
             },
             ProjectError::InvalidConnection {
                 connection: "local".into(),

@@ -11,17 +11,6 @@ pub enum TxStatus {
     Failed,
 }
 
-impl TxStatus {
-    pub fn from_wire(byte: u8) -> Option<TxStatus> {
-        match byte {
-            b'I' => Some(TxStatus::Idle),
-            b'T' => Some(TxStatus::InTransaction),
-            b'E' => Some(TxStatus::Failed),
-            _ => None,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionInfo {
     pub id: SessionId,
@@ -36,17 +25,4 @@ pub enum SessionState {
     },
     /// 연결이 밖에서 끊겼다 (서버 재시작, `pg_terminate_backend` 등).
     Lost,
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tx_status_from_wire() {
-        assert_eq!(TxStatus::from_wire(b'I'), Some(TxStatus::Idle));
-        assert_eq!(TxStatus::from_wire(b'T'), Some(TxStatus::InTransaction));
-        assert_eq!(TxStatus::from_wire(b'E'), Some(TxStatus::Failed));
-        assert_eq!(TxStatus::from_wire(b'X'), None);
-    }
 }

@@ -22,10 +22,6 @@ pub enum ProjectError {
         "접속 '{connection}'에 password 항목이 있습니다. 비밀번호는 설정 파일에 쓰지 않고 키체인에 저장합니다"
     )]
     PasswordInConfig { connection: String },
-    #[error(
-        "접속 '{connection}'의 sslmode '{value}'는 쓸 수 없습니다. disable, require, verify-full 중 하나여야 합니다"
-    )]
-    UnknownSslMode { connection: String, value: String },
     #[error("접속 '{connection}'의 설정이 잘못됐습니다: {source}")]
     InvalidConnection {
         connection: String,

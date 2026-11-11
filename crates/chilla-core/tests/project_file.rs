@@ -150,9 +150,11 @@ fn rejects_malformed_entries() {
 fn rejects_an_unknown_sslmode() {
     assert_eq!(
         load_local("sslmode = \"prefer\""),
-        Err(ProjectError::UnknownSslMode {
+        Err(ProjectError::InvalidConnection {
             connection: "local".into(),
-            value: "prefer".into()
+            source: ProfileError::UnknownSslMode {
+                value: "prefer".into()
+            }
         })
     );
 }

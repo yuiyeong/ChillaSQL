@@ -12,10 +12,7 @@ async fn connect(profile: &ConnectionProfile) -> Result<PgConnection, ConnectErr
 }
 
 async fn connect_error(profile: &ConnectionProfile) -> ConnectError {
-    match connect(profile).await {
-        Ok(_) => panic!("연결되면 안 된다"),
-        Err(e) => e,
-    }
+    support::connect_error(profile, Some(password())).await
 }
 
 /// 서버가 보기에 그 연결이 암호화돼 있는가.

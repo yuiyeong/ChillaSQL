@@ -53,29 +53,24 @@ async fn run<D: DbConnection>(connection: D, mut commands: mpsc::Receiver<Sessio
 impl SessionHandle {
     /// task가 이미 끝났으면 `Lost`다.
     pub(crate) async fn state(&self) -> SessionState {
-        let (reply, response) = oneshot::channel();
-        if self
-            .commands
-            .send(SessionCommand::State(reply))
+        self.request(SessionCommand::State)
             .await
-            .is_err()
-        {
-            return SessionState::Lost;
-        }
-        response.await.unwrap_or(SessionState::Lost)
+            .unwrap_or(SessionState::Lost)
     }
 
     /// 연결이 닫힐 때까지 기다린다. task가 이미 끝났으면 바로 돌아온다.
     pub(crate) async fn close(self) {
+        self.request(SessionCommand::Close).await;
+    }
+
+    /// 명령을 보내고 답을 기다린다. task가 끝났으면 `None`이다.
+    async fn request<T>(
+        &self,
+        command: impl FnOnce(oneshot::Sender<T>) -> SessionCommand,
+    ) -> Option<T> {
         let (reply, response) = oneshot::channel();
-        if self
-            .commands
-            .send(SessionCommand::Close(reply))
-            .await
-            .is_ok()
-        {
-            let _ = response.await;
-        }
+        self.commands.send(command(reply)).await.ok()?;
+        response.await.ok()
     }
 }
 

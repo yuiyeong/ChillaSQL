@@ -5,17 +5,9 @@ use std::time::{Duration, Instant};
 use chilla_core::application::{ConnectError, Connector, DbConnection};
 use chilla_core::domain::{ConnectionProfile, Password, TxStatus};
 use chilla_core::infrastructure::PgConnector;
-use support::{admin, backend_exists, eventually, local_profile, password};
-
-async fn connect_error(profile: ConnectionProfile, password: Option<Password>) -> ConnectError {
-    match PgConnector::new()
-        .connect(&profile, password.as_ref())
-        .await
-    {
-        Ok(_) => panic!("연결되면 안 된다"),
-        Err(e) => e,
-    }
-}
+use support::{
+    admin, backend_exists, connect_error, eventually, local_profile, password, terminate_backend,
+};
 
 #[tokio::test]
 async fn connects_and_closes() {
@@ -46,7 +38,7 @@ async fn connects_and_closes() {
 #[tokio::test]
 async fn wrong_password_is_auth_failed_and_does_not_leak() {
     let secret = "wrong-secret-9f3";
-    let error = connect_error(local_profile(), Some(Password::new(secret.into()))).await;
+    let error = connect_error(&local_profile(), Some(Password::new(secret.into()))).await;
     assert!(
         matches!(error, ConnectError::AuthFailed { .. }),
         "{error:?}"
@@ -56,7 +48,7 @@ async fn wrong_password_is_auth_failed_and_does_not_leak() {
 
 #[tokio::test]
 async fn missing_password_is_password_required() {
-    let error = connect_error(local_profile(), None).await;
+    let error = connect_error(&local_profile(), None).await;
     assert_eq!(error, ConnectError::PasswordRequired);
 }
 
@@ -66,7 +58,7 @@ async fn unknown_database_is_a_database_error() {
         database: "no_such_db".into(),
         ..local_profile()
     };
-    match connect_error(profile, Some(password())).await {
+    match connect_error(&profile, Some(password())).await {
         ConnectError::Database { code, .. } => assert_eq!(code, "3D000"),
         other => panic!("{other:?}"),
     }
@@ -78,7 +70,7 @@ async fn closed_port_is_unreachable() {
         port: 1,
         ..local_profile()
     };
-    let error = connect_error(profile, Some(password())).await;
+    let error = connect_error(&profile, Some(password())).await;
     assert!(
         matches!(error, ConnectError::Unreachable { .. }),
         "{error:?}"
@@ -118,10 +110,7 @@ async fn terminated_backend_is_detected() {
         .await
         .unwrap();
 
-    admin
-        .execute("SELECT pg_terminate_backend($1)", &[&conn.backend_pid()])
-        .await
-        .unwrap();
+    terminate_backend(&admin, conn.backend_pid()).await;
 
     assert!(eventually(async || conn.is_closed()).await);
     tokio::time::timeout(Duration::from_secs(1), conn.close())

@@ -9,20 +9,10 @@ use super::{
     ConnectError, Connector, DbConnection, PasswordKey, PasswordStore, PasswordStoreError,
     ProjectError, ProjectStore,
 };
-use crate::domain::{ConnectionProfile, Password, Project, SslMode, TxStatus};
+use crate::domain::{ConnectionProfile, Password, Project, TxStatus};
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
-    ConnectionProfile {
-        name: name.into(),
-        host: "localhost".into(),
-        port: 5432,
-        database: "app".into(),
-        user: "postgres".into(),
-        sslmode: SslMode::Disable,
-        sslrootcert: None,
-        tunnel: None,
-        color: None,
-    }
+    ConnectionProfile::fixture(name)
 }
 
 /// 등록한 디렉토리만 프로젝트로 읽힌다.

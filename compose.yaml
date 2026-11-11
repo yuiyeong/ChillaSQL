@@ -1,12 +1,15 @@
 name: chillasql
 
+# 두 test DB가 같이 쓰는 계정. test 전용 값이다.
+x-pg-env: &pg-env
+  POSTGRES_USER: chilla
+  POSTGRES_PASSWORD: chilla
+  POSTGRES_DB: chilla_test
+
 services:
   db:
     image: postgres:18
-    environment:
-      POSTGRES_USER: chilla
-      POSTGRES_PASSWORD: chilla
-      POSTGRES_DB: chilla_test
+    environment: *pg-env
     ports:
       - "127.0.0.1:54318:5432"
     volumes:
@@ -28,10 +31,7 @@ services:
   # SSL을 켠 서버. sslmode require, verify-full test가 쓴다. seed가 없어 volume도 없다.
   db-tls:
     image: postgres:18
-    environment:
-      POSTGRES_USER: chilla
-      POSTGRES_PASSWORD: chilla
-      POSTGRES_DB: chilla_test
+    environment: *pg-env
     ports:
       - "127.0.0.1:54319:5432"
     volumes:

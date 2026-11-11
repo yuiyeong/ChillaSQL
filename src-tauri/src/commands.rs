@@ -6,9 +6,10 @@
 
 use std::path::{Path, PathBuf};
 
-use chilla_core::application::App;
+use chilla_core::application::{App, AppError};
 use chilla_core::domain::{
-    ConnectionProfile, Password, Project, SessionId, SessionInfo, SessionState, SslMode, TxStatus,
+    ConnectionProfile, Password, ProfileError, Project, SessionId, SessionInfo, SessionState,
+    TxStatus,
 };
 use chilla_core::infrastructure::PgConnector;
 use serde::{Deserialize, Serialize};
@@ -75,22 +76,16 @@ impl From<&ConnectionProfile> for ConnectionDto {
 }
 
 impl TryFrom<ConnectionDto> for ConnectionProfile {
-    type Error = CommandError;
+    type Error = ProfileError;
 
     fn try_from(dto: ConnectionDto) -> Result<Self, Self::Error> {
-        let sslmode: SslMode = dto.sslmode.parse().map_err(|()| {
-            CommandError::invalid_connection(format!(
-                "sslmode '{}'는 쓸 수 없습니다. disable, require, verify-full 중 하나여야 합니다",
-                dto.sslmode
-            ))
-        })?;
         Ok(Self {
             name: dto.name,
             host: dto.host,
             port: dto.port,
             database: dto.database,
             user: dto.user,
-            sslmode,
+            sslmode: dto.sslmode.parse()?,
             sslrootcert: dto.sslrootcert.map(PathBuf::from),
             tunnel: dto.tunnel,
             color: dto.color,
@@ -177,7 +172,7 @@ pub async fn test_connection(
     password: Option<String>,
 ) -> CommandResult<()> {
     let password = password.map(Password::new);
-    let profile = ConnectionProfile::try_from(connection)?;
+    let profile = ConnectionProfile::try_from(connection).map_err(AppError::from)?;
     Ok(app.test_connection(profile, password).await?)
 }
 
@@ -207,7 +202,7 @@ mod tests {
     use std::collections::BTreeSet;
     use std::path::PathBuf;
 
-    use chilla_core::domain::{Project, SessionId, TxStatus};
+    use chilla_core::domain::{Project, SessionId, SslMode, TxStatus};
     use serde_json::json;
 
     use super::*;
@@ -277,6 +272,7 @@ mod tests {
         let mut dto = ConnectionDto::from(&profile(SslMode::Disable));
         dto.sslmode = "prefer".into();
         let error = ConnectionProfile::try_from(dto).unwrap_err();
+        let error = CommandError::from(AppError::from(error));
         assert_eq!(error.kind, "invalid_connection");
         assert!(error.message.contains("prefer"), "{}", error.message);
     }

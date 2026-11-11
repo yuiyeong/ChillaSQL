@@ -10,12 +10,10 @@
 
 use std::io;
 use std::pin::Pin;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tokio::sync::Notify;
+use tokio::sync::watch;
 
 use crate::domain::TxStatus;
 
@@ -23,47 +21,46 @@ const HEADER_LEN: usize = 5;
 const READY_FOR_QUERY: u8 = b'Z';
 const ERROR_RESPONSE: u8 = b'E';
 
-struct Shared {
-    /// 마지막 ReadyForQuery의 상태 byte.
-    status: AtomicU8,
+/// ReadyForQuery의 상태 byte.
+fn decode_status(byte: u8) -> Option<TxStatus> {
+    match byte {
+        b'I' => Some(TxStatus::Idle),
+        b'T' => Some(TxStatus::InTransaction),
+        b'E' => Some(TxStatus::Failed),
+        _ => None,
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Seen {
+    /// 마지막 ReadyForQuery의 상태. 첫 ReadyForQuery 전에는 `Idle`이다.
+    status: TxStatus,
     /// ErrorResponse를 봤고 그 뒤의 ReadyForQuery는 아직 못 봤다.
-    error_pending: AtomicBool,
-    /// 서버 쪽 stream이 끝났다. 더 올 ReadyForQuery가 없다.
-    ended: AtomicBool,
-    changed: Notify,
+    error_pending: bool,
 }
 
 /// [`TxTap`]이 본 트랜잭션 상태.
 #[derive(Clone)]
-pub(crate) struct TxStatusCell(Arc<Shared>);
+pub(crate) struct TxStatusCell(watch::Receiver<Seen>);
 
 impl TxStatusCell {
-    /// 마지막 ReadyForQuery의 상태. 첫 ReadyForQuery 전에는 `Idle`이다.
     fn get(&self) -> TxStatus {
-        TxStatus::from_wire(self.0.status.load(Ordering::Acquire)).unwrap_or(TxStatus::Idle)
+        self.0.borrow().status
     }
 
     /// 오류 뒤의 ReadyForQuery를 기다렸다가 상태를 돌려준다. 오류가 없었으면 바로 돌려준다.
-    /// 연결이 끝나 ReadyForQuery가 오지 않을 때는 마지막으로 본 상태를 돌려준다.
     pub(crate) async fn settled(&self) -> TxStatus {
-        loop {
-            // 확인과 대기 사이에 온 알림을 놓치지 않도록 먼저 등록한다.
-            let changed = self.0.changed.notified();
-            tokio::pin!(changed);
-            changed.as_mut().enable();
-            let waiting = self.0.error_pending.load(Ordering::Acquire)
-                && !self.0.ended.load(Ordering::Acquire);
-            if !waiting {
-                return self.get();
-            }
-            changed.await;
-        }
+        let mut seen = self.0.clone();
+        // tap이 drop되면(연결이 끝나면) Err다. 더 올 ReadyForQuery가 없으므로 마지막으로 본
+        // 상태를 돌려준다. FATAL 오류 뒤에 연결이 닫히는 경우가 그렇다.
+        let _ = seen.wait_for(|seen| !seen.error_pending).await;
+        self.get()
     }
 }
 
 pub(crate) struct TxTap<S> {
     inner: S,
-    shared: Arc<Shared>,
+    seen: watch::Sender<Seen>,
     /// 모으는 중인 message header (type 1 byte + 길이 4 byte).
     header: [u8; HEADER_LEN],
     header_filled: usize,
@@ -75,21 +72,19 @@ pub(crate) struct TxTap<S> {
 
 impl<S> TxTap<S> {
     pub(crate) fn new(inner: S) -> (Self, TxStatusCell) {
-        let shared = Arc::new(Shared {
-            status: AtomicU8::new(b'I'),
-            error_pending: AtomicBool::new(false),
-            ended: AtomicBool::new(false),
-            changed: Notify::new(),
+        let (seen, cell) = watch::channel(Seen {
+            status: TxStatus::Idle,
+            error_pending: false,
         });
         let tap = Self {
             inner,
-            shared: shared.clone(),
+            seen,
             header: [0; HEADER_LEN],
             header_filled: 0,
             status_next: false,
             skip: 0,
         };
-        (tap, TxStatusCell(shared))
+        (tap, TxStatusCell(cell))
     }
 
     /// 서버에서 읽은 byte를 순서대로 넘긴다. 어디서 끊겨 와도 된다.
@@ -97,11 +92,11 @@ impl<S> TxTap<S> {
         while let Some(&first) = bytes.first() {
             if self.status_next {
                 self.status_next = false;
-                if TxStatus::from_wire(first).is_some() {
-                    self.shared.status.store(first, Ordering::Release);
-                }
-                self.shared.error_pending.store(false, Ordering::Release);
-                self.shared.changed.notify_waiters();
+                self.seen.send_modify(|seen| {
+                    // 모르는 상태 byte면 이전 상태를 둔다.
+                    seen.status = decode_status(first).unwrap_or(seen.status);
+                    seen.error_pending = false;
+                });
                 bytes = &bytes[1..];
             } else if self.skip > 0 {
                 let n = self.skip.min(bytes.len());
@@ -130,15 +125,10 @@ impl<S> TxTap<S> {
             self.skip = payload - 1;
         } else {
             if ty == ERROR_RESPONSE {
-                self.shared.error_pending.store(true, Ordering::Release);
+                self.seen.send_modify(|seen| seen.error_pending = true);
             }
             self.skip = payload;
         }
-    }
-
-    fn end(&self) {
-        self.shared.ended.store(true, Ordering::Release);
-        self.shared.changed.notify_waiters();
     }
 }
 
@@ -150,19 +140,9 @@ impl<S: AsyncRead + Unpin> AsyncRead for TxTap<S> {
     ) -> Poll<io::Result<()>> {
         let this = self.get_mut();
         let before = buf.filled().len();
-        let had_room = buf.remaining() > 0;
         let result = Pin::new(&mut this.inner).poll_read(cx, buf);
-        match &result {
-            Poll::Ready(Ok(())) => {
-                let read = &buf.filled()[before..];
-                if read.is_empty() && had_room {
-                    this.end(); // EOF
-                } else {
-                    this.observe(read);
-                }
-            }
-            Poll::Ready(Err(_)) => this.end(),
-            Poll::Pending => {}
+        if matches!(result, Poll::Ready(Ok(()))) {
+            this.observe(&buf.filled()[before..]);
         }
         result
     }
@@ -335,7 +315,10 @@ mod tests {
 
         let mut sink = Vec::new();
         tap.read_to_end(&mut sink).await.unwrap();
+        assert_eq!(settled_now(&cell).await, None);
 
+        // tokio-postgres의 connection task는 stream이 끝나면 tap을 drop한다.
+        drop(tap);
         assert_eq!(settled_now(&cell).await, Some(TxStatus::Idle));
     }
 

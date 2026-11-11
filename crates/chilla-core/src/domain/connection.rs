@@ -2,8 +2,9 @@ use std::path::PathBuf;
 use std::str::FromStr;
 
 /// `chilla.toml`의 `sslmode`. 조용히 평문으로 내려가는 `prefer`는 두지 않는다.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SslMode {
+    #[default]
     Disable,
     /// 암호화만 하고 서버 인증서는 확인하지 않는다.
     Require,
@@ -22,14 +23,16 @@ impl SslMode {
 }
 
 impl FromStr for SslMode {
-    type Err = ();
+    type Err = ProfileError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "disable" => Ok(SslMode::Disable),
             "require" => Ok(SslMode::Require),
             "verify-full" => Ok(SslMode::VerifyFull),
-            _ => Err(()),
+            _ => Err(ProfileError::UnknownSslMode {
+                value: s.to_string(),
+            }),
         }
     }
 }
@@ -50,6 +53,8 @@ pub struct ConnectionProfile {
 }
 
 impl ConnectionProfile {
+    pub const DEFAULT_PORT: u16 = 5432;
+
     pub fn validate(&self) -> Result<(), ProfileError> {
         let required = [
             ("name", &self.name),
@@ -104,6 +109,26 @@ pub enum ProfileError {
     ZeroPort,
     #[error("sslrootcert는 sslmode가 verify-full일 때만 쓸 수 있습니다")]
     RootCertWithoutVerifyFull,
+    #[error("sslmode '{value}'는 쓸 수 없습니다. disable, require, verify-full 중 하나여야 합니다")]
+    UnknownSslMode { value: String },
+}
+
+#[cfg(test)]
+impl ConnectionProfile {
+    /// test용 접속 정보. 기획서 5장의 `local` 접속과 같은 값이다.
+    pub(crate) fn fixture(name: &str) -> Self {
+        Self {
+            name: name.into(),
+            host: "localhost".into(),
+            port: Self::DEFAULT_PORT,
+            database: "app".into(),
+            user: "postgres".into(),
+            sslmode: SslMode::Disable,
+            sslrootcert: None,
+            tunnel: None,
+            color: None,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -115,17 +140,7 @@ mod tests {
     type Setter = fn(&mut ConnectionProfile, String);
 
     fn local() -> ConnectionProfile {
-        ConnectionProfile {
-            name: "local".into(),
-            host: "localhost".into(),
-            port: 5432,
-            database: "app".into(),
-            user: "postgres".into(),
-            sslmode: SslMode::Disable,
-            sslrootcert: None,
-            tunnel: None,
-            color: Some("green".into()),
-        }
+        ConnectionProfile::fixture("local")
     }
 
     #[test]
@@ -133,7 +148,13 @@ mod tests {
         for s in ["disable", "require", "verify-full"] {
             assert_eq!(s.parse::<SslMode>().unwrap().as_str(), s);
         }
-        assert!("prefer".parse::<SslMode>().is_err());
+        assert_eq!(
+            "prefer".parse::<SslMode>(),
+            Err(ProfileError::UnknownSslMode {
+                value: "prefer".into()
+            })
+        );
+        assert_eq!(SslMode::default(), SslMode::Disable);
     }
 
     #[test]

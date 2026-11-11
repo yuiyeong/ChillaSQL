@@ -13,7 +13,8 @@ use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
-use tokio_postgres::{Client, Config, NoTls};
+use tokio_postgres::error::SqlState;
+use tokio_postgres::{Client, Config, NoTls, SimpleQueryMessage};
 
 use crate::application::{ConnectError, Connector, DbConnection};
 use crate::domain::{ConnectionProfile, Password, SslMode, TxStatus};
@@ -109,11 +110,7 @@ where
         // 끊긴 이유는 `Client`의 다음 호출이 오류로 알려 준다.
         let _ = connection.await;
     });
-    let backend_pid = client
-        .query_one("SELECT pg_backend_pid()", &[])
-        .await
-        .map_err(connect_error)?
-        .get(0);
+    let backend_pid = backend_pid(&client).await?;
 
     Ok(PgConnection {
         client,
@@ -121,6 +118,23 @@ where
         tx_status,
         backend_pid,
     })
+}
+
+/// simple query로 묻는다. `query_one`은 prepare 때문에 round trip이 한 번 더 든다.
+async fn backend_pid(client: &Client) -> Result<i32, ConnectError> {
+    let messages = client
+        .simple_query("SELECT pg_backend_pid()")
+        .await
+        .map_err(connect_error)?;
+    messages
+        .iter()
+        .find_map(|message| match message {
+            SimpleQueryMessage::Row(row) => row.get(0)?.parse().ok(),
+            _ => None,
+        })
+        .ok_or_else(|| ConnectError::Other {
+            message: "서버가 backend pid를 돌려주지 않았습니다".into(),
+        })
 }
 
 pub struct PgConnection {
@@ -158,15 +172,19 @@ fn unreachable(error: std::io::Error) -> ConnectError {
 
 fn connect_error(error: tokio_postgres::Error) -> ConnectError {
     if let Some(db) = error.as_db_error() {
-        let code = db.code().code();
         let message = db.message().to_string();
-        return match code {
-            // invalid_password, invalid_authorization_specification
-            "28P01" | "28000" => ConnectError::AuthFailed { message },
-            _ => ConnectError::Database {
-                code: code.to_string(),
+        let auth_failed = [
+            SqlState::INVALID_PASSWORD,
+            SqlState::INVALID_AUTHORIZATION_SPECIFICATION,
+        ]
+        .contains(db.code());
+        return if auth_failed {
+            ConnectError::AuthFailed { message }
+        } else {
+            ConnectError::Database {
+                code: db.code().code().to_string(),
                 message,
-            },
+            }
         };
     }
     let message = match error.source() {
@@ -186,18 +204,15 @@ fn connect_error(error: tokio_postgres::Error) -> ConnectError {
 mod tests {
     use super::*;
 
-    /// test DB (`scripts/test-db.sh up`).
+    /// test DB (`scripts/test-db.sh up`). private인 `client`로 SQL을 보내야 해서 이 test만
+    /// `tests/`가 아니라 여기 있다.
     fn local_profile() -> ConnectionProfile {
         ConnectionProfile {
-            name: "local".into(),
             host: "127.0.0.1".into(),
             port: 54318,
             database: "chilla_test".into(),
             user: "chilla".into(),
-            sslmode: SslMode::Disable,
-            sslrootcert: None,
-            tunnel: None,
-            color: None,
+            ..ConnectionProfile::fixture("local")
         }
     }
 

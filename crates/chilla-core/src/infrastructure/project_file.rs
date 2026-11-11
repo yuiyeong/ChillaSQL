@@ -8,7 +8,6 @@ use crate::application::{ProjectError, ProjectStore};
 use crate::domain::{ConnectionProfile, Project, SslMode};
 
 const FILE_NAME: &str = "chilla.toml";
-const DEFAULT_PORT: u16 = 5432;
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽는 [`ProjectStore`].
 pub struct TomlProjectStore;
@@ -106,17 +105,18 @@ fn connection(
             .map_err(|e: toml::de::Error| ProjectError::Parse {
                 message: format!("접속 '{name}': {}", e.message()),
             })?;
-    let sslmode = match raw.sslmode {
-        None => SslMode::Disable,
-        Some(value) => value.parse().map_err(|()| ProjectError::UnknownSslMode {
-            connection: name.clone(),
-            value,
-        })?,
+    let invalid = |source| ProjectError::InvalidConnection {
+        connection: name.clone(),
+        source,
+    };
+    let sslmode = match &raw.sslmode {
+        None => SslMode::default(),
+        Some(value) => value.parse().map_err(invalid)?,
     };
     let profile = ConnectionProfile {
-        name,
+        name: name.clone(),
         host: raw.host,
-        port: raw.port.unwrap_or(DEFAULT_PORT),
+        port: raw.port.unwrap_or(ConnectionProfile::DEFAULT_PORT),
         database: raw.database,
         user: raw.user,
         sslmode,
@@ -125,12 +125,7 @@ fn connection(
         tunnel: raw.tunnel,
         color: raw.color,
     };
-    profile
-        .validate()
-        .map_err(|source| ProjectError::InvalidConnection {
-            connection: profile.name.clone(),
-            source,
-        })?;
+    profile.validate().map_err(invalid)?;
     Ok(profile)
 }
 
