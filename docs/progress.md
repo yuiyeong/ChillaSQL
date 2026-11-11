@@ -4,7 +4,7 @@
 
 ## 지금
 
-- **진행 중**: 없음 (M1 완료. branch `m1-session-core`에 있고 main에 합치는 일이 남음)
+- **진행 중**: 없음 (M1 완료)
 - **다음 할 일**: M2 계획 작성 → `docs/plans/M2-query-core.md`
 - **M2에서 챙길 것**:
   - session actor(`application/session_actor.rs`)의 명령 enum에 실행을 더한다. 결과는 stream으로 받고 버릴 때는 cancel + drain
