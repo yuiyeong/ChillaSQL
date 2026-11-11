@@ -70,6 +70,30 @@ impl ConnectionProfile {
         }
         Ok(())
     }
+
+    /// 같은 서버에 같은 방법으로 같은 사용자로 붙는가. 저장된 비밀번호를 이 접속 정보에
+    /// 써도 되는지 가릴 때 쓴다. 색처럼 연결과 무관한 항목은 보지 않는다.
+    pub fn same_target(&self, other: &ConnectionProfile) -> bool {
+        let ConnectionProfile {
+            name,
+            host,
+            port,
+            database,
+            user,
+            sslmode,
+            sslrootcert,
+            tunnel,
+            color: _,
+        } = self;
+        *name == other.name
+            && *host == other.host
+            && *port == other.port
+            && *database == other.database
+            && *user == other.user
+            && *sslmode == other.sslmode
+            && *sslrootcert == other.sslrootcert
+            && *tunnel == other.tunnel
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -131,6 +155,52 @@ mod tests {
                 set(&mut profile, blank.to_string());
                 assert_eq!(profile.validate(), Err(ProfileError::EmptyField { field }));
             }
+        }
+    }
+
+    #[test]
+    fn same_target_ignores_only_the_color() {
+        let saved = local();
+        assert!(saved.same_target(&ConnectionProfile {
+            color: Some("red".into()),
+            ..local()
+        }));
+        let different: [ConnectionProfile; 8] = [
+            ConnectionProfile {
+                name: "other".into(),
+                ..local()
+            },
+            ConnectionProfile {
+                host: "evil.example".into(),
+                ..local()
+            },
+            ConnectionProfile {
+                port: 6543,
+                ..local()
+            },
+            ConnectionProfile {
+                database: "other".into(),
+                ..local()
+            },
+            ConnectionProfile {
+                user: "other".into(),
+                ..local()
+            },
+            ConnectionProfile {
+                sslmode: SslMode::Require,
+                ..local()
+            },
+            ConnectionProfile {
+                sslrootcert: Some("/ca.pem".into()),
+                ..local()
+            },
+            ConnectionProfile {
+                tunnel: Some("ssh -L".into()),
+                ..local()
+            },
+        ];
+        for other in different {
+            assert!(!saved.same_target(&other), "{other:?}");
         }
     }
 

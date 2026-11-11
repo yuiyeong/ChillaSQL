@@ -96,18 +96,32 @@ impl<C: Connector> App<C> {
         Ok(blocking(move || passwords.delete(&key)).await?)
     }
 
-    /// 연결되는지만 확인하고 바로 닫는다. 아직 저장하지 않은 접속도 받는다. `password`가
-    /// 없으면 키체인에서 `profile.name`으로 찾는다.
+    /// 연결되는지만 확인하고 바로 닫는다. 아직 저장하지 않은 접속도 받는다.
+    ///
+    /// `password`가 없으면 키체인의 비밀번호를 쓰는데, `profile`이 프로젝트에 저장된 같은
+    /// 이름의 접속과 연결 대상이 같을 때만이다. 화면이 보낸 host로 저장된 비밀번호가 나가지
+    /// 않게 하려는 것이다. 대상을 바꿔 test하려면 비밀번호를 다시 입력해야 한다.
     pub async fn test_connection(
         &self,
         profile: ConnectionProfile,
         password: Option<Password>,
     ) -> Result<(), AppError> {
-        let key = self.password_key(&profile.name).await?;
+        let stored_key = {
+            let state = self.state.lock().await;
+            let project = state.project.as_ref().ok_or(AppError::NoProject)?;
+            project
+                .connection(&profile.name)
+                .filter(|saved| saved.same_target(&profile))
+                .map(|saved| PasswordKey {
+                    project_dir: project.dir.clone(),
+                    connection: saved.name.clone(),
+                })
+        };
         profile.validate()?;
-        let password = match password {
-            Some(password) => Some(password),
-            None => self.stored_password(key).await?,
+        let password = match (password, stored_key) {
+            (Some(password), _) => Some(password),
+            (None, Some(key)) => self.stored_password(key).await?,
+            (None, None) => None,
         };
         let connection = self.connector.connect(&profile, password.as_ref()).await?;
         connection.close().await;
@@ -226,7 +240,7 @@ mod tests {
     use super::*;
     use crate::application::test_support::{FakeConnector, FakePasswords, FakeProjects, profile};
     use crate::application::{PasswordKey, PasswordStore, ProjectError};
-    use crate::domain::{ProfileError, SessionState, TxStatus};
+    use crate::domain::{ProfileError, SessionState, SslMode, TxStatus};
 
     struct Fixture {
         app: App<FakeConnector>,
@@ -456,6 +470,55 @@ mod tests {
             Err(AppError::InvalidProfile(ProfileError::ZeroPort))
         );
         assert!(f.connector.requests().is_empty());
+    }
+
+    /// 화면이 저장된 접속의 이름에 다른 host를 붙여 보내도 키체인의 비밀번호가 그 host로
+    /// 가면 안 된다.
+    #[tokio::test]
+    async fn test_connection_keeps_the_stored_password_from_a_different_target() {
+        let f = opened().await;
+        f.app.set_password("local", pw("stored")).await.unwrap();
+
+        let changes: [fn(&mut ConnectionProfile); 6] = [
+            |p| p.host = "evil.example".into(),
+            |p| p.port = 6543,
+            |p| p.database = "other".into(),
+            |p| p.user = "other".into(),
+            |p| p.sslmode = SslMode::Require,
+            |p| p.tunnel = Some("ssh -L 5432:evil.example:5432 jump".into()),
+        ];
+        for change in changes {
+            let mut draft = profile("local");
+            change(&mut draft);
+            f.app.test_connection(draft, None).await.unwrap();
+        }
+        let mut with_root_cert = profile("local");
+        with_root_cert.sslmode = SslMode::VerifyFull;
+        with_root_cert.sslrootcert = Some("/tmp/ca.pem".into());
+        f.app.test_connection(with_root_cert, None).await.unwrap();
+
+        let sent: Vec<Option<String>> = f
+            .connector
+            .requests()
+            .into_iter()
+            .map(|(_, password)| password)
+            .collect();
+        assert_eq!(sent, vec![None; 7]);
+    }
+
+    #[tokio::test]
+    async fn test_connection_uses_the_stored_password_when_only_the_color_differs() {
+        let f = opened().await;
+        f.app.set_password("local", pw("stored")).await.unwrap();
+        let mut draft = profile("local");
+        draft.color = Some("red".into());
+
+        f.app.test_connection(draft, None).await.unwrap();
+
+        assert_eq!(
+            f.connector.requests(),
+            [("local".to_string(), Some("stored".to_string()))]
+        );
     }
 
     #[tokio::test]
