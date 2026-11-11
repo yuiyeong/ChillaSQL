@@ -23,3 +23,4 @@
 2. `superpowers:test-driven-development`로 구현한다.
 3. `simplify`로 코드를 정리한다.
 4. `code-review`를 high로 돌린다.
+5. 나온 지적은 `superpowers:receiving-code-review`로 하나씩 다시 검토하고, 고치는 게 맞다고 판단한 것만 고친다. 고치지 않은 지적은 이유와 함께 보고한다.
