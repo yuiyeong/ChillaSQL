@@ -316,6 +316,45 @@ async fn terminated_backend_finishes_the_query_and_loses_the_session() {
 }
 
 #[tokio::test]
+async fn text_that_cannot_be_sent_is_a_client_error() {
+    let (app, _dir) = app_with_project().await;
+    let session = open_session(&app).await;
+
+    let events = run(&app, session.id, "SELECT 1\0").await;
+    assert!(
+        matches!(
+            outcome(events.last().unwrap()),
+            QueryOutcome::ClientError { .. }
+        ),
+        "{events:?}"
+    );
+    assert_eq!(app.session_state(session.id).await, Ok(OPEN));
+
+    app.close_session(session.id).await.unwrap();
+}
+
+/// COPY … FROM STDIN은 지원하지 않는다. 세션을 일부러 잃는다.
+#[tokio::test]
+async fn copy_from_stdin_loses_the_session() {
+    let (app, _dir) = app_with_project().await;
+    let session = open_session(&app).await;
+    run(&app, session.id, "CREATE TEMP TABLE c (id int)").await;
+
+    let events = run(&app, session.id, "COPY c FROM STDIN").await;
+    assert!(
+        matches!(
+            outcome(events.last().unwrap()),
+            QueryOutcome::ConnectionLost { .. }
+        ),
+        "{events:?}"
+    );
+    assert!(
+        eventually(async || app.session_state(session.id).await == Ok(SessionState::Lost)).await
+    );
+    assert_eq!(app.close_session(session.id).await, Ok(()));
+}
+
+#[tokio::test]
 async fn closing_a_session_stops_its_running_query() {
     let admin = admin().await;
     let (app, _dir) = app_with_project().await;

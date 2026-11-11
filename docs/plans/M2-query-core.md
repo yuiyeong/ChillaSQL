@@ -1015,7 +1015,7 @@ git commit -m "feat: 쿼리 실행 Tauri command와 결과 Channel"
 
 `simplify` skill로 M2에서 바뀐 코드를 정리하고 `pnpm check`를 통과시킨 뒤 commit한다(`refactor: simplify 지적 반영 (…)`).
 
-- [ ] **Step 2: `code-review high`**
+- [x] **Step 2: `code-review high`**
 
 `code-review`를 high로 돌린다. 지적은 `superpowers:receiving-code-review`로 하나씩 다시 검토해 고치는 게 맞는 것만 고치고 commit한다(`fix: code review 지적 반영 (…)`). 고치지 않은 지적은 이유와 함께 작업 로그에 남긴다.
 

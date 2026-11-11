@@ -64,6 +64,10 @@ pub enum QueryOutcome {
     ConnectionLost {
         message: String,
     },
+    /// 서버의 오류가 아닌 오류로 끝났다(UTF-8이 아닌 값, 보낼 수 없는 text 등). 연결은 그대로다.
+    ClientError {
+        message: String,
+    },
 }
 
 /// 결과를 나눠 보내는 크기와 화면이 보관할 행 수.

@@ -8,7 +8,10 @@ use super::QuerySink;
 use crate::application::{QueryError, RowItem, RowSource};
 use crate::domain::{QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, ServerError};
 
-/// 남은 결과를 버리는 이유. `Finished`의 outcome이 된다.
+/// SQLSTATE query_canceled. cancel 요청이 멈춘 문장의 오류다. 버리는 중에 오면 버린 이유로 알린다.
+const QUERY_CANCELED: &str = "57014";
+
+/// 남은 결과를 버리는 이유. 문장이 어떻게 끝났는지 모르면 `Finished`의 outcome이 된다.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum DrainReason {
     Cancelled,
@@ -34,6 +37,25 @@ enum Phase {
     Draining(DrainReason),
 }
 
+/// 결과 도중에 받은 오류. 처음 것만 남기고 결과는 `None`까지 읽는다.
+enum Failure {
+    Server(ServerError),
+    Client { message: String },
+}
+
+impl Failure {
+    fn is_query_canceled(&self) -> bool {
+        matches!(self, Self::Server(error) if error.code == QUERY_CANCELED)
+    }
+
+    fn outcome(self) -> QueryOutcome {
+        match self {
+            Self::Server(error) => QueryOutcome::Failed(error),
+            Self::Client { message } => QueryOutcome::ClientError { message },
+        }
+    }
+}
+
 /// 결과가 끝난 방식.
 enum End {
     /// `None`까지 읽었다.
@@ -51,10 +73,10 @@ pub(super) struct Pending {
 }
 
 impl Pending {
-    /// 시작하지 않고 버린다.
-    pub(super) fn discard(mut self) {
+    /// 시작하지 않고 마친다. `outcome`은 `Discarded` 또는 `Cancelled`다.
+    pub(super) fn finish(mut self, outcome: QueryOutcome) {
         (self.sink)(QueryEvent::Finished {
-            outcome: QueryOutcome::Discarded,
+            outcome,
             elapsed: Duration::ZERO,
         });
     }
@@ -109,8 +131,10 @@ pub(super) struct Query<R> {
     look_ahead: bool,
     /// 마지막 `Complete`의 행 수.
     completed: Option<u64>,
-    /// 처음 받은 서버 오류.
-    error: Option<ServerError>,
+    /// 처음 받은 오류.
+    error: Option<Failure>,
+    /// 버리는 중에 화면에 보내지 않고 버린 행이 있다(보내지 않은 batch와 look-ahead 행 포함).
+    discarded: bool,
     end: Option<End>,
 }
 
@@ -130,6 +154,7 @@ impl<R: RowSource> Query<R> {
             look_ahead: false,
             completed: None,
             error: None,
+            discarded: false,
             end: None,
         }
     }
@@ -157,13 +182,17 @@ impl<R: RowSource> Query<R> {
             Some(Err(QueryError::ConnectionLost { message })) => {
                 self.end = Some(End::ConnectionLost { message });
             }
-            // 버리는 중에는 끝났는지만 본다.
-            Some(_) if self.is_draining() => {}
+            // 버리는 중에는 화면에 보내지 않는다. 행을 버렸는지만 남긴다.
+            Some(Ok(RowItem::Columns(_))) if self.is_draining() => {}
+            Some(Ok(RowItem::Row(_))) if self.is_draining() => self.discarded = true,
             Some(Ok(RowItem::Columns(columns))) => self.emit(QueryEvent::Columns(columns)),
             Some(Ok(RowItem::Row(row))) => self.push(row),
             Some(Ok(RowItem::Complete { rows })) => self.completed = Some(rows),
             Some(Err(QueryError::Server(error))) => {
-                self.error.get_or_insert(error);
+                self.error.get_or_insert(Failure::Server(error));
+            }
+            Some(Err(QueryError::Client { message })) => {
+                self.error.get_or_insert(Failure::Client { message });
             }
         }
     }
@@ -200,8 +229,8 @@ impl<R: RowSource> Query<R> {
         self.emit(QueryEvent::Rows(batch));
     }
 
-    /// `fetch_more`. 다음 batch를 읽게 했으면 true다.
-    pub(super) fn fetch_more(&mut self) -> bool {
+    /// `fetch_more`. 다음 batch를 읽게 한다. 버리는 중이면 아무것도 하지 않는다.
+    pub(super) fn fetch_more(&mut self) {
         match self.phase {
             Phase::Paused => {
                 self.phase = Phase::Reading;
@@ -211,14 +240,12 @@ impl<R: RowSource> Query<R> {
                     self.send_batch();
                     self.look_ahead = true;
                 }
-                true
             }
             Phase::Reading => {
                 // 보낸 batch의 look-ahead가 아직 끝나지 않았다. 다음 행에서 멈추지 않는다.
                 self.look_ahead = false;
-                true
             }
-            Phase::Draining(_) => false,
+            Phase::Draining(_) => {}
         }
     }
 
@@ -229,6 +256,7 @@ impl<R: RowSource> Query<R> {
         }
         self.phase = Phase::Draining(reason);
         self.clock.resume();
+        self.discarded |= !self.batch.is_empty();
         self.batch = Vec::new();
         self.batch_bytes = 0;
         self.look_ahead = false;
@@ -251,13 +279,13 @@ impl<R: RowSource> Query<R> {
             (Phase::Draining(_), End::ConnectionLost { message }) => {
                 QueryOutcome::ConnectionLost { message }
             }
-            (Phase::Draining(reason), End::Done) => reason.outcome(),
+            (Phase::Draining(reason), End::Done) => self.drained_outcome(reason),
             (_, end) => {
                 if !self.batch.is_empty() {
                     self.send_batch();
                 }
                 match (self.error.take(), end) {
-                    (Some(error), _) => QueryOutcome::Failed(error),
+                    (Some(error), _) => error.outcome(),
                     (None, End::ConnectionLost { message }) => {
                         QueryOutcome::ConnectionLost { message }
                     }
@@ -269,6 +297,23 @@ impl<R: RowSource> Query<R> {
         };
         self.emit_finished(outcome);
         lost
+    }
+
+    /// 버리는 중에 `None`까지 읽은 결과. 문장이 실제로 어떻게 끝났는지 알면 그것을 알린다.
+    ///
+    /// cancel이 늦게 닿았거나 실패하면 문장이 끝까지 돈다(commit된 DELETE 등). 그때 취소로
+    /// 알리면 화면이 틀린다. 다만 화면에 보내지 않고 버린 행이 있으면 결과를 다 받은 것이 아니므로
+    /// 버린 이유로 알린다.
+    fn drained_outcome(&mut self, reason: DrainReason) -> QueryOutcome {
+        if let Some(error) = self.error.take()
+            && !error.is_query_canceled()
+        {
+            return error.outcome();
+        }
+        match self.completed {
+            Some(rows) if !self.discarded => QueryOutcome::Completed { rows },
+            _ => reason.outcome(),
+        }
     }
 
     /// 세션을 닫으며 마친다. 결과가 어떻게 끝났든 버린 것으로 본다.

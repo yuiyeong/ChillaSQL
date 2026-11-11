@@ -89,8 +89,23 @@ fn parenthesized_and_atomic_bodies_stay_whole() {
     let atomic = texts(
         "CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT CASE WHEN true THEN 1 END; SELECT 2; END; SELECT 3",
     );
-    assert_eq!(atomic.len(), 2);
-    assert_eq!(atomic[1], "SELECT 3");
+    assert_eq!(
+        atomic,
+        [
+            "CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN ATOMIC SELECT CASE WHEN true THEN 1 END; SELECT 2; END",
+            "SELECT 3"
+        ]
+    );
+    // BEGIN과 ATOMIC 사이의 주석은 body를 닫지 않는다.
+    assert_eq!(
+        texts(
+            "CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN /* c */ ATOMIC SELECT 1; SELECT 2; END; SELECT 3"
+        ),
+        [
+            "CREATE FUNCTION f() RETURNS int LANGUAGE sql BEGIN /* c */ ATOMIC SELECT 1; SELECT 2; END",
+            "SELECT 3"
+        ]
+    );
     // 트랜잭션의 BEGIN은 atomic body를 열지 않는다.
     assert_eq!(
         texts("BEGIN; SELECT CASE WHEN true THEN 1 END; COMMIT; END"),

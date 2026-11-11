@@ -10,8 +10,8 @@ use chilla_core::application::{
 use chilla_core::domain::{Column, ServerError, SslMode, TxStatus};
 use chilla_core::infrastructure::{PgConnection, PgConnector};
 use support::{
-    activity, admin, collect, connect, password, terminate_backend, tls_admin, tls_profile,
-    wait_until_running,
+    activity, admin, backend_exists, collect, connect, eventually, password, terminate_backend,
+    tls_admin, tls_profile, wait_until_running,
 };
 
 type Item = Result<RowItem, QueryError>;
@@ -134,6 +134,49 @@ async fn server_error_carries_the_position_and_the_connection_goes_on() {
     conn.close().await;
 }
 
+/// SQL_ASCII DB나 client_encoding을 바꾼 세션에서는 UTF-8이 아닌 값이 온다. 그 행만 오류이고
+/// 결과와 연결은 이어진다.
+#[tokio::test]
+async fn non_utf8_cell_is_a_client_error_and_the_rows_go_on() {
+    let conn = connect().await;
+    run(&conn, "SET client_encoding = 'LATIN1'").await;
+
+    // 보내는 text도 LATIN1로 읽히므로 값은 chr로 만든다. 서버는 é를 0xE9 한 byte로 보낸다.
+    let items = run(&conn, "VALUES ('x', chr(233)), ('y', 'z')").await;
+
+    assert_eq!(
+        items,
+        vec![
+            columns(&["column1", "column2"]),
+            Err(QueryError::Client {
+                message: "결과에 UTF-8이 아닌 값이 있습니다. client_encoding을 확인하세요".into()
+            }),
+            row(&[Some("y"), Some("z")]),
+            complete(2),
+        ]
+    );
+    run(&conn, "SET client_encoding = 'UTF8'").await;
+    assert_eq!(run(&conn, "SELECT 42").await, select_42());
+    conn.close().await;
+}
+
+/// 보내지 못한 text는 연결을 잃은 것이 아니다.
+#[tokio::test]
+async fn text_with_nul_is_a_client_error_and_the_connection_goes_on() {
+    let conn = connect().await;
+
+    let started = conn.start_query("SELECT 1\0").await;
+
+    assert!(
+        matches!(started, Err(QueryError::Client { .. })),
+        "{:?}",
+        started.err()
+    );
+    assert!(!conn.is_closed());
+    assert_eq!(run(&conn, "SELECT 42").await, select_42());
+    conn.close().await;
+}
+
 #[tokio::test]
 async fn unread_rows_make_the_server_wait() {
     let admin = admin().await;
@@ -173,11 +216,14 @@ async fn cancel_discards_a_half_read_result() {
 /// M2 완료 기준의 port 수준 확인.
 #[tokio::test]
 async fn cancel_ends_a_sleeping_query() {
+    let admin = admin().await;
     let conn = connect().await;
     let mut rows = conn.start_query("SELECT pg_sleep(10)").await.unwrap();
 
     let waited = tokio::time::timeout(Duration::from_millis(200), rows.next()).await;
     assert!(waited.is_err(), "{waited:?}");
+    // 서버는 실행을 시작하기 전에 닿은 cancel을 무시한다.
+    wait_until_running(&admin, conn.backend_pid()).await;
 
     let started = Instant::now();
     assert_eq!(conn.cancel_handle().cancel().await, Ok(()));
@@ -199,7 +245,8 @@ async fn cancel_waits_until_the_server_has_handled_it() {
         let mut rows = conn.start_query("SELECT pg_sleep(10)").await.unwrap();
         wait_until_running(&admin, conn.backend_pid()).await;
         conn.cancel_handle().cancel().await.unwrap();
-        collect(&mut rows).await;
+        let items = collect(&mut rows).await;
+        assert!(has_server_error(&items, "57014"), "{i}번째: {items:?}");
         assert_eq!(run(&conn, "SELECT 42").await, select_42(), "{i}번째");
     }
     conn.close().await;
@@ -263,6 +310,29 @@ async fn terminated_connection_ends_the_rows() {
         conn.start_query("SELECT 1").await,
         Err(QueryError::ConnectionLost { .. })
     ));
+    conn.close().await;
+}
+
+/// COPY … FROM STDIN은 지원하지 않는다. 서버가 COPY 상태로 남아 다음 쿼리를 받지 못하므로
+/// 결과가 멈추지 않고 연결이 정말로 끊긴다.
+#[tokio::test]
+async fn copy_from_stdin_loses_the_connection_instead_of_hanging() {
+    let admin = admin().await;
+    let conn = connect().await;
+    let pid = conn.backend_pid();
+    run(&conn, "CREATE TEMP TABLE c (id int)").await;
+    let mut rows = conn.start_query("COPY c FROM STDIN").await.unwrap();
+
+    let items = tokio::time::timeout(Duration::from_secs(2), collect(&mut rows))
+        .await
+        .expect("2초 안에 끝난다");
+
+    assert!(
+        matches!(items.last(), Some(Err(QueryError::ConnectionLost { .. }))),
+        "{items:?}"
+    );
+    assert!(eventually(async || conn.is_closed()).await);
+    assert!(eventually(async || !backend_exists(&admin, pid).await).await);
     conn.close().await;
 }
 

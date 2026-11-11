@@ -185,7 +185,22 @@ pub struct ServerErrorDto {
     pub message: String,
     pub detail: Option<String>,
     pub hint: Option<String>,
+    /// 오류 위치. 서버에 보낸 text에서의 UTF-16 code unit offset(0부터)이다. 화면 editor의 offset과
+    /// 같다. 서버가 위치를 주지 않았거나 text 밖이면 `null`이다.
     pub position: Option<u32>,
+}
+
+/// 서버가 준 오류 위치(1부터 세는 글자 번호)를 `sql`의 UTF-16 code unit offset(0부터)으로 바꾼다.
+/// 0이거나 text 끝을 넘으면 `None`이다. text 끝(글자 수 + 1)은 "end of input" 오류가 가리키는
+/// 곳이라 받는다.
+fn utf16_position(sql: &str, position: u32) -> Option<u32> {
+    let before = position.checked_sub(1)?;
+    let mut chars = sql.chars();
+    let mut units = 0u32;
+    for _ in 0..before {
+        units += u32::try_from(chars.next()?.len_utf16()).ok()?;
+    }
+    Some(units)
 }
 
 /// `finished` 이벤트에서 `type` 옆에 펼쳐지는 부분. `outcome`이 구분자다.
@@ -197,6 +212,7 @@ pub enum OutcomeDto {
     Cancelled,
     Discarded,
     ConnectionLost { message: String },
+    ClientError { message: String },
 }
 
 /// 쿼리 하나의 결과 이벤트. 화면이 `type`으로 구분한다.
@@ -234,34 +250,39 @@ impl From<Column> for ColumnDto {
     }
 }
 
-impl From<ServerError> for ServerErrorDto {
-    fn from(error: ServerError) -> Self {
+impl ServerErrorDto {
+    /// `sql`은 그 오류를 낸, 서버에 보낸 text다.
+    fn new(error: ServerError, sql: &str) -> Self {
         Self {
             code: error.code,
             message: error.message,
             detail: error.detail,
             hint: error.hint,
-            position: error.position,
+            position: error
+                .position
+                .and_then(|position| utf16_position(sql, position)),
         }
     }
 }
 
-impl From<QueryOutcome> for OutcomeDto {
-    fn from(outcome: QueryOutcome) -> Self {
+impl OutcomeDto {
+    fn new(outcome: QueryOutcome, sql: &str) -> Self {
         match outcome {
             QueryOutcome::Completed { rows } => Self::Completed { rows },
             QueryOutcome::Failed(error) => Self::Failed {
-                error: error.into(),
+                error: ServerErrorDto::new(error, sql),
             },
             QueryOutcome::Cancelled => Self::Cancelled,
             QueryOutcome::Discarded => Self::Discarded,
             QueryOutcome::ConnectionLost { message } => Self::ConnectionLost { message },
+            QueryOutcome::ClientError { message } => Self::ClientError { message },
         }
     }
 }
 
-impl From<QueryEvent> for QueryEventDto {
-    fn from(event: QueryEvent) -> Self {
+impl QueryEventDto {
+    /// `sql`은 그 쿼리로 서버에 보낸 text다.
+    fn new(event: QueryEvent, sql: &str) -> Self {
         match event {
             QueryEvent::Columns(columns) => Self::Columns {
                 columns: columns.into_iter().map(Into::into).collect(),
@@ -278,7 +299,7 @@ impl From<QueryEvent> for QueryEventDto {
                 elapsed_micros: micros(elapsed),
             },
             QueryEvent::Finished { outcome, elapsed } => Self::Finished {
-                outcome: outcome.into(),
+                outcome: OutcomeDto::new(outcome, sql),
                 elapsed_micros: micros(elapsed),
             },
         }
@@ -363,8 +384,10 @@ pub async fn execute_query(
 ) -> CommandResult<u64> {
     // 화면이 사라져 send가 실패해도 무시한다. 그 쿼리는 다음 execute나 close_session에서 정리된다.
     // sink는 session의 task 안에서 돈다. panic하면 session이 죽으므로 오류를 내지 않는다.
+    // 오류 위치를 화면의 offset으로 바꾸려고 보낸 text를 sink가 갖는다.
+    let sent = sql.clone();
     let sink = Box::new(move |event| {
-        let _ = on_event.send(QueryEventDto::from(event));
+        let _ = on_event.send(QueryEventDto::new(event, &sent));
     });
     let query = app.execute(SessionId(session_id), sql, sink).await?;
     Ok(query.0)
@@ -545,8 +568,35 @@ mod tests {
         assert!(utf16_spans(sql, &[]).is_empty());
     }
 
+    /// 이벤트를 낸 쿼리의 text. 오류 위치 16(1부터 센 글자 번호)은 offset 15다.
+    const SENT: &str = "SELECT * FROM t WHERE nope";
+
+    fn error_position(sql: &str, position: Option<u32>) -> Option<u32> {
+        let error = ServerError {
+            code: "42P01".into(),
+            message: "m".into(),
+            detail: None,
+            hint: None,
+            position,
+        };
+        ServerErrorDto::new(error, sql).position
+    }
+
+    /// 서버는 1부터 세는 글자 번호를 주고, 화면 editor는 0부터 세는 UTF-16 offset을 쓴다.
+    #[test]
+    fn error_position_is_a_utf16_offset_into_the_sent_text() {
+        assert_eq!(error_position("SELECT *\nFROM nope", Some(15)), Some(14));
+        // 😀 하나가 UTF-16 code unit 2개다.
+        assert_eq!(error_position("SELECT '😀' FROM nope", Some(17)), Some(17));
+        // "syntax error at end of input"은 text 끝을 가리킨다.
+        assert_eq!(error_position("SELECT 1 +", Some(11)), Some(10));
+        assert_eq!(error_position("SELECT 1 +", Some(12)), None);
+        assert_eq!(error_position("SELECT 1 +", Some(0)), None);
+        assert_eq!(error_position("SELECT 1 +", None), None);
+    }
+
     fn event_json(event: QueryEvent) -> serde_json::Value {
-        serde_json::to_value(QueryEventDto::from(event)).unwrap()
+        serde_json::to_value(QueryEventDto::new(event, SENT)).unwrap()
     }
 
     fn keys(json: &serde_json::Value) -> BTreeSet<&str> {
@@ -607,7 +657,7 @@ mod tests {
                 message: "m".into(),
                 detail: None,
                 hint: Some("h".into()),
-                position: Some(15),
+                position: Some(16),
             }),
             90,
         );
@@ -659,6 +709,24 @@ mod tests {
         );
         assert_eq!(
             keys(&lost),
+            BTreeSet::from(["type", "outcome", "message", "elapsedMicros"])
+        );
+
+        let client = finished(
+            QueryOutcome::ClientError {
+                message: "y".into(),
+            },
+            11,
+        );
+        assert_eq!(
+            client,
+            json!({
+                "type": "finished", "outcome": "client_error", "message": "y",
+                "elapsedMicros": 11
+            })
+        );
+        assert_eq!(
+            keys(&client),
             BTreeSet::from(["type", "outcome", "message", "elapsedMicros"])
         );
     }

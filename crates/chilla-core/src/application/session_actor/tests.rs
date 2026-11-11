@@ -263,7 +263,26 @@ async fn fetch_more_for_another_query_is_refused() {
     assert_eq!(handle.fetch_more(query).await, Some(true));
     batch(next(&mut events).await);
     outcome(next(&mut events).await);
-    assert_eq!(handle.fetch_more(query).await, Some(false));
+    // 화면은 look-ahead 때문에 끝난 쿼리에 fetch_more를 보낼 수 있다. 오류가 아니다.
+    assert_eq!(handle.fetch_more(query).await, Some(true));
+    assert_eq!(handle.fetch_more(QueryId(99)).await, Some(false));
+}
+
+#[tokio::test]
+async fn fetch_more_is_accepted_for_every_query_this_session_issued() {
+    let (handle, link) = session();
+    link.fail_cancels();
+    link.expect_query();
+    let (sink_a, _events_a) = sink();
+    let (sink_b, _events_b) = sink();
+    let a = handle.execute("A".into(), sink_a).await.unwrap();
+    let b = handle.execute("B".into(), sink_b).await.unwrap();
+
+    // A는 버리는 중이고 B는 기다린다.
+    assert_eq!(handle.fetch_more(a).await, Some(true));
+    assert_eq!(handle.fetch_more(b).await, Some(true));
+    assert_eq!(handle.fetch_more(QueryId(0)).await, Some(false));
+    assert_eq!(handle.fetch_more(QueryId(3)).await, Some(false));
 }
 
 #[tokio::test]
@@ -280,6 +299,60 @@ async fn server_error_keeps_the_rows_received_before_it() {
     assert_eq!(batch(next(&mut events).await).rows, numbered(0..3));
     let finished = outcome(next(&mut events).await);
     assert_eq!(finished, QueryOutcome::Failed(server_error("22012")));
+}
+
+/// client 오류(UTF-8이 아닌 값 등)는 서버 오류처럼 다룬다. 결과를 끝까지 읽고 연결은 계속 쓴다.
+#[tokio::test]
+async fn client_error_keeps_the_rows_received_before_it() {
+    let (handle, link) = session();
+    let feed = link.expect_query();
+    feed.columns(&["n"]);
+    feed.rows(0..3);
+    feed.push(Err(QueryError::Client {
+        message: "m".into(),
+    }));
+    feed.complete(4);
+    let (sink, mut events) = sink();
+    handle.execute("SELECT n".into(), sink).await;
+
+    assert!(matches!(next(&mut events).await, QueryEvent::Columns(_)));
+    assert_eq!(batch(next(&mut events).await).rows, numbered(0..3));
+    let finished = outcome(next(&mut events).await);
+    assert_eq!(
+        finished,
+        QueryOutcome::ClientError {
+            message: "m".into()
+        }
+    );
+    assert_eq!(feed.unread(), 0);
+    assert_eq!(
+        handle.state().await,
+        SessionState::Open { tx: TxStatus::Idle }
+    );
+}
+
+#[tokio::test]
+async fn client_error_from_start_query_finishes_the_query() {
+    let (handle, link) = session();
+    let (sink, mut events) = sink();
+    handle.execute("SELECT 1\0".into(), sink).await;
+
+    let finished = outcome(next(&mut events).await);
+    assert!(
+        matches!(finished, QueryOutcome::ClientError { .. }),
+        "{finished:?}"
+    );
+    assert_eq!(
+        handle.state().await,
+        SessionState::Open { tx: TxStatus::Idle }
+    );
+    let (sink, mut events) = self::sink();
+    handle.execute("SELECT 1".into(), sink).await;
+    assert_eq!(
+        outcome(next(&mut events).await),
+        QueryOutcome::Completed { rows: 0 }
+    );
+    assert_eq!(link.sent(), ["SELECT 1\0", "SELECT 1"]);
 }
 
 #[tokio::test]
@@ -304,6 +377,29 @@ async fn next_execute_discards_the_previous_result() {
     assert_eq!(link.sent(), ["A", "B"]);
 }
 
+/// cancel이 끝나기 전에 다음 쿼리를 보내면 늦게 닿은 cancel이 다음 쿼리를 멈출 수 있다.
+#[tokio::test]
+async fn next_query_waits_for_the_cancel_in_flight() {
+    let (handle, link) = session();
+    let feed_a = link.expect_query();
+    let (sink_a, mut events_a) = sink();
+    let (sink_b, mut events_b) = sink();
+    handle.execute("A".into(), sink_a).await;
+    let gate = link.hold_cancels().await;
+
+    handle.execute("B".into(), sink_b).await;
+    // A의 결과는 57014로 끝났지만 cancel은 아직 끝나지 않았다.
+    assert!(eventually(|| link.cancels() == 1).await);
+    quiet(&mut events_a).await;
+    assert_eq!(feed_a.unread(), 0);
+    assert_eq!(link.sent(), ["A"]);
+
+    drop(gate);
+    assert_eq!(outcome(next(&mut events_a).await), QueryOutcome::Discarded);
+    outcome(next(&mut events_b).await);
+    assert_eq!(link.sent(), ["A", "B"]);
+}
+
 #[tokio::test]
 async fn execute_while_draining_replaces_the_waiting_query() {
     let (handle, link) = session();
@@ -318,10 +414,20 @@ async fn execute_while_draining_replaces_the_waiting_query() {
     handle.execute("C".into(), sink_c).await;
     assert_eq!(outcome(next(&mut events_b).await), QueryOutcome::Discarded);
     assert_eq!(link.sent(), ["A"]);
+    // C는 이미 버리는 중인 A에 cancel을 더 보내지 않는다.
+    quiet(&mut events_a).await;
+    assert_eq!(link.cancels(), 1);
 
+    // cancel이 실패해 A는 끝까지 돌았다. 버린 행이 없으므로 끝난 그대로 알린다.
     feed_a.complete(0);
-    assert_eq!(outcome(next(&mut events_a).await), QueryOutcome::Discarded);
-    outcome(next(&mut events_c).await);
+    assert_eq!(
+        outcome(next(&mut events_a).await),
+        QueryOutcome::Completed { rows: 0 }
+    );
+    assert_eq!(
+        outcome(next(&mut events_c).await),
+        QueryOutcome::Completed { rows: 0 }
+    );
     assert_eq!(link.sent(), ["A", "C"]);
 }
 
@@ -353,6 +459,35 @@ async fn cancel_of_a_half_read_result_drops_the_rest() {
     assert_eq!(outcome(next(&mut events).await), QueryOutcome::Cancelled);
 }
 
+/// 앞 쿼리를 버리는 동안 기다리는 쿼리를 취소하면 그 쿼리는 서버에 가지 않는다.
+#[tokio::test]
+async fn cancel_of_a_waiting_query_removes_it() {
+    let (handle, link) = session();
+    link.fail_cancels();
+    let feed_a = link.expect_query();
+    let (sink_a, mut events_a) = sink();
+    let (sink_b, mut events_b) = sink();
+    handle.execute("A".into(), sink_a).await;
+    let b = handle.execute("B".into(), sink_b).await.unwrap();
+
+    assert_eq!(handle.cancel(b).await, Some(Ok(())));
+    assert_eq!(
+        next(&mut events_b).await,
+        QueryEvent::Finished {
+            outcome: QueryOutcome::Cancelled,
+            elapsed: Duration::ZERO
+        }
+    );
+    assert_eq!(events_b.recv().await, None);
+
+    feed_a.complete(0);
+    outcome(next(&mut events_a).await);
+    // 명령 하나가 지나가면 A를 마친 처리도 끝났다.
+    handle.state().await;
+    assert_eq!(link.sent(), ["A"]);
+    assert_eq!(link.cancels(), 1);
+}
+
 #[tokio::test]
 async fn cancel_of_a_finished_or_unknown_query_does_nothing() {
     let (handle, link) = session();
@@ -380,8 +515,61 @@ async fn failed_cancel_reports_the_error() {
         handle.cancel(query).await,
         Some(Err(CancelError { .. }))
     ));
+    // cancel이 닿지 않아 문장이 끝까지 돌았다. 버린 행이 없으므로 끝난 그대로 알린다.
     feed.complete(0);
+    assert_eq!(
+        outcome(next(&mut events).await),
+        QueryOutcome::Completed { rows: 0 }
+    );
+}
+
+/// cancel보다 문장이 먼저 끝났으면(commit된 DELETE 등) 취소된 것이 아니다.
+#[tokio::test]
+async fn statement_that_completed_despite_cancel_is_completed() {
+    let (handle, link) = session();
+    link.ignore_cancels(1);
+    let feed = link.expect_query();
+    let (sink, mut events) = sink();
+    let query = handle.execute("DELETE FROM t".into(), sink).await.unwrap();
+
+    assert_eq!(handle.cancel(query).await, Some(Ok(())));
+    feed.complete(3);
+    assert_eq!(
+        outcome(next(&mut events).await),
+        QueryOutcome::Completed { rows: 3 }
+    );
+}
+
+/// 서버가 결과를 끝냈어도 화면에 보내지 않고 버린 행이 있으면 취소된 것이다.
+#[tokio::test]
+async fn cancelled_select_with_dropped_rows_stays_cancelled() {
+    let (handle, link) = session();
+    let feed = link.expect_query();
+    feed.rows(0..1200);
+    feed.complete(1200);
+    let (sink, mut events) = sink();
+    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+
+    assert_eq!(batch(next(&mut events).await).rows.len(), 500);
+    assert_eq!(handle.cancel(query).await, Some(Ok(())));
     assert_eq!(outcome(next(&mut events).await), QueryOutcome::Cancelled);
+}
+
+/// cancel이 아닌 서버 오류(57014가 아닌 것)는 버리는 중에 와도 결과다.
+#[tokio::test]
+async fn real_error_during_drain_is_reported() {
+    let (handle, link) = session();
+    link.ignore_cancels(1);
+    let feed = link.expect_query();
+    let (sink, mut events) = sink();
+    let query = handle.execute("SELECT 1/0".into(), sink).await.unwrap();
+
+    assert_eq!(handle.cancel(query).await, Some(Ok(())));
+    feed.fail("22012");
+    assert_eq!(
+        outcome(next(&mut events).await),
+        QueryOutcome::Failed(server_error("22012"))
+    );
 }
 
 #[tokio::test(start_paused = true)]
@@ -400,7 +588,13 @@ async fn cancel_is_sent_again_when_the_query_outlives_it() {
     quiet(&mut events).await;
     assert_eq!(link.cancels(), 1);
 
-    tokio::time::advance(Duration::from_secs(1)).await;
+    // cancel이 끝나고 950ms(quiet 50ms 두 번 포함). 아직 다시 보내지 않는다.
+    tokio::time::advance(Duration::from_millis(850)).await;
+    quiet(&mut events).await;
+    assert_eq!(link.cancels(), 1);
+
+    // 1초를 넘었다.
+    tokio::time::advance(Duration::from_millis(100)).await;
     assert_eq!(outcome(next(&mut events).await), QueryOutcome::Cancelled);
     assert_eq!(link.cancels(), 2);
 }

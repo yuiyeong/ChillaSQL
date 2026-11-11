@@ -224,7 +224,8 @@ impl<C: Connector> App<C> {
             .ok_or(AppError::UnknownSession { id: session })
     }
 
-    /// 받다 만 결과의 다음 batch를 읽게 한다.
+    /// 받다 만 결과의 다음 batch를 읽게 한다. 이미 끝났거나 버려진 쿼리면 아무것도 하지 않는다.
+    /// 그 세션이 만든 적 없는 쿼리면 `QueryNotActive`다.
     pub async fn fetch_more(&self, session: SessionId, query: QueryId) -> Result<(), AppError> {
         let handle = self.session_handle(session).await?;
         match handle.fetch_more(query).await {
@@ -756,7 +757,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn fetch_more_on_a_finished_query_is_query_not_active() {
+    async fn fetch_more_is_refused_only_for_an_unknown_query() {
         let f = opened().await;
         let session = session_of(&f).await;
         let (sink, mut events) = sink();
@@ -767,9 +768,10 @@ mod tests {
             .unwrap();
         finished(&mut events).await;
 
+        assert_eq!(f.app.fetch_more(session, query).await, Ok(()));
         assert_eq!(
-            f.app.fetch_more(session, query).await,
-            Err(AppError::QueryNotActive { query })
+            f.app.fetch_more(session, QueryId(99)).await,
+            Err(AppError::QueryNotActive { query: QueryId(99) })
         );
     }
 

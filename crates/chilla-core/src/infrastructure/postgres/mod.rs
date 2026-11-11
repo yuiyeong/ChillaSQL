@@ -10,11 +10,12 @@ mod tls;
 mod tx_tap;
 
 use std::error::Error as _;
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use socket2::{SockRef, TcpKeepalive};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
+use tokio::net::{TcpStream, ToSocketAddrs};
 use tokio::task::JoinHandle;
 use tokio_postgres::error::SqlState;
 use tokio_postgres::{Client, Config, NoTls, SimpleQueryMessage};
@@ -79,18 +80,17 @@ async fn establish(
     password: Option<&Password>,
     connect_timeout: Duration,
 ) -> Result<PgConnection, ConnectError> {
-    let tcp = open_tcp(profile).await?;
+    let tcp = open_tcp((profile.host.as_str(), profile.port)).await?;
+    let server = tcp.peer_addr().map_err(unreachable)?;
     let Some(verification) = verification(profile) else {
-        return start(tcp, profile, password, connect_timeout).await;
+        return start(tcp, profile, server, password, connect_timeout).await;
     };
     let tls = tls::negotiate(tcp, &profile.host, verification).await?;
-    start(tls, profile, password, connect_timeout).await
+    start(tls, profile, server, password, connect_timeout).await
 }
 
-async fn open_tcp(profile: &ConnectionProfile) -> Result<TcpStream, ConnectError> {
-    let tcp = TcpStream::connect((profile.host.as_str(), profile.port))
-        .await
-        .map_err(unreachable)?;
+async fn open_tcp(addr: impl ToSocketAddrs) -> Result<TcpStream, ConnectError> {
+    let tcp = TcpStream::connect(addr).await.map_err(unreachable)?;
     configure_socket(&tcp).map_err(unreachable)?;
     Ok(tcp)
 }
@@ -119,9 +119,12 @@ fn configure_socket(tcp: &TcpStream) -> std::io::Result<()> {
 }
 
 /// 이미 열린(필요하면 암호화까지 끝난) stream 위에서 PostgreSQL 세션을 시작한다.
+///
+/// `server`는 `stream`이 연결된 서버의 주소다.
 async fn start<S>(
     stream: S,
     profile: &ConnectionProfile,
+    server: SocketAddr,
     password: Option<&Password>,
     connect_timeout: Duration,
 ) -> Result<PgConnection, ConnectError>
@@ -157,6 +160,7 @@ where
         tx_status,
         backend_pid,
         profile: profile.clone(),
+        server,
         connect_timeout,
     })
 }
@@ -184,8 +188,12 @@ pub struct PgConnection {
     driver: JoinHandle<()>,
     tx_status: TxStatusCell,
     backend_pid: i32,
-    /// cancel 요청을 같은 서버로 같은 방법으로 보내려고 갖는다.
+    /// cancel 요청을 같은 방법(TLS 여부, 인증서 확인)으로 보내려고 갖는다.
     profile: ConnectionProfile,
+    /// 연결한 서버의 주소. cancel 요청은 host 이름을 다시 찾지 않고 이 주소로 보낸다.
+    /// DNS round robin이나 load balancer 뒤에서는 다시 찾은 주소가 다른 서버일 수 있고,
+    /// 그 서버는 cancel을 말없이 무시한다.
+    server: SocketAddr,
     connect_timeout: Duration,
 }
 
@@ -207,8 +215,12 @@ impl DbConnection for PgConnection {
 
     async fn start_query(&self, sql: &str) -> Result<PgRows, QueryError> {
         match self.client.simple_query_raw(sql).await {
-            Ok(stream) => Ok(PgRows::new(stream)),
-            Err(error) => Err(QueryError::ConnectionLost {
+            Ok(stream) => Ok(PgRows::new(stream, self.driver.abort_handle())),
+            Err(error) if error.is_closed() => Err(QueryError::ConnectionLost {
+                message: error_message(&error),
+            }),
+            // 보내기 전에 실패했다(NUL이 든 text 등). 연결은 그대로다.
+            Err(error) => Err(QueryError::Client {
                 message: error_message(&error),
             }),
         }
@@ -218,6 +230,7 @@ impl DbConnection for PgConnection {
         PgCancel {
             token: self.client.cancel_token(),
             profile: self.profile.clone(),
+            addr: self.server,
             timeout: self.connect_timeout,
         }
     }
@@ -336,7 +349,7 @@ mod tests {
         let conn = connect().await;
         let mut cancel = conn.cancel_handle();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        cancel.profile.port = listener.local_addr().unwrap().port();
+        cancel.addr = listener.local_addr().unwrap();
         drop(listener);
 
         let result = cancel.cancel().await;
@@ -353,7 +366,9 @@ mod tests {
         let conn = connect().await;
         let mut cancel = conn.cancel_handle();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        cancel.profile.port = listener.local_addr().unwrap().port();
+        cancel.addr = listener.local_addr().unwrap();
+        // host 이름을 다시 찾지 않는다. 찾으면 이 이름에서 실패한다.
+        cancel.profile.host = "cancel-must-not-resolve.invalid".into();
         let server = tokio::spawn(async move {
             let (mut socket, _) = listener.accept().await.unwrap();
             let mut request = [0u8; 16];

@@ -1,8 +1,10 @@
 //! 실행 중인 쿼리를 멈추는 cancel 요청.
 //!
-//! cancel 요청은 새 연결로 보낸다. 연결할 때와 같은 방법(TCP, 필요하면 TLS)으로 stream을 열고
-//! `tokio-postgres`에는 그 stream만 넘긴다. 서버의 응답은 없고, 요청을 처리한 뒤 연결을 닫는다.
+//! cancel 요청은 새 연결로 보낸다. 세션이 연결한 서버 주소로 연결할 때와 같은 방법(TCP, 필요하면
+//! TLS)으로 stream을 열고 `tokio-postgres`에는 그 stream만 넘긴다. 서버의 응답은 없고, 요청을
+//! 처리한 뒤 연결을 닫는다.
 
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite};
@@ -15,7 +17,10 @@ use crate::domain::ConnectionProfile;
 pub struct PgCancel {
     pub(super) token: CancelToken,
     /// 연결할 때 쓴 접속 정보. 비밀번호는 없다 (cancel 요청에는 인증이 없다).
+    /// TLS의 server name과 인증서 확인에 쓴다.
     pub(super) profile: ConnectionProfile,
+    /// 세션이 연결한 서버의 주소. 이 주소로 연결한다.
+    pub(super) addr: SocketAddr,
     /// stream을 열 때부터 서버가 연결을 닫을 때까지 전체에 걸린다.
     pub(super) timeout: Duration,
 }
@@ -30,7 +35,7 @@ impl QueryCancel for PgCancel {
 
 impl PgCancel {
     async fn send(&self) -> Result<(), CancelError> {
-        let tcp = open_tcp(&self.profile).await.map_err(cancel_error)?;
+        let tcp = open_tcp(self.addr).await.map_err(cancel_error)?;
         match verification(&self.profile) {
             None => request(tcp, &self.token).await,
             Some(verification) => {

@@ -5,7 +5,7 @@ use std::ops::Range;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::watch;
+use tokio::sync::{OwnedRwLockWriteGuard, RwLock, watch};
 
 use super::numbered;
 use crate::application::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
@@ -18,6 +18,8 @@ pub(crate) struct FakeLink {
     lost: Arc<AtomicBool>,
     lost_during_tx_status: Arc<AtomicBool>,
     queries: Arc<Mutex<FakeQueries>>,
+    /// write guard를 누가 갖고 있으면 cancel이 끝나지 않는다.
+    cancel_gate: Arc<RwLock<()>>,
 }
 
 /// 가짜 연결이 받은 쿼리와 cancel.
@@ -95,6 +97,12 @@ impl FakeLink {
     /// 다음 `count`번의 cancel이 `Ok(())`를 돌려주되 결과를 끝내지 않게 한다(쿼리보다 먼저 닿은 cancel).
     pub(crate) fn ignore_cancels(&self, count: usize) {
         self.queries().ignore_cancels = count;
+    }
+
+    /// 돌려준 guard를 drop할 때까지 cancel이 끝나지 않게 한다(답이 늦은 cancel 요청).
+    /// 서버 쪽 효과(끝나지 않은 결과를 57014로 끝내기)는 cancel을 부르는 즉시 일어난다.
+    pub(crate) async fn hold_cancels(&self) -> OwnedRwLockWriteGuard<()> {
+        self.cancel_gate.clone().write_owned().await
     }
 
     /// `tx_status`가 돌려줄 값. 처음에는 `Idle`이다.
@@ -242,6 +250,15 @@ pub(crate) struct FakeCancel(FakeLink);
 
 impl QueryCancel for FakeCancel {
     async fn cancel(self) -> Result<(), CancelError> {
+        let result = self.send();
+        let _held = self.0.cancel_gate.read().await;
+        result
+    }
+}
+
+impl FakeCancel {
+    /// 서버 쪽 효과. `FakeLink::hold_cancels`와 관계없이 바로 일어난다.
+    fn send(&self) -> Result<(), CancelError> {
         let mut queries = self.0.queries();
         queries.cancels += 1;
         if queries.fail_cancels {
@@ -301,6 +318,12 @@ impl DbConnection for FakeConnection {
         if self.is_closed() {
             return Err(QueryError::ConnectionLost {
                 message: "가짜 연결이 끊겼다".into(),
+            });
+        }
+        // 실제 연결처럼 NUL이 든 text는 보내지 못한다. 연결은 그대로다.
+        if sql.contains('\0') {
+            return Err(QueryError::Client {
+                message: "가짜: text에 NUL이 있다".into(),
             });
         }
         let feed = queries.expected.pop_front().unwrap_or_else(|| {

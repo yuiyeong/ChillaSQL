@@ -74,7 +74,8 @@ pub trait DbConnection: Send + 'static {
     fn tx_status(&self) -> impl Future<Output = TxStatus> + Send;
     /// 연결이 밖에서 끊겼으면 true다 (서버 재시작, `pg_terminate_backend` 등).
     fn is_closed(&self) -> bool;
-    /// 문장을 보낸다. 서버의 응답은 기다리지 않는다. 연결이 끊겨 있으면 `ConnectionLost`다.
+    /// 문장을 보낸다. 서버의 응답은 기다리지 않는다. 연결이 끊겨 있으면 `ConnectionLost`, 보낼 수
+    /// 없는 text(NUL이 든 text 등)면 `Client`다.
     fn start_query(&self, sql: &str)
     -> impl Future<Output = Result<Self::Rows, QueryError>> + Send;
     /// 이 연결에서 실행 중인 쿼리를 멈추는 요청. 연결과 따로 살아서 다른 task에서 쓸 수 있다.
@@ -87,7 +88,7 @@ pub trait DbConnection: Send + 'static {
 pub trait RowSource: Send + 'static {
     /// 다음 항목. 결과가 끝나면 `None`이다. cancel-safe여야 한다(`select!`에서 쓴다).
     ///
-    /// `Err(Server)` 뒤에도 `None`까지 읽어야 연결이 다음 쿼리를 받는다.
+    /// `Err(Server)`와 `Err(Client)` 뒤에도 `None`까지 읽어야 연결이 다음 쿼리를 받는다.
     /// `Err(ConnectionLost)`는 마지막 항목이고 그 뒤에는 `None`이다.
     fn next(&mut self) -> impl Future<Output = Option<Result<RowItem, QueryError>>> + Send;
 }
@@ -108,6 +109,10 @@ pub enum QueryError {
     Server(ServerError),
     #[error("연결이 끊겼습니다: {message}")]
     ConnectionLost { message: String },
+    /// 서버의 오류도 아니고 연결이 끊긴 것도 아니다(UTF-8이 아닌 값, 보낼 수 없는 text 등).
+    /// 연결은 계속 쓸 수 있다.
+    #[error("쿼리를 처리하지 못했습니다: {message}")]
+    Client { message: String },
 }
 
 pub trait QueryCancel: Send + 'static {

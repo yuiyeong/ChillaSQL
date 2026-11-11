@@ -157,12 +157,20 @@ impl<D: DbConnection> Actor<D> {
                 self.execute(Pending { id, sql, sink }).await;
             }
             SessionCommand::FetchMore { query, reply } => {
-                let current = self.query.as_mut().filter(|q| q.id == query);
-                let _ = reply.send(current.is_some_and(Query::fetch_more));
+                if let Some(current) = self.query.as_mut().filter(|q| q.id == query) {
+                    current.fetch_more();
+                }
+                // look-ahead 때문에 화면은 이미 끝난 쿼리에 fetch_more를 보낼 수 있다. 이 세션이
+                // 만든 쿼리면 무엇이든 받아들인다.
+                let _ = reply.send((1..=self.last_id).contains(&query.0));
             }
             SessionCommand::Cancel { query, reply } => {
                 let current = self.query.as_mut().filter(|q| q.id == query);
-                if current.is_some_and(|q| q.drain(DrainReason::Cancelled)) {
+                if let Some(waiting) = self.pending.take_if(|p| p.id == query) {
+                    // 아직 서버에 보내지 않았으므로 cancel 요청 없이 빼기만 한다.
+                    waiting.finish(QueryOutcome::Cancelled);
+                    let _ = reply.send(Ok(()));
+                } else if current.is_some_and(|q| q.drain(DrainReason::Cancelled)) {
                     self.send_cancel(Some(reply));
                 } else {
                     let _ = reply.send(Ok(()));
@@ -195,7 +203,7 @@ impl<D: DbConnection> Actor<D> {
             self.send_cancel(None);
         }
         if let Some(replaced) = self.pending.replace(next) {
-            replaced.discard();
+            replaced.finish(QueryOutcome::Discarded);
         }
     }
 
@@ -210,6 +218,7 @@ impl<D: DbConnection> Actor<D> {
                         QueryOutcome::ConnectionLost { message }
                     }
                     QueryError::Server(error) => QueryOutcome::Failed(error),
+                    QueryError::Client { message } => QueryOutcome::ClientError { message },
                 };
                 let elapsed = started.elapsed();
                 (next.sink)(QueryEvent::Finished { outcome, elapsed });
@@ -261,7 +270,7 @@ impl<D: DbConnection> Actor<D> {
             query.finish_closed();
         }
         if let Some(pending) = self.pending.take() {
-            pending.discard();
+            pending.finish(QueryOutcome::Discarded);
         }
         self.connection.close().await;
     }
@@ -322,14 +331,17 @@ impl SessionHandle {
             .await
     }
 
-    /// 받다 만 결과의 다음 batch를 읽게 한다. 그 쿼리가 지금 쿼리가 아니거나 버리는 중이면 `Some(false)`다.
+    /// 받다 만 결과의 다음 batch를 읽게 한다. 이 세션이 만든 쿼리면 `Some(true)`다. 지금 쿼리가
+    /// `Paused`일 때만 읽기를 이어 가고, 버리는 중이거나 기다리거나 이미 끝난 쿼리면 아무것도 하지
+    /// 않는다. 이 세션이 만든 적 없는 쿼리면 `Some(false)`다.
     pub(crate) async fn fetch_more(&self, query: QueryId) -> Option<bool> {
         self.request(|reply| SessionCommand::FetchMore { query, reply })
             .await
     }
 
     /// 쿼리를 멈추고 남은 결과를 버린다. cancel 요청이 서버에 닿은 뒤 돌아온다.
-    /// 그 쿼리가 지금 쿼리가 아니면 아무것도 하지 않고 `Some(Ok(()))`다.
+    /// 앞 쿼리를 버리는 동안 기다리는 쿼리면 보내지 않고 `Cancelled`로 마친다(cancel 요청은 없다).
+    /// 그 밖의 쿼리(끝났거나 모르는 쿼리)면 아무것도 하지 않고 `Some(Ok(()))`다.
     pub(crate) async fn cancel(&self, query: QueryId) -> Option<Result<(), CancelError>> {
         self.request(|reply| SessionCommand::Cancel { query, reply })
             .await
