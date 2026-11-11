@@ -3,7 +3,10 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
-use crate::domain::{ConnectionProfile, Password, ProfileError, Project, StatementSpan, TxStatus};
+use crate::domain::{
+    Column, ConnectionProfile, Password, ProfileError, Project, Row, ServerError, StatementSpan,
+    TxStatus,
+};
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽는다.
 pub trait ProjectStore: Send + Sync {
@@ -63,13 +66,59 @@ pub trait Connector: Send + Sync + 'static {
 
 /// 열려 있는 DB 연결 하나.
 pub trait DbConnection: Send + 'static {
+    type Rows: RowSource;
+    type Cancel: QueryCancel;
+
     fn backend_pid(&self) -> i32;
     /// 서버가 마지막으로 알려 준 트랜잭션 상태. 오류 직후에는 서버가 상태를 알려 줄 때까지 기다린다.
     fn tx_status(&self) -> impl Future<Output = TxStatus> + Send;
     /// 연결이 밖에서 끊겼으면 true다 (서버 재시작, `pg_terminate_backend` 등).
     fn is_closed(&self) -> bool;
-    /// 서버가 세션을 끝낼 때까지 기다린다.
+    /// 문장을 보낸다. 서버의 응답은 기다리지 않는다. 연결이 끊겨 있으면 `ConnectionLost`다.
+    fn start_query(&self, sql: &str)
+    -> impl Future<Output = Result<Self::Rows, QueryError>> + Send;
+    /// 이 연결에서 실행 중인 쿼리를 멈추는 요청. 연결과 따로 살아서 다른 task에서 쓸 수 있다.
+    fn cancel_handle(&self) -> Self::Cancel;
+    /// 서버가 세션을 끝낼 때까지 기다린다. 실행 중인 쿼리가 있으면 끝날 때까지 기다리지 않는다.
     fn close(self) -> impl Future<Output = ()> + Send;
+}
+
+/// 쿼리 하나의 결과. 읽지 않으면 서버가 기다린다(backpressure).
+pub trait RowSource: Send + 'static {
+    /// 다음 항목. 결과가 끝나면 `None`이다. cancel-safe여야 한다(`select!`에서 쓴다).
+    ///
+    /// `Err(Server)` 뒤에도 `None`까지 읽어야 연결이 다음 쿼리를 받는다.
+    /// `Err(ConnectionLost)`는 마지막 항목이고 그 뒤에는 `None`이다.
+    fn next(&mut self) -> impl Future<Output = Option<Result<RowItem, QueryError>>> + Send;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RowItem {
+    Columns(Vec<Column>),
+    Row(Row),
+    /// 문장이 끝났다. `rows`는 서버가 알려 준 행 수다(영향받은 행 또는 돌려준 행).
+    Complete {
+        rows: u64,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum QueryError {
+    #[error("{}", .0.message)]
+    Server(ServerError),
+    #[error("연결이 끊겼습니다: {message}")]
+    ConnectionLost { message: String },
+}
+
+pub trait QueryCancel: Send + 'static {
+    /// cancel 요청을 보내고 서버가 처리할 때까지 기다린다. 실행 중인 쿼리가 없으면 서버가 무시한다.
+    fn cancel(self) -> impl Future<Output = Result<(), CancelError>> + Send;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("취소 요청을 보내지 못했습니다: {message}")]
+pub struct CancelError {
+    pub message: String,
 }
 
 /// 연결 실패. 화면이 다음 행동을 고를 수 있게 나눈다. 어느 variant에도 비밀번호는 들어가지 않는다.

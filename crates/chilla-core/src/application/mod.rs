@@ -9,6 +9,7 @@ mod test_support;
 pub use app::{App, AppError};
 
 pub use ports::{
-    ConnectError, Connector, DbConnection, PasswordKey, PasswordStore, PasswordStoreError,
-    ProjectError, ProjectStore, SplitError, StatementSplitter,
+    CancelError, ConnectError, Connector, DbConnection, PasswordKey, PasswordStore,
+    PasswordStoreError, ProjectError, ProjectStore, QueryCancel, QueryError, RowItem, RowSource,
+    SplitError, StatementSplitter,
 };

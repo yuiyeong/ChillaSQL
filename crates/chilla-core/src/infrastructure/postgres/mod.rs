@@ -4,6 +4,8 @@
 //! 넘긴다. `tokio-postgres`가 socket을 직접 열면 서버가 보내는 byte를 볼 수 없어 트랜잭션
 //! 상태를 알 수 없다. 이 때문에 SCRAM channel binding은 쓰지 않는다.
 
+mod cancel;
+mod rows;
 mod tls;
 mod tx_tap;
 
@@ -17,12 +19,17 @@ use tokio::task::JoinHandle;
 use tokio_postgres::error::SqlState;
 use tokio_postgres::{Client, Config, NoTls, SimpleQueryMessage};
 
-use crate::application::{ConnectError, Connector, DbConnection};
+use crate::application::{ConnectError, Connector, DbConnection, QueryError};
 use crate::domain::{ConnectionProfile, Password, SslMode, TxStatus};
+pub use cancel::PgCancel;
+pub use rows::PgRows;
 use tls::Verification;
 use tx_tap::{TxStatusCell, TxTap};
 
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+/// `close`가 driver task를 기다리는 시간. 실행 중인 쿼리가 있으면 driver는 쿼리가 끝나야
+/// 끝나므로, 그 전에 `abort`해서 socket을 닫는다.
+const CLOSE_GRACE: Duration = Duration::from_secs(1);
 // 30초 조용하면 10초 간격으로 3번 확인한다. 응답이 없는 연결은 1분쯤 뒤에 끊긴 것으로 드러난다.
 const KEEPALIVE_IDLE: Duration = Duration::from_secs(30);
 const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
@@ -60,7 +67,8 @@ impl Connector for PgConnector {
         profile: &ConnectionProfile,
         password: Option<&Password>,
     ) -> Result<PgConnection, ConnectError> {
-        tokio::time::timeout(self.connect_timeout, establish(profile, password))
+        let connection = establish(profile, password, self.connect_timeout);
+        tokio::time::timeout(self.connect_timeout, connection)
             .await
             .unwrap_or(Err(ConnectError::Timeout))
     }
@@ -69,20 +77,32 @@ impl Connector for PgConnector {
 async fn establish(
     profile: &ConnectionProfile,
     password: Option<&Password>,
+    connect_timeout: Duration,
 ) -> Result<PgConnection, ConnectError> {
+    let tcp = open_tcp(profile).await?;
+    let Some(verification) = verification(profile) else {
+        return start(tcp, profile, password, connect_timeout).await;
+    };
+    let tls = tls::negotiate(tcp, &profile.host, verification).await?;
+    start(tls, profile, password, connect_timeout).await
+}
+
+async fn open_tcp(profile: &ConnectionProfile) -> Result<TcpStream, ConnectError> {
     let tcp = TcpStream::connect((profile.host.as_str(), profile.port))
         .await
         .map_err(unreachable)?;
     configure_socket(&tcp).map_err(unreachable)?;
+    Ok(tcp)
+}
 
-    let verification = match (profile.sslmode, &profile.sslrootcert) {
-        (SslMode::Disable, _) => return start(tcp, profile, password).await,
-        (SslMode::Require, _) => Verification::None,
-        (SslMode::VerifyFull, Some(path)) => Verification::RootsFrom(path),
-        (SslMode::VerifyFull, None) => Verification::Platform,
-    };
-    let tls = tls::negotiate(tcp, &profile.host, verification).await?;
-    start(tls, profile, password).await
+/// 서버 인증서를 어떻게 확인할지. TLS를 쓰지 않으면 `None`이다.
+fn verification(profile: &ConnectionProfile) -> Option<Verification<'_>> {
+    match (profile.sslmode, &profile.sslrootcert) {
+        (SslMode::Disable, _) => None,
+        (SslMode::Require, _) => Some(Verification::None),
+        (SslMode::VerifyFull, Some(path)) => Some(Verification::RootsFrom(path)),
+        (SslMode::VerifyFull, None) => Some(Verification::Platform),
+    }
 }
 
 /// socket을 직접 열기 때문에 tokio-postgres가 해 주던 설정을 여기서 한다.
@@ -103,6 +123,7 @@ async fn start<S>(
     stream: S,
     profile: &ConnectionProfile,
     password: Option<&Password>,
+    connect_timeout: Duration,
 ) -> Result<PgConnection, ConnectError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -135,6 +156,8 @@ where
         driver,
         tx_status,
         backend_pid,
+        profile: profile.clone(),
+        connect_timeout,
     })
 }
 
@@ -161,9 +184,15 @@ pub struct PgConnection {
     driver: JoinHandle<()>,
     tx_status: TxStatusCell,
     backend_pid: i32,
+    /// cancel 요청을 같은 서버로 같은 방법으로 보내려고 갖는다.
+    profile: ConnectionProfile,
+    connect_timeout: Duration,
 }
 
 impl DbConnection for PgConnection {
+    type Rows = PgRows;
+    type Cancel = PgCancel;
+
     fn backend_pid(&self) -> i32 {
         self.backend_pid
     }
@@ -176,9 +205,34 @@ impl DbConnection for PgConnection {
         self.client.is_closed()
     }
 
+    async fn start_query(&self, sql: &str) -> Result<PgRows, QueryError> {
+        match self.client.simple_query_raw(sql).await {
+            Ok(stream) => Ok(PgRows::new(stream)),
+            Err(error) => Err(QueryError::ConnectionLost {
+                message: error_message(&error),
+            }),
+        }
+    }
+
+    fn cancel_handle(&self) -> PgCancel {
+        PgCancel {
+            token: self.client.cancel_token(),
+            profile: self.profile.clone(),
+            timeout: self.connect_timeout,
+        }
+    }
+
     async fn close(self) {
-        drop(self.client);
-        let _ = self.driver.await;
+        let PgConnection {
+            client, mut driver, ..
+        } = self;
+        drop(client);
+        if tokio::time::timeout(CLOSE_GRACE, &mut driver)
+            .await
+            .is_err()
+        {
+            driver.abort();
+        }
     }
 }
 
@@ -205,10 +259,7 @@ fn connect_error(error: tokio_postgres::Error) -> ConnectError {
             }
         };
     }
-    let message = match error.source() {
-        Some(source) => format!("{error}: {source}"),
-        None => error.to_string(),
-    };
+    let message = error_message(&error);
     // tokio-postgres는 오류 종류를 공개하지 않는다. 서버가 비밀번호를 요구하는데 없을 때의
     // 문구로 판별하고, tests/connect.rs의 missing_password_is_password_required가 이를 고정한다.
     if message.contains("password missing") {
@@ -218,9 +269,18 @@ fn connect_error(error: tokio_postgres::Error) -> ConnectError {
     }
 }
 
+/// `tokio-postgres`의 오류는 원인(io 오류 등)을 `source`에만 담는다.
+fn error_message(error: &tokio_postgres::Error) -> String {
+    match error.source() {
+        Some(source) => format!("{error}: {source}"),
+        None => error.to_string(),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::application::{CancelError, QueryCancel};
 
     /// test DB (`scripts/test-db.sh up`). private인 `client`로 SQL을 보내야 해서 이 test만
     /// `tests/`가 아니라 여기 있다.
@@ -265,5 +325,22 @@ mod tests {
         assert_eq!(conn.tx_status().await, TxStatus::Failed);
         conn.client.batch_execute("ROLLBACK").await.unwrap();
         assert_eq!(conn.tx_status().await, TxStatus::Idle);
+    }
+
+    #[tokio::test]
+    async fn cancel_to_an_unreachable_server_is_an_error() {
+        let conn = PgConnector::new()
+            .connect(&local_profile(), Some(&Password::new("chilla".into())))
+            .await
+            .expect("scripts/test-db.sh up 을 먼저 실행하세요");
+        let mut cancel = conn.cancel_handle();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        cancel.profile.port = listener.local_addr().unwrap().port();
+        drop(listener);
+
+        let result = cancel.cancel().await;
+
+        assert!(matches!(result, Err(CancelError { .. })), "{result:?}");
+        conn.close().await;
     }
 }

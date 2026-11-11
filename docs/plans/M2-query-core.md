@@ -425,7 +425,7 @@ impl FakeFeed {
 - `PgCancel::cancel`: 연결할 때와 같은 방법으로 stream을 연다(TCP, `sslmode`에 따라 `tls::negotiate`. `TxTap`은 씌우지 않는다). `cancel_query_raw(&mut stream, NoTls)` 뒤 서버가 연결을 닫을 때까지 읽는다(EOF와 read 오류 모두 닫힌 것이다). 전체에 `PgConnector`의 connect timeout(기본 10초)을 건다. 실패는 `CancelError`.
 - `close`: client를 drop하고 driver task를 최대 1초 기다린다. 그 안에 끝나지 않으면 `abort`한다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `tests/support/mod.rs`에 `pub async fn connect() -> PgConnection`(`local_profile()`과 `password()`로 연결)과 `pub async fn collect<R: RowSource>(rows: &mut R) -> Vec<Result<RowItem, QueryError>>`(`None`까지 모음)를 더한다. `tests/query_stream.rs`:
 
@@ -493,21 +493,21 @@ impl FakeFeed {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --test query_stream`
 Expected: FAIL. `start_query`가 없어 compile error가 난다.
 
-- [ ] **Step 3: domain type, port, `PgRows`, `PgCancel`, 가짜 연결 구현**
+- [x] **Step 3: domain type, port, `PgRows`, `PgCancel`, 가짜 연결 구현**
 
 `FakeConnection`이 새 `DbConnection`을 구현해야 crate가 compile된다. 위의 가짜 interface를 이 step에서 만든다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS (M1의 test도 그대로 통과한다)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

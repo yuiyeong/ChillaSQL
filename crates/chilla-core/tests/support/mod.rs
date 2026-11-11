@@ -4,9 +4,9 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use chilla_core::application::{ConnectError, Connector};
+use chilla_core::application::{ConnectError, Connector, QueryError, RowItem, RowSource};
 use chilla_core::domain::{ConnectionProfile, Password, SslMode};
-use chilla_core::infrastructure::PgConnector;
+use chilla_core::infrastructure::{PgConnection, PgConnector};
 
 pub const TEST_DB_PORT: u16 = 54318;
 /// SSL을 켠 test DB. 서버 인증서의 SAN은 `DNS:localhost`뿐이다.
@@ -51,6 +51,23 @@ pub fn tls_file(name: &str) -> PathBuf {
 
 pub fn password() -> Password {
     Password::new(PASSWORD.into())
+}
+
+/// 검사하려는 코드로 test DB에 연결한다.
+pub async fn connect() -> PgConnection {
+    PgConnector::new()
+        .connect(&local_profile(), Some(&password()))
+        .await
+        .expect("scripts/test-db.sh up 을 먼저 실행하세요")
+}
+
+/// 결과를 `None`까지 모두 읽는다.
+pub async fn collect<R: RowSource>(rows: &mut R) -> Vec<Result<RowItem, QueryError>> {
+    let mut items = Vec::new();
+    while let Some(item) = rows.next().await {
+        items.push(item);
+    }
+    items
 }
 
 /// 확인용 직접 연결. 검사하려는 코드를 거치지 않는다.

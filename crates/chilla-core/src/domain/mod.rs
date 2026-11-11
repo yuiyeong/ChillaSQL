@@ -3,11 +3,13 @@
 mod connection;
 mod password;
 mod project;
+mod query;
 mod session;
 mod statement;
 
 pub use connection::{ConnectionProfile, ProfileError, SslMode};
 pub use password::Password;
 pub use project::Project;
+pub use query::{Column, QueryId, Row, ServerError};
 pub use session::{SessionId, SessionInfo, SessionState, TxStatus};
 pub use statement::StatementSpan;

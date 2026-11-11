@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
+futures-util = { version = "0.3", default-features = false }
 keyring-core = "1"
 pg_query = "18.1"
 rustls = { version = "0.23", default-features = false, features = ["ring", "std", "tls12", "logging"] }
@@ -20,4 +21,4 @@ toml = { version = "1", features = ["preserve_order"] }
 [dev-dependencies]
 syn = { version = "2", features = ["full", "visit"] }
 tempfile = "3"
-tokio = { version = "1", features = ["rt-multi-thread"] }
+tokio = { version = "1", features = ["rt-multi-thread", "test-util"] }

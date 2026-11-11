@@ -410,6 +410,7 @@ name = "chilla-core"
 version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
+ "futures-util",
  "keyring-core",
  "pg_query",
  "rustls",
