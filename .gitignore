@@ -29,5 +29,8 @@ src-tauri/gen/
 # Claude Code local settings
 .claude/settings.local.json
 
+# TLS test DB 인증서 (scripts/test-db.sh 가 만든다)
+db/tls/
+
 # Agent scratch
 .superpowers/

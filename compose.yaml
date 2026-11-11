@@ -25,5 +25,39 @@ services:
       retries: 90
       start_period: 120s
 
+  # SSL을 켠 서버. sslmode require, verify-full test가 쓴다. seed가 없어 volume도 없다.
+  db-tls:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: chilla
+      POSTGRES_PASSWORD: chilla
+      POSTGRES_DB: chilla_test
+    ports:
+      - "127.0.0.1:54319:5432"
+    volumes:
+      # scripts/test-db.sh 가 만든다.
+      - ./db/tls:/certs:ro
+    # PostgreSQL은 key 파일이 postgres 소유에 0600이어야 받는다. bind mount한 파일은 그렇지
+    # 않으므로 root로 복사해 권한을 맞춘 뒤 원래 entrypoint로 넘어간다.
+    command:
+      - sh
+      - -c
+      - |
+        cp /certs/server.crt /certs/server.key /var/lib/postgresql/ &&
+        chown postgres:postgres /var/lib/postgresql/server.crt /var/lib/postgresql/server.key &&
+        chmod 600 /var/lib/postgresql/server.key &&
+        exec docker-entrypoint.sh postgres -c ssl=on \
+          -c ssl_cert_file=/var/lib/postgresql/server.crt \
+          -c ssl_key_file=/var/lib/postgresql/server.key
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U $$POSTGRES_USER -d $$POSTGRES_DB",
+        ]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
 volumes:
   pgdata:

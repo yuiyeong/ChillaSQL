@@ -1,11 +1,14 @@
 //! integration test가 함께 쓰는 것. test DB는 `scripts/test-db.sh up`으로 띄운다.
 #![allow(dead_code)]
 
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use chilla_core::domain::{ConnectionProfile, Password, SslMode};
 
 pub const TEST_DB_PORT: u16 = 54318;
+/// SSL을 켠 test DB. 서버 인증서의 SAN은 `DNS:localhost`뿐이다.
+pub const TLS_DB_PORT: u16 = 54319;
 
 pub fn local_profile() -> ConnectionProfile {
     ConnectionProfile {
@@ -21,6 +24,25 @@ pub fn local_profile() -> ConnectionProfile {
     }
 }
 
+/// TLS test DB의 profile. `sslrootcert`는 `db/tls/` 아래의 파일 이름이다.
+pub fn tls_profile(host: &str, sslmode: SslMode, sslrootcert: Option<&str>) -> ConnectionProfile {
+    ConnectionProfile {
+        name: "tls".into(),
+        host: host.into(),
+        port: TLS_DB_PORT,
+        sslmode,
+        sslrootcert: sslrootcert.map(tls_file),
+        ..local_profile()
+    }
+}
+
+/// `scripts/test-db.sh`가 만든 `db/tls/<name>`의 절대 경로.
+pub fn tls_file(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../db/tls")
+        .join(name)
+}
+
 pub fn password() -> Password {
     Password::new("chilla".into())
 }
@@ -28,6 +50,10 @@ pub fn password() -> Password {
 /// 확인용 직접 연결. 검사하려는 코드를 거치지 않는다.
 pub async fn admin() -> tokio_postgres::Client {
     admin_on(TEST_DB_PORT).await
+}
+
+pub async fn tls_admin() -> tokio_postgres::Client {
+    admin_on(TLS_DB_PORT).await
 }
 
 pub async fn admin_on(port: u16) -> tokio_postgres::Client {

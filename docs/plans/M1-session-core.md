@@ -634,8 +634,10 @@ git commit -m "feat: tokio-postgres 연결과 ReadyForQuery 상태를 읽는 TxT
 
 ```rust
 // infrastructure::postgres::tls (crate 안에서만)
-pub(crate) async fn negotiate(tcp: TcpStream, profile: &ConnectionProfile)
+pub(crate) enum Verification<'a> { None, RootsFrom(&'a Path), Platform }
+pub(crate) async fn negotiate(tcp: TcpStream, host: &str, verification: Verification<'_>)
     -> Result<tokio_rustls::client::TlsStream<TcpStream>, ConnectError>;
+// 구현 중 바뀜: profile 대신 host와 Verification을 받는다. sslmode가 Disable인 경우를 이 함수가 몰라도 된다
 
 // tests/support/mod.rs
 pub fn tls_profile(host: &str, sslmode: SslMode, sslrootcert: Option<&str>) -> ConnectionProfile;
@@ -652,7 +654,7 @@ TLS test DB:
 | `db/tls/server.crt`, `server.key` | CA가 서명한 서버 인증서. CN `localhost`, SAN은 `DNS:localhost`만 (IP SAN 없음), `extendedKeyUsage=serverAuth` |
 | `db/tls/other-ca.crt` | 서버 인증서와 무관한 CA |
 
-- [ ] **Step 1: TLS test DB 추가**
+- [x] **Step 1: TLS test DB 추가**
 
 - `scripts/test-db.sh`의 `up`은 `db/tls/server.crt`가 없으면 `docker compose up` 전에 `openssl`로 위 파일을 만든다. CA 두 개는 `openssl req -x509 -newkey rsa:2048 -nodes -days 3650`, 서버 인증서는 CSR을 만든 뒤 `openssl x509 -req ... -extfile`로 SAN과 EKU를 넣는다(macOS의 LibreSSL에서 동작하는 option만 쓴다). `reset`은 `db/tls`도 지운다.
 - `compose.yaml`에 service `db-tls`를 추가한다. image와 환경 변수는 `db`와 같고 port는 `127.0.0.1:54319:5432`, volume은 `./db/tls:/certs:ro`뿐이다(init SQL과 named volume 없음). PostgreSQL은 key 파일이 `postgres` 소유에 `0600`이어야 하므로 command에서 복사한다.
@@ -675,7 +677,7 @@ TLS test DB:
 Run: `scripts/test-db.sh reset && docker compose exec -T db-tls psql -U chilla -d chilla_test -tAc "SHOW ssl"`
 Expected: `on`
 
-- [ ] **Step 2: 실패하는 test 작성 (`tests/tls.rs`)**
+- [x] **Step 2: 실패하는 test 작성 (`tests/tls.rs`)**
 
 ```rust
 #[tokio::test] async fn require_encrypts_without_verifying() {
@@ -704,12 +706,12 @@ Expected: `on`
 }
 ```
 
-- [ ] **Step 3: 실패 확인**
+- [x] **Step 3: 실패 확인**
 
 Run: `cargo test -p chilla-core --test tls`
 Expected: FAIL. `require_against_a_server_without_ssl_is_tls_not_supported`를 포함해 연결하는 test가 Task 5 Step 4의 `Other`로 실패한다.
 
-- [ ] **Step 4: `negotiate` 구현, `PgConnector`에 연결**
+- [x] **Step 4: `negotiate` 구현, `PgConnector`에 연결**
 
 1. SSLRequest 8 byte(`00 00 00 08 04 D2 16 2F`)를 쓰고 `read_exact`로 1 byte만 읽는다. `S`면 계속, `N`이면 `TlsNotSupported`, 그 밖은 `Other`.
 2. `rustls::ClientConfig`는 `builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))`에서 시작해 `with_safe_default_protocol_versions()` 후 verifier를 고른다.
@@ -725,7 +727,7 @@ Expected: FAIL. `require_against_a_server_without_ssl_is_tls_not_supported`를 �
 
 `PgConnector`는 Task 5 Step 4의 2번 자리에서 `negotiate`를 부르고, 돌려받은 `TlsStream`을 `TxTap`으로 감싼다. `connect_raw`에는 계속 `SslMode::Disable`과 `NoTls`를 넘긴다(`tokio-postgres`는 이미 암호화된 stream인 줄 모른다).
 
-- [ ] **Step 5: 통과 확인**
+- [x] **Step 5: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
@@ -733,7 +735,7 @@ Expected: PASS
 Run: `cargo tree -p chilla-core -i aws-lc-rs`
 Expected: `did not match any packages` 오류. `aws-lc-rs`가 tree에 없다.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

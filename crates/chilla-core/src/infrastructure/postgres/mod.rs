@@ -1,8 +1,10 @@
 //! `tokio-postgres`로 연결하는 [`Connector`].
 //!
-//! TCP 연결을 직접 열어 [`TxTap`]으로 감싼 뒤 `connect_raw`에 넘긴다. `tokio-postgres`가
-//! socket을 직접 열면 서버가 보내는 byte를 볼 수 없어 트랜잭션 상태를 알 수 없다.
+//! TCP 연결과 TLS handshake를 직접 하고 그 stream을 [`TxTap`]으로 감싼 뒤 `connect_raw`에
+//! 넘긴다. `tokio-postgres`가 socket을 직접 열면 서버가 보내는 byte를 볼 수 없어 트랜잭션
+//! 상태를 알 수 없다. 이 때문에 SCRAM channel binding은 쓰지 않는다.
 
+mod tls;
 mod tx_tap;
 
 use std::error::Error as _;
@@ -15,6 +17,7 @@ use tokio_postgres::{Client, Config, NoTls};
 
 use crate::application::{ConnectError, Connector, DbConnection};
 use crate::domain::{ConnectionProfile, Password, SslMode, TxStatus};
+use tls::Verification;
 use tx_tap::{TxStatusCell, TxTap};
 
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
@@ -66,12 +69,14 @@ async fn establish(
         .map_err(unreachable)?;
     tcp.set_nodelay(true).map_err(unreachable)?;
 
-    match profile.sslmode {
-        SslMode::Disable => start(tcp, profile, password).await,
-        SslMode::Require | SslMode::VerifyFull => Err(ConnectError::Other {
-            message: "SSL은 아직 지원하지 않습니다".into(),
-        }),
-    }
+    let verification = match (profile.sslmode, &profile.sslrootcert) {
+        (SslMode::Disable, _) => return start(tcp, profile, password).await,
+        (SslMode::Require, _) => Verification::None,
+        (SslMode::VerifyFull, Some(path)) => Verification::RootsFrom(path),
+        (SslMode::VerifyFull, None) => Verification::Platform,
+    };
+    let tls = tls::negotiate(tcp, &profile.host, verification).await?;
+    start(tls, profile, password).await
 }
 
 /// 이미 열린(필요하면 암호화까지 끝난) stream 위에서 PostgreSQL 세션을 시작한다.
