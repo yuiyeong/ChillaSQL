@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "ChillaSQL",
-        "width": 1600,
-        "height": 1200,
+        "width": 1512,
+        "height": 982,
         "center": true,
         "theme": "Dark"
       }
