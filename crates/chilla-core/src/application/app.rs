@@ -318,14 +318,11 @@ mod tests {
     use std::path::Path;
     use std::sync::Arc;
 
-    use std::time::Duration;
-
-    use tokio::sync::mpsc::{self, UnboundedReceiver};
-    use tokio::time::timeout;
+    use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
     use crate::application::test_support::{
-        FakeConnector, FakePasswords, FakeProjects, FakeSplitter, profile,
+        FakeConnector, FakePasswords, FakeProjects, FakeSplitter, next, profile, sink,
     };
     use crate::application::{CancelError, PasswordKey, PasswordStore, ProjectError, SplitError};
     use crate::domain::{
@@ -369,22 +366,10 @@ mod tests {
 
     const OPEN: SessionState = SessionState::Open { tx: TxStatus::Idle };
 
-    fn sink() -> (QuerySink, UnboundedReceiver<QueryEvent>) {
-        let (sender, events) = mpsc::unbounded_channel();
-        let sink: QuerySink = Box::new(move |event| {
-            let _ = sender.send(event);
-        });
-        (sink, events)
-    }
-
     /// `Finished`가 올 때까지 읽고 그 `QueryOutcome`을 돌려준다.
     async fn finished(events: &mut UnboundedReceiver<QueryEvent>) -> QueryOutcome {
         loop {
-            let event = timeout(Duration::from_secs(1), events.recv())
-                .await
-                .expect("1초 안에 이벤트가 오지 않았다")
-                .expect("sink가 이벤트 없이 drop됐다");
-            if let QueryEvent::Finished { outcome, .. } = event {
+            if let QueryEvent::Finished { outcome, .. } = next(events).await {
                 return outcome;
             }
         }

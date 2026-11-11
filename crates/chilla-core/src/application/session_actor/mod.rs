@@ -7,6 +7,7 @@
 mod query;
 
 use std::future::pending;
+use std::ops::ControlFlow;
 use std::time::Duration;
 
 use tokio::sync::{mpsc, oneshot};
@@ -99,12 +100,13 @@ impl<D: DbConnection> Actor<D> {
     async fn run(mut self, mut commands: mpsc::Receiver<SessionCommand>) {
         loop {
             match self.next_event(&mut commands).await {
-                Event::Command(Some(SessionCommand::Close(reply))) => {
-                    self.close().await;
-                    let _ = reply.send(());
-                    return;
+                Event::Command(Some(command)) => {
+                    if let ControlFlow::Break(reply) = self.handle(command).await {
+                        self.close().await;
+                        let _ = reply.send(());
+                        return;
+                    }
                 }
-                Event::Command(Some(command)) => self.handle(command).await,
                 Event::Command(None) => return self.close().await,
                 Event::Item(item) => {
                     if let Some(query) = &mut self.query {
@@ -141,7 +143,8 @@ impl<D: DbConnection> Actor<D> {
         }
     }
 
-    async fn handle(&mut self, command: SessionCommand) {
+    /// 명령 하나를 처리한다. `Close`는 세션을 끝내야 하므로 처리하지 않고 그 답장을 `Break`로 돌려준다.
+    async fn handle(&mut self, command: SessionCommand) -> ControlFlow<oneshot::Sender<()>> {
         match command {
             SessionCommand::State(reply) => {
                 let state = self.state().await;
@@ -165,23 +168,17 @@ impl<D: DbConnection> Actor<D> {
                     let _ = reply.send(Ok(()));
                 }
             }
-            SessionCommand::Close(_) => unreachable!("run이 처리한다"),
+            SessionCommand::Close(reply) => return ControlFlow::Break(reply),
         }
+        ControlFlow::Continue(())
     }
 
     async fn state(&mut self) -> SessionState {
-        if self.query.is_some() {
-            // 결과를 다 읽기 전에는 서버가 트랜잭션 상태를 알려 주지 않는다. 기다리지 않는다.
-            return if self.connection.is_closed() {
-                SessionState::Lost
-            } else {
-                SessionState::Open { tx: self.tx }
-            };
+        // 결과를 다 읽기 전에는 서버가 트랜잭션 상태를 알려 주지 않는다. 쿼리가 있으면 기다리지 않고
+        // 마지막으로 읽은 값을 답한다.
+        if self.query.is_none() && !self.connection.is_closed() {
+            self.tx = self.connection.tx_status().await;
         }
-        if self.connection.is_closed() {
-            return SessionState::Lost;
-        }
-        self.tx = self.connection.tx_status().await;
         // 상태를 기다리는 사이에 연결이 끊길 수 있으므로 받은 뒤에 끊겼는지 본다.
         if self.connection.is_closed() {
             SessionState::Lost
@@ -224,11 +221,12 @@ impl<D: DbConnection> Actor<D> {
     ///
     /// cancel이 끝나기 전에 다음 쿼리를 보내면 늦게 닿은 cancel이 다음 쿼리를 멈출 수 있다.
     async fn settle(&mut self) {
-        let over = self.query.as_ref().is_some_and(Query::is_over);
-        if !over || self.cancel.is_some() {
+        if self.cancel.is_some() {
             return;
         }
-        let query = self.query.take().expect("위에서 확인했다");
+        let Some(query) = self.query.take_if(|query| query.is_over()) else {
+            return;
+        };
         self.resend_at = None;
         let lost = query.finish();
         if !lost {
@@ -317,9 +315,7 @@ impl SessionHandle {
         self.commands.send(command(reply)).await.ok()?;
         response.await.ok()
     }
-}
 
-impl SessionHandle {
     /// 쿼리를 맡기고 바로 돌아온다. 결과는 `sink`로 간다. task가 끝났으면 `None`이다.
     pub(crate) async fn execute(&self, sql: String, sink: QuerySink) -> Option<QueryId> {
         self.request(|reply| SessionCommand::Execute { sql, sink, reply })

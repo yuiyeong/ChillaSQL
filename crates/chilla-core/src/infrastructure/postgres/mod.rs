@@ -294,6 +294,13 @@ mod tests {
         }
     }
 
+    async fn connect() -> PgConnection {
+        PgConnector::new()
+            .connect(&local_profile(), Some(&Password::new("chilla".into())))
+            .await
+            .expect("scripts/test-db.sh up 을 먼저 실행하세요")
+    }
+
     /// FIN 없이 죽은 연결(sleep 뒤 복귀, VPN 끊김)은 keepalive가 있어야 끊긴 줄 안다.
     #[tokio::test]
     async fn sockets_probe_idle_connections() {
@@ -314,10 +321,7 @@ mod tests {
 
     #[tokio::test]
     async fn tx_status_follows_the_server() {
-        let conn = PgConnector::new()
-            .connect(&local_profile(), Some(&Password::new("chilla".into())))
-            .await
-            .expect("scripts/test-db.sh up 을 먼저 실행하세요");
+        let conn = connect().await;
 
         conn.client.batch_execute("BEGIN").await.unwrap();
         assert_eq!(conn.tx_status().await, TxStatus::InTransaction);
@@ -329,10 +333,7 @@ mod tests {
 
     #[tokio::test]
     async fn cancel_to_an_unreachable_server_is_an_error() {
-        let conn = PgConnector::new()
-            .connect(&local_profile(), Some(&Password::new("chilla".into())))
-            .await
-            .expect("scripts/test-db.sh up 을 먼저 실행하세요");
+        let conn = connect().await;
         let mut cancel = conn.cancel_handle();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         cancel.profile.port = listener.local_addr().unwrap().port();
@@ -349,10 +350,7 @@ mod tests {
     async fn cancel_returns_only_after_the_server_closes_the_connection() {
         use tokio::io::AsyncReadExt;
 
-        let conn = PgConnector::new()
-            .connect(&local_profile(), Some(&Password::new("chilla".into())))
-            .await
-            .expect("scripts/test-db.sh up 을 먼저 실행하세요");
+        let conn = connect().await;
         let mut cancel = conn.cancel_handle();
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         cancel.profile.port = listener.local_addr().unwrap().port();

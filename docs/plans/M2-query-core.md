@@ -1011,7 +1011,7 @@ git commit -m "feat: 쿼리 실행 Tauri command와 결과 Channel"
 **Files:**
 - Modify: `docs/progress.md`, `docs/plans/M2-query-core.md` (체크박스), review에서 고치는 코드
 
-- [ ] **Step 1: `simplify`**
+- [x] **Step 1: `simplify`**
 
 `simplify` skill로 M2에서 바뀐 코드를 정리하고 `pnpm check`를 통과시킨 뒤 commit한다(`refactor: simplify 지적 반영 (…)`).
 

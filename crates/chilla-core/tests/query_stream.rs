@@ -10,7 +10,7 @@ use chilla_core::application::{
 use chilla_core::domain::{Column, ServerError, SslMode, TxStatus};
 use chilla_core::infrastructure::{PgConnection, PgConnector};
 use support::{
-    admin, collect, connect, password, terminate_backend, tls_admin, tls_profile,
+    activity, admin, collect, connect, password, terminate_backend, tls_admin, tls_profile,
     wait_until_running,
 };
 
@@ -143,21 +143,9 @@ async fn unread_rows_make_the_server_wait() {
     read_rows(&mut rows, 500).await;
     tokio::time::sleep(Duration::from_millis(300)).await;
 
-    let activity = admin
-        .query_one(
-            "SELECT state, wait_event FROM pg_stat_activity WHERE pid = $1",
-            &[&conn.backend_pid()],
-        )
-        .await
-        .unwrap();
-    assert_eq!(
-        activity.get::<_, Option<String>>(0).as_deref(),
-        Some("active")
-    );
-    assert_eq!(
-        activity.get::<_, Option<String>>(1).as_deref(),
-        Some("ClientWrite")
-    );
+    let (state, wait_event) = activity(&admin, conn.backend_pid()).await;
+    assert_eq!(state.as_deref(), Some("active"));
+    assert_eq!(wait_event.as_deref(), Some("ClientWrite"));
 
     conn.cancel_handle().cancel().await.unwrap();
     collect(&mut rows).await;

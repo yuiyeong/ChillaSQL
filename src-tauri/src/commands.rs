@@ -150,7 +150,7 @@ pub struct StatementSpanDto {
 
 /// byte offset의 span을 UTF-16 code unit offset으로 바꾼다. text를 한 번만 훑는다.
 ///
-/// span은 start 오름차순에 서로 겹치지 않는다고 가정한다(scanner가 그렇게 돌려준다).
+/// span은 start 오름차순에 서로 겹치지 않는다고 가정한다(`StatementSplitter::split`의 약속).
 fn utf16_spans(sql: &str, spans: &[StatementSpan]) -> Vec<StatementSpanDto> {
     let mut chars = sql.char_indices().peekable();
     let mut units = 0;
@@ -343,7 +343,8 @@ pub async fn close_session(app: State<'_, CoreApp>, session_id: u64) -> CommandR
     Ok(app.close_session(SessionId(session_id)).await?)
 }
 
-#[tauri::command]
+/// `pg_query::scan`은 text 길이만큼 걸리므로 main thread를 막지 않게 async runtime에서 돈다.
+#[tauri::command(async)]
 pub fn split_statements(
     app: State<'_, CoreApp>,
     sql: String,
@@ -394,13 +395,8 @@ pub async fn cancel_query(
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
-    use std::path::PathBuf;
 
-    use std::time::Duration;
-
-    use chilla_core::domain::{
-        Column, Project, QueryOutcome, RowBatch, ServerError, SessionId, SslMode, TxStatus,
-    };
+    use chilla_core::domain::SslMode;
     use serde_json::json;
 
     use super::*;
@@ -423,14 +419,8 @@ mod tests {
     fn connection_dto_has_no_password_key() {
         let json =
             serde_json::to_value(ConnectionDto::from(&profile(SslMode::VerifyFull))).unwrap();
-        let keys: BTreeSet<&str> = json
-            .as_object()
-            .unwrap()
-            .keys()
-            .map(String::as_str)
-            .collect();
         assert_eq!(
-            keys,
+            keys(&json),
             BTreeSet::from([
                 "name",
                 "host",

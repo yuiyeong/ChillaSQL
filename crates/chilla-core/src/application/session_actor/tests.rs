@@ -1,14 +1,11 @@
-use std::time::Duration;
-
-use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::{Instant, timeout};
 
 use super::*;
-use crate::application::test_support::{FakeConnection, FakeLink, server_error};
-use crate::application::{QueryError, QuerySink};
-use crate::domain::{
-    Column, QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, TxStatus,
+use crate::application::test_support::{
+    FakeConnection, FakeLink, next, numbered, server_error, sink,
 };
+use crate::domain::{Column, QueryEvent, QueryId, QueryLimits, QueryOutcome, RowBatch, TxStatus};
 
 fn session() -> (SessionHandle, FakeLink) {
     session_with(QueryLimits::default())
@@ -21,22 +18,6 @@ fn session_with(limits: QueryLimits) -> (SessionHandle, FakeLink) {
         link: link.clone(),
     };
     (spawn(connection, limits), link)
-}
-
-fn sink() -> (QuerySink, UnboundedReceiver<QueryEvent>) {
-    let (sender, events) = mpsc::unbounded_channel();
-    let sink: QuerySink = Box::new(move |event| {
-        let _ = sender.send(event);
-    });
-    (sink, events)
-}
-
-/// 1초 안에 온 이벤트. 없으면 panic한다.
-async fn next(events: &mut UnboundedReceiver<QueryEvent>) -> QueryEvent {
-    timeout(Duration::from_secs(1), events.recv())
-        .await
-        .expect("1초 안에 이벤트가 오지 않았다")
-        .expect("sink가 이벤트 없이 drop됐다")
 }
 
 /// 50ms 동안 이벤트가 없음을 확인한다.
@@ -58,11 +39,6 @@ fn outcome(event: QueryEvent) -> QueryOutcome {
         QueryEvent::Finished { outcome, .. } => outcome,
         other => panic!("Finished가 아니다: {other:?}"),
     }
-}
-
-/// `FakeFeed::rows`가 넣는 행.
-fn numbered(range: std::ops::Range<u64>) -> Vec<Row> {
-    range.map(|i| vec![Some(i.to_string())]).collect()
 }
 
 async fn eventually(check: impl Fn() -> bool) -> bool {

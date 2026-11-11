@@ -136,11 +136,8 @@ impl<R: RowSource> Query<R> {
 
     /// 지금 읽어야 하는 결과. `Paused`이거나 결과가 끝났으면 `None`이다.
     pub(super) fn rows_to_read(&mut self) -> Option<&mut R> {
-        let reads = match self.phase {
-            Phase::Reading => true,
-            Phase::Paused => false,
-            Phase::Draining(_) => self.end.is_none(),
-        };
+        // 끝난 결과는 다시 poll하지 않는다. `None` 뒤의 poll은 port가 정하지 않았다.
+        let reads = self.end.is_none() && self.phase != Phase::Paused;
         reads.then_some(&mut self.rows)
     }
 
@@ -149,7 +146,7 @@ impl<R: RowSource> Query<R> {
         self.end.is_some()
     }
 
-    pub(super) fn is_draining(&self) -> bool {
+    fn is_draining(&self) -> bool {
         matches!(self.phase, Phase::Draining(_))
     }
 

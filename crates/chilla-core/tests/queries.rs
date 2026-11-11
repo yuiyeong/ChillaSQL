@@ -12,8 +12,8 @@ use chilla_core::domain::{
 };
 use chilla_core::infrastructure::PgConnector;
 use support::{
-    admin, app_with_project, backend_exists, eventually, finished, next, sink, store_password,
-    terminate_backend, wait_until_running,
+    activity, admin, app_with_project, backend_exists, eventually, finished, next, sink,
+    store_password, terminate_backend, wait_until_running,
 };
 use tokio::sync::mpsc::UnboundedReceiver;
 use tokio::time::timeout;
@@ -110,18 +110,9 @@ async fn first_500_rows_of_a_million_arrive_within_100ms() {
             .await
             .is_err()
     );
-    let wait = admin
-        .query_one(
-            "SELECT state, wait_event FROM pg_stat_activity WHERE pid = $1",
-            &[&session.backend_pid],
-        )
-        .await
-        .unwrap();
-    assert_eq!(wait.get::<_, Option<String>>(0).as_deref(), Some("active"));
-    assert_eq!(
-        wait.get::<_, Option<String>>(1).as_deref(),
-        Some("ClientWrite")
-    );
+    let (state, wait_event) = activity(&admin, session.backend_pid).await;
+    assert_eq!(state.as_deref(), Some("active"));
+    assert_eq!(wait_event.as_deref(), Some("ClientWrite"));
 
     app.close_session(session.id).await.unwrap();
 }

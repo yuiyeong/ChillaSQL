@@ -146,6 +146,21 @@ pub async fn wait_until_running(admin: &tokio_postgres::Client, pid: i32) {
     assert!(running, "쿼리가 실행되지 않는다");
 }
 
+/// backend `pid`의 `pg_stat_activity` (state, wait_event).
+pub async fn activity(
+    admin: &tokio_postgres::Client,
+    pid: i32,
+) -> (Option<String>, Option<String>) {
+    let row = admin
+        .query_one(
+            "SELECT state, wait_event FROM pg_stat_activity WHERE pid = $1",
+            &[&pid],
+        )
+        .await
+        .unwrap();
+    (row.get(0), row.get(1))
+}
+
 /// `check`가 true가 될 때까지 50ms 간격으로 최대 2초 기다린다.
 pub async fn eventually(mut check: impl AsyncFnMut() -> bool) -> bool {
     for _ in 0..40 {

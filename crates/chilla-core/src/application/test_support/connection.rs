@@ -1,102 +1,15 @@
-//! `application`의 단위 test가 쓰는 가짜 port 구현.
+//! 가짜 DB 연결: 결과 stream, cancel, 트랜잭션 상태를 test가 밖에서 조작한다.
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::VecDeque;
 use std::ops::Range;
-use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tokio::sync::watch;
 
-use super::{
-    CancelError, ConnectError, Connector, DbConnection, PasswordKey, PasswordStore,
-    PasswordStoreError, ProjectError, ProjectStore, QueryCancel, QueryError, RowItem, RowSource,
-    SplitError, StatementSplitter,
-};
-use crate::domain::{
-    Column, ConnectionProfile, Password, Project, Row, ServerError, StatementSpan, TxStatus,
-};
-
-pub(crate) fn profile(name: &str) -> ConnectionProfile {
-    ConnectionProfile::fixture(name)
-}
-
-/// 등록한 디렉토리만 프로젝트로 읽힌다.
-#[derive(Default)]
-pub(crate) struct FakeProjects(Mutex<HashMap<PathBuf, Project>>);
-
-impl FakeProjects {
-    pub(crate) fn add(&self, dir: &str, connections: &[&str]) {
-        let project = Project {
-            dir: dir.into(),
-            name: dir.trim_start_matches('/').into(),
-            connections: connections.iter().map(|name| profile(name)).collect(),
-        };
-        self.0.lock().unwrap().insert(dir.into(), project);
-    }
-}
-
-impl ProjectStore for FakeProjects {
-    fn load(&self, dir: &Path) -> Result<Project, ProjectError> {
-        self.0
-            .lock()
-            .unwrap()
-            .get(dir)
-            .cloned()
-            .ok_or_else(|| ProjectError::NotFound {
-                path: dir.join("chilla.toml"),
-            })
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct FakePasswords(Mutex<HashMap<PasswordKey, String>>);
-
-impl FakePasswords {
-    pub(crate) fn is_empty(&self) -> bool {
-        self.0.lock().unwrap().is_empty()
-    }
-}
-
-impl PasswordStore for FakePasswords {
-    fn get(&self, key: &PasswordKey) -> Result<Option<Password>, PasswordStoreError> {
-        Ok(self.0.lock().unwrap().get(key).cloned().map(Password::new))
-    }
-
-    fn set(&self, key: &PasswordKey, password: &Password) -> Result<(), PasswordStoreError> {
-        let mut entries = self.0.lock().unwrap();
-        entries.insert(key.clone(), password.expose().to_string());
-        Ok(())
-    }
-
-    fn delete(&self, key: &PasswordKey) -> Result<(), PasswordStoreError> {
-        self.0.lock().unwrap().remove(key);
-        Ok(())
-    }
-}
-
-/// text를 `;`로 잘라 비어 있지 않은 조각마다 span을 만든다. `'`가 홀수 개면 나눌 수 없다.
-pub(crate) struct FakeSplitter;
-
-impl StatementSplitter for FakeSplitter {
-    fn split(&self, sql: &str) -> Result<Vec<StatementSpan>, SplitError> {
-        if sql.matches('\'').count() % 2 == 1 {
-            return Err(SplitError {
-                message: "따옴표가 닫히지 않았다".into(),
-            });
-        }
-        let mut spans = Vec::new();
-        let mut start = 0;
-        for piece in sql.split(';') {
-            let end = start + piece.len();
-            if !piece.trim().is_empty() {
-                spans.push(StatementSpan { start, end });
-            }
-            start = end + 1;
-        }
-        Ok(spans)
-    }
-}
+use super::numbered;
+use crate::application::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
+use crate::domain::{Column, Row, ServerError, TxStatus};
 
 /// 가짜 연결 하나를 test가 밖에서 보고 조작하는 손잡이.
 #[derive(Clone, Default)]
@@ -156,9 +69,7 @@ impl FakeLink {
     fn queries(&self) -> std::sync::MutexGuard<'_, FakeQueries> {
         self.queries.lock().unwrap()
     }
-}
 
-impl FakeLink {
     /// 다음 `start_query`가 돌려줄 결과를 예약한다(FIFO). 예약이 없으면 `Complete { rows: 0 }`만 있는 결과다.
     pub(crate) fn expect_query(&self) -> FakeFeed {
         let feed = FakeFeed::new(self.lost.clone());
@@ -270,9 +181,7 @@ impl FakeFeed {
         });
         item
     }
-}
 
-impl FakeFeed {
     pub(crate) fn columns(&self, names: &[&str]) {
         let columns = names.iter().map(|name| Column {
             name: name.to_string(),
@@ -280,10 +189,10 @@ impl FakeFeed {
         self.push(Ok(RowItem::Columns(columns.collect())));
     }
 
-    /// 행 `i`는 `vec![Some(i.to_string())]`이다.
+    /// [`numbered`]의 행을 넣는다.
     pub(crate) fn rows(&self, range: Range<u64>) {
-        for i in range {
-            self.row(vec![Some(i.to_string())]);
+        for row in numbered(range) {
+            self.row(row);
         }
     }
 
@@ -364,9 +273,13 @@ impl DbConnection for FakeConnection {
         self.pid
     }
 
-    /// `None`까지 읽히지 않은 결과가 있으면 다 읽힐 때까지 기다린다. 실제 연결에서
-    /// ReadyForQuery가 socket에 남아 멈추는 것을 흉내 낸다. 끊긴 연결에서는 바로 돌아온다
-    /// (실제 연결도 tap이 drop되면 기다리지 않는다).
+    /// `None`까지 읽히지 않은 결과가 있으면 다 읽힐 때까지 기다린다. 끊긴 연결에서는 바로
+    /// 돌아온다(실제 연결도 tap이 drop되면 기다리지 않는다).
+    ///
+    /// 실제 연결보다 엄격하다. 실제 연결은 ErrorResponse 뒤에만 ReadyForQuery를 기다리고, 그
+    /// 밖에는 마지막으로 본 상태를 바로 돌려준다. 이 가짜는 결과를 다 읽기 전에 부른 `tx_status`를
+    /// 언제나 기다리게 해서, session actor가 결과를 다 읽기 전에 `tx_status`를 부르는 실수를 test가
+    /// 잡게 한다.
     async fn tx_status(&self) -> TxStatus {
         if self.link.lost_during_tx_status.load(Ordering::SeqCst) {
             self.link.lose();
@@ -407,70 +320,5 @@ impl DbConnection for FakeConnection {
 
     async fn close(self) {
         self.link.closed.store(true, Ordering::SeqCst);
-    }
-}
-
-#[derive(Default)]
-struct ConnectLog {
-    /// 연결 요청마다 받은 (접속 정보, 비밀번호).
-    requests: Vec<(ConnectionProfile, Option<String>)>,
-    links: Vec<FakeLink>,
-}
-
-/// 항상 연결에 성공하고, 받은 요청과 만든 연결을 기록한다.
-#[derive(Clone, Default)]
-pub(crate) struct FakeConnector {
-    log: Arc<Mutex<ConnectLog>>,
-    gate: Arc<tokio::sync::RwLock<()>>,
-}
-
-impl FakeConnector {
-    /// 연결 요청마다 받은 (접속 이름, 비밀번호).
-    pub(crate) fn requests(&self) -> Vec<(String, Option<String>)> {
-        let log = self.log.lock().unwrap();
-        let named = log.requests.iter();
-        named.map(|(p, pw)| (p.name.clone(), pw.clone())).collect()
-    }
-
-    /// 연결 요청마다 받은 접속 정보.
-    pub(crate) fn profiles(&self) -> Vec<ConnectionProfile> {
-        let log = self.log.lock().unwrap();
-        log.requests.iter().map(|(p, _)| p.clone()).collect()
-    }
-
-    /// 만든 순서대로의 연결.
-    pub(crate) fn links(&self) -> Vec<FakeLink> {
-        self.log.lock().unwrap().links.clone()
-    }
-
-    /// 돌려준 guard를 drop할 때까지 연결이 끝나지 않게 한다. 요청은 받은 즉시 기록된다.
-    pub(crate) async fn block(&self) -> tokio::sync::OwnedRwLockWriteGuard<()> {
-        self.gate.clone().write_owned().await
-    }
-}
-
-impl Connector for FakeConnector {
-    type Connection = FakeConnection;
-
-    async fn connect(
-        &self,
-        profile: &ConnectionProfile,
-        password: Option<&Password>,
-    ) -> Result<FakeConnection, ConnectError> {
-        let password = password.map(|p| p.expose().to_string());
-        self.log
-            .lock()
-            .unwrap()
-            .requests
-            .push((profile.clone(), password));
-        let _open = self.gate.read().await;
-
-        let mut log = self.log.lock().unwrap();
-        let link = FakeLink::default();
-        log.links.push(link.clone());
-        Ok(FakeConnection {
-            pid: 1000 + log.links.len() as i32,
-            link,
-        })
     }
 }

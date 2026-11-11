@@ -27,11 +27,8 @@ impl StatementSplitter for PgQuerySplitter {
 
         for token in &scanned.tokens {
             let kind = token.token();
-            if matches!(kind, Token::SqlComment | Token::CComment) {
-                continue;
-            }
-
             match kind {
+                Token::SqlComment | Token::CComment => continue,
                 Token::Ascii59 if paren_depth == 0 && atomic_depth == 0 => {
                     spans.extend(current.take());
                     previous = Some(kind);
@@ -47,6 +44,7 @@ impl StatementSplitter for PgQuerySplitter {
             }
             previous = Some(kind);
 
+            // scanner의 offset은 `sql` 안의 byte offset이라 음수가 아니다.
             let (start, end) = (token.start as usize, token.end as usize);
             match &mut current {
                 Some(span) => span.end = end,

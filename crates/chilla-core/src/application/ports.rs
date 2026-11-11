@@ -147,7 +147,7 @@ pub enum ConnectError {
 
 /// SQL text를 문장 단위로 나눈다. 문장이 문법에 맞는지는 보지 않는다.
 pub trait StatementSplitter: Send + Sync {
-    /// 문장마다 span을 돌려준다. 빈 문장은 만들지 않는다.
+    /// 문장마다 span을 돌려준다. 빈 문장은 만들지 않는다. span은 start 오름차순이고 서로 겹치지 않는다.
     fn split(&self, sql: &str) -> Result<Vec<StatementSpan>, SplitError>;
 }
 
