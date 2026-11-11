@@ -10,7 +10,7 @@ coverage/
 
 # Rust / Tauri
 target/
-src-tauri/gen/schemas/
+src-tauri/gen/
 
 # Environment
 .env
@@ -28,3 +28,6 @@ src-tauri/gen/schemas/
 
 # Claude Code local settings
 .claude/settings.local.json
+
+# Agent scratch
+.superpowers/

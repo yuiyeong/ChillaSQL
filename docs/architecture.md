@@ -13,14 +13,14 @@
 ```
 src-tauri/src/                  command. use case를 부르는 일만 한다
 crates/chilla-core/src/
-├── domain/                     외부 I/O crate에 의존하지 않는다
+├── domain/                     다른 layer와 I/O crate에 의존하지 않는다
 ├── application/                use case와 port trait. domain만 의존한다
 └── infrastructure/             port 구현
 ```
 
 | layer | 들어가는 것 | 의존할 수 있는 것 |
 | --- | --- | --- |
-| `domain` | 접속 정보, 세션, 쿼리 같은 개념과 규칙 | 없음. 외부 I/O crate에 의존하지 않는다 |
+| `domain` | 접속 정보, 세션, 쿼리 같은 개념과 규칙 | 다른 layer에 의존하지 않는다. 외부 crate는 I/O가 없는 것(`serde` 등)만 쓴다 |
 | `application` | use case, port trait | `domain` |
 | `infrastructure` | port 구현: `tokio-postgres`, keychain, 터널 프로세스, `pg_query` | `application`, `domain`, 외부 crate |
 | `src-tauri` | Tauri command. 화면에서 받은 입력으로 use case를 부르고 결과를 돌려준다 | `chilla-core`, `tauri` |
@@ -48,11 +48,11 @@ src/
 
 | 위치 | 들어가는 것 | 규칙 |
 | --- | --- | --- |
-| `src/features/<기능>/` | 그 기능의 component, store, hook | 기능 단위로 묶는다 |
-| `src/shared/` | 기능에 속하지 않는 공용 코드 | 기능 단위로 묶지 않는다 |
+| `src/features/<기능>/` | 그 기능의 component, store, hook | - |
+| `src/shared/` | 기능에 속하지 않는 공용 코드 | - |
 | `src/shared/api/` | Tauri command 호출 | `@tauri-apps/api/core`의 `invoke`는 여기서만 import한다 |
 
-`invoke` 위치 규칙은 ESLint의 `no-restricted-imports`가 강제한다. `src/shared/api/` 밖에서 import하면 lint가 error를 낸다.
+`invoke` 위치 규칙은 ESLint의 `no-restricted-imports`가 강제한다. `src/shared/api/` 밖에서 `@tauri-apps/api`와 `@tauri-apps/api/core`를 import하면 모두 lint가 error를 낸다.
 
 ## 4. 검사
 

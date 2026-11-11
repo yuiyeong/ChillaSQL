@@ -7,19 +7,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
 URL="postgres://chilla:chilla@127.0.0.1:54318/chilla_test"
+# 기대값은 db/init/01-big-table.sql 의 seed 규모에서 나온다.
 EXPECTED="1000000|100000|100000"
 QUERY="SELECT count(*), count(*) FILTER (WHERE note IS NULL), count(*) FILTER (WHERE note = '') FROM big_table;"
 
 up() {
   if ! docker info >/dev/null 2>&1; then
-    echo "Docker가 실행 중이 아닙니다"
+    echo "Docker가 실행 중이 아닙니다" >&2
     exit 1
   fi
   docker compose up -d --wait
   local actual
-  actual="$(docker compose exec -T db psql -U chilla -d chilla_test -tAc "$QUERY")"
+  actual="$(docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$0"' "$QUERY")"
   if [ "$actual" != "$EXPECTED" ]; then
-    echo "데이터가 기대와 다릅니다. scripts/test-db.sh reset 을 실행하세요"
+    echo "데이터가 기대와 다릅니다. scripts/test-db.sh reset 을 실행하세요" >&2
     exit 1
   fi
   echo "test DB 준비 완료: $URL"
