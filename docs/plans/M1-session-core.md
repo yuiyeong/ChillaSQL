@@ -185,7 +185,7 @@ pub struct SessionInfo { pub id: SessionId, pub connection: String, pub backend_
 pub enum SessionState { Open { tx: TxStatus }, Lost }
 ```
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `tests/layer_deps.rs`는 source 파일을 읽어 금지된 경로가 있는지 본다. 주석 줄(`//`로 시작)은 건너뛰고, 줄 안에 `<token>::` 또는 `use <token>`이 있으면 위반이다.
 
@@ -236,27 +236,27 @@ domain 단위 test:
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core`
 Expected: FAIL. `domain` module이 없어 compile error가 난다.
 
-- [ ] **Step 3: domain type 구현, 빈 `application`·`infrastructure` module 추가**
+- [x] **Step 3: domain type 구현, 빈 `application`·`infrastructure` module 추가**
 
 `ProfileError`의 `Display`는 한국어다(예: `host가 비어 있습니다`, `sslrootcert는 sslmode가 verify-full일 때만 쓸 수 있습니다`).
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cargo test -p chilla-core`
 Expected: PASS
 
-- [ ] **Step 5: `docs/architecture.md` 갱신**
+- [x] **Step 5: `docs/architecture.md` 갱신**
 
 - 2장 표의 `application` 행 "의존할 수 있는 것"을 `domain`, `tokio`의 runtime 기능(`sync`, `task`, `time`)으로 바꾼다.
 - "의존 방향 검사" 문단을 `crates/chilla-core/tests/layer_deps.rs`가 검사한다는 내용과 위 금지 token 표로 바꾼다.
 - 4장에 `pnpm check`가 `scripts/test-db.sh up`을 먼저 실행한다는 것과 Docker가 떠 있어야 한다는 것을 적는다(script 변경은 Task 5).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

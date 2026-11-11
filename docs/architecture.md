@@ -21,7 +21,7 @@ crates/chilla-core/src/
 | layer | 들어가는 것 | 의존할 수 있는 것 |
 | --- | --- | --- |
 | `domain` | 접속 정보, 세션, 쿼리 같은 개념과 규칙 | 다른 layer에 의존하지 않는다. 외부 crate는 I/O가 없는 것(`serde` 등)만 쓴다 |
-| `application` | use case, port trait | `domain` |
+| `application` | use case, port trait | `domain`. 외부 crate는 `tokio`의 runtime 기능(`sync`, `task`, `time`)만 쓴다. I/O는 하지 않는다 |
 | `infrastructure` | port 구현: `tokio-postgres`, keychain, 터널 프로세스, `pg_query` | `application`, `domain`, 외부 crate |
 | `src-tauri` | Tauri command. 화면에서 받은 입력으로 use case를 부르고 결과를 돌려준다 | `chilla-core`, `tauri` |
 
@@ -35,7 +35,14 @@ crates/chilla-core/src/
 
 ### 의존 방향 검사
 
-compiler는 같은 crate 안의 module 사이 의존 방향을 막지 못한다. M1에서 첫 module을 만들 때 `domain`이 `infrastructure`를 import하지 않는지 확인하는 test를 함께 넣는다.
+compiler는 같은 crate 안의 module 사이 의존 방향을 막지 못한다. `crates/chilla-core/tests/layer_deps.rs`가 `domain`과 `application`의 source를 읽어 아래 경로를 쓰는 줄(`<경로>::` 또는 `use <경로>`)이 있으면 실패한다. 주석 줄은 보지 않는다. 같은 test가 `chilla-core`의 `Cargo.toml`에 `tauri`가 없는지도 확인한다.
+
+| layer | 쓸 수 없는 경로 |
+| --- | --- |
+| `domain` | `crate::application`, `crate::infrastructure`, `tokio`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `pg_query`, `std::fs`, `std::net`, `std::process` |
+| `application` | `crate::infrastructure`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `pg_query`, `std::fs`, `std::net`, `std::process`, `tokio::net`, `tokio::fs`, `tokio::process` |
+
+I/O를 하는 crate를 새로 들이면 이 표와 test의 목록에 함께 넣는다.
 
 ## 3. 화면
 
@@ -65,6 +72,6 @@ commit 전에 `pnpm check`를 통과시킨다.
 | `pnpm lint:rust` | `cargo clippy --workspace --all-targets -- -D warnings` |
 | `pnpm format` | Prettier와 `cargo fmt`로 고쳐 쓴다 |
 | `pnpm format:check` | 고치지 않고 형식만 확인한다 |
-| `pnpm check` | `format:check`, `lint`, `typecheck`, `lint:rust`, `test`, `cargo test`를 순서대로 실행한다 |
+| `pnpm check` | `scripts/test-db.sh up`으로 test DB를 띄운 뒤 `format:check`, `lint`, `typecheck`, `lint:rust`, `test`, `cargo test`를 순서대로 실행한다. `cargo test`가 test DB에 접속하므로 Docker가 떠 있어야 한다 |
 
 Rust는 `rustfmt`와 `clippy` 기본 설정을 쓴다. Prettier는 Tailwind class 정렬 plugin만 더하고 나머지는 기본값이다. `docs/`와 `*.md`는 Prettier가 건드리지 않는다.

@@ -375,6 +375,7 @@ dependencies = [
  "apple-native-keyring-store",
  "keyring-core",
  "pg_query",
+ "thiserror 2.0.21",
 ]
 
 [[package]]
