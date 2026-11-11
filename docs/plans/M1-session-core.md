@@ -781,13 +781,14 @@ pub enum AppError {
 }
 
 // application::session_actor (crate 안에서만)
-pub(crate) struct SessionHandle { .. }
-pub(crate) fn spawn<D: DbConnection>(info: SessionInfo, connection: D) -> SessionHandle;
+pub(crate) struct SessionHandle { .. }                              // Clone
+pub(crate) fn spawn<D: DbConnection>(connection: D) -> SessionHandle;
 impl SessionHandle {
-    pub(crate) fn info(&self) -> &SessionInfo;
     pub(crate) async fn state(&self) -> SessionState;
     pub(crate) async fn close(self);
 }
+// 구현 중 바뀜: handle이 SessionInfo를 갖지 않는다(M1에서 읽는 곳이 없다). App이 lock 밖에서
+// 세션에 물을 수 있게 Clone이다
 ```
 
 동작 규칙:
@@ -803,7 +804,7 @@ impl SessionHandle {
 - `PasswordStore` 호출은 blocking이므로 `tokio::task::spawn_blocking` 안에서 한다.
 - `close_session`: 목록에서 빼고 `close`한다. `Lost`인 세션도 `Ok`다. 없는 id는 `UnknownSession`.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `app.rs`의 단위 test는 가짜 `Connector`를 쓴다. 가짜 연결은 `Arc<AtomicBool>` 두 개(`closed`, `lost`)를 공유해 test가 `close` 호출을 확인하고 끊김을 흉내 낸다.
 
@@ -855,21 +856,21 @@ impl SessionHandle {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --test sessions`
 Expected: FAIL. `App`이 없어 compile error가 난다.
 
-- [ ] **Step 3: `session_actor`와 `App` 구현**
+- [x] **Step 3: `session_actor`와 `App` 구현**
 
 `AppError`의 `Display`는 한국어이고, 안에 든 오류가 있으면 그 `Display`를 그대로 보여 준다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS (`layer_deps`가 `application`에서 `tokio::net` 등을 쓰지 않았는지 확인한다)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
