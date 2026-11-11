@@ -308,7 +308,7 @@ impl ProjectStore for TomlProjectStore { .. }
 
 `Project.dir`은 `std::fs::canonicalize`한 절대 경로다. `connections`는 파일에 쓰인 순서다. `connections`가 없으면 빈 목록이다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 각 test는 `tempfile::tempdir()`에 `chilla.toml`을 쓰고 `TomlProjectStore.load(dir)`를 부른다.
 
@@ -345,21 +345,21 @@ impl ProjectStore for TomlProjectStore { .. }
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --test project_file`
 Expected: FAIL. `TomlProjectStore`가 없어 compile error가 난다.
 
-- [ ] **Step 3: `ProjectStore`, `ProjectError`, `TomlProjectStore::load` 구현**
+- [x] **Step 3: `ProjectStore`, `ProjectError`, `TomlProjectStore::load` 구현**
 
 두 단계로 읽는다. 먼저 `toml::Table`로 읽어 각 접속 table에 이름이 `password`(ASCII 대소문자 무시)인 키가 있는지 본다. 그 다음 `#[serde(deny_unknown_fields)]`를 붙인 struct로 deserialize하고 `ConnectionProfile`로 옮긴 뒤 `validate()`를 부른다. `ProjectError`의 `Display`는 한국어이고 `PasswordInConfig`는 `접속 '<이름>'에 password 항목이 있습니다. 비밀번호는 설정 파일에 쓰지 않고 키체인에 저장합니다`다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `cargo test -p chilla-core`
 Expected: PASS (`layer_deps` 포함)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
