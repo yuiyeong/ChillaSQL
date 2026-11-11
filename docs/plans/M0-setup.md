@@ -43,7 +43,7 @@
 **Interfaces:**
 - Produces: Cargo workspace members `src-tauri`(package `chillasql`, lib `chillasql_lib`)와 `crates/chilla-core`(package `chilla-core`, lib `chilla_core`). `chilla-core`는 `pg_query = "18.1"`을 일반 dependency로 가진다. M2가 이 위에 문장 나누기를 만든다.
 
-- [ ] **Step 1: template을 scratch 디렉토리에 만들고 저장소 루트로 복사**
+- [x] **Step 1: template을 scratch 디렉토리에 만들고 저장소 루트로 복사**
 
 저장소 루트가 비어 있지 않으므로 바로 생성하지 않는다.
 
@@ -57,7 +57,7 @@ rsync -a --exclude .gitignore --exclude README.md --exclude node_modules "$SCRAT
 
 `tauri.conf.json`의 `productName`을 `"ChillaSQL"`로, 창 `title`을 `"ChillaSQL"`로 바꾼다.
 
-- [ ] **Step 2: 루트 `Cargo.toml` workspace와 빈 `chilla-core` crate 만들기**
+- [x] **Step 2: 루트 `Cargo.toml` workspace와 빈 `chilla-core` crate 만들기**
 
 ```toml
 [workspace]
@@ -67,7 +67,7 @@ resolver = "3"
 
 `crates/chilla-core`는 edition 2024 lib crate이고 `lib.rs`는 비워 둔다. `src-tauri/Cargo.toml`에 `chilla-core = { path = "../crates/chilla-core" }`를 추가한다.
 
-- [ ] **Step 3: 실패하는 test 작성**
+- [x] **Step 3: 실패하는 test 작성**
 
 ```rust
 // crates/chilla-core/tests/pg_query_smoke.rs
@@ -79,31 +79,31 @@ fn splits_statements_ignoring_semicolon_inside_dollar_quote() {
 }
 ```
 
-- [ ] **Step 4: 실패 확인**
+- [x] **Step 4: 실패 확인**
 
 Run: `cargo test -p chilla-core`
 Expected: FAIL. `unresolved crate pg_query` compile error가 난다.
 
-- [ ] **Step 5: `chilla-core`의 `[dependencies]`에 `pg_query = "18.1"`을 추가하고 통과 확인**
+- [x] **Step 5: `chilla-core`의 `[dependencies]`에 `pg_query = "18.1"`을 추가하고 통과 확인**
 
 Run: `cargo test -p chilla-core`
 Expected: PASS (1 test)
 
 build script가 도구 부족으로 실패하면 `brew install protobuf` 또는 `brew install cmake`로 그 도구만 설치하고 다시 돌린다. 설치한 도구와 이유는 진행상황 작업 로그에 남긴다.
 
-- [ ] **Step 6: Tauri 빌드 안에서 compile 확인**
+- [x] **Step 6: Tauri 빌드 안에서 compile 확인**
 
 Run: `pnpm install && pnpm tauri build --debug --no-bundle`
 Expected: 성공. `target/debug/chillasql`이 생긴다.
 
-- [ ] **Step 7: `dist/` 없이 workspace 전체 test 확인 (Review Focus 1)**
+- [x] **Step 7: `dist/` 없이 workspace 전체 test 확인 (Review Focus 1)**
 
 Run: `rm -rf dist && cargo test`
 Expected: PASS
 
 `frontendDist` 경로가 없다는 오류가 나면 `src-tauri/build.rs`에서 `tauri_build::build()`를 부르기 전에 `std::fs::create_dir_all("../dist")`를 호출하고 다시 돌린다.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add -A
