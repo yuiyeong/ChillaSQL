@@ -5,15 +5,17 @@
 //! `Password`는 `Serialize`가 아니라서 실수로 넣어도 compile되지 않는다.
 
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use chilla_core::application::{App, AppError};
 use chilla_core::domain::{
-    ConnectionProfile, Password, ProfileError, Project, SessionId, SessionInfo, SessionState,
-    TxStatus,
+    Column, ConnectionProfile, Password, ProfileError, Project, QueryEvent, QueryId, QueryOutcome,
+    RowBatch, ServerError, SessionId, SessionInfo, SessionState, StatementSpan, TxStatus,
 };
 use chilla_core::infrastructure::PgConnector;
 use serde::{Deserialize, Serialize};
 use tauri::State;
+use tauri::ipc::Channel;
 
 use crate::error::CommandError;
 
@@ -139,6 +141,150 @@ impl From<SessionState> for SessionStateDto {
     }
 }
 
+/// 문장의 위치. `start`와 `end`는 화면 문자열(JS)의 UTF-16 code unit offset이다.
+#[derive(Debug, Clone, Serialize)]
+pub struct StatementSpanDto {
+    pub start: usize,
+    pub end: usize,
+}
+
+/// byte offset의 span을 UTF-16 code unit offset으로 바꾼다. text를 한 번만 훑는다.
+///
+/// span은 start 오름차순에 서로 겹치지 않는다고 가정한다(scanner가 그렇게 돌려준다).
+fn utf16_spans(sql: &str, spans: &[StatementSpan]) -> Vec<StatementSpanDto> {
+    let mut chars = sql.char_indices().peekable();
+    let mut units = 0;
+    // `byte` 앞의 글자를 모두 지나며 UTF-16 code unit을 센다. offset은 앞으로만 간다.
+    let mut advance_to = |byte: usize| {
+        while let Some(&(at, ch)) = chars.peek() {
+            if at >= byte {
+                break;
+            }
+            units += ch.len_utf16();
+            chars.next();
+        }
+        units
+    };
+    spans
+        .iter()
+        .map(|span| StatementSpanDto {
+            start: advance_to(span.start),
+            end: advance_to(span.end),
+        })
+        .collect()
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ColumnDto {
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ServerErrorDto {
+    pub code: String,
+    pub message: String,
+    pub detail: Option<String>,
+    pub hint: Option<String>,
+    pub position: Option<u32>,
+}
+
+/// `finished` 이벤트에서 `type` 옆에 펼쳐지는 부분. `outcome`이 구분자다.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum OutcomeDto {
+    Completed { rows: u64 },
+    Failed { error: ServerErrorDto },
+    Cancelled,
+    Discarded,
+    ConnectionLost { message: String },
+}
+
+/// 쿼리 하나의 결과 이벤트. 화면이 `type`으로 구분한다.
+#[derive(Debug, Clone, Serialize)]
+#[serde(
+    tag = "type",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum QueryEventDto {
+    Columns {
+        columns: Vec<ColumnDto>,
+    },
+    Rows {
+        first_row: u64,
+        /// cell은 `null`(NULL) 또는 서버가 만든 text다.
+        rows: Vec<Vec<Option<String>>>,
+        retained_from: u64,
+        elapsed_micros: u64,
+    },
+    Finished {
+        #[serde(flatten)]
+        outcome: OutcomeDto,
+        elapsed_micros: u64,
+    },
+}
+
+fn micros(elapsed: Duration) -> u64 {
+    u64::try_from(elapsed.as_micros()).unwrap_or(u64::MAX)
+}
+
+impl From<Column> for ColumnDto {
+    fn from(column: Column) -> Self {
+        Self { name: column.name }
+    }
+}
+
+impl From<ServerError> for ServerErrorDto {
+    fn from(error: ServerError) -> Self {
+        Self {
+            code: error.code,
+            message: error.message,
+            detail: error.detail,
+            hint: error.hint,
+            position: error.position,
+        }
+    }
+}
+
+impl From<QueryOutcome> for OutcomeDto {
+    fn from(outcome: QueryOutcome) -> Self {
+        match outcome {
+            QueryOutcome::Completed { rows } => Self::Completed { rows },
+            QueryOutcome::Failed(error) => Self::Failed {
+                error: error.into(),
+            },
+            QueryOutcome::Cancelled => Self::Cancelled,
+            QueryOutcome::Discarded => Self::Discarded,
+            QueryOutcome::ConnectionLost { message } => Self::ConnectionLost { message },
+        }
+    }
+}
+
+impl From<QueryEvent> for QueryEventDto {
+    fn from(event: QueryEvent) -> Self {
+        match event {
+            QueryEvent::Columns(columns) => Self::Columns {
+                columns: columns.into_iter().map(Into::into).collect(),
+            },
+            QueryEvent::Rows(RowBatch {
+                first_row,
+                rows,
+                retained_from,
+                elapsed,
+            }) => Self::Rows {
+                first_row,
+                rows,
+                retained_from,
+                elapsed_micros: micros(elapsed),
+            },
+            QueryEvent::Finished { outcome, elapsed } => Self::Finished {
+                outcome: outcome.into(),
+                elapsed_micros: micros(elapsed),
+            },
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn open_project(app: State<'_, CoreApp>, path: String) -> CommandResult<ProjectDto> {
     let project = app.open_project(Path::new(&path)).await?;
@@ -197,12 +343,64 @@ pub async fn close_session(app: State<'_, CoreApp>, session_id: u64) -> CommandR
     Ok(app.close_session(SessionId(session_id)).await?)
 }
 
+#[tauri::command]
+pub fn split_statements(
+    app: State<'_, CoreApp>,
+    sql: String,
+) -> CommandResult<Vec<StatementSpanDto>> {
+    let spans = app.split_statements(&sql)?;
+    Ok(utf16_spans(&sql, &spans))
+}
+
+/// query id를 돌려주고 바로 끝난다. 결과는 `on_event`로 간다.
+#[tauri::command]
+pub async fn execute_query(
+    app: State<'_, CoreApp>,
+    session_id: u64,
+    sql: String,
+    on_event: Channel<QueryEventDto>,
+) -> CommandResult<u64> {
+    // 화면이 사라져 send가 실패해도 무시한다. 그 쿼리는 다음 execute나 close_session에서 정리된다.
+    // sink는 session의 task 안에서 돈다. panic하면 session이 죽으므로 오류를 내지 않는다.
+    let sink = Box::new(move |event| {
+        let _ = on_event.send(QueryEventDto::from(event));
+    });
+    let query = app.execute(SessionId(session_id), sql, sink).await?;
+    Ok(query.0)
+}
+
+#[tauri::command]
+pub async fn fetch_more(
+    app: State<'_, CoreApp>,
+    session_id: u64,
+    query_id: u64,
+) -> CommandResult<()> {
+    Ok(app
+        .fetch_more(SessionId(session_id), QueryId(query_id))
+        .await?)
+}
+
+#[tauri::command]
+pub async fn cancel_query(
+    app: State<'_, CoreApp>,
+    session_id: u64,
+    query_id: u64,
+) -> CommandResult<()> {
+    Ok(app
+        .cancel_query(SessionId(session_id), QueryId(query_id))
+        .await?)
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
     use std::path::PathBuf;
 
-    use chilla_core::domain::{Project, SessionId, SslMode, TxStatus};
+    use std::time::Duration;
+
+    use chilla_core::domain::{
+        Column, Project, QueryOutcome, RowBatch, ServerError, SessionId, SslMode, TxStatus,
+    };
     use serde_json::json;
 
     use super::*;
@@ -338,6 +536,140 @@ mod tests {
         assert_eq!(
             shape(SessionState::Lost),
             json!({ "status": "lost", "tx": null })
+        );
+    }
+
+    #[test]
+    fn statement_spans_are_utf16_offsets() {
+        let sql = "SELECT '한글'; SELECT '😀'; SELECT 2";
+        let spans = [
+            StatementSpan { start: 0, end: 15 },
+            StatementSpan { start: 17, end: 30 },
+            StatementSpan { start: 32, end: 40 },
+        ];
+        let offsets: Vec<(usize, usize)> = utf16_spans(sql, &spans)
+            .iter()
+            .map(|span| (span.start, span.end))
+            .collect();
+        assert_eq!(offsets, [(0, 11), (13, 24), (26, 34)]);
+        assert!(utf16_spans(sql, &[]).is_empty());
+    }
+
+    fn event_json(event: QueryEvent) -> serde_json::Value {
+        serde_json::to_value(QueryEventDto::from(event)).unwrap()
+    }
+
+    fn keys(json: &serde_json::Value) -> BTreeSet<&str> {
+        json.as_object()
+            .unwrap()
+            .keys()
+            .map(String::as_str)
+            .collect()
+    }
+
+    fn finished(outcome: QueryOutcome, micros: u64) -> serde_json::Value {
+        event_json(QueryEvent::Finished {
+            outcome,
+            elapsed: Duration::from_micros(micros),
+        })
+    }
+
+    #[test]
+    fn query_event_dto_shapes() {
+        let columns = event_json(QueryEvent::Columns(vec![Column { name: "id".into() }]));
+        assert_eq!(
+            columns,
+            json!({ "type": "columns", "columns": [{ "name": "id" }] })
+        );
+        assert_eq!(keys(&columns), BTreeSet::from(["type", "columns"]));
+
+        let rows = event_json(QueryEvent::Rows(RowBatch {
+            first_row: 500,
+            rows: vec![vec![Some("1".into()), None, Some(String::new())]],
+            retained_from: 2,
+            elapsed: Duration::from_micros(4246),
+        }));
+        assert_eq!(
+            rows,
+            json!({
+                "type": "rows", "firstRow": 500, "rows": [["1", null, ""]],
+                "retainedFrom": 2, "elapsedMicros": 4246
+            })
+        );
+        assert_eq!(
+            keys(&rows),
+            BTreeSet::from(["type", "firstRow", "rows", "retainedFrom", "elapsedMicros"])
+        );
+
+        let completed = finished(QueryOutcome::Completed { rows: 3 }, 120);
+        assert_eq!(
+            completed,
+            json!({ "type": "finished", "outcome": "completed", "rows": 3, "elapsedMicros": 120 })
+        );
+        assert_eq!(
+            keys(&completed),
+            BTreeSet::from(["type", "outcome", "rows", "elapsedMicros"])
+        );
+
+        let failed = finished(
+            QueryOutcome::Failed(ServerError {
+                code: "42P01".into(),
+                message: "m".into(),
+                detail: None,
+                hint: Some("h".into()),
+                position: Some(15),
+            }),
+            90,
+        );
+        assert_eq!(
+            failed,
+            json!({
+                "type": "finished", "outcome": "failed", "elapsedMicros": 90,
+                "error": {
+                    "code": "42P01", "message": "m", "detail": null, "hint": "h", "position": 15
+                }
+            })
+        );
+        assert_eq!(
+            keys(&failed),
+            BTreeSet::from(["type", "outcome", "elapsedMicros", "error"])
+        );
+        assert_eq!(
+            keys(&failed["error"]),
+            BTreeSet::from(["code", "message", "detail", "hint", "position"])
+        );
+
+        for (outcome, name) in [
+            (QueryOutcome::Cancelled, "cancelled"),
+            (QueryOutcome::Discarded, "discarded"),
+        ] {
+            let json = finished(outcome, 5300);
+            assert_eq!(
+                json,
+                json!({ "type": "finished", "outcome": name, "elapsedMicros": 5300 })
+            );
+            assert_eq!(
+                keys(&json),
+                BTreeSet::from(["type", "outcome", "elapsedMicros"])
+            );
+        }
+
+        let lost = finished(
+            QueryOutcome::ConnectionLost {
+                message: "x".into(),
+            },
+            10,
+        );
+        assert_eq!(
+            lost,
+            json!({
+                "type": "finished", "outcome": "connection_lost", "message": "x",
+                "elapsedMicros": 10
+            })
+        );
+        assert_eq!(
+            keys(&lost),
+            BTreeSet::from(["type", "outcome", "message", "elapsedMicros"])
         );
     }
 }

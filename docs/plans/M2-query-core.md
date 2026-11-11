@@ -957,7 +957,7 @@ impl From<QueryEvent> for QueryEventDto { .. }
 | `QueryNotActive { .. }` | `query_not_active` |
 | `Cancel(_)` | `cancel_failed` |
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `commands.rs`:
 
@@ -983,21 +983,21 @@ impl From<QueryEvent> for QueryEventDto { .. }
 
 `error.rs`의 `command_error_kinds`에 위 표의 5개를 더한다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chillasql`
 Expected: FAIL. `utf16_spans`와 `QueryEventDto`가 없어 compile error가 난다.
 
-- [ ] **Step 3: DTO와 command 구현, `lib.rs`에 등록**
+- [x] **Step 3: DTO와 command 구현, `lib.rs`에 등록**
 
 `generate_handler!`에 `split_statements`, `execute_query`, `fetch_more`, `cancel_query`를 더한다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

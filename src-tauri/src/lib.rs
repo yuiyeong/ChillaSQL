@@ -30,6 +30,10 @@ pub fn run() {
             commands::open_session,
             commands::session_state,
             commands::close_session,
+            commands::split_statements,
+            commands::execute_query,
+            commands::fetch_more,
+            commands::cancel_query,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
