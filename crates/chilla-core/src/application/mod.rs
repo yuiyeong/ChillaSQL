@@ -10,5 +10,5 @@ pub use app::{App, AppError};
 
 pub use ports::{
     ConnectError, Connector, DbConnection, PasswordKey, PasswordStore, PasswordStoreError,
-    ProjectError, ProjectStore,
+    ProjectError, ProjectStore, SplitError, StatementSplitter,
 };

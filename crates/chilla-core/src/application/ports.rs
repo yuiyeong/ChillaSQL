@@ -3,7 +3,7 @@
 use std::future::Future;
 use std::path::{Path, PathBuf};
 
-use crate::domain::{ConnectionProfile, Password, ProfileError, Project, TxStatus};
+use crate::domain::{ConnectionProfile, Password, ProfileError, Project, StatementSpan, TxStatus};
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽는다.
 pub trait ProjectStore: Send + Sync {
@@ -91,4 +91,17 @@ pub enum ConnectError {
     Database { code: String, message: String },
     #[error("연결에 실패했습니다: {message}")]
     Other { message: String },
+}
+
+/// SQL text를 문장 단위로 나눈다. 문장이 문법에 맞는지는 보지 않는다.
+pub trait StatementSplitter: Send + Sync {
+    /// 문장마다 span을 돌려준다. 빈 문장은 만들지 않는다.
+    fn split(&self, sql: &str) -> Result<Vec<StatementSpan>, SplitError>;
+}
+
+/// 따옴표, `$$`, 주석이 닫히지 않아 문장 경계를 알 수 없다.
+#[derive(Debug, PartialEq, Eq, thiserror::Error)]
+#[error("문장을 나누지 못했습니다: {message}")]
+pub struct SplitError {
+    pub message: String,
 }

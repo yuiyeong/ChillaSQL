@@ -220,7 +220,7 @@ pub struct PgQuerySplitter;                      // impl StatementSplitter
 - atomic 깊이(psql과 같은 규칙): `BeginP` 바로 다음 token이 `Atomic`이면 1이 된다. 깊이가 1 이상일 때 `Case`에서 +1, `EndP`에서 -1. `BEGIN;`(트랜잭션)은 다음 token이 `Atomic`이 아니라서 해당하지 않는다.
 - `scan`이 `Err`면(닫히지 않은 따옴표, `$$`, `/*`) `SplitError { message: <pg_query의 message> }`다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `tests/statements.rs`. helper `texts(sql) -> Vec<&str>`는 `PgQuerySplitter.split(sql).unwrap()`의 span마다 `&sql[start..end]`를 돌려준다. `spans(sql) -> Vec<(usize, usize)>`는 `(start, end)`다.
 
@@ -267,21 +267,21 @@ pub struct PgQuerySplitter;                      // impl StatementSplitter
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --test statements`
 Expected: FAIL. `PgQuerySplitter`가 없어 compile error가 난다.
 
-- [ ] **Step 3: `StatementSpan`, `StatementSplitter`, `PgQuerySplitter` 구현**
+- [x] **Step 3: `StatementSpan`, `StatementSplitter`, `PgQuerySplitter` 구현**
 
 위 규칙대로 구현한다. `pg_query_smoke.rs`를 지운다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

@@ -4,8 +4,10 @@ mod keychain;
 mod memory_password_store;
 mod postgres;
 mod project_file;
+mod statement_splitter;
 
 pub use keychain::KeychainPasswordStore;
 pub use memory_password_store::MemoryPasswordStore;
 pub use postgres::{PgConnection, PgConnector};
 pub use project_file::TomlProjectStore;
+pub use statement_splitter::PgQuerySplitter;

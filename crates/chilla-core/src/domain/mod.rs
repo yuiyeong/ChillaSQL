@@ -4,8 +4,10 @@ mod connection;
 mod password;
 mod project;
 mod session;
+mod statement;
 
 pub use connection::{ConnectionProfile, ProfileError, SslMode};
 pub use password::Password;
 pub use project::Project;
 pub use session::{SessionId, SessionInfo, SessionState, TxStatus};
+pub use statement::StatementSpan;
