@@ -12,6 +12,7 @@ impl From<AppError> for CommandError {
     fn from(error: AppError) -> Self {
         let kind = match &error {
             AppError::NoProject => "no_project",
+            AppError::ProjectChanged => "project_changed",
             AppError::UnknownConnection { .. } => "unknown_connection",
             AppError::UnknownSession { .. } => "unknown_session",
             AppError::Project(ProjectError::NotFound { .. }) => "project_not_found",
@@ -54,6 +55,7 @@ mod tests {
     #[test]
     fn command_error_kinds() {
         assert_eq!(kind(AppError::NoProject), "no_project");
+        assert_eq!(kind(AppError::ProjectChanged), "project_changed");
         assert_eq!(
             kind(AppError::UnknownConnection { name: "x".into() }),
             "unknown_connection"

@@ -31,12 +31,12 @@ async fn run<D: DbConnection>(connection: D, mut commands: mpsc::Receiver<Sessio
     while let Some(command) = commands.recv().await {
         match command {
             SessionCommand::State(reply) => {
+                // 상태를 기다리는 사이에 연결이 끊길 수 있으므로 받은 뒤에 끊겼는지 본다.
+                let tx = connection.tx_status().await;
                 let state = if connection.is_closed() {
                     SessionState::Lost
                 } else {
-                    SessionState::Open {
-                        tx: connection.tx_status().await,
-                    }
+                    SessionState::Open { tx }
                 };
                 let _ = reply.send(state);
             }
@@ -109,6 +109,14 @@ mod tests {
             SessionState::Open { tx: TxStatus::Idle }
         );
         link.lose();
+        assert_eq!(handle.state().await, SessionState::Lost);
+    }
+
+    /// 상태를 기다리는 사이에 연결이 끊겼으면 기다린 끝에 받은 상태는 죽은 연결의 것이다.
+    #[tokio::test]
+    async fn connection_lost_while_reading_status_is_lost() {
+        let (handle, link) = session();
+        link.lose_during_tx_status();
         assert_eq!(handle.state().await, SessionState::Lost);
     }
 

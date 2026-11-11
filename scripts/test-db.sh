@@ -44,6 +44,8 @@ up() {
   fi
   if [ ! -f "$TLS_DIR/server.crt" ]; then
     gen_certs
+    # 떠 있는 db-tls는 시작할 때 복사한 옛 인증서를 쓴다. 새 인증서로 다시 만든다.
+    docker compose up -d --wait --force-recreate db-tls
   fi
   docker compose up -d --wait
   local actual

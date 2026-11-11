@@ -20,6 +20,8 @@ use crate::domain::{
 pub enum AppError {
     #[error("프로젝트를 먼저 열어야 합니다")]
     NoProject,
+    #[error("연결하는 동안 프로젝트가 다시 열렸습니다. 다시 시도하세요")]
+    ProjectChanged,
     #[error("접속 '{name}'이 프로젝트에 없습니다")]
     UnknownConnection { name: String },
     #[error("세션 {}이 없습니다", id.0)]
@@ -46,6 +48,8 @@ struct State {
     project: Option<Project>,
     sessions: HashMap<SessionId, SessionHandle>,
     last_session_id: u64,
+    /// `open_project`가 성공할 때마다 오른다. 같은 디렉토리를 다시 연 것도 구분한다.
+    project_generation: u64,
 }
 
 impl<C: Connector> App<C> {
@@ -72,6 +76,7 @@ impl<C: Connector> App<C> {
         let previous = {
             let mut state = self.state.lock().await;
             state.project = Some(project.clone());
+            state.project_generation += 1;
             std::mem::take(&mut state.sessions)
         };
         close_all(previous).await;
@@ -79,18 +84,23 @@ impl<C: Connector> App<C> {
     }
 
     pub async fn set_password(&self, connection: &str, password: Password) -> Result<(), AppError> {
-        let key = self.password_key(connection).await?;
+        let key = self.saved_connection_key(connection).await?;
         let passwords = self.passwords.clone();
         Ok(blocking(move || passwords.set(&key, &password)).await?)
     }
 
     pub async fn has_password(&self, connection: &str) -> Result<bool, AppError> {
-        let key = self.password_key(connection).await?;
+        let key = self.saved_connection_key(connection).await?;
         Ok(self.stored_password(key).await?.is_some())
     }
 
+    /// 프로젝트에서 이미 빠진 접속의 항목도 지울 수 있다.
     pub async fn delete_password(&self, connection: &str) -> Result<(), AppError> {
-        let key = self.password_key(connection).await?;
+        let key = {
+            let state = self.state.lock().await;
+            let project = state.project.as_ref().ok_or(AppError::NoProject)?;
+            password_key(project, connection)
+        };
         let passwords = self.passwords.clone();
         Ok(blocking(move || passwords.delete(&key)).await?)
     }
@@ -105,13 +115,15 @@ impl<C: Connector> App<C> {
         profile: ConnectionProfile,
         password: Option<Password>,
     ) -> Result<(), AppError> {
-        let stored_key = {
+        let (profile, stored_key) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
-            project
+            let profile = profile.resolved_under(&project.dir);
+            let stored_key = project
                 .connection(&profile.name)
                 .filter(|saved| saved.same_target(&profile))
-                .map(|saved| password_key(project, &saved.name))
+                .map(|saved| password_key(project, &saved.name));
+            (profile, stored_key)
         };
         profile.validate()?;
         let password = match (password, stored_key) {
@@ -125,7 +137,7 @@ impl<C: Connector> App<C> {
     }
 
     pub async fn open_session(&self, connection: &str) -> Result<SessionInfo, AppError> {
-        let (profile, key) = {
+        let (profile, key, generation) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
             let profile =
@@ -134,20 +146,24 @@ impl<C: Connector> App<C> {
                     .ok_or_else(|| AppError::UnknownConnection {
                         name: connection.to_string(),
                     })?;
-            (profile.clone(), password_key(project, &profile.name))
+            (
+                profile.clone(),
+                password_key(project, &profile.name),
+                state.project_generation,
+            )
         };
-        let project_dir = key.project_dir.clone();
         let password = self.stored_password(key).await?;
 
         // 연결은 오래 걸릴 수 있다. 그동안 lock을 잡지 않는다.
         let db = self.connector.connect(&profile, password.as_ref()).await?;
 
         let mut state = self.state.lock().await;
-        if state.project.as_ref().map(|p| &p.dir) != Some(&project_dir) {
-            // 연결하는 사이에 다른 프로젝트가 열렸다.
+        if state.project_generation != generation {
+            // 연결하는 사이에 프로젝트가 다시 열렸다. 그때 세션을 모두 닫았으므로, 그 전의
+            // 접속 정보로 붙은 이 연결을 세션으로 남기지 않는다.
             drop(state);
             db.close().await;
-            return Err(AppError::NoProject);
+            return Err(AppError::ProjectChanged);
         }
         state.last_session_id += 1;
         let info = SessionInfo {
@@ -181,10 +197,16 @@ impl<C: Connector> App<C> {
         close_all(sessions).await;
     }
 
-    async fn password_key(&self, connection: &str) -> Result<PasswordKey, AppError> {
+    /// 프로젝트에 있는 접속의 키체인 항목. 없는 이름으로는 항목을 만들지 않는다.
+    async fn saved_connection_key(&self, connection: &str) -> Result<PasswordKey, AppError> {
         let state = self.state.lock().await;
         let project = state.project.as_ref().ok_or(AppError::NoProject)?;
-        Ok(password_key(project, connection))
+        let saved = project
+            .connection(connection)
+            .ok_or_else(|| AppError::UnknownConnection {
+                name: connection.to_string(),
+            })?;
+        Ok(password_key(project, &saved.name))
     }
 
     async fn stored_password(
@@ -291,6 +313,57 @@ mod tests {
             Err(AppError::NoProject)
         );
         assert!(f.connector.requests().is_empty());
+    }
+
+    /// 연결하는 동안 같은 디렉토리를 다시 열어도(reload) 그 전의 접속 정보로 붙은 세션은
+    /// 등록되지 않는다.
+    #[tokio::test]
+    async fn session_connected_across_a_project_reload_is_not_registered() {
+        let f = Arc::new(opened().await);
+        let blocked = f.connector.block().await;
+        let opening = tokio::spawn({
+            let f = f.clone();
+            async move { f.app.open_session("local").await }
+        });
+        while f.connector.requests().is_empty() {
+            tokio::task::yield_now().await;
+        }
+
+        f.app.open_project(Path::new("/p")).await.unwrap();
+        drop(blocked);
+
+        assert_eq!(opening.await.unwrap(), Err(AppError::ProjectChanged));
+        assert!(f.connector.links()[0].closed());
+        assert!(f.app.state.lock().await.sessions.is_empty());
+    }
+
+    #[tokio::test]
+    async fn passwords_belong_to_connections_of_the_project() {
+        let f = opened().await;
+        let unknown = || AppError::UnknownConnection {
+            name: "stagng".into(),
+        };
+        assert_eq!(f.app.set_password("stagng", pw("x")).await, Err(unknown()));
+        assert_eq!(f.app.has_password("stagng").await, Err(unknown()));
+        assert!(f.passwords.is_empty());
+        // 지우기는 프로젝트에서 빠진 접속의 항목도 치울 수 있어야 한다.
+        assert_eq!(f.app.delete_password("stagng").await, Ok(()));
+    }
+
+    /// 화면은 chilla.toml에 쓸 값 그대로 보낸다. 파일에서 읽을 때와 같은 경로가 돼야 한다.
+    #[tokio::test]
+    async fn test_connection_resolves_sslrootcert_against_the_project_dir() {
+        let f = opened().await;
+        let mut draft = profile("draft");
+        draft.sslmode = SslMode::VerifyFull;
+        draft.sslrootcert = Some("certs/ca.pem".into());
+
+        f.app.test_connection(draft, Some(pw("x"))).await.unwrap();
+
+        assert_eq!(
+            f.connector.profiles()[0].sslrootcert,
+            Some("/p/certs/ca.pem".into())
+        );
     }
 
     #[tokio::test]

@@ -10,6 +10,7 @@ mod tx_tap;
 use std::error::Error as _;
 use std::time::Duration;
 
+use socket2::{SockRef, TcpKeepalive};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
@@ -22,6 +23,10 @@ use tls::Verification;
 use tx_tap::{TxStatusCell, TxTap};
 
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
+// 30초 조용하면 10초 간격으로 3번 확인한다. 응답이 없는 연결은 1분쯤 뒤에 끊긴 것으로 드러난다.
+const KEEPALIVE_IDLE: Duration = Duration::from_secs(30);
+const KEEPALIVE_INTERVAL: Duration = Duration::from_secs(10);
+const KEEPALIVE_RETRIES: u32 = 3;
 const APPLICATION_NAME: &str = "ChillaSQL";
 
 pub struct PgConnector {
@@ -68,7 +73,7 @@ async fn establish(
     let tcp = TcpStream::connect((profile.host.as_str(), profile.port))
         .await
         .map_err(unreachable)?;
-    tcp.set_nodelay(true).map_err(unreachable)?;
+    configure_socket(&tcp).map_err(unreachable)?;
 
     let verification = match (profile.sslmode, &profile.sslrootcert) {
         (SslMode::Disable, _) => return start(tcp, profile, password).await,
@@ -78,6 +83,19 @@ async fn establish(
     };
     let tls = tls::negotiate(tcp, &profile.host, verification).await?;
     start(tls, profile, password).await
+}
+
+/// socket을 직접 열기 때문에 tokio-postgres가 해 주던 설정을 여기서 한다.
+///
+/// keepalive가 없으면 FIN 없이 죽은 연결(sleep 뒤 복귀, VPN 끊김, NAT timeout)을 읽는 쪽이
+/// 영영 모른다. 세션이 `Lost`로 바뀌지 않고 다음 쿼리가 몇 분씩 멈춘다.
+fn configure_socket(tcp: &TcpStream) -> std::io::Result<()> {
+    tcp.set_nodelay(true)?;
+    let keepalive = TcpKeepalive::new()
+        .with_time(KEEPALIVE_IDLE)
+        .with_interval(KEEPALIVE_INTERVAL)
+        .with_retries(KEEPALIVE_RETRIES);
+    SockRef::from(tcp).set_tcp_keepalive(&keepalive)
 }
 
 /// 이미 열린(필요하면 암호화까지 끝난) stream 위에서 PostgreSQL 세션을 시작한다.
@@ -214,6 +232,24 @@ mod tests {
             user: "chilla".into(),
             ..ConnectionProfile::fixture("local")
         }
+    }
+
+    /// FIN 없이 죽은 연결(sleep 뒤 복귀, VPN 끊김)은 keepalive가 있어야 끊긴 줄 안다.
+    #[tokio::test]
+    async fn sockets_probe_idle_connections() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let tcp = TcpStream::connect(listener.local_addr().unwrap())
+            .await
+            .unwrap();
+
+        configure_socket(&tcp).unwrap();
+
+        let socket = socket2::SockRef::from(&tcp);
+        assert!(tcp.nodelay().unwrap());
+        assert!(socket.keepalive().unwrap());
+        assert_eq!(socket.tcp_keepalive_time().unwrap(), KEEPALIVE_IDLE);
+        assert_eq!(socket.tcp_keepalive_interval().unwrap(), KEEPALIVE_INTERVAL);
+        assert_eq!(socket.tcp_keepalive_retries().unwrap(), KEEPALIVE_RETRIES);
     }
 
     #[tokio::test]

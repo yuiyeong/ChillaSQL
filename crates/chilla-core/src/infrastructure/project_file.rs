@@ -120,11 +120,11 @@ fn connection(
         database: raw.database,
         user: raw.user,
         sslmode,
-        // `join`은 절대 경로를 받으면 그 경로를 그대로 돌려준다.
-        sslrootcert: raw.sslrootcert.map(|path| dir.join(path)),
+        sslrootcert: raw.sslrootcert,
         tunnel: raw.tunnel,
         color: raw.color,
-    };
+    }
+    .resolved_under(dir);
     profile.validate().map_err(invalid)?;
     Ok(profile)
 }

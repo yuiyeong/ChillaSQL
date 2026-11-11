@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
 /// `chilla.toml`의 `sslmode`. 조용히 평문으로 내려가는 `prefer`는 두지 않는다.
@@ -76,6 +76,14 @@ impl ConnectionProfile {
         Ok(())
     }
 
+    /// 상대 경로인 `sslrootcert`를 프로젝트 디렉토리 기준의 절대 경로로 바꾼다. `chilla.toml`에
+    /// 쓰인 값도, 화면이 보낸 값도 이 함수를 거쳐야 같은 파일을 가리킨다.
+    pub fn resolved_under(mut self, project_dir: &Path) -> Self {
+        // `join`은 절대 경로를 받으면 그 경로를 그대로 돌려준다.
+        self.sslrootcert = self.sslrootcert.map(|path| project_dir.join(path));
+        self
+    }
+
     /// 같은 서버에 같은 방법으로 같은 사용자로 붙는가. 저장된 비밀번호를 이 접속 정보에
     /// 써도 되는지 가릴 때 쓴다. 색처럼 연결과 무관한 항목은 보지 않는다.
     pub fn same_target(&self, other: &ConnectionProfile) -> bool {
@@ -133,8 +141,6 @@ impl ConnectionProfile {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use super::*;
 
     type Setter = fn(&mut ConnectionProfile, String);
@@ -177,6 +183,25 @@ mod tests {
                 assert_eq!(profile.validate(), Err(ProfileError::EmptyField { field }));
             }
         }
+    }
+
+    #[test]
+    fn resolved_under_makes_a_relative_root_cert_absolute() {
+        let with_cert = |path: &str| ConnectionProfile {
+            sslmode: SslMode::VerifyFull,
+            sslrootcert: Some(PathBuf::from(path)),
+            ..local()
+        };
+        let dir = Path::new("/p");
+        assert_eq!(
+            with_cert("certs/ca.pem").resolved_under(dir).sslrootcert,
+            Some(PathBuf::from("/p/certs/ca.pem"))
+        );
+        assert_eq!(
+            with_cert("/etc/ca.pem").resolved_under(dir).sslrootcert,
+            Some(PathBuf::from("/etc/ca.pem"))
+        );
+        assert_eq!(local().resolved_under(dir).sslrootcert, None);
     }
 
     #[test]

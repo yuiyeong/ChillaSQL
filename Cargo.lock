@@ -415,6 +415,8 @@ dependencies = [
  "rustls",
  "rustls-platform-verifier",
  "serde",
+ "socket2",
+ "syn 2.0.119",
  "tempfile",
  "thiserror 2.0.21",
  "tokio",

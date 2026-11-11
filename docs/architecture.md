@@ -35,7 +35,7 @@ crates/chilla-core/src/
 
 ### 의존 방향 검사
 
-compiler는 같은 crate 안의 module 사이 의존 방향을 막지 못한다. `crates/chilla-core/tests/layer_deps.rs`가 `domain`과 `application`의 source를 읽어 아래 경로를 쓰는 줄(`<경로>::` 또는 `use <경로>`)이 있으면 실패한다. 주석 줄은 보지 않는다. 같은 test가 `chilla-core`의 `Cargo.toml`에 `tauri`가 없는지도 확인한다.
+compiler는 같은 crate 안의 module 사이 의존 방향을 막지 못한다. `crates/chilla-core/tests/layer_deps.rs`가 `domain`과 `application`의 source를 `syn`으로 parse해서, `use`(묶거나 여러 줄에 걸친 것 포함)와 코드 안의 경로가 아래 경로로 시작하면 실패한다. `super::`로 올라가는 경로는 `crate::`로 보고, macro의 인자는 글자로 찾는다. 같은 test가 `chilla-core`의 `Cargo.toml`에 `tauri`가 없는지도 확인한다.
 
 | layer | 쓸 수 없는 경로 |
 | --- | --- |
