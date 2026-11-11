@@ -38,7 +38,7 @@ Tauri + React/TypeScript로 확정했다. 화면은 React로, DB 연결과 터�
 | 결과 표 | TanStack Table + TanStack Virtual | 가상 스크롤로 보이는 행만 그림 |
 | DB 드라이버 | tokio-postgres | 세션 고정, 쿼리 취소, 행 단위 스트리밍을 직접 제어 가능 |
 | TLS | rustls | SSL 연결과 서버 인증서 검증. tokio-postgres만으로는 SSL 연결이 안 됨 |
-| 비밀번호 저장 | keyring (macOS 키체인) | OS가 암호화를 담당 |
+| 비밀번호 저장 | keyring-core + apple-native-keyring-store (macOS 키체인) | OS가 암호화를 담당 |
 | 터널 프로세스 | tokio::process | 터널 명령을 자식 프로세스로 실행하고 감시 |
 | Lint, formatter | ESLint + Prettier, clippy + rustfmt | 화면과 Rust 양쪽의 코드 스타일과 구조 규칙을 도구로 확인 |
 | 설정 파일 | TOML (serde) | 사람이 읽고 고치기 쉬움 |
@@ -67,7 +67,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 접속 테스트 | 저장 전에 연결 가능 여부 확인. 터널 명령이 있으면 터널까지 포함해 확인 |
 | 접속별 색상 | 탭과 창 상단에 색을 표시해 어느 DB인지 구분 |
 | 읽기 전용 | 접속 단위로 켜고 끔 |
-| SSL | SSL 모드 선택. public IP 접속에는 서버 인증서까지 확인하는 verify-full을 쓸 수 있음 |
+| SSL | `sslmode`로 선택: `disable`(기본값), `require`(암호화만), `verify-full`(서버 인증서와 host 이름까지 확인). `verify-full`은 `sslrootcert`로 신뢰할 CA 파일을 정할 수 있고, 없으면 macOS의 trust store로 확인 |
 
 ### 4.2 터널 연결 (선택)
 
@@ -198,6 +198,7 @@ port = 5432
 database = "app"
 user = "app_user"
 sslmode = "require"        # 서버 인증서까지 확인하려면 "verify-full"
+# sslrootcert = "certs/ca.pem"   # verify-full에서 이 CA만 신뢰
 color = "red"
 
 # 스테이징: 터널 명령을 먼저 실행한 뒤 접속
@@ -246,7 +247,7 @@ color = "green"
 
 | 대상 | 처리 |
 | --- | --- |
-| 접속 비밀번호 | 키체인에 저장. 항목은 프로젝트 경로와 접속 이름으로 구분. 설정 파일에는 password 항목 자체가 없음 |
+| 접속 비밀번호 | 키체인에 저장. 항목은 프로젝트 경로와 접속 이름으로 구분(service `com.yuiyeong.chillasql`, account `<프로젝트 디렉토리 절대 경로>::<접속 이름>`). 설정 파일에는 password 항목 자체가 없고, 있으면 프로젝트를 열지 않음 |
 | 전송 구간 | public IP 접속은 SSL 사용. `require`는 암호화만 하고, `verify-full`은 서버 인증서까지 확인 |
 | 터널 명령 | 설정 파일에 평문으로 저장. 명령 안에 토큰이나 비밀번호를 직접 쓰지 않음 |
 | 설정 파일 | 비밀 정보가 들어가지 않도록 저장 시 검사 |

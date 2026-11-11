@@ -61,6 +61,7 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **먼저 확인할 것**:
   - 커서 위치에서 실행할 문장을 고를 때 M2의 문장 위치 정보를 쓸지, 화면 쪽에서 따로 판별할지
   - `tauri.conf.json`의 CSP를 켠다(지금은 `null`). Vite HMR과 CodeMirror가 넣는 style이 막히지 않는 정책을 정한다
+  - `pnpm tauri dev` 빌드마다 키체인 확인 창이 뜬다(M1에서 확인). dev 빌드를 고정된 self-signed code signing identity로 서명할지 정한다
 
 ### M4. 결과 표
 

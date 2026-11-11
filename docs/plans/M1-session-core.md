@@ -104,30 +104,30 @@ src-tauri/src/
 **Interfaces:**
 - Produces: `chilla-core`의 키체인 dependency(Task 4가 쓴다), 진행상황의 결정 기록
 
-- [ ] **Step 1: probe 작성**
+- [x] **Step 1: probe 작성**
 
 `keychain_probe.rs`는 인자 `set | get | delete`를 받는 example이다. `apple_native_keyring_store::keychain::Store::new()`로 store를 만들고 `CredentialStoreApi::build("com.yuiyeong.chillasql.probe", "probe", None)`으로 entry를 얻어 `set_password("probe-value")`, `get_password()`, `delete_credential()`을 부른다. `get`은 걸린 시간과 성공 여부만 출력한다.
 
-- [ ] **Step 2: 같은 binary로 저장하고 읽기**
+- [x] **Step 2: 같은 binary로 저장하고 읽기**
 
 Run: `cargo run -p chilla-core --example keychain_probe -- set && cargo run -p chilla-core --example keychain_probe -- get`
 Expected: dialog 없이 성공한다.
 
-- [ ] **Step 3: 다시 빌드한 binary로 읽기**
+- [x] **Step 3: 다시 빌드한 binary로 읽기**
 
 probe의 출력 문자열 하나를 바꿔 binary가 달라지게 한 뒤 실행한다. 이 step은 dialog가 뜨면 실행이 멈추므로, 실행 전에 사용자에게 화면을 봐 달라고 요청하고 결과(dialog가 떴는지, "항상 허용"을 누른 뒤 한 번 더 빌드하면 다시 뜨는지)를 받는다.
 
 Run: `cargo run -p chilla-core --example keychain_probe -- get`
 Expected: 둘 중 하나. (a) dialog 없이 성공. (b) "keychain_probe가 키체인의 기밀 정보를 사용하려고 합니다" dialog가 뜬다. ad-hoc 서명은 빌드마다 code hash가 바뀌므로 (b)를 예상한다.
 
-- [ ] **Step 4: 정리와 기록**
+- [x] **Step 4: 정리와 기록**
 
 - `cargo run -p chilla-core --example keychain_probe -- delete` 후 `keychain_probe.rs`를 지운다.
 - `docs/progress.md` 결정 기록에 "이 계획에서 정한 것"의 항목과 "먼저 확인한 것" 표의 결정 2개, Step 3의 결과를 한 줄씩 남긴다. M1 상태를 `진행 중`으로 바꾼다.
 - Step 3이 (b)면 `docs/milestones.md` M3의 "먼저 확인할 것"에 한 줄을 추가한다: "`pnpm tauri dev` 빌드마다 키체인 확인 창이 뜬다. dev 빌드를 고정된 self-signed code signing identity로 서명할지 정한다". M1의 코드는 바뀌지 않는다.
 - `docs/spec.md`를 고친다: 2장 표의 비밀번호 저장 행을 `keyring-core + apple-native-keyring-store (macOS 키체인)`으로, 4.1의 SSL 행에 `sslmode` 세 값과 `sslrootcert`를, 5장 `chilla.toml` 예시의 `production`에 `# sslrootcert = "certs/ca.pem"   # verify-full에서 이 CA만 신뢰` 주석 한 줄을, 7장 접속 비밀번호 행에 키체인 service와 account 형식을 넣는다.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

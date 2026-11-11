@@ -4,8 +4,8 @@
 
 ## 지금
 
-- **진행 중**: M1 접속·세션 코어 (계획 중). 계획을 썼고 검토를 기다린다 → [M1](plans/M1-session-core.md)
-- **다음 할 일**: 계획 검토가 끝나면 Task 1(키체인 확인 창 확인과 결정 기록)부터 시작한다. Task 1 Step 3은 사람이 화면의 dialog를 봐야 한다
+- **진행 중**: M1 접속·세션 코어 → [M1](plans/M1-session-core.md). branch `m1-session-core`
+- **다음 할 일**: 계획에서 체크되지 않은 첫 task부터 이어간다
 - **M1에서 챙길 것**: layer 의존 방향 test는 계획의 Task 2에 있다 ([구조](architecture.md) 2장)
 
 ## 마일스톤 현황
@@ -15,7 +15,7 @@
 | 마일스톤 | 단계 | 상태 | 계획 | 시작 | 완료 |
 | --- | --- | --- | --- | --- | --- |
 | M0 셋업 | 1 | 완료 | [M0](plans/M0-setup.md) | 2026-11-11 | 2026-11-11 |
-| M1 접속·세션 코어 | 1 | 계획 중 | [M1](plans/M1-session-core.md) | 2026-11-11 | |
+| M1 접속·세션 코어 | 1 | 진행 중 | [M1](plans/M1-session-core.md) | 2026-11-11 | |
 | M2 쿼리 실행 코어 | 1 | 대기 | | | |
 | M3 프로젝트·에디터 화면 | 1 | 대기 | | | |
 | M4 결과 표 | 1 | 대기 | | | |
@@ -34,11 +34,18 @@
 | --- | --- | --- | --- |
 | 2026-11-11 | M0 | lint와 formatter 도입: ESLint + Prettier, clippy + rustfmt. `pnpm check`를 commit 전 통과 기준으로 씀 | 화면과 Rust 양쪽의 스타일과 구조 규칙(`invoke` 위치)을 사람이 아니라 도구로 확인하려고 |
 | 2026-11-11 | M0 | layer를 crate가 아니라 `chilla-core` 안의 module(`domain`, `application`, `infrastructure`)로 나눔 | 혼자 쓰는 앱에 crate 여러 개는 과함. 의존 방향은 M1에서 test로 확인 |
-
 | 2026-11-11 | M0 | dark 테마 고정, 기본 창 1512×982(화면 가운데) | 사용자 요청. light 전환은 만들지 않음. 창 크기는 14" MacBook Pro 기본 해상도에 맞춤. 처음 정한 1600×1200은 내장 display를 넘어서 바꿈 |
 | 2026-11-11 | M0 | `@tauri-apps/*` 패키지는 `src/shared/api/`에서만 import. ESLint로 강제 | 화면 코드와 Tauri IPC 사이의 경계를 한 곳에 둠 |
 | 2026-11-11 | M0 | release profile에서 `panic = "abort"`와 `strip`을 뺌 | 세션 task 하나의 panic이 앱 전체를 끝내 열린 트랜잭션을 잃지 않게 함. binary 크기는 중요하지 않음 |
 | 2026-11-11 | M0 | CSP는 M3에서 켬 (지금은 template 기본값 `null`) | Vite HMR, CodeMirror가 넣는 style에 맞춰 정해야 함. M3 전에는 DB 내용을 화면에 그리지 않음 |
+| 2026-11-11 | M1 | 결과는 portal이 아니라 stream(`query_raw`, `simple_query_raw`)으로 받고 session actor가 500행씩 당겨 읽음. 남은 결과 버리기는 cancel + drain | portal은 트랜잭션 안에서만 살아서 Auto 모드와 어긋나고 `VACUUM` 같은 문장을 못 돌림. stream은 backpressure가 걸려 읽지 않은 행이 메모리에 쌓이지 않음. 구현은 M2 |
+| 2026-11-11 | M1 | 트랜잭션 상태는 연결 stream을 감싼 `TxTap`이 ReadyForQuery의 상태 byte를 읽어 알아냄. TLS handshake는 `tokio-rustls`로 직접 하고 `tokio-postgres`에는 `connect_raw` + `NoTls`로 넘김 | `tokio-postgres` 0.7은 상태 값을 버리고 공개하지 않음. SQL 파서로 추적하는 것은 추론이라 쓰지 않음. 대가로 SCRAM channel binding을 쓰지 않음 |
+| 2026-11-11 | M1 | `sslmode`는 `disable`(기본값), `require`, `verify-full`만 받음. `chilla.toml`에 `sslrootcert` 추가(`verify-full` 전용, 있으면 그 CA만 신뢰, 없으면 macOS trust store) | 사설 CA를 쓰는 서버를 `verify-full`로 확인하려면 CA를 지정할 방법이 필요함. `prefer`처럼 조용히 평문으로 내려가는 모드는 두지 않음 |
+| 2026-11-11 | M1 | `chilla.toml`에 모르는 항목이 있으면 프로젝트를 열지 않음 | `sslmod` 같은 오타를 조용히 넘기지 않으려고 |
+| 2026-11-11 | M1 | 키체인 항목: service `com.yuiyeong.chillasql`, account `<프로젝트 디렉토리 절대 경로>::<접속 이름>`. crate는 `keyring` 대신 `keyring-core` + `apple-native-keyring-store` | `keyring` 4가 platform이 하나인 앱에는 이 조합을 쓰라고 안내함 |
+| 2026-11-11 | M1 | 연결 timeout 10초(TCP, TLS, 인증 포함), `application_name`은 `ChillaSQL` | 응답 없는 host에서 무한정 기다리지 않게 함. 서버의 `pg_stat_activity`에서 앱을 구분 |
+| 2026-11-11 | M1 | `application` layer는 `tokio`의 runtime 기능(`sync`, `task`, `time`)을 쓸 수 있음. `pnpm check`는 test DB를 먼저 띄움 | session actor가 task와 channel을 씀. `cargo test`가 test DB에 접속함 |
+| 2026-11-11 | M1 | 서명하지 않은(ad-hoc) 빌드는 다시 빌드할 때마다 키체인 확인 창이 뜸. 자동 test는 실제 키체인을 쓰지 않고(`MemoryPasswordStore`), dev 빌드 서명은 M3에서 정함 | probe로 확인: 같은 binary는 6ms, 다시 빌드한 binary는 dialog가 떠서 응답까지 7~12초. ad-hoc 서명은 빌드마다 code hash가 바뀜 |
 
 ## 작업 로그
 
