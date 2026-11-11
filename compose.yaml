@@ -1,0 +1,25 @@
+name: chillasql
+
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: chilla
+      POSTGRES_PASSWORD: chilla
+      POSTGRES_DB: chilla_test
+    ports:
+      - "127.0.0.1:54318:5432"
+    volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+      # PostgreSQL 18 image의 data 경로는 /var/lib/postgresql/18/docker 이므로 상위 디렉토리를 mount한다.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      # TCP로 확인해야 init 중의 임시 서버에서 통과하지 않는다.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "chilla", "-d", "chilla_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 90
+      start_period: 120s
+
+volumes:
+  pgdata:
