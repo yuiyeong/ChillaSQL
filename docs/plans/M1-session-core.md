@@ -43,6 +43,7 @@
 - `ConnectionProfile::same_target`을 더했다. `App::test_connection`은 저장된 접속과 연결 대상이 같을 때만 키체인의 비밀번호를 쓴다(화면이 보낸 host로 저장된 비밀번호가 나가지 않게).
 - `ConnectionProfile::DEFAULT_PORT`, `SslMode::default()`(`Disable`)를 domain에 뒀다.
 - backend pid는 `simple_query`로 묻는다(round trip 1번).
+- code review 반영: `AppError::ProjectChanged`(연결 중 프로젝트가 다시 열림, kind `project_changed`), `ConnectionProfile::resolved_under`(상대 `sslrootcert`), `set_password`·`has_password`는 프로젝트에 있는 접속만, DB socket의 TCP keepalive, `layer_deps`를 `syn` 기반으로.
 
 ## Global Constraints
 
@@ -1001,7 +1002,7 @@ git commit -m "feat: 프로젝트·세션 Tauri command와 오류 직렬화"
 **Files:**
 - Modify: `docs/progress.md`, `docs/plans/M1-session-core.md` (체크박스)
 
-- [ ] **Step 1: 완료 기준 실행**
+- [x] **Step 1: 완료 기준 실행**
 
 Run: `scripts/test-db.sh reset && pnpm check`
 Expected: PASS. 완료 기준과 test의 대응은 다음과 같다.
@@ -1012,18 +1013,18 @@ Expected: PASS. 완료 기준과 test의 대응은 다음과 같다.
 | `verify-full`로 인증서가 틀린 서버를 거부 | `tls::verify_full_rejects_a_hostname_mismatch`, `tls::verify_full_rejects_an_untrusted_ca` |
 | 설정 파일에 password 항목이 있으면 거부 | `project_file::rejects_a_password_entry` |
 
-- [ ] **Step 2: 키체인 test 손으로 실행**
+- [x] **Step 2: 키체인 test 손으로 실행**
 
 Run: `cargo test -p chilla-core --test password_store -- --ignored`
 Expected: PASS. 확인 창이 뜨면 허용한다.
 
-- [ ] **Step 3: 진행상황 갱신**
+- [x] **Step 3: 진행상황 갱신**
 
 - M1 상태를 `완료`로 바꾸고 날짜를 적는다.
 - 작업 로그에 완료 기준 확인 결과와 Task 1 Step 3의 키체인 결과를 남긴다.
 - "지금"을 `다음 할 일: M2 계획 작성 → docs/plans/M2-query-core.md`로 바꾸고, M2에서 챙길 것으로 "session actor의 명령 enum에 실행을 더한다. 결과는 stream으로 받고 버릴 때는 cancel + drain"을 적는다.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs
