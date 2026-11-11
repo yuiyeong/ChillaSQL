@@ -2,4 +2,7 @@
 
 mod ports;
 
-pub use ports::{PasswordKey, PasswordStore, PasswordStoreError, ProjectError, ProjectStore};
+pub use ports::{
+    ConnectError, Connector, DbConnection, PasswordKey, PasswordStore, PasswordStoreError,
+    ProjectError, ProjectStore,
+};

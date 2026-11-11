@@ -1,0 +1,68 @@
+//! integration test가 함께 쓰는 것. test DB는 `scripts/test-db.sh up`으로 띄운다.
+#![allow(dead_code)]
+
+use std::time::Duration;
+
+use chilla_core::domain::{ConnectionProfile, Password, SslMode};
+
+pub const TEST_DB_PORT: u16 = 54318;
+
+pub fn local_profile() -> ConnectionProfile {
+    ConnectionProfile {
+        name: "local".into(),
+        host: "127.0.0.1".into(),
+        port: TEST_DB_PORT,
+        database: "chilla_test".into(),
+        user: "chilla".into(),
+        sslmode: SslMode::Disable,
+        sslrootcert: None,
+        tunnel: None,
+        color: None,
+    }
+}
+
+pub fn password() -> Password {
+    Password::new("chilla".into())
+}
+
+/// 확인용 직접 연결. 검사하려는 코드를 거치지 않는다.
+pub async fn admin() -> tokio_postgres::Client {
+    admin_on(TEST_DB_PORT).await
+}
+
+pub async fn admin_on(port: u16) -> tokio_postgres::Client {
+    let config =
+        format!("host=127.0.0.1 port={port} user=chilla password=chilla dbname=chilla_test");
+    let (client, connection) = tokio_postgres::connect(&config, tokio_postgres::NoTls)
+        .await
+        .unwrap_or_else(|e| {
+            panic!(
+                "test DB({port})에 접속하지 못했다. scripts/test-db.sh up 을 먼저 실행하세요: {e}"
+            )
+        });
+    tokio::spawn(connection);
+    client
+}
+
+pub async fn backend_exists(admin: &tokio_postgres::Client, pid: i32) -> bool {
+    admin
+        .query_one(
+            "SELECT count(*) FROM pg_stat_activity WHERE pid = $1",
+            &[&pid],
+        )
+        .await
+        .unwrap()
+        .get::<_, i64>(0)
+        == 1
+}
+
+/// `check`가 true가 될 때까지 50ms 간격으로 최대 2초 기다린다.
+pub async fn eventually(mut check: impl AsyncFnMut() -> bool) -> bool {
+    for _ in 0..40 {
+        if check().await {
+            return true;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    check().await
+}

@@ -13,7 +13,7 @@
     "lint:rust": "cargo clippy --workspace --all-targets -- -D warnings",
     "format": "prettier --write . && cargo fmt --all",
     "format:check": "prettier --check . && cargo fmt --all --check",
-    "check": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm lint:rust && pnpm test && cargo test"
+    "check": "scripts/test-db.sh up && pnpm format:check && pnpm lint && pnpm typecheck && pnpm lint:rust && pnpm test && cargo test"
   },
   "dependencies": {
     "@tauri-apps/api": "^2",

@@ -2,8 +2,10 @@
 
 mod keychain;
 mod memory_password_store;
+mod postgres;
 mod project_file;
 
 pub use keychain::KeychainPasswordStore;
 pub use memory_password_store::MemoryPasswordStore;
+pub use postgres::{PgConnection, PgConnector};
 pub use project_file::TomlProjectStore;

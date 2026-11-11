@@ -9,7 +9,10 @@ keyring-core = "1"
 pg_query = "18.1"
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
+tokio = { version = "1", features = ["net", "rt", "sync", "time", "io-util", "macros"] }
+tokio-postgres = "0.7"
 toml = { version = "1", features = ["preserve_order"] }
 
 [dev-dependencies]
 tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread"] }

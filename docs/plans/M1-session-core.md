@@ -472,7 +472,7 @@ pub trait Connector: Send + Sync + 'static {
 }
 pub trait DbConnection: Send + 'static {
     fn backend_pid(&self) -> i32;
-    fn tx_status(&self) -> TxStatus;
+    fn tx_status(&self) -> impl Future<Output = TxStatus> + Send;  // 오류 직후에는 ReadyForQuery까지 기다린다 (아래 "구현 중 바뀐 것")
     fn is_closed(&self) -> bool;                                   // 연결이 밖에서 끊겼으면 true
     fn close(self) -> impl Future<Output = ()> + Send;             // 서버가 세션을 끝낼 때까지 기다린다
 }
@@ -500,7 +500,10 @@ impl DbConnection for PgConnection { .. }
 
 // infrastructure::postgres::tx_tap (crate 안에서만)
 pub(crate) struct TxStatusCell(..);                                // Clone
-impl TxStatusCell { pub(crate) fn get(&self) -> TxStatus }         // 첫 Z 전에는 Idle
+impl TxStatusCell {
+    fn get(&self) -> TxStatus;                                     // 마지막 Z의 상태. 첫 Z 전에는 Idle
+    pub(crate) async fn settled(&self) -> TxStatus;                // ErrorResponse 뒤의 Z를 기다린 뒤 get()
+}
 pub(crate) struct TxTap<S> { .. }                                  // AsyncRead + AsyncWrite
 impl<S> TxTap<S> {
     pub(crate) fn new(inner: S) -> (Self, TxStatusCell);
@@ -515,7 +518,7 @@ pub async fn backend_exists(admin: &tokio_postgres::Client, pid: i32) -> bool;  
 pub async fn eventually(check: impl AsyncFnMut() -> bool) -> bool;                // 50ms 간격으로 최대 2초
 ```
 
-- [ ] **Step 1: 실패하는 integration test 작성 (`tests/connect.rs`)**
+- [x] **Step 1: 실패하는 integration test 작성 (`tests/connect.rs`)**
 
 ```rust
 #[tokio::test] async fn connects_and_closes() {
@@ -542,12 +545,12 @@ pub async fn eventually(check: impl AsyncFnMut() -> bool) -> bool;              
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `scripts/test-db.sh up && cargo test -p chilla-core --test connect`
 Expected: FAIL. `PgConnector`가 없어 compile error가 난다.
 
-- [ ] **Step 3: `TxTap` 단위 test 작성과 구현**
+- [x] **Step 3: `TxTap` 단위 test 작성과 구현**
 
 `observe`는 backend message framing을 따라간다. message는 type 1 byte + 길이 4 byte(big-endian, 길이 자신 포함) + payload다. header 5 byte를 모으고, type이 `Z`면 다음 1 byte를 `TxStatus::from_wire`로 읽어 cell에 쓰고, 아니면 payload `길이 - 4` byte를 복사 없이 건너뛴다. 상태는 header buffer(5 byte), 모은 수, 건너뛸 수뿐이다. `AsyncRead::poll_read`는 inner가 새로 채운 구간만 `observe`에 넘기고, `AsyncWrite`는 inner에 그대로 넘긴다.
 
@@ -573,7 +576,9 @@ fn msg(ty: u8, payload: &[u8]) -> Vec<u8>;   // test helper
 Run: `cargo test -p chilla-core tx_tap`
 Expected: 구현 전 FAIL, 구현 후 PASS
 
-- [ ] **Step 4: `PgConnector`, `PgConnection` 구현**
+**구현 중 바뀐 것 (2026-11-11):** Step 5의 test가 `SELECT 1/0` 직후 `Failed`가 아니라 `InTransaction`을 읽어 실패했다. 서버는 ErrorResponse를 먼저 flush하고 ReadyForQuery를 따로 보내는데, `tokio-postgres`는 ErrorResponse에서 바로 오류를 돌려주므로 그 시점에는 `Z`가 아직 tap을 지나지 않았다(계획 때의 scratch test는 두 message가 한 번에 읽혀 통과했다). 그래서 `TxTap`이 type `E`(ErrorResponse)를 보면 "Z를 기다리는 중"으로 표시하고, `TxStatusCell::settled`가 그 `Z`나 stream의 끝(EOF, read 오류)까지 기다린다. `DbConnection::tx_status`는 이 때문에 async가 됐다. 단위 test 3개(`settled_is_immediate_without_an_error`, `status_after_an_error_waits_for_ready_for_query`, `settled_does_not_hang_when_the_connection_ends_after_an_error`)를 더했다.
+
+- [x] **Step 4: `PgConnector`, `PgConnection` 구현**
 
 연결 순서는 다음과 같고 전체를 `tokio::time::timeout(connect_timeout, ..)`으로 감싼다.
 
@@ -588,7 +593,7 @@ Expected: 구현 전 FAIL, 구현 후 PASS
 
 `close`는 `Client`를 drop하고 `JoinHandle`을 await한다. `is_closed`는 `Client::is_closed()`다. `ConnectError`의 `Display`는 한국어다.
 
-- [ ] **Step 5: 실제 서버로 `TxTap` 확인 (`postgres/mod.rs`의 `#[cfg(test)]`)**
+- [x] **Step 5: 실제 서버로 `TxTap` 확인 (`postgres/mod.rs`의 `#[cfg(test)]`)**
 
 ```rust
 #[tokio::test] async fn tx_status_follows_the_server() {
@@ -599,12 +604,12 @@ Expected: 구현 전 FAIL, 구현 후 PASS
 }
 ```
 
-- [ ] **Step 6: `package.json`의 `check`를 `scripts/test-db.sh up && pnpm format:check && ...`로 바꾸고 통과 확인**
+- [x] **Step 6: `package.json`의 `check`를 `scripts/test-db.sh up && pnpm format:check && ...`로 바꾸고 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add -A
@@ -786,7 +791,7 @@ impl SessionHandle {
 동작 규칙:
 
 - session actor는 `DbConnection`을 혼자 갖는 task다. `mpsc` channel(크기 8)로 명령 `State(oneshot::Sender<SessionState>)`와 `Close(oneshot::Sender<()>)`를 받는다. M2가 실행 명령을 이 enum에 더한다.
-- `State`: `is_closed()`면 `Lost`, 아니면 `Open { tx: tx_status() }`.
+- `State`: `is_closed()`면 `Lost`, 아니면 `Open { tx: tx_status().await }`.
 - `Close`: `connection.close().await` 후 응답하고 task를 끝낸다. handle이 모두 drop돼 channel이 닫혀도 `close`하고 끝낸다.
 - actor가 이미 끝났으면 `SessionHandle::state`는 `Lost`, `close`는 그냥 끝난다.
 - `App`의 상태는 프로젝트 하나(`Option<Project>`)와 `HashMap<SessionId, SessionHandle>`이고 `tokio::sync::Mutex` 하나로 지킨다. `SessionId`는 1부터 올라가는 `AtomicU64`다.
