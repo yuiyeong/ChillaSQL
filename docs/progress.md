@@ -31,6 +31,8 @@
 
 | 날짜 | 마일스톤 | 결정 | 이유 |
 | --- | --- | --- | --- |
+| 2026-11-11 | M0 | lint와 formatter 도입: ESLint + Prettier, clippy + rustfmt. `pnpm check`를 commit 전 통과 기준으로 씀 | 화면과 Rust 양쪽의 스타일과 구조 규칙(`invoke` 위치)을 사람이 아니라 도구로 확인하려고 |
+| 2026-11-11 | M0 | layer를 crate가 아니라 `chilla-core` 안의 module(`domain`, `application`, `infrastructure`)로 나눔 | 혼자 쓰는 앱에 crate 여러 개는 과함. 의존 방향은 M1에서 test로 확인 |
 
 ## 작업 로그
 

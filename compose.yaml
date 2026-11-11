@@ -15,7 +15,17 @@ services:
       - pgdata:/var/lib/postgresql
     healthcheck:
       # TCP로 확인해야 init 중의 임시 서버에서 통과하지 않는다.
-      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "chilla", "-d", "chilla_test"]
+      test:
+        [
+          "CMD",
+          "pg_isready",
+          "-h",
+          "127.0.0.1",
+          "-U",
+          "chilla",
+          "-d",
+          "chilla_test",
+        ]
       interval: 2s
       timeout: 3s
       retries: 90

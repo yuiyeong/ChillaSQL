@@ -39,6 +39,7 @@ Tauri + React/TypeScript로 확정했다. 화면은 React로, DB 연결과 터�
 | TLS | rustls | SSL 연결과 서버 인증서 검증. tokio-postgres만으로는 SSL 연결이 안 됨 |
 | 비밀번호 저장 | keyring (macOS 키체인) | OS가 암호화를 담당 |
 | 터널 프로세스 | tokio::process | 터널 명령을 자식 프로세스로 실행하고 감시 |
+| Lint, formatter | ESLint + Prettier, clippy + rustfmt | 화면과 Rust 양쪽의 코드 스타일과 구조 규칙을 도구로 확인 |
 | 설정 파일 | TOML (serde) | 사람이 읽고 고치기 쉬움 |
 | 앱 내부 저장소 | SQLite (rusqlite) | 쿼리 기록, 열려 있던 탭, 최근 프로젝트 보관 |
 
@@ -49,6 +50,8 @@ Tauri + React/TypeScript로 확정했다. 화면은 React로, DB 연결과 터�
 &#91;embedded content: 앱 구조 · 화면, Rust 코어, 외부 연결\]
 
 화면은 Rust 코어에 명령을 보내고 결과를 500행씩 나눠 받는다. 터널 명령이 있는 접속이면 터널 관리가 명령을 먼저 실행하고, 세션 관리는 열린 포트로 연결한다. 그 접속의 마지막 세션이 끊기면 터널도 끝낸다.
+
+layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 
 ## 4. 기능 요구사항
 
