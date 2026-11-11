@@ -128,7 +128,7 @@ git commit -m "chore: Tauri 골격과 Cargo workspace 구성, pg_query compile �
 - Consumes: Task 1의 template
 - Produces: `pnpm test`(Vitest + jsdom + Testing Library) 환경, Tailwind가 적용된 `App` component. M3가 이 위에 화면을 올린다.
 
-- [ ] **Step 1: test 도구 설치**
+- [x] **Step 1: test 도구 설치**
 
 ```bash
 pnpm add -D vitest jsdom @testing-library/react @testing-library/jest-dom
@@ -136,7 +136,7 @@ pnpm add -D vitest jsdom @testing-library/react @testing-library/jest-dom
 
 `package.json`에 `"test": "vitest run"`, `vite.config.ts`에 `test` 블록, `src/test/setup.ts`를 추가한다.
 
-- [ ] **Step 2: 실패하는 test 작성**
+- [x] **Step 2: 실패하는 test 작성**
 
 ```tsx
 // src/App.test.tsx
@@ -150,23 +150,23 @@ test("앱 이름을 보여 주고 template의 greet 입력란은 없다", () => 
 });
 ```
 
-- [ ] **Step 3: 실패 확인**
+- [x] **Step 3: 실패 확인**
 
 Run: `pnpm test`
 Expected: FAIL. template App의 heading은 `"Welcome to Tauri + React"`이고 입력란이 있다.
 
-- [ ] **Step 4: `App` 교체, Tailwind 적용, template 잔재 제거**
+- [x] **Step 4: `App` 교체, Tailwind 적용, template 잔재 제거**
 
 - `App`은 화면 전체를 채우는 `<main>` 안에 `<h1>ChillaSQL</h1>`만 둔다. Tailwind class로 어두운 배경에 가운데 정렬한다.
 - `pnpm add -D tailwindcss @tailwindcss/vite`로 설치하고, `pnpm add zustand`를 한다. 첫 store는 M3에서 만든다.
 - Rust 쪽 `greet` command와 `tauri-plugin-opener`를 지운다. crate, `invoke_handler`, capability의 `opener:default`, npm `@tauri-apps/plugin-opener`가 대상이다.
 
-- [ ] **Step 5: 통과 확인**
+- [x] **Step 5: 통과 확인**
 
 Run: `pnpm test && pnpm build && cargo test`
 Expected: 모두 PASS. `pnpm build`는 tsc 오류 없이 `dist/`를 만든다.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
