@@ -188,7 +188,7 @@ git commit -m "feat: Tailwind, Zustand, Vitest를 갖춘 화면 골격"
   - 테이블 `public.big_table`, 정확히 1,000,000행
   - `scripts/test-db.sh up | reset | down`. 인자가 없으면 `up`이다.
 
-- [ ] **Step 1: `scripts/test-db.sh` 작성 (검증 포함)**
+- [x] **Step 1: `scripts/test-db.sh` 작성 (검증 포함)**
 
 `set -euo pipefail`. 하위 명령은 다음과 같다.
 - `up`
@@ -208,12 +208,12 @@ FROM big_table;
 -- 기대: 1000000|100000|100000
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `scripts/test-db.sh up`
 Expected: FAIL. `compose.yaml`이 없어서 `no configuration file provided` 오류가 난다.
 
-- [ ] **Step 3: `compose.yaml` 작성**
+- [x] **Step 3: `compose.yaml` 작성**
 
 - `name: chillasql`
 - service `db`
@@ -226,7 +226,7 @@ Expected: FAIL. `compose.yaml`이 없어서 `no configuration file provided` 오
   - `interval: 2s`, `timeout: 3s`, `retries: 90`, `start_period: 120s`
   - TCP로 확인해야 init 중의 임시 서버에서 통과하지 않는다(Review Focus 4).
 
-- [ ] **Step 4: `db/init/01-big-table.sql` 작성**
+- [x] **Step 4: `db/init/01-big-table.sql` 작성**
 
 데이터는 결정적으로 만든다(random 금지). 뒤 마일스톤의 test가 값을 예측할 수 있어야 한다. 컬럼은 M4·M8의 타입별 표시 확인용이다.
 
@@ -259,13 +259,13 @@ ANALYZE big_table;
 Run: `scripts/test-db.sh reset`
 Expected: PASS. 접속 URL이 출력된다.
 
-- [ ] **Step 5: Review Focus 3, 5 확인**
+- [x] **Step 5: Review Focus 3, 5 확인**
 
 - Run `scripts/test-db.sh up` 한 번 더 → Expected: seed 없이 바로 PASS
 - Run `docker compose exec -T db psql -U chilla -d chilla_test -c "DELETE FROM big_table WHERE id = 1"` 후 `scripts/test-db.sh up` → Expected: exit 1, `reset` 안내. 확인 뒤 `scripts/test-db.sh reset`.
 - Docker Desktop을 끈 상태에서 `scripts/test-db.sh up` → Expected: exit 1, `Docker가 실행 중이 아닙니다`. 54318 포트 충돌은 docker의 bind 오류가 그대로 보이고 exit가 0이 아니면 된다.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add compose.yaml db scripts
