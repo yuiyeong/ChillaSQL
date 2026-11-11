@@ -274,7 +274,77 @@ git commit -m "chore: PostgreSQL 18 test DB와 100만 행 seed script 추가"
 
 ---
 
-### Task 4: 완료 기준 확인과 기록
+### Task 4: lint, formatter, 구조 규칙
+
+M0 진행 중에 추가한 task다(2026-11-11 결정). 코드를 옮기지 않고 도구 설정과 규칙 문서만 넣는다. 실제 layer module은 M1의 첫 코드와 함께 생긴다.
+
+**Files:**
+- Create: `eslint.config.js`, `.prettierrc.json`, `.prettierignore`
+- Modify: `package.json` (devDependencies, scripts)
+- Modify: 기존 `src/**`, `*.ts`, `*.json`, Rust 파일 (formatter가 바꾸는 만큼만)
+- Create: `docs/architecture.md`
+- Modify: `CLAUDE.md` (구조 문서 pointer와 검사 명령), `docs/spec.md` 2장·3장, `docs/progress.md` 결정 기록
+
+**Interfaces:**
+- Consumes: Task 1의 Cargo workspace, Task 2의 `pnpm test`
+- Produces: 아래 script. Task 5와 이후 모든 마일스톤이 `pnpm check`를 통과 기준으로 쓴다.
+  - `pnpm lint`: `eslint .`
+  - `pnpm lint:rust`: `cargo clippy --workspace --all-targets -- -D warnings`
+  - `pnpm format`: `prettier --write . && cargo fmt --all`
+  - `pnpm format:check`: `prettier --check . && cargo fmt --all --check`
+  - `pnpm check`: `format:check`, `lint`, `lint:rust`, `test`, `cargo test`를 순서대로 실행
+- Produces: 구조 규칙 (`docs/architecture.md`)
+  - Rust: `crates/chilla-core/src/` 아래 `domain`(외부 I/O crate 의존 금지) ← `application`(use case와 port trait, `domain`만 의존) ← `infrastructure`(port 구현: `tokio-postgres`, keychain, 터널 프로세스, `pg_query`). `src-tauri`는 command에서 use case를 부르는 일만 한다.
+  - 화면: `src/features/<기능>/`(component, store, hook)와 `src/shared/`. Tauri `invoke`는 `src/shared/api/`에서만 호출한다.
+
+- [ ] **Step 1: 도구 설치와 설정 파일 작성**
+
+```bash
+pnpm add -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks eslint-config-prettier globals prettier prettier-plugin-tailwindcss
+```
+
+- `eslint.config.js`는 flat config다. `@eslint/js` recommended, `typescript-eslint` recommended, `react-hooks` recommended를 켜고 `eslint-config-prettier`를 마지막에 둔다. `dist`, `target`, `src-tauri/gen`은 ignore한다.
+- `.prettierrc.json`은 `{ "plugins": ["prettier-plugin-tailwindcss"] }`만 둔다. 나머지는 Prettier 기본값이다.
+- `.prettierignore`에는 `dist`, `target`, `src-tauri/gen`, `pnpm-lock.yaml`, `docs`, `*.md`를 넣는다. 한국어 문서는 Prettier가 건드리지 않는다.
+- Rust는 `rustfmt`와 `clippy` 기본 설정을 쓴다. 설정 파일을 만들지 않는다.
+- 위 Interfaces의 script 5개를 `package.json`에 추가한다.
+
+- [ ] **Step 2: `invoke` 위치 규칙을 ESLint로 강제하고 실패 확인**
+
+`eslint.config.js`에 `no-restricted-imports`를 추가한다. `@tauri-apps/api/core`를 import하면 `Tauri invoke는 src/shared/api 안에서만 호출한다` 메시지로 error를 낸다. `src/shared/api/**`만 예외다.
+
+확인용으로 `src/violation.ts`에 `import { invoke } from "@tauri-apps/api/core"; export const x = invoke;`를 쓴다.
+
+Run: `pnpm lint`
+Expected: FAIL. `src/violation.ts`에서 위 메시지의 error 1개가 난다.
+
+`src/violation.ts`를 지운다.
+
+- [ ] **Step 3: 기존 코드에 formatter와 lint 적용**
+
+Run: `pnpm format && pnpm check`
+Expected: PASS. warning이 없다.
+
+lint가 기존 코드에서 error를 내면 rule을 끄지 않고 코드를 고친다.
+
+- [ ] **Step 4: 구조 규칙 문서화**
+
+- `docs/architecture.md`에 위 Interfaces의 구조 규칙을 쓴다. layer별로 무엇이 들어가고 무엇에 의존할 수 있는지, 기획서 3장의 구성요소(세션 관리, 터널 관리, 쿼리 실행)가 어느 layer에 놓이는지 표로 정리한다. 문체는 기존 문서와 같은 "~한다" 평서체다.
+- Rust layer의 의존 방향은 compiler가 강제하지 못한다. M1에서 첫 module을 만들 때 `domain`이 `infrastructure`를 import하지 않는지 확인하는 test를 넣는다는 점을 문서에 적는다.
+- `CLAUDE.md`에 `docs/architecture.md` pointer를 추가하고, 작업 규칙에 "commit 전에 `pnpm check`를 통과시킨다"를 추가한다.
+- `docs/spec.md` 2장 표에 lint와 formatter 행(ESLint + Prettier, clippy + rustfmt)을 추가하고, 3장에 구조 문서 link 한 줄을 추가한다.
+- `docs/progress.md` 결정 기록에 두 행을 추가한다: lint/formatter 도입, layer를 crate가 아니라 `chilla-core` 안의 module로 나눈 것과 그 이유(혼자 쓰는 앱에 crate 여러 개는 과함).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A
+git commit -m "chore: ESLint, Prettier, clippy, rustfmt 설정과 구조 규칙 문서 추가"
+```
+
+---
+
+### Task 5: 완료 기준 확인과 기록
 
 **Files:**
 - Modify: `docs/progress.md`
@@ -282,7 +352,7 @@ git commit -m "chore: PostgreSQL 18 test DB와 100만 행 seed script 추가"
 
 - [ ] **Step 1: 완료 기준 실행**
 
-Run: `cargo test && pnpm test && scripts/test-db.sh reset`
+Run: `pnpm check && scripts/test-db.sh reset`
 Expected: 모두 PASS. `reset`에 걸린 시간을 적어 둔다.
 
 - [ ] **Step 2: 창 확인**
