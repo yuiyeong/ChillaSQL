@@ -4,9 +4,16 @@
 
 ## 지금
 
-- **진행 중**: M2 쿼리 실행 코어 (진행 중). 계획은 [M2](plans/M2-query-core.md). Task 1(Channel 직렬화 형식 확인과 결정 기록) 완료
-- **다음 할 일**: Task 2부터 이어서 진행
-- **계획을 쓰며 확인한 것**: 계획 맨 위 "먼저 확인한 것" 표에 있다. 결정 기록에는 옮겼다
+- **진행 중**: 없음 (M2 완료)
+- **다음 할 일**: M3 계획 작성 → `docs/plans/M3-project-editor.md`
+- **M3에서 챙길 것** (M2가 화면에 주는 계약)
+  - 화면은 `rows` event의 `retainedFrom`보다 앞의 행을 버리고 그 구간을 "다시 실행해야 볼 수 있음"으로 그린다
+  - `split_statements`의 span과 server 오류의 `position`은 모두 보낸 text 기준 0-based UTF-16 code unit offset이다
+  - 선택 영역에 문장이 여러 개면 `multiple_statements`가 온다 (M8 전까지)
+  - `finished`의 outcome은 `completed`, `failed`, `cancelled`, `discarded`, `connection_lost`, `client_error` 여섯이다. cancel한 쿼리도 서버에서 이미 끝났고 버린 행이 없으면 `completed`로 온다
+  - `fetch_more`는 그 세션이 발급한 query id면 끝난 쿼리에도 `Ok`다. 결과의 끝은 `finished` event로만 안다
+  - 화면이 사라진(Channel이 끊긴) 쿼리는 다음 실행이나 세션 닫기 전까지 DB에 열려 있다 (자동 닫기는 M6)
+  - `COPY … FROM STDIN` / `TO STDOUT`은 지원하지 않는다. 실행하면 그 세션의 연결을 끊고 `connection_lost`로 알린다
 
 ## 마일스톤 현황
 
@@ -16,7 +23,7 @@
 | --- | --- | --- | --- | --- | --- |
 | M0 셋업 | 1 | 완료 | [M0](plans/M0-setup.md) | 2026-11-11 | 2026-11-11 |
 | M1 접속·세션 코어 | 1 | 완료 | [M1](plans/M1-session-core.md) | 2026-11-11 | 2026-11-11 |
-| M2 쿼리 실행 코어 | 1 | 진행 중 | [M2](plans/M2-query-core.md) | 2026-11-11 | |
+| M2 쿼리 실행 코어 | 1 | 완료 | [M2](plans/M2-query-core.md) | 2026-11-11 | 2026-11-11 |
 | M3 프로젝트·에디터 화면 | 1 | 대기 | | | |
 | M4 결과 표 | 1 | 대기 | | | |
 | M5 터널 | 2 | 대기 | | | |
@@ -63,7 +70,17 @@
 | 2026-11-11 | M2 | 취소는 "쿼리를 멈추고 남은 결과를 버린다". 받다 만 결과에도 쓰고, 취소 뒤에 온 행은 보내지 않고 `Cancelled`로 끝냄 | cancel + drain(M1 결정)으로 연결을 다음 쿼리에 바로 쓸 수 있게 함 |
 | 2026-11-11 | M2 | 조금씩 오는 행을 timer로 미리 보내지 않음. 500행이 차거나 결과가 끝나야 보냄 | 필요해지면 그때 넣음 |
 | 2026-11-11 | M2 | 타임아웃(4.5, M8), 받다 만 결과 10분 뒤 자동 닫기(4.6, M6), 화면 쪽 TypeScript wrapper(M3)는 M2에 넣지 않음 | 각 마일스톤의 범위 |
-| 2026-11-11 | M2 | batch는 Channel로 JSON을 보냄. 500행 batch 하나가 118,374 byte(JSON 문자 수)이고 Rust → webview 지연은 20개를 50ms 간격으로 보냈을 때 median 6.96ms, max 13.90ms, 200개(10만 행)를 한꺼번에 보냈을 때 첫 batch부터 마지막까지 630ms, 지연 max 6.93ms | 기준(median ≤ 20ms, burst 전체 ≤ 2,000ms)을 넘어 binary 형식은 쓰지 않음. 6장의 "첫 결과 표시 0.1초" 중 Channel의 몫은 1/5 이하. DB 없이 `big_table`과 같은 모양으로 만든 batch를 `pnpm tauri dev`(debug build)에서 잼 |
+| 2026-11-11 | M2 | batch는 Channel로 JSON을 보냄. 500행 batch 하나가 118,374자(JSON 문자 수, 약 118 KB)이고 Rust → webview 지연은 20개를 50ms 간격으로 보냈을 때 median 6.96ms, max 13.90ms, 200개(10만 행)를 한꺼번에 보냈을 때 첫 batch부터 마지막까지 630ms, 지연 max 6.93ms | 기준(median ≤ 20ms, burst 전체 ≤ 2,000ms) 안이라 binary 형식은 쓰지 않음. 6장의 "첫 결과 표시 0.1초" 중 Channel의 몫은 1/5 이하. DB 없이 `big_table`과 같은 모양으로 만든 batch를 `pnpm tauri dev`(debug build)에서 잼 |
+| 2026-11-11 | M2 | batch를 보낸 뒤 look-ahead 행을 읽기 전에 온 `fetch_more`는 예정된 pause를 취소함(다음 batch를 이어 읽음) | 계획의 규칙대로면 `true`를 답하고도 `Paused`가 돼 다음 batch가 오지 않음. 화면은 `rows`를 받자마자 `fetch_more`를 보낼 수 있음 |
+| 2026-11-11 | M2 | cancel은 서버가 연결을 닫을 때까지(EOF) 기다림. 쿼리보다 먼저 닿은 cancel은 서버가 무시하므로 actor가 1초 간격으로 다시 보냄 | 서버가 요청을 처리하기 전에 돌아오면 다음 쿼리가 cancel에 맞을 수 있음. 먼저 닿은 cancel의 무시는 병렬 실행 15회 중 2회쯤 관찰됨 |
+| 2026-11-11 | M2 | cancel한 쿼리를 버리는 동안(`Draining`)에도 결과를 숨기지 않음. 끝날 때 57014가 아닌 server 오류가 있으면 `failed`, `Complete`를 받았고 버린 행이 없으면 `completed`, 그 밖에는 `cancelled`/`discarded` | cancel이 늦게 닿아 commit된 DELETE를 "취소됨"으로 보여 주면 사용자가 실행되지 않았다고 믿음. 화면에 보내지 않은 행이 있으면 결과를 다 받은 것이 아니므로 버린 이유로 알림 |
+| 2026-11-11 | M2 | 앞 쿼리를 버리는 동안 대기 중인 쿼리의 cancel은 그 쿼리를 `cancelled`로 버림(cancel 요청은 보내지 않음) | 계획의 "그 밖은 바로 Ok"는 아무것도 하지 않아, 멈추려던 DML이 실행됨 |
+| 2026-11-11 | M2 | `fetch_more`는 이 세션이 발급한 query id면 끝난 쿼리에도 no-op `Ok`, 발급한 적 없는 id만 `query_not_active` | look-ahead 때문에 화면이 방금 끝난 쿼리에 `fetch_more`를 보낼 수 있음 |
+| 2026-11-11 | M2 | DB 오류가 아닌 stream 오류에서는 연결을 실제로 끊고 `connection_lost`로 알림. `COPY … FROM STDIN` / `TO STDOUT`은 지원하지 않음 | 그런 오류 뒤의 연결은 protocol이 어긋나 다음 쿼리를 받지 못함. 보고와 상태를 일치시킴. `COPY … FROM STDIN`은 cancel도 듣지 않음 |
+| 2026-11-11 | M2 | server도 연결 끊김도 아닌 오류는 outcome `client_error`(UTF-8이 아닌 값, NUL 문자가 든 text). 연결은 그대로 둠 | driver가 UTF-8이 아닌 cell에서 panic하고(SQL_ASCII DB, `client_encoding` 변경) NUL이 든 text는 보내지 못함. 둘 다 연결 문제가 아님 |
+| 2026-11-11 | M2 | cancel 요청은 연결할 때의 peer address로 보냄 | cancel마다 host를 다시 resolve하면 DNS round-robin host에서 다른 서버로 갈 수 있음(libpq와 같음) |
+| 2026-11-11 | M2 | server 오류의 `position`은 DTO에서 보낸 text 기준 0-based UTF-16 offset으로 바꿔 보냄 | 서버는 1부터 세는 글자 번호를 주는데 문장 span은 UTF-16 offset이라 emoji 같은 non-BMP 문자가 앞에 있으면 위치가 어긋남 |
+| 2026-11-11 | M2 | `split_statements` command는 async로 돌림(`#[tauri::command(async)]`) | sync command는 main thread에서 돌아 1만 줄 scan(약 40ms)이 화면을 막음 |
 
 ## 작업 로그
 
@@ -71,6 +88,18 @@
 
 ### 2026-11-11
 
+- M2 완료. 완료 기준 확인: `scripts/test-db.sh reset`(100만 행 `big_table` 생성, 9.5초) 뒤 `pnpm check` 통과
+  - `$$` 블록, 문자열, 주석 안의 `;`를 경계로 보지 않음: `statements::semicolons_inside_dollar_quotes_strings_and_comments_are_not_boundaries`
+  - 100만 행 쿼리의 첫 500행이 0.1초 안에 도착: `queries::first_500_rows_of_a_million_arrive_within_100ms`가 `execute`부터 sink까지 4.31ms. Channel에서 webview까지는 Task 1에서 잰 값으로, 50ms 간격일 때 median 6.96ms, max 13.90ms, 200 batch를 한꺼번에 보냈을 때 630ms
+  - 10초짜리 `pg_sleep` 쿼리가 취소 후 1초 안에 끝남: `queries::sleeping_query_ends_within_a_second_of_cancel`이 1.90ms
+- simplify로 test 가짜 연결을 `test_support/connection.rs`로 나누고 공용 helper를 뽑았으며, session actor의 panic 경로를 없애고 중복을 정리함(7건 모두 반영). `split_statements`를 async command로 바꿈
+- code review high 지적 10건 중 8건을 고침: UTF-8이 아닌 값의 panic(`client_error`), DB 오류가 아닌 stream 오류에서 연결을 실제로 끊기, 대기 중인 쿼리의 cancel, `Draining` 쿼리의 실제 결과 보고, cancel을 peer address로 보내기, NUL 문자가 든 text의 `client_error`, 오류 `position`의 단위(0-based UTF-16), look-ahead로 끝난 쿼리의 `fetch_more`. 다시 review한 뒤 test 2개를 더함(drain 중 버린 행의 기록 두 경로). 미뤄 둔 minor 중 actor의 cancel gate test, 재전송 간격 고정, `execute_while_draining`의 단언, splitter test 2개 등도 같이 고침
+  - 고치지 않은 것
+    - `establish`와 `PgCancel`이 stream을 여는 분기가 각각 6줄씩 중복. plain과 TLS가 다른 type이라 하나로 묶으려면 `Box<dyn>`이나 enum으로 M1의 연결 경로를 바꿔야 함. M5에서 터널로 여는 방법이 바뀔 때 함께 정리([마일스톤](milestones.md) M5에 적음)
+    - 미뤄 둔 minor 중 cancel task panic 시 `None`(실제 cancel에는 panic 경로가 없음), sink panic(command의 sink는 panic하지 않음), `cancel_discards_a_half_read_result`의 1초(실패를 본 적 없음), splitter의 100ms timing(측정 40ms), `SessionHandle`이 `None`을 돌려주는 경우의 test, `utf16_spans`의 추가 test, cancel 실패 문구, 중첩 `BEGIN ATOMIC`의 깊이 덮어쓰기(유효한 SQL에서는 불가능)
+    - 빈 결과의 `Columns` 직후에 cancel이 닿으면 `Columns` 없이 `completed`(행 수는 맞음). 화면이 `Columns` 없는 `completed`를 "행 없는 문장"으로 그리면 header만 빠짐. UTF-8이 아닌 행은 빠지고 뒤 행은 계속 전달되어 행 번호가 서버와 어긋남(outcome이 `client_error`라 사용자가 앎)
+- 계획의 결함으로 실행 중 바로잡은 것: Task 5에서 `error.rs`의 kind mapping까지 함(`match`가 exhaustive라 variant만 더하면 compile되지 않음). 50회 반복 test가 cancel의 EOF 대기를 고정하지 못해 가짜 listener를 쓰는 test(`cancel_returns_only_after_the_server_closes_the_connection`)를 더함. 고정 200ms 대기를 backend가 active가 될 때까지의 대기로 바꿈. look-ahead 중에 온 `fetch_more`를 잃지 않도록 규칙을 바꿈
+- 알려진 것: `query_stream` test가 Task 3 시점에 약 260회 중 1회 실패했음. 원인으로 의심된 `cancel_ends_a_sleeping_query`(`wait_until_running` 없이 cancel)를 고친 뒤 반복 실행(20회씩)에서는 재현되지 않음
 - M2 계획 작성. 세션 구조를 정하는 사실은 계획을 쓰면서 `tokio-postgres` 0.7.18, `pg_query` 18.1.0 source와 scratch test(저장소 밖)로 확인해 계획 맨 위 표에 적음: 실행은 simple query protocol(값은 text), 문장 나누기는 `split_with_parser`와 `split_with_scanner` 대신 `pg_query::scan`의 token으로, cancel 요청은 서버가 연결을 닫을 때까지(EOF) 기다림, 연결이 끊기면 driver가 같은 오류를 끝없이 돌려줌. 마일스톤의 "먼저 확인할 것"(Channel 직렬화 형식)은 webview가 있어야 해서 Task 1에 둠
 - M1 완료. 완료 기준 확인: `scripts/test-db.sh reset` 7초 뒤 `pnpm check` 통과. `sessions::two_sessions_open_and_close_independently`(세션 2개를 따로 열고 닫음), `tls::verify_full_rejects_a_hostname_mismatch`와 `tls::verify_full_rejects_an_untrusted_ca`(`verify-full`이 틀린 인증서를 거부), `project_file::rejects_a_password_entry`(password 항목 거부). 키체인 contract test는 손으로 돌려 통과(`cargo test -p chilla-core --test password_store -- --ignored`)
 - TLS test DB 추가: `127.0.0.1:54319`, compose service `db-tls`. 인증서는 `scripts/test-db.sh`가 `db/tls/`에 만듦(gitignore)

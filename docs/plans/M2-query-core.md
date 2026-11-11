@@ -48,6 +48,23 @@
 - **조금씩 오는 행을 timer로 미리 보내지 않는다.** 500행이 차거나 결과가 끝나야 보낸다. 필요해지면 그때 넣는다.
 - 타임아웃(4.5, M8), 받다 만 결과 10분 뒤 자동 닫기(4.6, M6), 화면 쪽 TypeScript wrapper(M3)는 M2에 넣지 않는다.
 
+## 구현 뒤 정리에서 바뀐 것 (2026-11-11)
+
+아래 task 본문의 interface와 규칙은 계획 당시의 것이다. 실행과 review를 거치며 다음이 바뀌었다.
+
+- `QueryError::Client { message }`와 `QueryOutcome::ClientError { message }`(JSON `client_error`)를 더했다. UTF-8이 아닌 값과 NUL 문자가 든 text처럼 server도 연결 끊김도 아닌 오류에 쓰며, 연결은 그대로다.
+- `Draining`은 결과를 숨기지 않는다. 끝날 때 57014가 아닌 server 오류가 있으면 `Failed`, `Complete`를 받았고 버린 행이 없으면 `Completed`, 그 밖에는 이유(`Cancelled`/`Discarded`)로 끝난다. 계획의 "취소 뒤에는 `Cancelled`로 끝낸다"를 이렇게 다듬었다. 그래서 `failed_cancel_reports_the_error`, `execute_while_draining_replaces_the_waiting_query`의 기대값이 바뀌었다.
+- 앞 쿼리를 버리는 동안 대기 중인 쿼리를 cancel하면 그 쿼리를 `Cancelled`로 버린다(cancel 요청은 보내지 않는다). 계획의 "그 밖은 바로 Ok"는 아무것도 하지 않았다.
+- `fetch_more`는 이 세션이 발급한 query id면 끝난 쿼리에도 no-op `Ok`이고, 발급한 적 없는 id만 `QueryNotActive`다. test는 `fetch_more_is_refused_only_for_an_unknown_query`로 이름이 바뀌었다.
+- batch를 보낸 뒤 look-ahead 행을 읽기 전에 온 `fetch_more`는 예정된 pause를 취소한다. test는 `fetch_more_during_the_look_ahead_is_not_lost`.
+- DB 오류가 아닌 stream 오류에서는 driver를 멈춰 연결을 실제로 끊고 `ConnectionLost`로 보고한다(`COPY … FROM STDIN` / `TO STDOUT` 포함).
+- `PgCancel`은 연결할 때의 peer address로 연결한다(`addr: SocketAddr`). cancel마다 host를 다시 resolve하지 않는다.
+- DTO의 server 오류 `position`은 보낸 text 기준 0-based UTF-16 offset으로 바꿔 보낸다(`utf16_position`).
+- `split_statements`는 `#[tauri::command(async)]`다. signature와 JSON은 그대로다.
+- session actor는 `session_actor/{mod,query,tests}.rs`로, test 가짜는 `test_support/{mod,connection}.rs`로 나뉘었다.
+- 계획의 test 목록에 없던 test: `fetch_more_is_refused_only_for_an_unknown_query`, `fetch_more_during_the_look_ahead_is_not_lost`, `cancel_returns_only_after_the_server_closes_the_connection`(가짜 listener로 EOF 대기를 고정), `next_query_waits_for_the_cancel_in_flight`, `cancel_of_a_waiting_query_removes_it`, `rows_that_arrive_after_cancel_keep_the_query_cancelled`와 `look_ahead_row_dropped_by_cancel_keeps_the_query_cancelled`(버린 행의 기록 두 경로를 각각 고정).
+- Task 5가 `src-tauri/src/error.rs`의 kind mapping과 `command_error_kinds` test까지 함께 한다(`match`가 exhaustive라 `AppError` variant를 더하면 Task 6 전에 compile되지 않는다).
+
 ## Global Constraints
 
 - M1의 Global Constraints를 그대로 따른다(macOS 전용, `chilla-core`는 `tauri`에 의존하지 않음, 탭 = 세션, 비밀번호는 `Password`로만, 사용자에게 보이는 오류 message는 한국어).
@@ -1019,7 +1036,7 @@ git commit -m "feat: 쿼리 실행 Tauri command와 결과 Channel"
 
 `code-review`를 high로 돌린다. 지적은 `superpowers:receiving-code-review`로 하나씩 다시 검토해 고치는 게 맞는 것만 고치고 commit한다(`fix: code review 지적 반영 (…)`). 고치지 않은 지적은 이유와 함께 작업 로그에 남긴다.
 
-- [ ] **Step 3: 완료 기준 실행**
+- [x] **Step 3: 완료 기준 실행**
 
 Run: `scripts/test-db.sh reset && pnpm check`
 Expected: PASS. 완료 기준과 test의 대응은 다음과 같다.
@@ -1030,13 +1047,13 @@ Expected: PASS. 완료 기준과 test의 대응은 다음과 같다.
 | 100만 행 쿼리의 첫 500행이 DB 응답 후 0.1초 안에 Channel에 도착 | `queries::first_500_rows_of_a_million_arrive_within_100ms`(sink까지) + Task 1의 `spaced` median(Channel에서 webview까지) |
 | 10초짜리 `pg_sleep` 쿼리가 취소 후 1초 안에 끝남 | `queries::sleeping_query_ends_within_a_second_of_cancel` |
 
-- [ ] **Step 4: 진행상황 갱신**
+- [x] **Step 4: 진행상황 갱신**
 
 - M2 상태를 `완료`로 바꾸고 날짜를 적는다.
 - 작업 로그에 완료 기준 확인 결과, Task 1의 수치, 고치지 않은 review 지적을 남긴다.
 - "지금"을 `다음 할 일: M3 계획 작성 → docs/plans/M3-project-editor.md`로 바꾸고, M3에서 챙길 것을 적는다: 화면이 `retainedFrom`보다 앞의 행을 버린다, `split_statements`의 offset은 UTF-16이다, 선택 영역에 문장이 여러 개면 `multiple_statements`가 온다(M8 전까지), 화면이 사라진 쿼리는 다음 실행이나 세션 닫기 전까지 DB에 열려 있다(자동 닫기는 M6).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add docs
