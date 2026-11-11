@@ -4,12 +4,9 @@
 
 ## 지금
 
-- **진행 중**: 없음 (M1 완료)
-- **다음 할 일**: M2 계획 작성 → `docs/plans/M2-query-core.md`
-- **M2에서 챙길 것**:
-  - session actor(`application/session_actor.rs`)의 명령 enum에 실행을 더한다. 결과는 stream으로 받고 버릴 때는 cancel + drain
-  - 받다 만 결과 stream을 들고 있는 동안에는 actor가 `tx_status()`를 기다리면 안 된다. 서버의 ErrorResponse만 읽히고 ReadyForQuery가 socket에 남으면 그 대기가 끝나지 않아 actor가 stream도 못 당기고 `Close`도 못 받는다. 실행 중인 세션의 상태는 actor가 가진 값으로 답한다
-  - cancel은 `connect_raw`로 연 연결이라 `CancelToken::cancel_query_raw`에 직접 연 stream을 넘겨야 한다(SSL이면 TLS handshake도 직접)
+- **진행 중**: M2 쿼리 실행 코어 (계획 중). 계획은 [M2](plans/M2-query-core.md), 아직 사용자 검토 전
+- **다음 할 일**: 계획 검토 → Task 1(Channel 직렬화 형식 확인과 결정 기록)부터 시작
+- **계획을 쓰며 확인한 것**: 계획 맨 위 "먼저 확인한 것" 표에 있다. 결정 기록에는 Task 1에서 옮긴다
 
 ## 마일스톤 현황
 
@@ -19,7 +16,7 @@
 | --- | --- | --- | --- | --- | --- |
 | M0 셋업 | 1 | 완료 | [M0](plans/M0-setup.md) | 2026-11-11 | 2026-11-11 |
 | M1 접속·세션 코어 | 1 | 완료 | [M1](plans/M1-session-core.md) | 2026-11-11 | 2026-11-11 |
-| M2 쿼리 실행 코어 | 1 | 대기 | | | |
+| M2 쿼리 실행 코어 | 1 | 계획 중 | [M2](plans/M2-query-core.md) | 2026-11-11 | |
 | M3 프로젝트·에디터 화면 | 1 | 대기 | | | |
 | M4 결과 표 | 1 | 대기 | | | |
 | M5 터널 | 2 | 대기 | | | |
@@ -60,6 +57,7 @@
 
 ### 2026-11-11
 
+- M2 계획 작성. 세션 구조를 정하는 사실은 계획을 쓰면서 `tokio-postgres` 0.7.18, `pg_query` 18.1.0 source와 scratch test(저장소 밖)로 확인해 계획 맨 위 표에 적음: 실행은 simple query protocol(값은 text), 문장 나누기는 `split_with_parser`와 `split_with_scanner` 대신 `pg_query::scan`의 token으로, cancel 요청은 서버가 연결을 닫을 때까지(EOF) 기다림, 연결이 끊기면 driver가 같은 오류를 끝없이 돌려줌. 마일스톤의 "먼저 확인할 것"(Channel 직렬화 형식)은 webview가 있어야 해서 Task 1에 둠
 - M1 완료. 완료 기준 확인: `scripts/test-db.sh reset` 7초 뒤 `pnpm check` 통과. `sessions::two_sessions_open_and_close_independently`(세션 2개를 따로 열고 닫음), `tls::verify_full_rejects_a_hostname_mismatch`와 `tls::verify_full_rejects_an_untrusted_ca`(`verify-full`이 틀린 인증서를 거부), `project_file::rejects_a_password_entry`(password 항목 거부). 키체인 contract test는 손으로 돌려 통과(`cargo test -p chilla-core --test password_store -- --ignored`)
 - TLS test DB 추가: `127.0.0.1:54319`, compose service `db-tls`. 인증서는 `scripts/test-db.sh`가 `db/tls/`에 만듦(gitignore)
 - 자동 security review 지적 1건을 고침: 접속 테스트가 접속 이름만으로 키체인 비밀번호를 꺼내 화면이 보낸 host로 보내던 것
