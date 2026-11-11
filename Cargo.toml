@@ -1,0 +1,3 @@
+[workspace]
+members = ["src-tauri", "crates/chilla-core"]
+resolver = "3"

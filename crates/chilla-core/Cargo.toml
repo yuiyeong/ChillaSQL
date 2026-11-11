@@ -1,0 +1,10 @@
+[package]
+name = "chilla-core"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "chilla_core"
+
+[dependencies]
+pg_query = "18.1"
