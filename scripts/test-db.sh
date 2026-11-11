@@ -18,7 +18,8 @@ up() {
   fi
   docker compose up -d --wait
   local actual
-  actual="$(docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$0"' "$QUERY")"
+  # 검증 query 자체가 실패해도(table 없음 등) 불일치로 취급해 아래 hint를 출력한다.
+  actual="$(docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "$0"' "$QUERY")" || actual=""
   if [ "$actual" != "$EXPECTED" ]; then
     echo "데이터가 기대와 다릅니다. scripts/test-db.sh reset 을 실행하세요" >&2
     exit 1

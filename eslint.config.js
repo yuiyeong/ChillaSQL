@@ -4,7 +4,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 import tseslint from "typescript-eslint";
 import prettier from "eslint-config-prettier";
 
-const invokeMessage = "Tauri invoke는 src/shared/api 안에서만 호출한다";
+const tauriMessage = "Tauri API는 src/shared/api 안에서만 import한다";
 
 export default defineConfig(
   {
@@ -20,10 +20,14 @@ export default defineConfig(
       "no-restricted-imports": [
         "error",
         {
-          paths: [
-            { name: "@tauri-apps/api", message: invokeMessage },
-            { name: "@tauri-apps/api/core", message: invokeMessage },
-          ],
+          patterns: [{ group: ["@tauri-apps/*"], message: tauriMessage }],
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "ImportExpression[source.value=/^@tauri-apps\\//]",
+          message: tauriMessage,
         },
       ],
     },

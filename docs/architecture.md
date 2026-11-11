@@ -43,16 +43,16 @@ compiler는 같은 crate 안의 module 사이 의존 방향을 막지 못한다.
 src/
 ├── features/<기능>/            component, store, hook
 └── shared/
-    └── api/                    Tauri invoke 호출
+    └── api/                    Tauri API 호출
 ```
 
 | 위치 | 들어가는 것 | 규칙 |
 | --- | --- | --- |
 | `src/features/<기능>/` | 그 기능의 component, store, hook | - |
 | `src/shared/` | 기능에 속하지 않는 공용 코드 | - |
-| `src/shared/api/` | Tauri command 호출 | `@tauri-apps/api/core`의 `invoke`는 여기서만 import한다 |
+| `src/shared/api/` | Tauri command 호출과 event 구독 | 모든 `@tauri-apps/*` package는 여기서만 import한다 |
 
-`invoke` 위치 규칙은 ESLint의 `no-restricted-imports`가 강제한다. `src/shared/api/` 밖에서 `@tauri-apps/api`와 `@tauri-apps/api/core`를 import하면 모두 lint가 error를 낸다.
+모든 `@tauri-apps/*` package는 static import든 dynamic import든 `src/shared/api/`에서만 import한다. ESLint의 `no-restricted-imports`(static import)와 `no-restricted-syntax`(dynamic import)가 강제하며, `src/shared/api/` 밖에서 import하면 lint가 error를 낸다.
 
 ## 4. 검사
 
@@ -61,9 +61,10 @@ commit 전에 `pnpm check`를 통과시킨다.
 | 명령 | 하는 일 |
 | --- | --- |
 | `pnpm lint` | ESLint |
+| `pnpm typecheck` | `tsc --noEmit`으로 type만 확인한다 |
 | `pnpm lint:rust` | `cargo clippy --workspace --all-targets -- -D warnings` |
 | `pnpm format` | Prettier와 `cargo fmt`로 고쳐 쓴다 |
 | `pnpm format:check` | 고치지 않고 형식만 확인한다 |
-| `pnpm check` | `format:check`, `lint`, `lint:rust`, `test`, `cargo test`를 순서대로 실행한다 |
+| `pnpm check` | `format:check`, `lint`, `typecheck`, `lint:rust`, `test`, `cargo test`를 순서대로 실행한다 |
 
 Rust는 `rustfmt`와 `clippy` 기본 설정을 쓴다. Prettier는 Tailwind class 정렬 plugin만 더하고 나머지는 기본값이다. `docs/`와 `*.md`는 Prettier가 건드리지 않는다.

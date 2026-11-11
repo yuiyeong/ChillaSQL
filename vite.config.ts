@@ -4,11 +4,13 @@ import tailwindcss from "@tailwindcss/vite";
 
 // https://vite.dev/config/
 export default defineConfig({
+  // tauri dev에서 Vite가 화면을 지워 Rust error를 가리지 않게 한다.
+  clearScreen: false,
+
   plugins: [react(), tailwindcss()],
 
   test: {
     environment: "jsdom",
-    globals: true,
     setupFiles: ["./src/test/setup.ts"],
   },
 
@@ -16,6 +18,6 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
-    watch: { ignored: ["**/src-tauri/**"] },
+    watch: { ignored: ["**/src-tauri/**", "**/crates/**", "**/target/**"] },
   },
 });
