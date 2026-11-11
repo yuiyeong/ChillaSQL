@@ -4,9 +4,9 @@
 
 ## 지금
 
-- **진행 중**: 없음 (M0 완료)
-- **다음 할 일**: M1 계획 작성 → `docs/plans/M1-session-core.md`
-- **M1에서 챙길 것**: 첫 module을 만들 때 layer 의존 방향 test를 함께 넣는다 ([구조](architecture.md) 2장)
+- **진행 중**: M1 접속·세션 코어 (계획 중). 계획을 썼고 검토를 기다린다 → [M1](plans/M1-session-core.md)
+- **다음 할 일**: 계획 검토가 끝나면 Task 1(키체인 확인 창 확인과 결정 기록)부터 시작한다. Task 1 Step 3은 사람이 화면의 dialog를 봐야 한다
+- **M1에서 챙길 것**: layer 의존 방향 test는 계획의 Task 2에 있다 ([구조](architecture.md) 2장)
 
 ## 마일스톤 현황
 
@@ -15,7 +15,7 @@
 | 마일스톤 | 단계 | 상태 | 계획 | 시작 | 완료 |
 | --- | --- | --- | --- | --- | --- |
 | M0 셋업 | 1 | 완료 | [M0](plans/M0-setup.md) | 2026-11-11 | 2026-11-11 |
-| M1 접속·세션 코어 | 1 | 대기 | | | |
+| M1 접속·세션 코어 | 1 | 계획 중 | [M1](plans/M1-session-core.md) | 2026-11-11 | |
 | M2 쿼리 실행 코어 | 1 | 대기 | | | |
 | M3 프로젝트·에디터 화면 | 1 | 대기 | | | |
 | M4 결과 표 | 1 | 대기 | | | |
@@ -46,6 +46,7 @@
 
 ### 2026-11-11
 
+- M1 계획 작성. "먼저 확인할 것" 중 결과 나눠 받기와 트랜잭션 상태 감지는 계획을 쓰면서 `tokio-postgres` 0.7.18 source와 scratch test로 확인해 계획 맨 위 표에 적음: 결과는 portal이 아니라 stream으로 받고, 트랜잭션 상태는 `connect_raw`에 넘기는 stream을 감싸 ReadyForQuery의 상태 byte를 읽음. 결정 기록에는 Task 1에서 옮김
 - M0 완료. 완료 기준 확인: `pnpm check` 통과, `scripts/test-db.sh reset` 12.8초에 `big_table` 100만 행 생성, `pnpm tauri dev`로 `ChillaSQL` 창이 뜨는 것을 screenshot으로 확인
 - `pg_query` 18.1.0은 Tauri 빌드 안에서 추가 도구 없이 compile됨 (`protoc`, `cmake` 불필요). `dist/` 없이도 `cargo test` 통과
 - 진행 중에 lint, formatter, 구조 규칙 task를 추가해 task가 5개가 됨 ([구조](architecture.md))
