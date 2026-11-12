@@ -47,6 +47,41 @@
 - **CodeMirror의 `autocompletion()`은 켜지 않는다**(M7).
 - **넣지 않는 것**: 가상 스크롤과 이어서 가져오기(M4), 터널과 접속별 색상(M5, M6), 트랜잭션 표시(M6), 자동완성(M7), 오류 위치 밑줄·여러 문장 실행·저장하지 않은 탭 자동 보관·최근 프로젝트 목록(M8). 저장하지 않은 변경은 탭을 닫을 때와 프로젝트를 바꿀 때만 묻는다. **앱을 끝낼 때는 묻지 않는다**(M8의 자동 보관이 대신한다).
 
+## 구현 뒤 정리에서 바뀐 것 (2026-11-12)
+
+아래 task 본문의 interface와 규칙은 계획 당시의 것이다. 실행, simplify, code review를 거치며 다음이 바뀌었다. task 본문과 체크박스는 고치지 않았다.
+
+- 접속 form의 순수 logic 파일 이름이 `connectionForm.ts`에서 `connectionValues.ts`(test는 `connectionValues.test.ts`)로 바뀌었다(Task 8). `ConnectionForm.tsx`와 이름이 대소문자만 달라 macOS에서 확장자 없는 import가 엉뚱한 파일로 풀렸다.
+- `WriteModeDto`의 `Create`와 `Overwrite`는 unit variant가 아니라 빈 struct variant다(`Create {}`, `Overwrite {}`)(Task 5). serde가 unit variant에는 `deny_unknown_fields`를 적용하지 않는다. JSON은 같다.
+- 임시 파일에 쓰고 `rename`하는 code는 `infrastructure/atomic_write.rs` 하나다(Task 2, 3). `write_atomically(target, text, Missing)`와 `create_new_file(path, text)`를 `project_file.rs`와 `sql_files.rs`가 함께 쓴다. 임시 파일 이름은 helper가 `.{파일 이름}.chilla-tmp`로 정한다(`chilla.toml`은 `.chilla.toml.tmp`가 아니라 `.chilla.toml.chilla-tmp`). 이름이 NAME_MAX(255 byte)를 넘으면 `.chilla-tmp-{파일 이름의 hash}`다.
+- 임시 파일은 이미 있던 경로를 지운 뒤 `create_new`로 열고(심어 둔 symlink를 따라가지 않는다), `sync_all` 뒤에 `rename`한다. target이 있으면 임시 파일을 `0o600`으로 만들어 쓰기 전에 target의 권한으로 바꾸므로 umask가 기존 권한을 좁히지 않는다. 없으면 `0o644`에 umask가 적용된다(Task 2, 3).
+- `save_connection`이 도중에 지워진 `chilla.toml`은 다시 만들지 않고 `ProjectError::Write`다(`Missing::Error`). `sql_files`의 `Replace`와 `Overwrite`는 `Missing::Create`다(Task 3). `chilla.toml`이 symlink이면 저장한 뒤 일반 파일이 된다(프로젝트 밖의 파일에 쓰지 않는 쪽).
+- Task 4의 `save_connection` 규칙이 다음처럼 바뀌었다.
+  - `App`의 `save_lock`(`tokio::sync::Mutex`)이 본문 전체를 감싸 겹친 저장이 차례로 돈다.
+  - 같은 이름의 접속이 프로젝트에 없었던 경우도 `target_changed`다(2번의 "`previous`가 있고"를 "같은 이름의 접속이 없었거나 `!same_target`"으로). 남아 있던 키체인 비밀번호를 지운다. 대상이 같고 `password`가 없을 때만 키체인을 건드리지 않는다(5번).
+  - 쓰는 동안 프로젝트가 다시 열렸어도 입력한 비밀번호는 쓴 파일의 디렉토리 key로 저장하고, 그 뒤에 `ProjectChanged`를 돌려준다(4번). 문구는 "그동안 프로젝트가 다시 열렸습니다. 다시 시도하세요"다.
+  - test 이름 `save_connection_of_a_new_connection_touches_no_password`는 `save_connection_of_a_new_connection_leaves_no_password`가 되었다. 더해진 test는 `save_connection_of_a_new_name_forgets_a_leftover_password`, `save_connection_across_a_project_reload_keeps_the_new_project`, `concurrent_saves_run_one_at_a_time`이다. 뒤의 둘을 위해 `FakeProjects`에 `block()`이 생겼다.
+- `FakeProjects::create`가 등록하는 프로젝트의 `name`은 `add`와 같은 규칙(디렉토리에서 앞의 `/`를 뺀 값)이다(Task 4).
+- `src/shared/api/errors.ts`에 `messageOf(error)`와 `isCommandError(error, kind)`가 더해졌다(Task 6). 각 store와 component가 따로 두던 `messageOf`는 지워졌다.
+- `toConnection`은 세 번째 인자 `taken: readonly string[]`를 받는다. `original`이 `null`이고 이름이 `taken`에 있으면 `'<name>'은 이미 있는 접속 이름입니다` 오류다. `ConnectionForm`은 prop `existingNames`를 받는다(Task 8).
+- `ConnectionForm`의 비밀번호는 저장이 성공하면 비우고 테스트 뒤에는 둔다(Task 8). Global Constraints의 문구가 이에 맞게 바뀌었다.
+- `documents.ts`에 `findDocument(tabId)`(없으면 `undefined`)와 `documentFileText(tabId)`가 더해졌다(Task 9). 줄 끝이 CRLF인 파일은 tab id를 `crlfDocuments` Set에 두고, `saveTab`이 디스크에 쓰는 text는 `documentFileText`(그 탭이 CRLF면 `\r\n`으로 이음)다. `documentText`는 그대로 `\n`으로 이어 실행 경로의 offset이 CodeMirror의 위치와 같다. `EditorState.lineSeparator`는 쓰지 않는다(붙여 넣은 `\n` text가 한 줄로 들어간다). 줄 끝이 섞인 파일은 모두 CRLF로 저장된다.
+- Task 10의 `tabsStore`와 `saveTab`이 다음처럼 바뀌었다.
+  - `markSaved(id, path, stamp, dirty = false)`. 쓰는 동안 고쳤으면 `dirty`가 `true`다. 저장하거나 파일을 열면 `error`가 지워진다. `markSaved`와 `close`는 `naming`이 그 탭을 가리킬 때만 비운다.
+  - 같은 탭의 저장이 진행 중이면 `saveTab`은 아무것도 하지 않고 `"cancelled"`다(`inFlight` Set). 공백뿐인 `newPath`도 `"cancelled"`다. 계획이 `commands.ts`의 `execute("save")`와 `onName`에 둔 두 guard는 `saveTab` 안으로 내려갔다.
+  - `replace`가 `file_not_found`로 실패하면(밖에서 지워진 파일) `"<path> 파일이 밖에서 지워졌습니다. 다시 만들까요?"`를 묻고 `true`면 `overwrite`로 쓴다. `false`면 `"cancelled"`다.
+- Task 11의 `runsStore`가 다음처럼 바뀌었다.
+  - `run(tabId, prepare)`다. `Prepare`는 실행할 `RunRequest`나 실행하지 않을 이유(string)를 돌려주고, 문장 고르기(`splitStatements`)도 이 안에서 한다. `reject(tabId, message)`는 없어졌다. `execute("run")`의 1~3번(`reject`를 부르던 곳)은 `commands.ts`의 `prepareRun(tabId)`가 string을 돌려주는 것으로 바뀌었다.
+  - 번호가 둘이다. attempt는 `run`에 들어올 때, run token은 새 실행이 실제로 시작될 때만 오른다. 그래서 실행 중에 거절된 `Cmd+Enter`는 진행 중인 쿼리의 표시와 취소를 건드리지 않고, 화면에도 아무것도 보여 주지 않는다.
+  - `finished`의 `connection_lost`는 token과 무관하게 세션을 닫고 비운다. 여는 중인 세션에 합류한 실행도 `연결 중…`이다.
+  - `reset(): Promise<void>`는 모든 탭을 `release`한다(모든 세션을 닫고 실패는 무시). `switchProject`는 탭마다 `release`를 부르던 loop 대신 `reset`을 쓴다.
+- Task 11의 `ResultPane`은 `running`에서 `finished`로 바뀌어도 표를 다시 만들지 않고(`memo`), 300자에서 자를 때 surrogate pair를 가르지 않는다. `formatElapsed`는 반올림한 뒤에 단위를 고른다(999,600 µs는 `1.00 s`).
+- Task 12가 다음처럼 바뀌었다.
+  - `useShortcuts(enabled: boolean)`. 접속 form이 열려 있으면(`form !== null`) `false`라 `Cmd+Enter`와 `Cmd+W`가 뒤의 탭에 닿지 않는다.
+  - `ConnectionForm`의 `onSaved`는 `applyProject`가 아니라 `applySavedProject(project)`를 부른다. 연결 대상이 바뀐 접속을 쓰는 탭의 세션을 `release`한 뒤 project를 반영한다.
+  - `switchProject`의 `pickDirectory()`와 `confirm()`, `closeTab`의 `confirm()`이 실패하면 오류를 보여 준다(`showError`, `setError`). `closeTab`은 탭을 닫지 않는다. `projectStore`에 `clearError()`와 `showError(message)`가 더해졌다.
+- `src/test/deferred.ts`(`deferred<T>()`)와 `src/test/resetStores.ts`가 더해졌다. `domain`의 `has_sql_extension`은 pub이 아니다(Task 2).
+
 ## Global Constraints
 
 - M1, M2의 Global Constraints를 그대로 따른다(macOS 전용, `chilla-core`는 `tauri`에 의존하지 않음, 탭 = 세션, 비밀번호는 `Password`로만, 사용자에게 보이는 message는 한국어, JSON의 키는 camelCase이고 구분 값은 snake_case).

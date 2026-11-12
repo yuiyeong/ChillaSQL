@@ -4,15 +4,23 @@
 
 ## 지금
 
-- **진행 중**: M3 ([계획](plans/M3-project-editor.md)). Task 1(dev 빌드 서명, CSP, 결정 기록) 완료
-- **다음 할 일**: Task 2
-- **M3에서 챙길 것** (M2가 화면에 주는 계약)
+- **진행 중**: M3 ([계획](plans/M3-project-editor.md)). Task 1~12 구현, simplify, code review(high)와 그 수정까지 끝남. `pnpm check` 통과(HEAD `bc5c420`, vitest 211, cargo test 219 passed / 1 ignored)
+- **다음 할 일**: 계획의 Task 13
+  - Step 1: 손으로 확인(15항목)을 사용자와 함께 한다. 하나라도 다르면 원인을 찾아 고치고 처음부터 다시 한다
+  - Step 2: 시작 시간 측정(1초 이내)
+  - Step 3: 빌드된 앱에서 CSP 재확인
+  - Step 5: 완료 기록(M3 상태를 `완료`로, "지금"을 M4로, "M4에서 챙길 것"을 적음)
+- **손으로만 확인할 수 있는 것**: 구현 중 diff와 test로 확인할 수 없어 Step 1에 남긴 것
+  - 기본 menu의 `Cmd+W`가 webview의 `keydown`에 닿고 창이 닫히지 않는 것(12행), 에디터의 `Cmd+Z`/`Cmd+C`/`Cmd+V`(11행)
+  - 실제 webview에서 Channel의 `onmessage`로 batch가 오는 것(4행)
+  - 앱을 끝낼 때 `close_all_sessions`가 불리는 것(14행)
+- **알려진 것, 아직 M3에서 고치지 않은 것**은 아래 작업 로그(2026-11-12)에 있다
+- **M4에서 챙길 것** (M2가 화면에 주는 계약. M3의 임시 표는 첫 batch만 보여 주고 `fetch_more`를 부르지 않으며, `runReducer`는 이미 `retainedFrom`보다 앞의 행을 버림)
   - 화면은 `rows` event의 `retainedFrom`보다 앞의 행을 버리고 그 구간을 "다시 실행해야 볼 수 있음"으로 그린다
   - `split_statements`의 span과 server 오류의 `position`은 모두 보낸 text 기준 0-based UTF-16 code unit offset이다
-  - 선택 영역에 문장이 여러 개면 `multiple_statements`가 온다 (M8 전까지)
   - `finished`의 outcome은 `completed`, `failed`, `cancelled`, `discarded`, `connection_lost`, `client_error` 여섯이다. cancel한 쿼리도 서버에서 이미 끝났고 버린 행이 없으면 `completed`로 온다
   - `fetch_more`는 그 세션이 발급한 query id면 끝난 쿼리에도 `Ok`다. 결과의 끝은 `finished` event로만 안다
-  - 화면이 사라진(Channel이 끊긴) 쿼리는 다음 실행이나 세션 닫기 전까지 DB에 열려 있다 (자동 닫기는 M6)
+  - 화면이 사라진(Channel이 끊긴) 쿼리는 다음 실행이나 세션 닫기 전까지 DB에 열려 있다(자동 닫기는 M6). 받다 만 결과는 다음 실행, 취소, 탭 닫기에서 버려진다
   - `COPY … FROM STDIN` / `TO STDOUT`은 지원하지 않는다. 실행하면 그 세션의 연결을 끊고 `connection_lost`로 알린다
 
 ## 마일스톤 현황
@@ -101,6 +109,27 @@
 | 2026-11-12 | M3 | 저장하지 않은 변경은 탭을 닫을 때와 프로젝트를 바꿀 때만 묻고 앱을 끝낼 때는 묻지 않음. 가상 스크롤과 이어서 가져오기(M4), 터널과 접속별 색상(M5, M6), 트랜잭션 표시(M6), 자동완성(M7), 오류 위치 밑줄·여러 문장 실행·저장하지 않은 탭 자동 보관·최근 프로젝트 목록(M8)은 넣지 않음 | M8의 자동 보관이 앱을 끝낼 때의 확인을 대신함. 나머지는 각 마일스톤의 범위 |
 | 2026-11-12 | M3 | dev 빌드 서명 확정. runner로 서명한 binary가 키체인 항목을 만들고(`KEYCHAIN_PROBE 18.89 created`), 다시 빌드한 binary가 확인 창 없이 읽음(`lib.rs`에 빈 줄을 더해 다시 빌드 `9.03 existing`, probe 문구를 바꿔 CDHash가 바뀐 binary `9.669 existing`). `codesign -dvv`는 `Identifier=com.yuiyeong.chillasql`, Authority 줄 3개, `Signature=adhoc` 없음. cargo의 `runner` 상대 경로는 `.cargo/`가 있는 디렉토리 기준으로 풀림(tauri CLI가 `src-tauri/`에서 cargo를 불러도 됨) | 기준(확인 창 없음, 500ms 이내) 안. 빈 줄만 더한 빌드는 binary가 바뀌지 않았을 수 있어 code를 바꿔 한 번 더 잼. `pnpm tauri dev`에서 잼 |
 | 2026-11-12 | M3 | CSP 확정(위 값 그대로). `pnpm tauri build --debug --no-bundle`로 만든 binary에서 `CSP_PROBE {"violations":[],"cmStyled":true,"channelChars":20000}`. `dangerousDisableAssetCspModification`은 필요 없음 | CodeMirror의 `<style>`이 막히지 않고(`.cm-scroller`의 `overflow-x`가 `auto`), 8,192 byte를 넘어 fetch 경로를 타는 20,000자 Channel 메시지도 `connect-src`에 막히지 않음. `style-src`에 nonce가 붙지 않아 `'unsafe-inline'`이 그대로 들음 |
+| 2026-11-12 | M3 | 접속의 연결 대상을 바꿔 저장하면 `chilla.toml`을 쓰기 전에 저장된 비밀번호를 지움(입력한 비밀번호는 파일을 쓴 뒤에 저장). 지우기가 실패하면 파일을 쓰지 않음. 계획의 순서(쓴 뒤에 지움)를 바꿈 | 쓰기가 실패하거나 `ProjectChanged`가 나도 새 host에 옛 비밀번호가 남지 않아야 함(7장의 "대상을 바꿔 저장하면 지움"). 대가로 쓰기가 실패하면 대상은 그대로인데 비밀번호만 지워져 다시 입력해야 함(Ruling 6) |
+| 2026-11-12 | M3 | 프로젝트에 없던 이름으로 저장할 때도 키체인에 남아 있던 비밀번호를 지움. 같은 대상이고 비밀번호를 입력하지 않았을 때만 키체인을 건드리지 않음 | 접속 지우기가 없어 `chilla.toml`에서 손으로 지우게 돼 있고, 그러면 키체인 항목이 남아 같은 이름으로 다시 만든 접속의 새 host로 갈 수 있음. 대가로 같은 이름으로 다시 만든 접속은 비밀번호를 한 번 더 입력(Ruling 14, code review) |
+| 2026-11-12 | M3 | `save_connection`은 `save_lock`으로 하나씩 돌림. 쓰는 동안 프로젝트가 다시 열려도 입력한 비밀번호는 쓴 파일의 디렉토리 key로 저장한 뒤 `ProjectChanged`를 돌려줌 | 한 번의 저장이 키체인 delete, 파일 read-modify-write, state 갱신, 키체인 set에 걸쳐 있어 겹치면 서로의 결과를 덮음. 파일에는 이미 반영됐으므로 비밀번호를 버리면 사용자가 다시 입력해야 함(Ruling 13, simplify) |
+| 2026-11-12 | M3 | 임시 파일은 이미 있던 경로를 지운 뒤 `create_new`로 열고, `sync_all` 뒤에 rename함. 임시 파일 이름은 helper(`atomic_write.rs`)가 `.{파일 이름}.chilla-tmp`로 정하고 NAME_MAX를 넘으면 hash로 줄임. `chilla.toml`과 SQL 파일이 같은 helper를 씀 | 프로젝트 디렉토리에 심어 둔 `.chilla.toml.tmp` symlink를 `fs::write`가 따라가 프로젝트 밖 파일에 쓰던 것(자동 security review)을 막음. 파일 이름이 NAME_MAX에 가까우면 임시 이름이 `ENAMETOOLONG`이었고, 보안상 민감한 block이 두 곳에 중복돼 있었음 |
+| 2026-11-12 | M3 | 임시 파일은 target이 있으면 `0o600`으로 만들어 쓰기 전에 target의 권한으로 바꿈. target이 없으면 `0o644`에 umask를 적용 | 열 때 `mode`만 주면 umask가 적용돼 0664인 파일이 umask 022에서 0644가 됨. 쓰기 전에 바꾸므로 권한이 넓은 채로 내용이 놓이는 순간이 없음 |
+| 2026-11-12 | M3 | `save_connection` 도중 `chilla.toml`이 지워지면 다시 만들지 않고 `ProjectError::Write`. SQL 파일의 `Replace`와 `Overwrite`는 없으면 만듦 | 옛 code는 metadata 오류를 `NotFound`가 아니어도 삼키고 umask 권한으로 파일을 다시 만들었음. 지워진 설정 파일을 저장이 되살리지 않게 함 |
+| 2026-11-12 | M3 | symlink인 `chilla.toml`은 저장한 뒤 일반 파일이 됨 | symlink의 대상에 쓰지 않고 프로젝트 밖으로 쓰지 않는 쪽을 택함 |
+| 2026-11-12 | M3 | `WriteModeDto`의 `Create`와 `Overwrite`는 빈 struct variant(`Create {}`) | serde가 unit variant에는 `deny_unknown_fields`를 적용하지 않아 `{"mode":"create","stamp":"s"}`가 통과함. JSON은 같음 |
+| 2026-11-12 | M3 | 접속 form의 logic 파일 이름을 `connectionForm.ts`에서 `connectionValues.ts`로 바꿈 | `ConnectionForm.tsx`와 대소문자만 달라 macOS(case-insensitive)에서 확장자 없는 import `./ConnectionForm`이 `.ts`로 풀림. 확장자를 붙인 import는 다음 사람이 빼먹기 쉬운 우회라 쓰지 않음(Ruling 7) |
+| 2026-11-12 | M3 | 접속 form의 비밀번호는 저장이 성공하면 비우고 접속 테스트 뒤에는 둠. component의 local state에만 있고 form을 닫으면 사라짐 | 테스트 뒤 바로 저장하는 흐름에서 다시 입력하게 하지 않으려고. 대가로 form이 열려 있는 동안 비밀번호가 memory에 조금 더 남음(Ruling 8) |
+| 2026-11-12 | M3 | 파일로 연 탭도 활성 탭의 접속을 물려받음 | 새 탭은 활성 탭의 접속을 물려받는다는 규칙과 같음. 대가로 운영 접속 탭 옆에서 연 파일이 운영 접속을 가지지만 실행은 `Cmd+Enter`를 눌러야 함(Ruling 10) |
+| 2026-11-12 | M3 | run token이 실행할 문장을 고르는 동안(`split_statements`)도 덮음. 늦게 끝난 앞 실행은 뒤 실행을 덮지 않음 | `Cmd+Enter`를 빠르게 두 번 눌러 문장 나누기가 거꾸로 끝나면 먼저 누른 쪽이 화면을 차지했고, 그 사이 탭을 닫거나 접속을 바꾼 것을 따로 다시 확인해야 했음(simplify) |
+| 2026-11-12 | M3 | 실행 중에 거절된 `Cmd+Enter`(빈 줄 등)는 진행 중인 쿼리의 표시와 취소를 건드리지 않고 화면에 아무것도 보여 주지 않음. 번호를 attempt(누른 실행)와 token(시작한 실행)으로 나눔 | 거절된 실행이 상태를 `rejected`로 바꾸면 앞 쿼리의 event가 버려지고 취소 버튼이 동작하지 않는데 쿼리는 서버에서 계속 돎. 문구를 보여 줄 자리를 만드는 것은 M3의 임시 결과 화면 범위를 넘음. 대가로 빈 줄에서 누른 `Cmd+Enter`가 무반응으로 보임(Ruling 15) |
+| 2026-11-12 | M3 | 저장의 중복 막기와 이름 검사는 `saveTab` 안에서 함. 같은 탭의 저장이 겹치면 두 번째는 아무것도 하지 않음 | `Cmd+S`를 두 번 누르거나 이름 form을 두 번 제출하면 같은 stamp로 두 번 써서 두 번째가 가짜 `file_changed`를 받았고, 이름 form의 저장은 guard를 거치지 않았음(simplify) |
+| 2026-11-12 | M3 | 접속 form이 열려 있는 동안 단축키는 아무것도 하지 않음 | `Cmd+Enter`가 뒤의 탭을 실행하고 `Cmd+W`가 뒤의 탭을 닫았음 |
+| 2026-11-12 | M3 | 접속의 연결 대상을 고쳐 저장하면 그 접속을 쓰는 탭의 세션을 놓음. 다음 실행이 새 세션을 엶 | `runsStore`가 접속 이름이 같으면 세션을 다시 써서, host A로 실행한 적 있는 탭이 `local`을 host B로 고친 뒤에도 A에서 실행했고 sidebar는 B를 보여 줬음(code review) |
+| 2026-11-12 | M3 | 접속 추가는 이미 있는 이름을 거절함 | `save_connection`이 upsert라 있는 이름을 넣으면 기존 접속을 덮어 `tunnel`, `color`, 저장된 비밀번호가 묻지도 알리지도 않고 지워졌음(code review) |
+| 2026-11-12 | M3 | 밖에서 지워진 파일은 저장할 때 "다시 만들까요?"를 묻고 `true`면 `overwrite`로 다시 만듦 | `replace`가 `file_not_found`로 실패하는데 화면이 `file_changed`만 다뤄 그 탭의 내용을 저장할 길이 없었음(code review) |
+| 2026-11-12 | M3 | CRLF 파일은 줄 끝을 CRLF로 돌려 씀. tab id를 Set에 두고 저장할 때만 `\r\n`으로 이음(`EditorState.lineSeparator`는 쓰지 않음). 줄 끝이 섞인 파일은 모두 CRLF로 저장됨 | CodeMirror가 줄 끝을 `\n`으로 맞춰 한 글자만 고쳐도 모든 줄이 LF가 됨. `lineSeparator` facet은 붙여 넣은 `\n` text를 줄 하나 안의 문자로 넣어 화면의 줄과 어긋나고 LF가 섞임. 대부분 LF인 파일에 CRLF가 하나라도 있으면 전부 CRLF로 저장되는 것은 드물어서 둠(code review) |
+| 2026-11-12 | M3 | `switchProject`의 `pickDirectory()`와 `confirm()`, `closeTab`의 `confirm()`이 실패하면 오류를 보여 줌. `closeTab`은 탭을 닫지 않음 | reject가 unhandled rejection이 되어 화면에 아무것도 없었음. 같은 실패를 `ProjectGate`만 처리했음(code review) |
+| 2026-11-12 | M3 | 프로젝트를 바꾸면 모든 탭의 세션을 닫음(`reset`이 모두 `release`). 옛 세션의 닫기가 실패해도 무시 | Rust가 전환하고 화면이 reset하기 전에 시작된 실행의 세션이 새 프로젝트에서 열린 채 잊히는 창을 없앰. 옛 세션의 `closeSession`은 `unknown_session`으로 실패하고 무시됨(Ruling 11) |
 
 ## 작업 로그
 
@@ -108,6 +137,51 @@
 
 ### 2026-11-12
 
+- M3 Task 13 전까지 확인: `pnpm check` 통과(HEAD `bc5c420`). vitest 211(21 files), cargo test 219 passed / 1 ignored. 남은 것은 Task 13의 손으로 확인(Step 1, 3)과 시작 시간 측정(Step 2), 완료 기록(Step 5)
+- 알려진 것(M3에서 고치지 않았고 지금 code에서도 그대로인 것)
+  - 실행 중에 거절된 `Cmd+Enter`(빈 줄 등)는 화면에 아무 표시가 없다. 빈 줄에서 누른 `Cmd+Enter`가 무반응으로 보인다
+  - CRLF가 하나라도 있는 파일은 전체를 CRLF로 표시하고 저장한다. 대부분 LF인 파일은 모든 줄이 CRLF로 저장된다
+  - `save_connection`에서 파일과 state를 바꾼 뒤 `passwords.set`이 실패하면 화면의 project가 어긋난다(저장을 다시 누르면 맞춰짐). 쓰는 동안 프로젝트가 다시 열려 `ProjectChanged`가 나도 파일과 키체인에는 반영되어 있다
+  - SQL 파일 목록은 깊이와 개수 제한 없이 디렉토리 전체를 돈다. `resolve`와 open 사이의 TOCTOU도 그대로다(`create_new`와 symlink 검사가 막는 범위 밖)
+  - `targetChanged`는 `sslrootcert`를 문자열로 비교한다. 접속 테스트 결과가 값을 고친 뒤에 도착하면 옛 값의 "연결됐습니다"가 보인다(테스트 중에도 input이 enabled). `open`이 겹치면 늦게 끝난 쪽이 state를 차지한다. 수정 버튼들의 accessible name은 모두 "수정"이다
+  - `missing` 화면은 안내 문구와 같은 말의 `project_not_found` 오류를 한 번 더 보여 준다
+  - `concurrent_saves_run_one_at_a_time`은 50ms 대기에 기댄다. `FakeFiles::list`는 호출을 기록하지 않아 `list_sql_files`가 프로젝트 디렉토리를 넘기는지 단언이 없다. `dialog.ts`의 `async`는 불필요하다
+  - `scripts/cargo-runner.sh`는 `cargo run --release`의 `chillasql` binary도 서명한다(무해)
+- M3 code review high: 지적 10건 중 8건을 고침(commits `6d18a8d`..`bc5c420`)
+  - 접속의 연결 대상을 고쳐 저장하면 그 접속을 쓰는 탭의 세션을 놓음(`applySavedProject`)
+  - 접속 추가가 이미 있는 이름의 접속을 덮어쓰지 않음(`toConnection`의 `taken`)
+  - 밖에서 지워진 파일은 물어본 뒤 다시 만들어 저장함
+  - 시작하지 못한 실행(거절된 `Cmd+Enter`)이 진행 중인 쿼리를 화면에서 떼어 내지 않음(attempt와 token으로 나눔)
+  - 프로젝트에 없던 이름으로 저장할 때도 남아 있던 비밀번호를 지움. simplify에서 넘어온 `ProjectChanged` 문구("연결하는 동안…")도 같이 고침
+  - CRLF 파일을 저장할 때 줄 끝을 CRLF로 돌려 씀. 계획이 정한 `EditorState.lineSeparator`는 붙여 넣은 `\n` text가 한 줄로 들어가 쓰지 않고 tab id Set과 `documentFileText`로 함
+  - 프로젝트 바꾸기와 탭 닫기의 dialog가 실패하면 오류를 보여 줌
+  - 덮어쓴 파일이 umask와 상관없이 기존 권한을 그대로 가짐
+  - 다시 review한 결과 8건 모두 해결됐고 새 Critical, Important는 없음. 다시 review에서 나온 minor 하나(CRLF가 하나라도 있으면 전체를 CRLF로 저장)는 드문 경우라 둠
+  - 고치지 않은 것
+    - `save_connection`이 파일을 쓸 수 있는지 확인하기 전에 비밀번호를 지움: Ruling 6이 알고 고른 순서. 쓰기가 실패하면 다시 입력하면 되고, 반대 순서는 옛 비밀번호가 새 host로 갈 수 있음. 읽기·검증과 rename을 나누려면 port를 두 단계로 쪼개야 함
+    - 파일과 state를 바꾼 뒤 `passwords.set`이 실패하면 화면의 project가 어긋남: 키체인 쓰기가 실패해야 하는 드문 경우이고 열려 있는 form에서 저장을 다시 누르면 맞춰짐. 고치려면 `save_connection`에서 비밀번호 저장을 떼어 command를 둘로 나눠야 함
+    - cap 밖 후보 4건 중 3건: SQL 파일 목록의 깊이·개수 제한 없음, button class 중복, `targetChanged`의 `sslrootcert` 문자열 비교. 값이 작거나 simplify에서 이미 건너뜀
+- M3 simplify: reviewer 4개(reuse, simplification, efficiency, altitude)가 본 뒤 implementer 둘(Rust, 화면)이 고침(commits `7e5d112`..`ac98090`). vitest 175 → 197
+  - Rust: 임시 파일 쓰기를 `atomic_write.rs`로 모음(target 없음의 처리, 임시 파일 이름, 권한을 열 때 줌, `sync_all`). `save_connection`을 `save_lock`으로 직렬화하고 `ProjectChanged`여도 입력한 비밀번호를 저장. 이중 검사(`has_sql_extension`, `error.rs`의 바깥 arm)와 작은 곳(`expect`, `read`의 capacity, `indent` 이름) 정리
+  - 화면: 오류 읽기를 `errors.ts` 한 곳에(`messageOf`, `isCommandError`). run token이 문장 고르는 동안도 덮고, 세션 slot 정리를 token과 떼고 `reset`이 세션을 닫음. 저장의 중복 막기와 이름 검사를 `saveTab` 안으로. 접속 form이 열리면 단축키를 멈추고 디렉토리 고르기 실패를 보여 줌. 끝난 결과가 표를 다시 만들지 않고 시간과 긴 값의 경계를 고침. test의 `deferred`와 store 초기화를 `src/test/`로 모음
+  - 고치지 않은 것
+    - `FileError::TooLarge` 문구의 "16 MiB"가 `MAX_BYTES`와 따로 적혀 있음: variant에 limit을 실으면 port의 type이 바뀜. 문구는 계획이 정한 것
+    - `save_connection`이 `App`과 같은 `validate()`를 한 번 더 함: port가 스스로를 지키는 쪽으로 둠. `write_fields`의 두 번 호출, `make_parent_dirs`의 닿지 않는 arm, `tests/project_file.rs`의 helper 중복, app test의 `PasswordKey` helper: 값이 작음
+    - `resolve`와 open 사이의 TOCTOU: 혼자 쓰는 앱이고 `create_new`와 symlink 검사가 이미 있음
+    - `Tab`의 `path`와 `stamp`를 하나로 묶기, `saveTab`의 반환값 없애기, `ProjectStatus`에서 `"missing"` 빼기: 계획이 정한 interface이고 여러 파일과 test를 고쳐야 해서 값에 비해 변경이 큼
+    - `ConnectionForm`의 field를 배열로 그리기, Tailwind button class 공유, `Workspace`의 wrapper 세 곳, StrictMode once-guard hook: 겉모양 정리이고 공용 UI module이 아직 없음. test fixture 공유: 파일마다 값이 조금씩 달라 override가 많아짐
+    - 선택 영역 실행에서 문서 전체를 복사하지 않기, `lineColumn`을 `doc.lineAt`으로: `Cmd+Enter`마다 1~3ms. 첫 실행에서 문장 나누기와 세션 열기를 겹치기: run token의 구조와 어긋남
+    - 테스트 결과가 값을 고친 뒤에 도착하는 경우, `open`이 겹치는 경우, 수정 버튼들의 accessible name: 드문 경우이고 M3의 범위를 넘음
+    - implementer가 건너뛴 두 가지: `missing` 화면에서 error alert를 그리지 않기(`create` 실패처럼 다른 오류까지 가려짐), `outcomeOf`의 rest destructuring(ESLint `no-unused-vars`가 `type`과 `elapsedMicros`를 error로 냄)
+- M3 Task 1~12 완료. task마다 구현 뒤 review를 거침(Task 1~12 모두 마지막 review는 clean)
+  - fix round가 있었던 task: Task 3(자동 security review가 임시 파일이 심어 둔 symlink를 따라간다고 지적해 `899559b`로 고치고, review가 `sql_files.rs`와 중복이라 지적한 temp-write를 `7a18316`에서 `atomic_write.rs` 하나로 모음), Task 4(`save_connection`이 `chilla.toml`을 쓴 뒤에 키체인을 다뤄 새 대상에 옛 비밀번호가 남을 수 있어 `1dd7c30`에서 비밀번호 삭제를 파일 쓰기 앞으로 옮김), Task 8(`connectionForm.ts`가 `ConnectionForm.tsx`와 대소문자만 달라 `c4a6ffa`에서 `connectionValues.ts`로 바꿈)
+  - 계획의 결함으로 실행 중 바로잡은 것
+    - Task 4: `FakeProjects::create`가 등록하는 프로젝트의 `name`이 계획에 없어 `add`와 같은 규칙(디렉토리에서 앞의 `/`를 뺀 값)으로 정함. 계획의 `save_connection` 순서가 새 대상에 옛 비밀번호를 남길 수 있어 바꿈(위의 fix round)
+    - Task 5: `WriteModeDto`의 unit variant가 `deny_unknown_fields`를 적용받지 않아 빈 struct variant로 바꿈
+    - Task 8: 파일 이름 충돌(위의 fix round). Global Constraints의 "저장이나 테스트가 끝나면 (비밀번호를) 비운다"를 "저장이 끝나면 비운다"로 고침
+    - Task 9: 닫은 문서를 mount된 `SqlEditor`의 다음 transaction이 되살릴 수 있어 `setDocumentState`를 "열려 있지 않은 id면 아무것도 하지 않음"으로 바꿈(Task 10에서)
+    - Task 11, 12: 프로젝트 전환 중 시작된 실행의 세션이 새 프로젝트에서 열린 채 잊히는 창이 있어 `switchProject`가 탭마다 `release`를 부른 뒤 `reset`하도록 함(이후 simplify에서 `reset`이 세션을 닫는 것으로 바뀜). Task 12의 `commandFor` test는 `KeyboardEvent`를 만들어 `Keys` type의 excess property 오류를 피함
+  - Task 5, 6, 12가 diff만으로 확인할 수 없어 Task 13 Step 1에 넘긴 것은 위 "지금"에 있음
 - M3 Task 1: dev 빌드를 cargo runner에서 이 Mac의 code signing identity로 서명하게 하고(다시 빌드해도 키체인 확인 창 없음, 읽기 9~10ms), CSP를 켬(빌드된 앱에서 violation 없음, CodeMirror style과 20,000자 Channel 메시지 통과). CodeMirror package를 더하고 계획에서 정한 것을 결정 기록과 기획서, 마일스톤에 옮김. 임시 probe(`probe.rs`, `probe.ts`)는 확인 뒤 지움
 - M3 계획 작성. 마일스톤의 "먼저 확인할 것" 중 커서 문장 고르기는 계획에서 정했고(M2의 `split_statements`를 씀), CSP와 dev 빌드 서명은 계획을 쓰면서 `tauri` 2.12.5, tauri-cli, `style-mod` 4.1.4의 source와 scratch script(저장소 밖)로 확인한 사실을 계획 맨 위 표에 적음: desktop `tauri dev`에는 CSP가 붙지 않음(빌드된 앱에만), CodeMirror는 `<style>` tag를 넣어 `style-src`에 `'unsafe-inline'`이 필요함, 기본 menu의 `Cmd+W`가 창을 닫음, `tauri dev`는 `cargo run`이라 cargo의 runner에서 서명할 수 있음, 이 Mac에 유효한 code signing identity가 이미 있음, `lang-sql`의 `PostgreSQL` dialect가 `$$`·`::`·JSONB 연산자를 오류 없이 나눔. webview가 있어야 하는 확인(서명 뒤 키체인 확인 창, 실제 CSP header)은 Task 1에 둠. 결정 기록에는 Task 1에서 옮김
 

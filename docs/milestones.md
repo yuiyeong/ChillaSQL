@@ -60,15 +60,17 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **완료 기준**: 앱 시작부터 프로젝트 화면까지 1초 이내. 로컬 DB에 접속해 쿼리를 Cmd+Enter로 실행하고 취소할 수 있음
 - **먼저 확인할 것**:
   - 커서 위치에서 실행할 문장을 고를 때 M2의 문장 위치 정보를 쓸지, 화면 쪽에서 따로 판별할지
-  - `tauri.conf.json`의 CSP를 켠다(지금은 `null`). Vite HMR과 CodeMirror가 넣는 style이 막히지 않는 정책을 정한다
-  - `pnpm tauri dev` 빌드마다 키체인 확인 창이 뜬다(M1에서 확인). dev 빌드를 고정된 self-signed code signing identity로 서명할지 정한다
+  - `tauri.conf.json`의 CSP를 켠다(지금은 `null`). Vite HMR과 CodeMirror가 넣는 style이 막히지 않는 정책을 정한다 → 정함: `default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'`. 빌드된 앱에만 적용(desktop `tauri dev`에는 CSP가 붙지 않음)
+  - `pnpm tauri dev` 빌드마다 키체인 확인 창이 뜬다(M1에서 확인). dev 빌드를 고정된 self-signed code signing identity로 서명할지 정한다 → 정함: cargo runner script가 이 Mac에 이미 있는 identity로 서명(새로 만들지 않음). 다시 빌드해도 확인 창이 뜨지 않음
 
 ### M4. 결과 표
 
 - **목표**: 1단계 완료 기준 달성
 - **범위**: TanStack Table + TanStack Virtual 결과 표, 가상 스크롤과 스크롤 시 이어서 가져오기, 보관 상한을 넘어 버려진 구간에 "다시 실행해야 볼 수 있음" 표시, 컬럼 너비 조절, 셀과 행 복사
 - **완료 기준 (1단계)**: 로컬 DB에서 100만 행 결과를 끊김 없이 스크롤. 못 맞추면 기획서 2장대로 canvas 기반 그리드로 교체를 검토한다
-- **먼저 확인할 것**: release 빌드(`pnpm tauri build`)를 dev 빌드와 같은 identity로 서명할지(`bundle.macOS.signingIdentity`). 서명이 다르면 키체인이 다른 앱으로 본다
+- **먼저 확인할 것**:
+  - release 빌드(`pnpm tauri build`)를 dev 빌드와 같은 identity로 서명할지(`bundle.macOS.signingIdentity`). 서명이 다르면 키체인이 다른 앱으로 본다
+  - M3의 임시 결과 표는 첫 batch만 보여 주고 `fetch_more`를 부르지 않는다. 이를 대신할 때 `runReducer`가 이미 `retainedFrom`보다 앞의 행을 버리는 것과 맞춘다
 
 ---
 
@@ -89,7 +91,9 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **목표**: 2단계 완료 기준 달성. 이후 운영 DB 접속 가능
 - **범위**: Auto/Manual 전환(탭 단위), Commit과 Rollback 버튼, 열린 트랜잭션 표시(직접 BEGIN한 경우 포함), 트랜잭션이 열린 채 탭 닫기/앱 종료/Auto 전환 시 확인, 실패 상태 표시와 Rollback 안내(4.3), 트랜잭션 중 터널이 끊기면 유실 알림, 접속별 색상(탭과 창 상단), 위험 쿼리 확인(WHERE 없는 UPDATE/DELETE, DROP, TRUNCATE를 pg_query로 판별, 4.8), 받다 만 결과 10분 후 자동 닫기(4.6)
 - **완료 기준 (2단계)**: 터미널 없이 Railway staging에 접속해 Manual 트랜잭션을 Commit, Rollback
-- **먼저 확인할 것**: 없음 (M1에서 정한 트랜잭션 상태 감지 방법을 쓴다)
+- **먼저 확인할 것**:
+  - M1에서 정한 트랜잭션 상태 감지 방법을 쓴다
+  - 접속의 연결 대상을 고쳐 저장하거나 프로젝트를 바꾸면 그 접속의 세션을 묻지 않고 닫는다(M3). 열린 트랜잭션이 생기면 탭을 닫을 때와 같은 확인이 필요하다
 
 ---
 
