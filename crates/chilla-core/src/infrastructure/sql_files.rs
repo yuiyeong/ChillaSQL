@@ -1,9 +1,9 @@
-use std::fs::{self, File, OpenOptions};
-use std::io::{self, Read, Write};
+use std::fs::{self, File};
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use super::atomic_write::write_atomically;
+use super::atomic_write::{Missing, create_new_file, write_atomically};
 use crate::application::{FileError, SqlFileStore};
 use crate::domain::{FileStamp, SqlFile, SqlPath, WriteMode, has_sql_extension};
 
@@ -155,40 +155,25 @@ fn make_parent_dirs(path: &SqlPath, full: &Path) -> Result<(), FileError> {
 
 fn create_new(path: &SqlPath, full: &Path, text: &str) -> Result<FileStamp, FileError> {
     make_parent_dirs(path, full)?;
-    let mut file = OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(full)
-        .map_err(|e| match e.kind() {
-            io::ErrorKind::AlreadyExists => FileError::Exists {
-                path: path.as_str().to_string(),
-            },
-            _ => io_error(path, &e),
-        })?;
-    let written = file
-        .write_all(text.as_bytes())
-        .and_then(|()| file.metadata());
-    match written {
-        Ok(meta) => Ok(stamp(&meta)),
-        Err(e) => {
-            // 반쯤 쓴 새 파일을 남기지 않는다.
-            let _ = fs::remove_file(full);
-            Err(io_error(path, &e))
-        }
-    }
+    create_new_file(full, text).map_err(|e| match e.kind() {
+        io::ErrorKind::AlreadyExists => FileError::Exists {
+            path: path.as_str().to_string(),
+        },
+        _ => io_error(path, &e),
+    })?;
+    written_stamp(path, full)
 }
 
 /// 같은 디렉토리의 임시 파일에 쓰고 `rename`한다. 파일이 없으면 새로 만든다.
 fn replace(path: &SqlPath, full: &Path, text: &str) -> Result<FileStamp, FileError> {
-    let name = full
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_default();
-    let tmp = full.with_file_name(format!(".{name}.chilla-tmp"));
-    write_atomically(full, &tmp, text)
-        .and_then(|()| fs::metadata(full))
-        .map(|meta| stamp(&meta))
-        .map_err(|e| io_error(path, &e))
+    write_atomically(full, text, Missing::Create).map_err(|e| io_error(path, &e))?;
+    written_stamp(path, full)
+}
+
+/// 방금 쓴 파일의 stamp.
+fn written_stamp(path: &SqlPath, full: &Path) -> Result<FileStamp, FileError> {
+    let meta = fs::metadata(full).map_err(|e| io_error(path, &e))?;
+    Ok(stamp(&meta))
 }
 
 fn stamp(meta: &fs::Metadata) -> FileStamp {

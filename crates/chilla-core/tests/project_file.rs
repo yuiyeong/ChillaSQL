@@ -569,7 +569,7 @@ fn save_connection_does_not_follow_a_planted_temporary_symlink() {
     let target = outside.path().join("victim.txt");
     fs::write(&target, "untouched\n").unwrap();
     let (dir, _, _) = saved(SPEC_EXAMPLE, production());
-    std::os::unix::fs::symlink(&target, dir.path().join(".chilla.toml.tmp")).unwrap();
+    std::os::unix::fs::symlink(&target, dir.path().join(".chilla.toml.chilla-tmp")).unwrap();
 
     let result = TomlProjectStore.save_connection(dir.path(), &analytics());
 

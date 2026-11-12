@@ -1,16 +1,15 @@
-use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
-use super::atomic_write::write_atomically;
+use super::atomic_write::{Missing, create_new_file, write_atomically};
 use crate::application::{ProjectError, ProjectStore};
 use crate::domain::{ConnectionProfile, Project, SslMode};
 
 const FILE_NAME: &str = "chilla.toml";
-const TEMP_FILE_NAME: &str = ".chilla.toml.tmp";
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽고 쓰는 [`ProjectStore`].
 pub struct TomlProjectStore;
@@ -53,19 +52,10 @@ impl ProjectStore for TomlProjectStore {
         let path = dir.join(FILE_NAME);
         let name = dir_name(&canonical(dir)?);
         let text = format!("[project]\nname = {}\n", Value::from(name));
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&path)
-            .map_err(|e| match e.kind() {
-                io::ErrorKind::AlreadyExists => ProjectError::AlreadyExists { path: path.clone() },
-                _ => write_error(&path, e),
-            })?;
-        if let Err(e) = file.write_all(text.as_bytes()) {
-            // 반만 쓴 파일이 남으면 다시 만들 수도 읽을 수도 없다.
-            let _ = fs::remove_file(&path);
-            return Err(write_error(&path, e));
-        }
+        create_new_file(&path, &text).map_err(|e| match e.kind() {
+            io::ErrorKind::AlreadyExists => ProjectError::AlreadyExists { path: path.clone() },
+            _ => write_error(&path, e),
+        })?;
         self.load(dir)
     }
 
@@ -94,9 +84,8 @@ impl ProjectStore for TomlProjectStore {
         });
         let edited = with_connection(&text, profile, sslrootcert)?;
         let project = parse(&root, &edited).map_err(|e| write_error(&path, e))?;
-        // 1에서 읽은 파일이라 있다. 그 권한을 그대로 둔다.
-        let temp = path.with_file_name(TEMP_FILE_NAME);
-        write_atomically(&path, &temp, &edited).map_err(|e| write_error(&path, e))?;
+        // 위에서 읽은 파일이다. 그 사이에 지워졌으면 다시 만들지 않는다.
+        write_atomically(&path, &edited, Missing::Error).map_err(|e| write_error(&path, e))?;
         Ok(project)
     }
 }

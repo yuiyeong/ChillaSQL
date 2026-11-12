@@ -161,6 +161,63 @@ fn create_makes_parent_directories_and_refuses_an_existing_file() {
 }
 
 #[test]
+fn create_returns_the_stamp_that_read_sees() {
+    let dir = project(&[]);
+    let stamp = FsSqlFileStore
+        .write(dir.path(), &p("a.sql"), "SELECT 1", &WriteMode::Create)
+        .unwrap();
+    assert_eq!(
+        FsSqlFileStore.read(dir.path(), &p("a.sql")).unwrap().stamp,
+        stamp
+    );
+}
+
+/// 임시 파일 이름이 파일 이름보다 길어도 NAME_MAX(255 byte)를 넘지 않는다.
+#[test]
+fn overwrite_writes_a_file_with_a_long_name() {
+    let name = format!("{}.sql", "a".repeat(246));
+    assert_eq!(name.len(), 250);
+    let dir = project(&[(&name, "v1")]);
+
+    FsSqlFileStore
+        .write(dir.path(), &p(&name), "v2", &WriteMode::Overwrite)
+        .unwrap();
+
+    assert_eq!(fs::read_to_string(dir.path().join(&name)).unwrap(), "v2");
+    let entries: Vec<_> = fs::read_dir(dir.path())
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(entries, [name]);
+}
+
+/// Review Focus 4
+#[test]
+fn overwrite_and_replace_refuse_a_symlink_target() {
+    let outside = project(&[("victim.sql", "untouched")]);
+    let dir = project(&[]);
+    symlink(outside.path().join("victim.sql"), dir.path().join("a.sql")).unwrap();
+    let stamp = FsSqlFileStore
+        .read(outside.path(), &p("victim.sql"))
+        .unwrap()
+        .stamp;
+
+    for mode in [WriteMode::Overwrite, WriteMode::Replace { expected: stamp }] {
+        assert_eq!(
+            FsSqlFileStore.write(dir.path(), &p("a.sql"), "x", &mode),
+            Err(FileError::OutsideProject {
+                path: "a.sql".into()
+            }),
+            "{mode:?}"
+        );
+    }
+    assert_eq!(
+        fs::read_to_string(outside.path().join("victim.sql")).unwrap(),
+        "untouched"
+    );
+}
+
+#[test]
 fn replace_writes_when_the_stamp_matches() {
     let dir = project(&[("a.sql", "v1")]);
     let stamp = FsSqlFileStore.read(dir.path(), &p("a.sql")).unwrap().stamp;
