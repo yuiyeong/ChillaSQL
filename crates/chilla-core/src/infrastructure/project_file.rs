@@ -153,11 +153,26 @@ fn parse(dir: &Path, text: &str) -> Result<Project, ProjectError> {
 /// 같은 디렉토리의 임시 파일에 쓰고 바꿔 넣는다. 도중에 멈춰도 `chilla.toml`이 반만 쓰이지 않는다.
 fn replace(path: &Path, text: &str) -> io::Result<()> {
     let temp = path.with_file_name(TEMP_FILE_NAME);
-    let result = fs::write(&temp, text).and_then(|()| fs::rename(&temp, path));
+    let result = write_temp_and_rename(path, &temp, text);
     if result.is_err() {
         let _ = fs::remove_file(&temp);
     }
     result
+}
+
+fn write_temp_and_rename(path: &Path, temp: &Path, text: &str) -> io::Result<()> {
+    // 남아 있던 임시 파일(clone한 저장소에 심어 둔 symlink일 수도 있다)을 따라가 쓰지 않도록
+    // 치우고 `create_new`로 새로 만든다.
+    match fs::remove_file(temp) {
+        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
+        _ => {}
+    }
+    let mut file = OpenOptions::new().write(true).create_new(true).open(temp)?;
+    file.write_all(text.as_bytes())?;
+    // 새 파일이 기존 파일의 권한(예: 0600)을 잃지 않게 한다.
+    file.set_permissions(fs::metadata(path)?.permissions())?;
+    drop(file);
+    fs::rename(temp, path)
 }
 
 /// `text`에서 `[connections.<name>]`만 `profile`로 고친 text. 다른 줄과 주석은 그대로 둔다.

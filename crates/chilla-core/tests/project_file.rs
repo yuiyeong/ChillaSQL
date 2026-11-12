@@ -562,3 +562,43 @@ fn save_connection_leaves_no_temporary_file() {
         .collect();
     assert_eq!(entries, ["chilla.toml"]);
 }
+
+#[test]
+fn save_connection_does_not_follow_a_planted_temporary_symlink() {
+    let outside = tempfile::tempdir().unwrap();
+    let target = outside.path().join("victim.txt");
+    fs::write(&target, "untouched\n").unwrap();
+    let (dir, _, _) = saved(SPEC_EXAMPLE, production());
+    std::os::unix::fs::symlink(&target, dir.path().join(".chilla.toml.tmp")).unwrap();
+
+    let result = TomlProjectStore.save_connection(dir.path(), &analytics());
+
+    assert_eq!(result.unwrap().connection("analytics"), Some(&analytics()));
+    assert_eq!(fs::read_to_string(&target).unwrap(), "untouched\n");
+    let path = dir.path().join("chilla.toml");
+    assert!(fs::symlink_metadata(&path).unwrap().file_type().is_file());
+    let loaded = TomlProjectStore.load(dir.path()).unwrap();
+    assert_eq!(loaded.connection("analytics"), Some(&analytics()));
+    let entries: Vec<_> = fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(entries, ["chilla.toml"]);
+}
+
+#[test]
+fn save_connection_keeps_the_file_mode() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("chilla.toml");
+    fs::write(&path, SPEC_EXAMPLE).unwrap();
+    fs::set_permissions(&path, fs::Permissions::from_mode(0o600)).unwrap();
+
+    TomlProjectStore
+        .save_connection(dir.path(), &analytics())
+        .unwrap();
+
+    let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+    assert_eq!(mode, 0o600, "{mode:o}");
+}
