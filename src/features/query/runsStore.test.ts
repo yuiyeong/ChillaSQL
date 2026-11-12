@@ -518,3 +518,76 @@ test("prepare가 늦게 끝난 앞 실행은 뒤 실행을 덮지 않는다", as
   );
   expect(runOf("t")).toBe(stateB);
 });
+
+test("실행 중에 거절된 실행은 진행 중인 쿼리를 건드리지 않는다", async () => {
+  await useRuns.getState().run("t", prepared("UPDATE big_table SET note = ''"));
+  const running = runOf("t");
+  const onEvent = onEventOf(0);
+
+  await useRuns.getState().run("t", () => "커서 위치에 문장이 없습니다");
+  await useRuns.getState().run("t", () => {
+    throw new Error("문서가 없습니다");
+  });
+
+  expect(runOf("t")).toBe(running);
+  onEvent({ type: "columns", columns: [{ name: "id" }] });
+  onEvent(rowsEvent);
+  const state = runOf("t");
+  expect(state.status === "running" && state.result.rows).toEqual([["1"]]);
+
+  await useRuns.getState().cancel("t");
+  expect(cancelQuery).toHaveBeenCalledWith(3, 7);
+
+  onEvent({ type: "finished", elapsedMicros: 5, outcome: "cancelled" });
+  expect(runOf("t").status).toBe("finished");
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+});
+
+test("prepare를 기다리는 동안에도 앞 쿼리의 event가 반영된다", async () => {
+  await useRuns.getState().run("t", prepared("SELECT A"));
+  const lateA = onEventOf(0);
+  const preparing = deferred<string | RunRequest>();
+  const runningB = useRuns.getState().run("t", () => preparing.promise);
+
+  lateA({ type: "columns", columns: [{ name: "id" }] });
+  lateA(rowsEvent);
+  const stateA = runOf("t");
+  expect(stateA.status === "running" && stateA.result.rows).toEqual([["1"]]);
+
+  preparing.resolve({ connection: "local", sql: "SELECT B", origin });
+  await runningB;
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    3,
+    "SELECT B",
+    expect.any(Function),
+  );
+  const stateB = runOf("t");
+  expect(stateB.status === "running" && stateB.result.sql).toBe("SELECT B");
+
+  // 새 실행이 시작된 뒤에는 앞 쿼리의 event를 버린다.
+  lateA({ type: "finished", elapsedMicros: 5, outcome: "discarded" });
+  expect(runOf("t")).toBe(stateB);
+});
+
+test("쉬는 탭에서 거절되면 rejected다", async () => {
+  await useRuns.getState().run("t", prepared());
+  onEventOf(0)({
+    type: "finished",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 0,
+  });
+  expect(runOf("t").status).toBe("finished");
+
+  await useRuns.getState().run("t", () => "커서 위치에 문장이 없습니다");
+  expect(runOf("t")).toEqual({
+    status: "rejected",
+    message: "커서 위치에 문장이 없습니다",
+  });
+
+  await useRuns.getState().run("t", () => "실행할 문장이 없습니다");
+  expect(runOf("t")).toEqual({
+    status: "rejected",
+    message: "실행할 문장이 없습니다",
+  });
+});

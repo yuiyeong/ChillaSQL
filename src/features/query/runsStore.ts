@@ -21,7 +21,10 @@ export type Prepare = () => Promise<RunRequest | string> | RunRequest | string;
 export interface RunsState {
   /** tab id → 상태. 없으면 idle로 본다. */
   runs: Record<string, RunState>;
-  /** `prepare`가 끝나기 전에 같은 탭의 다음 동작이 오면 실행하지 않는다. */
+  /**
+   * `prepare`가 끝나기 전에 같은 탭의 다음 동작이 오면 실행하지 않는다. `prepare`가 문구를
+   * 돌려주면 rejected로 두는데, 그 탭이 연결 중이거나 실행 중이면 아무것도 바꾸지 않는다.
+   */
   run(tabId: string, prepare: Prepare): Promise<void>;
   cancel(tabId: string): Promise<void>;
   /** 탭을 닫거나 접속을 바꿀 때. 상태는 바로 지우고 세션을 닫는다. */
@@ -54,17 +57,20 @@ async function closeSlot(slot: SessionSlot): Promise<void> {
 
 export const useRuns = create<RunsState>()((set, get) => {
   // 아래 값은 화면이 그리지 않으므로 store 밖에 둔다.
-  // token은 탭마다 마지막 동작을 가리킨다. 번호를 다시 쓰지 않으므로 지우는 것도 token을 올리는 것이다.
+  // 번호는 탭마다 둘이다. attempt는 마지막으로 누른 실행을, token은 마지막으로 시작한 실행을
+  // 가리킨다. event는 token이 같을 때만 반영하므로, 시작하지 못한 실행은 진행 중인 쿼리를
+  // 화면에서 떼어 내지 않는다. 번호를 다시 쓰지 않으므로 지우는 것도 무효로 하는 것이다.
   // 세션과 실행은 그 탭의 token이 있을 때만 생긴다.
-  let lastToken = 0;
+  let lastNumber = 0;
+  const attempts = new Map<string, number>();
   const tokens = new Map<string, number>();
   const sessions = new Map<string, SessionSlot>();
   const executions = new Map<string, Execution>();
 
-  function bump(tabId: string): number {
-    lastToken += 1;
-    tokens.set(tabId, lastToken);
-    return lastToken;
+  function bump(numbers: Map<string, number>, tabId: string): number {
+    lastNumber += 1;
+    numbers.set(tabId, lastNumber);
+    return lastNumber;
   }
 
   function setRun(tabId: string, state: RunState): void {
@@ -97,9 +103,10 @@ export const useRuns = create<RunsState>()((set, get) => {
     return slot;
   }
 
-  /** 그 탭의 token, 세션, 실행을 잊는다. 잊은 세션을 돌려준다. */
+  /** 그 탭의 attempt, token, 세션, 실행을 잊는다. 잊은 세션을 돌려준다. */
   function drop(tabId: string): SessionSlot | undefined {
     const slot = sessions.get(tabId);
+    attempts.delete(tabId);
     tokens.delete(tabId);
     sessions.delete(tabId);
     executions.delete(tabId);
@@ -110,8 +117,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     runs: {},
 
     async run(tabId, prepare) {
-      const token = bump(tabId);
-      const current = () => tokens.get(tabId) === token;
+      const attempt = bump(attempts, tabId);
 
       let request: RunRequest | string;
       try {
@@ -121,12 +127,20 @@ export const useRuns = create<RunsState>()((set, get) => {
       } catch (error) {
         request = messageOf(error);
       }
-      if (!current()) return;
+      // 그 사이 같은 탭에서 다시 실행했거나 release했다.
+      if (attempts.get(tabId) !== attempt) return;
       if (typeof request === "string") {
+        // 진행 중인 쿼리의 표시와 취소는 그대로 둔다.
+        const status = get().runs[tabId]?.status;
+        if (status === "connecting" || status === "running") return;
+        bump(tokens, tabId);
         setRun(tabId, { status: "rejected", message: request });
         return;
       }
       const { connection, sql, origin } = request;
+
+      const token = bump(tokens, tabId);
+      const current = () => tokens.get(tabId) === token;
 
       const slot = slotFor(tabId, connection);
       if (slot.id === null) setRun(tabId, { status: "connecting" });
@@ -198,7 +212,8 @@ export const useRuns = create<RunsState>()((set, get) => {
     },
 
     async reset() {
-      const slots = [...tokens.keys()]
+      // token과 세션은 attempt가 있는 탭에만 있다.
+      const slots = [...attempts.keys()]
         .map(drop)
         .filter((slot) => slot !== undefined);
       set({ runs: {} });
