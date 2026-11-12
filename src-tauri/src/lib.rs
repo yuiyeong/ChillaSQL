@@ -4,7 +4,7 @@ mod error;
 use std::sync::Arc;
 
 use chilla_core::infrastructure::{
-    KeychainPasswordStore, PgConnector, PgQuerySplitter, TomlProjectStore,
+    FsSqlFileStore, KeychainPasswordStore, PgConnector, PgQuerySplitter, TomlProjectStore,
 };
 
 use commands::CoreApp;
@@ -16,6 +16,7 @@ pub fn run() {
         Arc::new(TomlProjectStore),
         Arc::new(passwords),
         Arc::new(PgQuerySplitter),
+        Arc::new(FsSqlFileStore),
         PgConnector::new(),
     );
 

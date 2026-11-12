@@ -11,7 +11,8 @@ use chilla_core::application::{
 };
 use chilla_core::domain::{ConnectionProfile, Password, QueryEvent, QueryOutcome, SslMode};
 use chilla_core::infrastructure::{
-    MemoryPasswordStore, PgConnection, PgConnector, PgQuerySplitter, TomlProjectStore,
+    FsSqlFileStore, MemoryPasswordStore, PgConnection, PgConnector, PgQuerySplitter,
+    TomlProjectStore,
 };
 use tempfile::TempDir;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
@@ -183,6 +184,7 @@ pub async fn app_with_project() -> (App<PgConnector>, TempDir) {
         Arc::new(TomlProjectStore),
         Arc::new(MemoryPasswordStore::default()),
         Arc::new(PgQuerySplitter),
+        Arc::new(FsSqlFileStore),
         PgConnector::new(),
     );
     app.open_project(dir.path()).await.unwrap();

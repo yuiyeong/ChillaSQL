@@ -14,10 +14,13 @@ use tokio::time::timeout;
 pub(crate) use connection::{FakeConnection, FakeLink, server_error};
 
 use super::{
-    ConnectError, Connector, PasswordKey, PasswordStore, PasswordStoreError, ProjectError,
-    ProjectStore, QuerySink, SplitError, StatementSplitter,
+    ConnectError, Connector, FileError, PasswordKey, PasswordStore, PasswordStoreError,
+    ProjectError, ProjectStore, QuerySink, SplitError, SqlFileStore, StatementSplitter,
 };
-use crate::domain::{ConnectionProfile, Password, Project, QueryEvent, Row, StatementSpan};
+use crate::domain::{
+    ConnectionProfile, FileStamp, Password, Project, QueryEvent, Row, SqlFile, SqlPath,
+    StatementSpan, WriteMode,
+};
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
     ConnectionProfile::fixture(name)
@@ -121,6 +124,47 @@ impl PasswordStore for FakePasswords {
     fn delete(&self, key: &PasswordKey) -> Result<(), PasswordStoreError> {
         self.0.lock().unwrap().remove(key);
         Ok(())
+    }
+}
+
+/// 항상 성공하고(빈 목록, 빈 파일, stamp `s`), `read`와 `write`가 받은 요청을 기록한다.
+#[derive(Default)]
+pub(crate) struct FakeFiles(Mutex<Vec<(PathBuf, String)>>);
+
+impl FakeFiles {
+    /// `read`와 `write`가 받은 (프로젝트 디렉토리, 경로). 받은 순서다.
+    pub(crate) fn calls(&self) -> Vec<(PathBuf, String)> {
+        self.0.lock().unwrap().clone()
+    }
+
+    fn record(&self, project_dir: &Path, path: &SqlPath) {
+        let call = (project_dir.to_path_buf(), path.as_str().to_string());
+        self.0.lock().unwrap().push(call);
+    }
+}
+
+impl SqlFileStore for FakeFiles {
+    fn list(&self, _project_dir: &Path) -> Result<Vec<SqlPath>, FileError> {
+        Ok(Vec::new())
+    }
+
+    fn read(&self, project_dir: &Path, path: &SqlPath) -> Result<SqlFile, FileError> {
+        self.record(project_dir, path);
+        Ok(SqlFile {
+            text: String::new(),
+            stamp: FileStamp("s".into()),
+        })
+    }
+
+    fn write(
+        &self,
+        project_dir: &Path,
+        path: &SqlPath,
+        _text: &str,
+        _mode: &WriteMode,
+    ) -> Result<FileStamp, FileError> {
+        self.record(project_dir, path);
+        Ok(FileStamp("s".into()))
     }
 }
 

@@ -583,7 +583,7 @@ impl<C: Connector> App<C> {
 - `FakeFiles`(test_support): `calls(&self) -> Vec<(PathBuf, String)>`로 받은 (프로젝트 디렉토리, 경로)를 돌려준다. `list`는 빈 Vec, `read`는 `SqlFile { text: "", stamp: FileStamp("s".into()) }`, `write`는 `FileStamp("s".into())`를 돌려준다.
 - `src-tauri/src/lib.rs`는 `Arc::new(FsSqlFileStore)`를 넘긴다. `tests/support/mod.rs`의 `app_with_project`도 같다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `app.rs`의 test module에 더한다. `fixture()`는 `FakeFiles`를 갖는다(`f.files`).
 
@@ -626,21 +626,21 @@ impl<C: Connector> App<C> {
 
 `error.rs`의 `command_error_kinds`에 위 kind 표의 9행을 더한다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --lib application::app`
 Expected: FAIL. `App::new`의 인자 수가 달라 compile error가 난다.
 
-- [ ] **Step 3: use case, `AppError`, kind mapping, `FakeFiles` 구현**
+- [x] **Step 3: use case, `AppError`, kind mapping, `FakeFiles` 구현**
 
 위 규칙대로 구현한다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

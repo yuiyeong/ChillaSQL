@@ -1,4 +1,4 @@
-use chilla_core::application::{AppError, ConnectError, ProjectError};
+use chilla_core::application::{AppError, ConnectError, FileError, ProjectError};
 use serde::Serialize;
 
 /// 화면으로 가는 오류. `kind`로 화면이 다음 행동을 고르고 `message`를 그대로 보여 준다.
@@ -17,6 +17,8 @@ impl From<AppError> for CommandError {
             AppError::UnknownSession { .. } => "unknown_session",
             AppError::Project(ProjectError::NotFound { .. }) => "project_not_found",
             AppError::Project(ProjectError::PasswordInConfig { .. }) => "password_in_config",
+            AppError::Project(ProjectError::AlreadyExists { .. }) => "project_exists",
+            AppError::Project(ProjectError::Write { .. }) => "project_write_failed",
             AppError::Project(_) => "project_invalid",
             AppError::InvalidProfile(_) => "invalid_connection",
             AppError::PasswordStore(_) => "password_store",
@@ -25,6 +27,18 @@ impl From<AppError> for CommandError {
             AppError::MultipleStatements { .. } => "multiple_statements",
             AppError::QueryNotActive { .. } => "query_not_active",
             AppError::Cancel(_) => "cancel_failed",
+            AppError::InvalidPath(_) | AppError::File(FileError::OutsideProject { .. }) => {
+                "invalid_path"
+            }
+            AppError::File(file) => match file {
+                FileError::NotFound { .. } => "file_not_found",
+                FileError::Exists { .. } => "file_exists",
+                FileError::Changed { .. } => "file_changed",
+                FileError::TooLarge { .. } => "file_too_large",
+                FileError::NotUtf8 { .. } => "file_not_utf8",
+                FileError::Io { .. } => "file_io",
+                FileError::OutsideProject { .. } => "invalid_path",
+            },
             AppError::Connect(connect) => match connect {
                 ConnectError::Unreachable { .. } => "unreachable",
                 ConnectError::Timeout => "timeout",
@@ -49,9 +63,9 @@ mod tests {
     use std::path::PathBuf;
 
     use chilla_core::application::{
-        CancelError, ConnectError, PasswordStoreError, ProjectError, SplitError,
+        CancelError, ConnectError, FileError, PasswordStoreError, ProjectError, SplitError,
     };
-    use chilla_core::domain::{ProfileError, QueryId, SessionId};
+    use chilla_core::domain::{ProfileError, QueryId, SessionId, SqlPathError};
 
     use super::*;
 
@@ -105,7 +119,18 @@ mod tests {
             }),
             "password_in_config"
         );
+        assert_eq!(
+            kind(ProjectError::AlreadyExists { path: path.clone() }),
+            "project_exists"
+        );
         let message = String::from("m");
+        assert_eq!(
+            kind(ProjectError::Write {
+                path: path.clone(),
+                message: message.clone()
+            }),
+            "project_write_failed"
+        );
         let invalid_projects = [
             ProjectError::Read {
                 path,
@@ -122,6 +147,58 @@ mod tests {
         for error in invalid_projects {
             assert_eq!(kind(error), "project_invalid");
         }
+
+        let file = |name: &str| name.to_string();
+        let file_errors = [
+            (
+                FileError::NotFound {
+                    path: file("a.sql"),
+                },
+                "file_not_found",
+            ),
+            (
+                FileError::Exists {
+                    path: file("a.sql"),
+                },
+                "file_exists",
+            ),
+            (
+                FileError::Changed {
+                    path: file("a.sql"),
+                },
+                "file_changed",
+            ),
+            (
+                FileError::TooLarge {
+                    path: file("a.sql"),
+                    bytes: 1,
+                },
+                "file_too_large",
+            ),
+            (
+                FileError::NotUtf8 {
+                    path: file("a.sql"),
+                },
+                "file_not_utf8",
+            ),
+            (
+                FileError::OutsideProject {
+                    path: file("a.sql"),
+                },
+                "invalid_path",
+            ),
+            (
+                FileError::Io {
+                    path: file("a.sql"),
+                    message: message.clone(),
+                },
+                "file_io",
+            ),
+        ];
+        for (error, expected) in file_errors {
+            assert_eq!(kind(error), expected);
+        }
+        assert_eq!(kind(SqlPathError::Empty), "invalid_path");
 
         assert_eq!(kind(ProfileError::ZeroPort), "invalid_connection");
         assert_eq!(

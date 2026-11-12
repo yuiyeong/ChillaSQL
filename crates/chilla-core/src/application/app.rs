@@ -1,7 +1,7 @@
 //! 프로젝트 하나와 그 세션들을 다루는 use case. Tauri command가 이것만 부른다.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use tokio::sync::Mutex;
@@ -9,12 +9,12 @@ use tokio::task::JoinSet;
 
 use super::session_actor::{self, QuerySink, SessionHandle};
 use super::{
-    CancelError, ConnectError, Connector, DbConnection, PasswordKey, PasswordStore,
-    PasswordStoreError, ProjectError, ProjectStore, SplitError, StatementSplitter,
+    CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey, PasswordStore,
+    PasswordStoreError, ProjectError, ProjectStore, SplitError, SqlFileStore, StatementSplitter,
 };
 use crate::domain::{
-    ConnectionProfile, Password, ProfileError, Project, QueryId, QueryLimits, SessionId,
-    SessionInfo, SessionState, StatementSpan,
+    ConnectionProfile, FileStamp, Password, ProfileError, Project, QueryId, QueryLimits, SessionId,
+    SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError, StatementSpan, WriteMode,
 };
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -45,12 +45,17 @@ pub enum AppError {
     QueryNotActive { query: QueryId },
     #[error(transparent)]
     Cancel(#[from] CancelError),
+    #[error(transparent)]
+    File(#[from] FileError),
+    #[error("파일 경로가 잘못됐습니다: {0}")]
+    InvalidPath(#[from] SqlPathError),
 }
 
 pub struct App<C: Connector> {
     projects: Arc<dyn ProjectStore>,
     passwords: Arc<dyn PasswordStore>,
     splitter: Arc<dyn StatementSplitter>,
+    files: Arc<dyn SqlFileStore>,
     connector: C,
     state: Mutex<State>,
 }
@@ -60,7 +65,7 @@ struct State {
     project: Option<Project>,
     sessions: HashMap<SessionId, SessionHandle>,
     last_session_id: u64,
-    /// `open_project`가 성공할 때마다 오른다. 같은 디렉토리를 다시 연 것도 구분한다.
+    /// 프로젝트를 새로 열 때마다(`open_project`, `create_project`) 오른다. 같은 디렉토리를 다시 연 것도 구분한다.
     project_generation: u64,
 }
 
@@ -69,12 +74,14 @@ impl<C: Connector> App<C> {
         projects: Arc<dyn ProjectStore>,
         passwords: Arc<dyn PasswordStore>,
         splitter: Arc<dyn StatementSplitter>,
+        files: Arc<dyn SqlFileStore>,
         connector: C,
     ) -> Self {
         Self {
             projects,
             passwords,
             splitter,
+            files,
             connector,
             state: Mutex::new(State::default()),
         }
@@ -86,15 +93,113 @@ impl<C: Connector> App<C> {
         let projects = self.projects.clone();
         let dir = dir.to_path_buf();
         let project = blocking(move || projects.load(&dir)).await?;
+        self.switch_project(project.clone()).await;
+        Ok(project)
+    }
 
+    /// `chilla.toml`을 만들고 그 프로젝트를 연다. 여는 것은 `open_project`와 같다. 만들지
+    /// 못하면 지금 프로젝트와 세션은 그대로다.
+    pub async fn create_project(&self, dir: &Path) -> Result<Project, AppError> {
+        let projects = self.projects.clone();
+        let dir = dir.to_path_buf();
+        let project = blocking(move || projects.create(&dir)).await?;
+        self.switch_project(project.clone()).await;
+        Ok(project)
+    }
+
+    /// 열려 있던 프로젝트의 세션을 모두 닫고 `project`로 바꾼다.
+    async fn switch_project(&self, project: Project) {
         let previous = {
             let mut state = self.state.lock().await;
-            state.project = Some(project.clone());
+            state.project = Some(project);
             state.project_generation += 1;
             std::mem::take(&mut state.sessions)
         };
         close_all(previous).await;
+    }
+
+    /// 접속을 `chilla.toml`에 쓰고 열려 있는 프로젝트에 반영한다. 세션은 그대로 둔다(열려
+    /// 있는 세션은 저장 전의 접속 정보로 붙어 있다).
+    ///
+    /// `password`가 있으면 키체인에 저장한다. 없을 때는 같은 이름의 접속이 있었고 연결 대상이
+    /// 바뀐 경우에만 저장된 비밀번호를 지운다. 새 대상으로 옛 비밀번호가 나가지 않게
+    /// 하려는 것이다(`test_connection`과 같은 규칙). 그 밖에는 키체인을 건드리지 않는다.
+    pub async fn save_connection(
+        &self,
+        profile: ConnectionProfile,
+        password: Option<Password>,
+    ) -> Result<Project, AppError> {
+        let (dir, profile, previous, generation) = {
+            let state = self.state.lock().await;
+            let project = state.project.as_ref().ok_or(AppError::NoProject)?;
+            let profile = profile.resolved_under(&project.dir);
+            profile.validate()?;
+            (
+                project.dir.clone(),
+                profile.clone(),
+                project.connection(&profile.name).cloned(),
+                state.project_generation,
+            )
+        };
+
+        let projects = self.projects.clone();
+        let (save_dir, saved) = (dir.clone(), profile.clone());
+        let project = blocking(move || projects.save_connection(&save_dir, &saved)).await?;
+
+        {
+            let mut state = self.state.lock().await;
+            if state.project_generation != generation {
+                return Err(AppError::ProjectChanged);
+            }
+            state.project = Some(project.clone());
+        }
+
+        let key = PasswordKey {
+            project_dir: dir,
+            connection: profile.name.clone(),
+        };
+        let passwords = self.passwords.clone();
+        match password {
+            Some(password) => blocking(move || passwords.set(&key, &password)).await?,
+            None if previous.is_some_and(|previous| !previous.same_target(&profile)) => {
+                blocking(move || passwords.delete(&key)).await?;
+            }
+            None => {}
+        }
         Ok(project)
+    }
+
+    /// 프로젝트 디렉토리 아래의 `.sql` 파일. 경로 오름차순이다.
+    pub async fn list_sql_files(&self) -> Result<Vec<SqlPath>, AppError> {
+        let dir = self.project_dir().await?;
+        let files = self.files.clone();
+        Ok(blocking(move || files.list(&dir)).await?)
+    }
+
+    /// `path`는 프로젝트 디렉토리 기준의 상대 경로다.
+    pub async fn read_sql_file(&self, path: &str) -> Result<SqlFile, AppError> {
+        let dir = self.project_dir().await?;
+        let path = SqlPath::parse(path)?;
+        let files = self.files.clone();
+        Ok(blocking(move || files.read(&dir, &path)).await?)
+    }
+
+    pub async fn write_sql_file(
+        &self,
+        path: &str,
+        text: String,
+        mode: WriteMode,
+    ) -> Result<FileStamp, AppError> {
+        let dir = self.project_dir().await?;
+        let path = SqlPath::parse(path)?;
+        let files = self.files.clone();
+        Ok(blocking(move || files.write(&dir, &path, &text, &mode)).await?)
+    }
+
+    async fn project_dir(&self) -> Result<PathBuf, AppError> {
+        let state = self.state.lock().await;
+        let project = state.project.as_ref().ok_or(AppError::NoProject)?;
+        Ok(project.dir.clone())
     }
 
     pub async fn set_password(&self, connection: &str, password: Password) -> Result<(), AppError> {
@@ -323,17 +428,20 @@ mod tests {
 
     use super::*;
     use crate::application::test_support::{
-        FakeConnector, FakePasswords, FakeProjects, FakeSplitter, next, profile, sink,
+        FakeConnector, FakeFiles, FakePasswords, FakeProjects, FakeSplitter, next, profile, sink,
     };
     use crate::application::{CancelError, PasswordKey, PasswordStore, ProjectError, SplitError};
     use crate::domain::{
-        ProfileError, QueryEvent, QueryOutcome, SessionState, SslMode, StatementSpan, TxStatus,
+        FileStamp, ProfileError, QueryEvent, QueryOutcome, SessionState, SslMode, StatementSpan,
+        TxStatus, WriteMode,
     };
 
     struct Fixture {
         app: App<FakeConnector>,
         connector: FakeConnector,
+        projects: Arc<FakeProjects>,
         passwords: Arc<FakePasswords>,
+        files: Arc<FakeFiles>,
     }
 
     /// `/p`(접속 local, staging)와 `/q`(접속 local)가 프로젝트다.
@@ -342,16 +450,20 @@ mod tests {
         projects.add("/p", &["local", "staging"]);
         projects.add("/q", &["local"]);
         let passwords = Arc::new(FakePasswords::default());
+        let files = Arc::new(FakeFiles::default());
         let connector = FakeConnector::default();
         Fixture {
             app: App::new(
-                projects,
+                projects.clone(),
                 passwords.clone(),
                 Arc::new(FakeSplitter),
+                files.clone(),
                 connector.clone(),
             ),
             connector,
+            projects,
             passwords,
+            files,
         }
     }
 
@@ -809,5 +921,188 @@ mod tests {
             f.app.split_statements("a 'b"),
             Err(AppError::Split(SplitError { .. }))
         ));
+    }
+
+    #[tokio::test]
+    async fn create_project_opens_it_and_closes_sessions() {
+        let f = opened().await;
+        session_of(&f).await;
+
+        let created = f.app.create_project(Path::new("/new")).await.unwrap();
+
+        assert_eq!(created.name, "new");
+        assert!(f.connector.links()[0].closed());
+        // /new에는 접속이 없다.
+        assert_eq!(
+            f.app.open_session("local").await,
+            Err(AppError::UnknownConnection {
+                name: "local".into()
+            })
+        );
+        // 이미 chilla.toml이 있는 디렉토리는 만들지 못하고, 지금 프로젝트는 그대로다.
+        assert_eq!(
+            f.app.create_project(Path::new("/p")).await,
+            Err(AppError::Project(ProjectError::AlreadyExists {
+                path: "/p/chilla.toml".into()
+            }))
+        );
+        let state = f.app.state.lock().await;
+        assert_eq!(state.project.as_ref().unwrap().name, "new");
+    }
+
+    #[tokio::test]
+    async fn save_connection_updates_the_project_and_keeps_sessions() {
+        let f = opened().await;
+        let session = session_of(&f).await;
+        let mut moved = profile("local");
+        moved.host = "db.internal".into();
+
+        let project = f.app.save_connection(moved, None).await.unwrap();
+
+        assert_eq!(project.connection("local").unwrap().host, "db.internal");
+        assert_eq!(f.app.session_state(session).await, Ok(OPEN));
+        f.app.open_session("local").await.unwrap();
+        assert_eq!(f.connector.profiles()[1].host, "db.internal");
+
+        f.app
+            .save_connection(profile("analytics"), None)
+            .await
+            .unwrap();
+        assert!(f.app.open_session("analytics").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn save_connection_stores_the_typed_password() {
+        let f = opened().await;
+
+        f.app
+            .save_connection(profile("local"), Some(pw("typed")))
+            .await
+            .unwrap();
+
+        f.app.open_session("local").await.unwrap();
+        assert_eq!(
+            f.connector.requests(),
+            [("local".to_string(), Some("typed".to_string()))]
+        );
+    }
+
+    /// 저장된 비밀번호가 바뀐 대상으로 가면 안 된다.
+    #[tokio::test]
+    async fn save_connection_forgets_the_password_when_the_target_changes() {
+        let changes: [fn(&mut ConnectionProfile); 6] = [
+            |p| p.host = "evil.example".into(),
+            |p| p.port = 6543,
+            |p| p.database = "other".into(),
+            |p| p.user = "other".into(),
+            |p| p.sslmode = SslMode::Require,
+            |p| p.tunnel = Some("ssh -L 5432:evil.example:5432 jump".into()),
+        ];
+        for change in changes {
+            let f = opened().await;
+            f.app.set_password("local", pw("stored")).await.unwrap();
+            let mut moved = profile("local");
+            change(&mut moved);
+
+            f.app.save_connection(moved, None).await.unwrap();
+
+            assert_eq!(f.app.has_password("local").await, Ok(false));
+        }
+
+        let f = opened().await;
+        f.app.set_password("local", pw("stored")).await.unwrap();
+        let mut recolored = profile("local");
+        recolored.color = Some("red".into());
+        f.app.save_connection(recolored, None).await.unwrap();
+        assert_eq!(f.app.has_password("local").await, Ok(true));
+
+        let mut moved = profile("local");
+        moved.host = "db.internal".into();
+        f.app.save_connection(moved, Some(pw("new"))).await.unwrap();
+        let key = PasswordKey {
+            project_dir: "/p".into(),
+            connection: "local".into(),
+        };
+        assert_eq!(f.passwords.get(&key).unwrap().unwrap().expose(), "new");
+    }
+
+    #[tokio::test]
+    async fn save_connection_of_a_new_connection_touches_no_password() {
+        let f = opened().await;
+
+        f.app
+            .save_connection(profile("analytics"), None)
+            .await
+            .unwrap();
+
+        assert!(f.passwords.is_empty());
+    }
+
+    #[tokio::test]
+    async fn save_connection_rejects_an_invalid_profile_without_writing() {
+        let f = fixture();
+        assert_eq!(
+            f.app.save_connection(profile("local"), None).await,
+            Err(AppError::NoProject)
+        );
+
+        f.app.open_project(Path::new("/p")).await.unwrap();
+        let mut invalid = profile("local");
+        invalid.port = 0;
+        assert_eq!(
+            f.app.save_connection(invalid, Some(pw("x"))).await,
+            Err(AppError::InvalidProfile(ProfileError::ZeroPort))
+        );
+        assert!(f.projects.saved().is_empty());
+        assert!(f.passwords.is_empty());
+    }
+
+    #[tokio::test]
+    async fn file_use_cases_need_a_project_and_a_valid_path() {
+        let f = fixture();
+        assert_eq!(f.app.list_sql_files().await, Err(AppError::NoProject));
+        assert_eq!(f.app.read_sql_file("a.sql").await, Err(AppError::NoProject));
+        assert_eq!(
+            f.app
+                .write_sql_file("a.sql", "x".into(), WriteMode::Create)
+                .await,
+            Err(AppError::NoProject)
+        );
+
+        f.app.open_project(Path::new("/p")).await.unwrap();
+        assert!(matches!(
+            f.app.read_sql_file("../a.sql").await,
+            Err(AppError::InvalidPath(_))
+        ));
+        assert!(matches!(
+            f.app
+                .write_sql_file("/etc/a.sql", "x".into(), WriteMode::Overwrite)
+                .await,
+            Err(AppError::InvalidPath(_))
+        ));
+        assert!(f.files.calls().is_empty());
+    }
+
+    #[tokio::test]
+    async fn file_use_cases_pass_the_project_dir() {
+        let f = opened().await;
+
+        let file = f.app.read_sql_file("queries/a.sql").await.unwrap();
+        let stamp = f
+            .app
+            .write_sql_file("b.sql", "SELECT 1".into(), WriteMode::Create)
+            .await
+            .unwrap();
+
+        assert_eq!(file.stamp, FileStamp("s".into()));
+        assert_eq!(stamp, FileStamp("s".into()));
+        assert_eq!(f.app.list_sql_files().await, Ok(vec![]));
+        assert_eq!(
+            f.files.calls(),
+            [
+                ("/p".into(), "queries/a.sql".to_string()),
+                ("/p".into(), "b.sql".to_string())
+            ]
+        );
     }
 }
