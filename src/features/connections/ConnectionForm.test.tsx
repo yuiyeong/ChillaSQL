@@ -12,7 +12,7 @@ import {
 } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
 import type { Connection, Project } from "../../shared/api/types";
-import { ConnectionForm } from "./ConnectionForm.tsx";
+import { ConnectionForm } from "./ConnectionForm";
 
 const saved: Project = { name: "demo", dir: "/p", connections: [] };
 

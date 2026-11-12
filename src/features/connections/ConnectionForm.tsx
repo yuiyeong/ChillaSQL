@@ -10,7 +10,7 @@ import {
   targetChanged,
   toConnection,
   type FormValues,
-} from "./connectionForm.ts";
+} from "./connectionValues";
 
 const buttonClass =
   "rounded bg-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-600 focus-visible:outline-2 focus-visible:outline-zinc-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-zinc-700";

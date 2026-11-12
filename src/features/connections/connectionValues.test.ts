@@ -5,7 +5,7 @@ import {
   targetChanged,
   toConnection,
   type FormValues,
-} from "./connectionForm.ts";
+} from "./connectionValues";
 
 const values: FormValues = {
   name: "local",

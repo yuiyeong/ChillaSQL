@@ -53,7 +53,7 @@
 - layer 규칙: 파일 I/O와 `toml_edit`는 `infrastructure`에서만 쓴다. `toml_edit`를 `layer_deps`의 두 목록과 [구조](../architecture.md)의 표에 넣는다.
 - `@tauri-apps/*`는 `src/shared/api/`에서만 import한다(ESLint가 강제). 기능 code는 `src/shared/api/commands`와 `src/shared/api/dialog`의 함수만 부르고, test는 이 두 module을 `vi.mock`으로 바꾼다. `types.ts`와 `errors.ts`는 mock하지 않는다.
 - 문서 text는 CodeMirror의 `EditorState`에만 둔다. Zustand store, React state, `localStorage`에 넣지 않는다(6장: 1만 줄 파일에서 입력 지연 없음).
-- 비밀번호는 form component의 local state에만 두고 저장이나 테스트가 끝나면 비운다. store와 `localStorage`에 넣지 않는다.
+- 비밀번호는 form component의 local state에만 두고 저장이 끝나면 비운다(테스트 뒤에는 둔다. form을 닫으면 사라진다). store와 `localStorage`에 넣지 않는다.
 - DB에서 온 값과 server의 message는 React의 text node로만 그린다. `dangerouslySetInnerHTML`과 `innerHTML`을 쓰지 않는다.
 - 단축키는 `KeyboardEvent.code`로 판별한다.
 - dark 테마 고정. 색은 Tailwind의 `zinc` 계열과 `@codemirror/theme-one-dark`를 쓴다.
@@ -105,7 +105,7 @@ src/
 │   └── dialog.ts                     pickDirectory, confirm
 └── features/
     ├── project/                      projectStore.ts, ProjectGate.tsx, Sidebar.tsx
-    ├── connections/                  connectionForm.ts, ConnectionForm.tsx
+    ├── connections/                  connectionValues.ts, ConnectionForm.tsx
     ├── editor/                       extensions.ts, documents.ts, statementAt.ts, SqlEditor.tsx,
     │                                 tabsStore.ts, saveTab.ts, TabBar.tsx
     ├── query/                        runReducer.ts, runsStore.ts, format.ts, ResultPane.tsx
@@ -949,15 +949,15 @@ git commit -m "feat: 프로젝트 열기와 sidebar"
 ### Task 8: 접속 추가와 수정
 
 **Files:**
-- Create: `src/features/connections/connectionForm.ts`, `src/features/connections/ConnectionForm.tsx`
-- Test: `connectionForm.test.ts`, `ConnectionForm.test.tsx`
+- Create: `src/features/connections/connectionValues.ts`, `src/features/connections/ConnectionForm.tsx`
+- Test: `connectionValues.test.ts`, `ConnectionForm.test.tsx`
 
 **Interfaces:**
 - Consumes: Task 6의 `saveConnection`, `testConnection`, `hasPassword`
 - Produces:
 
 ```ts
-// connectionForm.ts
+// connectionValues.ts
 export interface FormValues {
   name: string; host: string; port: string; database: string; user: string;
   sslmode: SslMode; sslrootcert: string;
@@ -990,7 +990,7 @@ export function ConnectionForm(props: {
 - [x] **Step 1: 실패하는 test 작성**
 
 ```ts
-// connectionForm.test.ts
+// connectionValues.test.ts
 test("값의 앞뒤 공백을 빼고 port를 숫자로 바꾼다");       // " localhost " → "localhost", "5432" → 5432
 test("빈 필수 항목과 잘못된 port는 error다");            // port "", "abc", "0", "65536", "54.3"
 test("sslrootcert는 verify-full일 때만 보낸다");          // require에 값이 있어도 null
@@ -1010,9 +1010,9 @@ test("도는 동안 테스트와 저장 버튼은 disabled다");
 - [x] **Step 2: 실패 확인**
 
 Run: `pnpm vitest run src/features/connections`
-Expected: FAIL. `./connectionForm`이 없다.
+Expected: FAIL. `./connectionValues`가 없다.
 
-- [x] **Step 3: `connectionForm.ts`, `ConnectionForm.tsx` 구현**
+- [x] **Step 3: `connectionValues.ts`, `ConnectionForm.tsx` 구현**
 
 - [x] **Step 4: 통과 확인**
 
