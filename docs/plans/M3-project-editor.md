@@ -1070,7 +1070,7 @@ export function SqlEditor(props: { tabId: string; onDocChange(tabId: string): vo
   4. 없으면 `null`.
 - `SqlEditor`: mount 때 `new EditorView({ state: documentState(tabId), parent, dispatchTransactions })`. transaction을 적용한 뒤 `setDocumentState(tabId, view.state)`를 부르고, `docChanged`인 transaction이 있으면 `onDocChange(tabId)`를 부른다. `tabId`가 바뀌면 `view.setState(documentState(tabId))` 뒤 `view.focus()`. unmount 때 `view.destroy()`.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 ```ts
 // extensions.test.ts — PostgreSQL.language.parser.parse(sql)의 node 이름을 본다. DOM은 쓰지 않는다
@@ -1115,19 +1115,19 @@ test("tab을 바꿨다 돌아와도 내용과 undo 기록이 남는다");
   // a를 고치고 → tabId "b"로 rerender → 다시 "a" → text가 고친 값. undo(view) 뒤 원래 text
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `pnpm vitest run src/features/editor`
 Expected: FAIL. `./statementAt`이 없다.
 
-- [ ] **Step 3: `extensions.ts`, `documents.ts`, `statementAt.ts`, `SqlEditor.tsx` 구현**
+- [x] **Step 3: `extensions.ts`, `documents.ts`, `statementAt.ts`, `SqlEditor.tsx` 구현**
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
