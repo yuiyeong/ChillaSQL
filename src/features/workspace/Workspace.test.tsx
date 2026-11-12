@@ -89,10 +89,10 @@ function connectionForm() {
   return form;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await useRuns.getState().reset();
   vi.resetAllMocks();
   useTabs.getState().reset();
-  useRuns.getState().reset();
   vi.mocked(listSqlFiles).mockResolvedValue([]);
   vi.mocked(hasPassword).mockResolvedValue(false);
 });

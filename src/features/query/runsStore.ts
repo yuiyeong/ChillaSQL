@@ -21,15 +21,17 @@ export interface RunsState {
   run(tabId: string, request: RunRequest): Promise<void>;
   reject(tabId: string, message: string): void;
   cancel(tabId: string): Promise<void>;
-  /** 탭을 닫거나 접속을 바꿀 때 */
+  /** 탭을 닫거나 접속을 바꿀 때. 상태는 바로 지우고 세션을 닫는다. */
   release(tabId: string): Promise<void>;
-  /** 프로젝트를 바꾼 뒤. 세션은 Rust가 이미 닫았다. */
-  reset(): void;
+  /** 모든 탭을 release한다. 프로젝트를 바꿀 때 */
+  reset(): Promise<void>;
 }
 
 /** 탭의 세션. `opening`은 세션 id로 끝난다(이미 열렸으면 끝난 promise). */
 interface SessionSlot {
   connection: string;
+  /** 열린 세션의 id. 여는 중이면 null */
+  id: number | null;
   opening: Promise<number>;
 }
 
@@ -50,6 +52,7 @@ async function closeSlot(slot: SessionSlot): Promise<void> {
 export const useRuns = create<RunsState>()((set, get) => {
   // 아래 값은 화면이 그리지 않으므로 store 밖에 둔다.
   // token은 탭마다 마지막 동작을 가리킨다. 번호를 다시 쓰지 않으므로 지우는 것도 token을 올리는 것이다.
+  // 세션과 실행은 그 탭의 token이 있을 때만 생긴다.
   let lastToken = 0;
   const tokens = new Map<string, number>();
   const sessions = new Map<string, SessionSlot>();
@@ -72,17 +75,31 @@ export const useRuns = create<RunsState>()((set, get) => {
     return true;
   }
 
-  function openSlot(
-    tabId: string,
-    connection: string,
-    previous: SessionSlot | undefined,
-  ): SessionSlot {
+  /** 그 탭의 `connection` 세션. 없거나 접속이 다르면 앞 세션을 닫은 뒤 새로 연다. */
+  function slotFor(tabId: string, connection: string): SessionSlot {
+    const previous = sessions.get(tabId);
+    if (previous?.connection === connection) return previous;
     const open = () => openSession(connection).then((session) => session.id);
-    const slot = {
+    const opened =
+      previous === undefined ? open() : closeSlot(previous).then(open);
+    const slot: SessionSlot = {
       connection,
-      opening: previous === undefined ? open() : closeSlot(previous).then(open),
+      id: null,
+      opening: opened.then((id) => {
+        slot.id = id;
+        return id;
+      }),
     };
     sessions.set(tabId, slot);
+    return slot;
+  }
+
+  /** 그 탭의 token, 세션, 실행을 잊는다. 잊은 세션을 돌려준다. */
+  function drop(tabId: string): SessionSlot | undefined {
+    const slot = sessions.get(tabId);
+    tokens.delete(tabId);
+    sessions.delete(tabId);
+    executions.delete(tabId);
     return slot;
   }
 
@@ -93,11 +110,8 @@ export const useRuns = create<RunsState>()((set, get) => {
       const token = bump(tabId);
       const current = () => tokens.get(tabId) === token;
 
-      let slot = sessions.get(tabId);
-      if (slot === undefined || slot.connection !== connection) {
-        setRun(tabId, { status: "connecting" });
-        slot = openSlot(tabId, connection, slot);
-      }
+      const slot = slotFor(tabId, connection);
+      if (slot.id === null) setRun(tabId, { status: "connecting" });
       let sessionId: number;
       try {
         sessionId = await slot.opening;
@@ -110,20 +124,23 @@ export const useRuns = create<RunsState>()((set, get) => {
       }
       if (!current()) return;
 
-      const opened = slot;
       const onEvent = (event: QueryEvent) => {
-        if (!current()) return;
-        set((s) => {
-          const before = s.runs[tabId] ?? { status: "idle" };
-          const after = reduce(before, event);
-          return after === before ? s : { runs: { ...s.runs, [tabId]: after } };
-        });
+        if (current()) {
+          set((s) => {
+            const before = s.runs[tabId] ?? { status: "idle" };
+            const after = reduce(before, event);
+            return after === before
+              ? s
+              : { runs: { ...s.runs, [tabId]: after } };
+          });
+        }
+        // 세션이 죽었다. 늦은 event여도 그 세션이 아직 이 탭의 것이면 버린다.
         if (
           event.type === "finished" &&
           event.outcome === "connection_lost" &&
-          forget(tabId, opened)
+          forget(tabId, slot)
         ) {
-          closeSession(sessionId).catch(() => {});
+          void closeSlot(slot);
         }
       };
 
@@ -133,9 +150,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       try {
         await queryId;
       } catch (error) {
-        if (isCommandError(error, "unknown_session")) {
-          forget(tabId, opened);
-        }
+        if (isCommandError(error, "unknown_session")) forget(tabId, slot);
         if (current()) {
           setRun(tabId, { status: "rejected", message: messageOf(error) });
         }
@@ -160,10 +175,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     },
 
     async release(tabId) {
-      const slot = sessions.get(tabId);
-      tokens.delete(tabId);
-      sessions.delete(tabId);
-      executions.delete(tabId);
+      const slot = drop(tabId);
       set((s) => {
         const runs = { ...s.runs };
         delete runs[tabId];
@@ -172,11 +184,12 @@ export const useRuns = create<RunsState>()((set, get) => {
       if (slot !== undefined) await closeSlot(slot);
     },
 
-    reset() {
-      tokens.clear();
-      sessions.clear();
-      executions.clear();
+    async reset() {
+      const slots = [...tokens.keys()]
+        .map(drop)
+        .filter((slot) => slot !== undefined);
       set({ runs: {} });
+      await Promise.all(slots.map(closeSlot));
     },
   };
 });

@@ -8,8 +8,8 @@ import { ResultPane } from "./ResultPane";
 import { emptyResult, type ResultData, type RunState } from "./runReducer";
 import { useRuns } from "./runsStore";
 
-beforeEach(() => {
-  useRuns.getState().reset();
+beforeEach(async () => {
+  await useRuns.getState().reset();
 });
 
 function result(patch: Partial<ResultData> = {}): ResultData {

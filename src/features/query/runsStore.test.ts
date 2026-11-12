@@ -48,9 +48,10 @@ const rowsEvent: QueryEvent = {
   elapsedMicros: 10,
 };
 
-beforeEach(() => {
+beforeEach(async () => {
+  // 앞 test의 세션을 닫는 호출이 mock 기록을 지우기 전에 끝나게 한다.
+  await useRuns.getState().reset();
   vi.resetAllMocks();
-  useRuns.getState().reset();
   vi.mocked(openSession).mockResolvedValue(session(3));
   vi.mocked(executeQuery).mockResolvedValue(7);
   vi.mocked(closeSession).mockResolvedValue();
@@ -216,10 +217,100 @@ test("connection_lost로 끝나면 세션을 닫고 버린다", async () => {
     outcome: "connection_lost",
     message: "연결이 끊겼습니다",
   });
-  expect(closeSession).toHaveBeenCalledWith(3);
+  await vi.waitFor(() => expect(closeSession).toHaveBeenCalledWith(3));
 
   await useRuns.getState().run("t", request());
   expect(openSession).toHaveBeenCalledTimes(2);
+});
+
+test("앞 실행의 늦은 connection_lost도 세션을 닫고 버린다", async () => {
+  await useRuns.getState().run("t", request("SELECT 1"));
+  const lateA = onEventOf(0);
+  await useRuns.getState().run("t", request("SELECT 2"));
+  const stateB = runOf("t");
+
+  lateA({
+    type: "finished",
+    elapsedMicros: 50,
+    outcome: "connection_lost",
+    message: "연결이 끊겼습니다",
+  });
+
+  expect(runOf("t")).toBe(stateB);
+  await vi.waitFor(() => expect(closeSession).toHaveBeenCalledWith(3));
+
+  await useRuns.getState().run("t", request("SELECT 3"));
+  expect(openSession).toHaveBeenCalledTimes(2);
+});
+
+test("여는 중인 세션에 합류한 실행도 connecting이다", async () => {
+  const opening = deferred<Session>();
+  vi.mocked(openSession).mockReturnValue(opening.promise);
+  const first = useRuns.getState().run("t", request("SELECT 1"));
+  useRuns.getState().reject("t", "커서 위치에 문장이 없습니다");
+
+  const second = useRuns.getState().run("t", request("SELECT 2"));
+
+  expect(runOf("t")).toEqual({ status: "connecting" });
+  expect(openSession).toHaveBeenCalledTimes(1);
+
+  opening.resolve(session(3));
+  await Promise.all([first, second]);
+  const state = runOf("t");
+  expect(state.status === "running" && state.result.sql).toBe("SELECT 2");
+});
+
+test("첫 세션이 여는 중일 때 접속을 바꾸면 앞 세션을 닫은 뒤 새로 연다", async () => {
+  const opening = deferred<Session>();
+  vi.mocked(openSession)
+    .mockReturnValueOnce(opening.promise)
+    .mockResolvedValueOnce(session(4, "staging"));
+
+  const first = useRuns.getState().run("t", request("SELECT 1", "local"));
+  const second = useRuns.getState().run("t", request("SELECT 2", "staging"));
+  expect(runOf("t")).toEqual({ status: "connecting" });
+  expect(openSession).toHaveBeenCalledTimes(1);
+
+  opening.resolve(session(3, "local"));
+  await Promise.all([first, second]);
+
+  expect(closeSession).toHaveBeenCalledTimes(1);
+  expect(closeSession).toHaveBeenCalledWith(3);
+  expect(openSession).toHaveBeenLastCalledWith("staging");
+  expect(vi.mocked(closeSession).mock.invocationCallOrder[0]).toBeLessThan(
+    vi.mocked(openSession).mock.invocationCallOrder[1],
+  );
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+  expect(executeQuery).toHaveBeenCalledWith(
+    4,
+    "SELECT 2",
+    expect.any(Function),
+  );
+});
+
+test("늦은 unknown_session은 새 세션을 건드리지 않는다", async () => {
+  const execution = deferred<number>();
+  vi.mocked(openSession)
+    .mockResolvedValueOnce(session(3, "local"))
+    .mockResolvedValueOnce(session(4, "staging"));
+  vi.mocked(executeQuery).mockReturnValueOnce(execution.promise);
+
+  const first = useRuns.getState().run("t", request("SELECT 1", "local"));
+  await vi.waitFor(() => expect(executeQuery).toHaveBeenCalledTimes(1));
+  await useRuns.getState().run("t", request("SELECT 2", "staging"));
+  const stateB = runOf("t");
+
+  execution.reject(new CommandError("unknown_session", "세션이 없습니다"));
+  await first;
+
+  expect(runOf("t")).toBe(stateB);
+  await useRuns.getState().run("t", request("SELECT 3", "staging"));
+  expect(openSession).toHaveBeenCalledTimes(2);
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    4,
+    "SELECT 3",
+    expect.any(Function),
+  );
 });
 
 test("cancel은 execute가 query id를 돌려준 뒤 보낸다", async () => {
@@ -317,7 +408,7 @@ test("release는 여는 중인 세션을 연 뒤에 닫고 실행하지 않는�
   expect(runOf("t")).toBeUndefined();
 });
 
-test("reset은 closeSession을 부르지 않고 모두 지운다", async () => {
+test("reset은 열린 세션을 모두 닫는다", async () => {
   vi.mocked(openSession)
     .mockResolvedValueOnce(session(3))
     .mockResolvedValueOnce(session(4))
@@ -326,10 +417,14 @@ test("reset은 closeSession을 부르지 않고 모두 지운다", async () => {
   await useRuns.getState().run("b", request());
   const lateA = onEventOf(0);
 
-  useRuns.getState().reset();
-
-  expect(closeSession).not.toHaveBeenCalled();
+  const resetting = useRuns.getState().reset();
+  // state는 닫기를 기다리기 전에 비운다.
   expect(useRuns.getState().runs).toEqual({});
+  await resetting;
+
+  expect(closeSession).toHaveBeenCalledTimes(2);
+  expect(closeSession).toHaveBeenCalledWith(3);
+  expect(closeSession).toHaveBeenCalledWith(4);
 
   lateA(rowsEvent);
   expect(useRuns.getState().runs).toEqual({});

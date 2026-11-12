@@ -144,11 +144,9 @@ export async function switchProject(): Promise<void> {
   if (dir === null) return;
   if (!(await useProject.getState().open(dir))) return;
 
-  // 옛 프로젝트의 세션은 Rust가 이미 닫았다. 바꾸는 동안 실행이 새로 연 세션은 여기서 닫는다.
-  // release는 세션을 닫지 못해도 reject하지 않는다.
-  const runs = useRuns.getState();
-  const released = useTabs.getState().tabs.map((tab) => runs.release(tab.id));
+  // 옛 프로젝트의 세션은 Rust가 이미 닫았으므로 그 close는 실패하고 무시된다.
+  // 바꾸는 동안 실행이 새로 연 세션은 여기서 닫힌다.
+  const closing = useRuns.getState().reset();
   useTabs.getState().reset();
-  useRuns.getState().reset();
-  await Promise.all(released);
+  await closing;
 }

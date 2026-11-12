@@ -64,11 +64,11 @@ function runOf(tabId: string) {
   return useRuns.getState().runs[tabId];
 }
 
-beforeEach(() => {
+beforeEach(async () => {
   vi.restoreAllMocks();
+  await useRuns.getState().reset();
   vi.resetAllMocks();
   useTabs.getState().reset();
-  useRuns.getState().reset();
   // spyOn이 바꾼 method를 되돌린다.
   useRuns.setState(useRuns.getInitialState(), true);
   useProject.setState(

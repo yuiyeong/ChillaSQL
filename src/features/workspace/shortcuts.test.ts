@@ -27,10 +27,10 @@ function key(
 const cmd = { metaKey: true };
 const shiftCmd = { metaKey: true, shiftKey: true };
 
-beforeEach(() => {
+beforeEach(async () => {
+  await useRuns.getState().reset();
   vi.resetAllMocks();
   useTabs.getState().reset();
-  useRuns.getState().reset();
   useProject.setState(useProject.getInitialState(), true);
 });
 
