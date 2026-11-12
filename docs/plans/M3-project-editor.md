@@ -1337,7 +1337,7 @@ export function ResultPane(props: { tabId: string | null }): JSX.Element;
 
 - 표: `<table>`에 `columns`를 header로, `rows`를 그대로 그린다. `null`은 흐린 `NULL`, 빈 문자열은 빈 cell이다. 300자를 넘는 값은 앞 300자와 `…`만 그린다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 ```ts
 // runReducer.test.ts
@@ -1378,19 +1378,19 @@ test("300자를 넘는 값은 줄여 그린다");            // 1,000자 값 →
 test("실패는 message, detail, hint, 위치를 보여 준다"); // "줄 4:6"
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `pnpm vitest run src/features/query`
 Expected: FAIL. `./runReducer`가 없다.
 
-- [ ] **Step 3: `runReducer.ts`, `runsStore.ts`, `format.ts`, `ResultPane.tsx` 구현**
+- [x] **Step 3: `runReducer.ts`, `runsStore.ts`, `format.ts`, `ResultPane.tsx` 구현**
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
