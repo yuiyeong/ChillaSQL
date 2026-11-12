@@ -4,6 +4,7 @@ import {
   saveConnection,
   testConnection,
 } from "../../shared/api/commands";
+import { messageOf } from "../../shared/api/errors";
 import type { Connection, Project, SslMode } from "../../shared/api/types";
 import {
   initialValues,
@@ -20,10 +21,6 @@ const inputClass =
 const sslmodes: SslMode[] = ["disable", "require", "verify-full"];
 
 type Notice = { kind: "ok" | "error"; text: string };
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function Field({
   label,

@@ -21,6 +21,15 @@ function isErrorPayload(
 export function toCommandError(value: unknown): CommandError {
   if (value instanceof CommandError) return value;
   if (isErrorPayload(value)) return new CommandError(value.kind, value.message);
-  const message = value instanceof Error ? value.message : String(value);
-  return new CommandError("internal", message);
+  return new CommandError("internal", messageOf(value));
+}
+
+/** 사용자에게 보일 문구. Error면 그 message, 아니면 문자열로 바꾼 값이다. */
+export function messageOf(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+/** `kind`의 CommandError인가 */
+export function isCommandError(error: unknown, kind: string): boolean {
+  return error instanceof CommandError && error.kind === kind;
 }

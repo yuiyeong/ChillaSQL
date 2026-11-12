@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { readSqlFile } from "../../shared/api/commands";
+import { messageOf } from "../../shared/api/errors";
 import { closeDocument, openDocument } from "./documents";
 
 export interface Tab {
@@ -35,10 +36,6 @@ export interface TabsState {
 
 function lastComponent(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function updateTab(tabs: Tab[], id: string, patch: Partial<Tab>): Tab[] {

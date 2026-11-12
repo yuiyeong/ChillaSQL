@@ -5,7 +5,7 @@ import {
   executeQuery,
   openSession,
 } from "../../shared/api/commands";
-import { CommandError } from "../../shared/api/errors";
+import { isCommandError, messageOf } from "../../shared/api/errors";
 import type { QueryEvent } from "../../shared/api/types";
 import { emptyResult, reduce, type Origin, type RunState } from "./runReducer";
 
@@ -36,10 +36,6 @@ interface SessionSlot {
 interface Execution {
   sessionId: number;
   queryId: Promise<number>;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** 세션이 열리면 닫는다. 열기와 닫기의 실패는 무시한다. */
@@ -137,7 +133,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       try {
         await queryId;
       } catch (error) {
-        if (error instanceof CommandError && error.kind === "unknown_session") {
+        if (isCommandError(error, "unknown_session")) {
           forget(tabId, opened);
         }
         if (current()) {

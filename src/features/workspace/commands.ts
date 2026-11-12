@@ -1,5 +1,6 @@
 import { splitStatements } from "../../shared/api/commands";
 import { confirm, pickDirectory } from "../../shared/api/dialog";
+import { messageOf } from "../../shared/api/errors";
 import { documentSelection, documentText } from "../editor/documents";
 import { saveTab } from "../editor/saveTab";
 import { lineColumn, statementAt } from "../editor/statementAt";
@@ -9,10 +10,6 @@ import { useRuns } from "../query/runsStore";
 
 export type CommandId =
   "run" | "cancel" | "save" | "newTab" | "closeTab" | "nextTab" | "prevTab";
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
-}
 
 function findTab(tabId: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === tabId);

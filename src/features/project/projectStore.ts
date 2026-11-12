@@ -4,7 +4,7 @@ import {
   listSqlFiles,
   openProject,
 } from "../../shared/api/commands";
-import { CommandError } from "../../shared/api/errors";
+import { isCommandError, messageOf } from "../../shared/api/errors";
 import type { Project } from "../../shared/api/types";
 
 export const LAST_PROJECT_KEY = "chilla.lastProjectDir";
@@ -26,10 +26,6 @@ export interface ProjectState {
   /** 접속을 저장한 뒤 */
   applyProject(project: Project): void;
   refreshFiles(): Promise<void>;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 function readLastDir(): string | null {
@@ -65,8 +61,7 @@ export const useProject = create<ProjectState>()((set, get) => {
       if (
         missingDir !== undefined &&
         get().project === null &&
-        error instanceof CommandError &&
-        error.kind === "project_not_found"
+        isCommandError(error, "project_not_found")
       ) {
         set({ status: "missing", missingDir, error: message });
       } else {

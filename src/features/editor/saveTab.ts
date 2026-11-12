@@ -1,6 +1,6 @@
 import { writeSqlFile } from "../../shared/api/commands";
 import { confirm } from "../../shared/api/dialog";
-import { CommandError } from "../../shared/api/errors";
+import { isCommandError, messageOf } from "../../shared/api/errors";
 import { useProject } from "../project/projectStore";
 import { documentText } from "./documents";
 import { useTabs } from "./tabsStore";
@@ -11,10 +11,6 @@ export type SaveResult = "saved" | "needs_name" | "cancelled" | "failed";
 export function normalizeNewPath(input: string): string {
   const path = input.trim();
   return path.toLowerCase().endsWith(".sql") ? path : `${path}.sql`;
-}
-
-function messageOf(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 /** 쓰는 동안 바뀐 text를 dirty로 남기며 저장을 기록한다. */
@@ -64,7 +60,7 @@ export async function saveTab(
         stamp: tab.stamp ?? "",
       });
     } catch (error) {
-      if (!(error instanceof CommandError && error.kind === "file_changed")) {
+      if (!isCommandError(error, "file_changed")) {
         throw error;
       }
       if (!(await confirm(`${path} 파일이 밖에서 바뀌었습니다. 덮어쓸까요?`))) {
