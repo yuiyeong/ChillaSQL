@@ -8,17 +8,29 @@ use crate::domain::{
     SqlFile, SqlPath, StatementSpan, TxStatus, WriteMode,
 };
 
-/// 프로젝트 디렉토리의 `chilla.toml`을 읽는다.
+/// 프로젝트 디렉토리의 `chilla.toml`을 읽고 쓴다.
 pub trait ProjectStore: Send + Sync {
     fn load(&self, dir: &Path) -> Result<Project, ProjectError>;
+    /// `chilla.toml`이 없는 디렉토리에 파일을 만들고 그 프로젝트를 돌려준다.
+    fn create(&self, dir: &Path) -> Result<Project, ProjectError>;
+    /// 접속 하나를 쓰고 쓴 뒤의 프로젝트를 돌려준다. 같은 이름이 있으면 바꾸고 없으면 끝에 더한다.
+    fn save_connection(
+        &self,
+        dir: &Path,
+        profile: &ConnectionProfile,
+    ) -> Result<Project, ProjectError>;
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ProjectError {
     #[error("{} 파일이 없습니다", path.display())]
     NotFound { path: PathBuf },
+    #[error("{} 파일이 이미 있습니다", path.display())]
+    AlreadyExists { path: PathBuf },
     #[error("{} 파일을 읽지 못했습니다: {message}", path.display())]
     Read { path: PathBuf, message: String },
+    #[error("{} 파일을 쓰지 못했습니다: {message}", path.display())]
+    Write { path: PathBuf, message: String },
     #[error("chilla.toml의 형식이 잘못됐습니다: {message}")]
     Parse { message: String },
     #[error(

@@ -17,6 +17,7 @@ tokio = { version = "1", features = ["net", "rt", "sync", "time", "io-util", "ma
 tokio-postgres = "0.7"
 tokio-rustls = { version = "0.26", default-features = false, features = ["ring", "tls12", "logging"] }
 toml = { version = "1", features = ["preserve_order"] }
+toml_edit = "0.25"
 
 [dev-dependencies]
 syn = { version = "2", features = ["full", "visit"] }

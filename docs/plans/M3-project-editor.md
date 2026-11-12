@@ -456,7 +456,7 @@ pub trait ProjectStore: Send + Sync {
 - `FakeProjects`(test_support): `create`는 접속이 없는 프로젝트를 등록하고(있으면 `AlreadyExists`), `save_connection`은 같은 이름을 바꾸거나 끝에 더한다. `saved(&self) -> Vec<(PathBuf, ConnectionProfile)>`로 받은 저장 요청을 돌려준다.
 - `layer_deps.rs`의 `DOMAIN_FORBIDDEN`과 `APPLICATION_FORBIDDEN`에 `"toml_edit"`를 넣고, [구조](../architecture.md) 2장의 두 표에도 넣는다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `tests/project_file.rs`에 더한다. helper `saved(toml: &str, profile: ConnectionProfile) -> (TempDir, Result<Project, ProjectError>, String)`는 파일을 쓰고 `save_connection`을 부른 뒤 결과와 디스크의 text를 돌려준다. `production()`은 `SPEC_EXAMPLE`의 `production`과 같은 `ConnectionProfile`이다.
 
@@ -501,21 +501,21 @@ pub trait ProjectStore: Send + Sync {
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --test project_file`
 Expected: FAIL. `create`와 `save_connection`이 없어 compile error가 난다.
 
-- [ ] **Step 3: `create`, `save_connection`, `FakeProjects` 구현**
+- [x] **Step 3: `create`, `save_connection`, `FakeProjects` 구현**
 
 위 규칙대로 구현한다. `load`의 검사(parse, `reject_passwords`, 접속별 검증)를 text를 받는 함수로 뽑아 `load`와 `save_connection`의 1, 6이 같이 쓴다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

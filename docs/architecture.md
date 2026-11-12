@@ -39,8 +39,8 @@ compiler는 같은 crate 안의 module 사이 의존 방향을 막지 못한다.
 
 | layer | 쓸 수 없는 경로 |
 | --- | --- |
-| `domain` | `crate::application`, `crate::infrastructure`, `tokio`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `pg_query`, `std::fs`, `std::net`, `std::process` |
-| `application` | `crate::infrastructure`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `pg_query`, `std::fs`, `std::net`, `std::process`, `tokio::net`, `tokio::fs`, `tokio::process` |
+| `domain` | `crate::application`, `crate::infrastructure`, `tokio`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `toml_edit`, `pg_query`, `std::fs`, `std::net`, `std::process` |
+| `application` | `crate::infrastructure`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `toml_edit`, `pg_query`, `std::fs`, `std::net`, `std::process`, `tokio::net`, `tokio::fs`, `tokio::process` |
 
 I/O를 하는 crate를 새로 들이면 이 표와 test의 목록에 함께 넣는다.
 

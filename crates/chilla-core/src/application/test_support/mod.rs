@@ -25,29 +25,76 @@ pub(crate) fn profile(name: &str) -> ConnectionProfile {
 
 /// 등록한 디렉토리만 프로젝트로 읽힌다.
 #[derive(Default)]
-pub(crate) struct FakeProjects(Mutex<HashMap<PathBuf, Project>>);
+pub(crate) struct FakeProjects {
+    projects: Mutex<HashMap<PathBuf, Project>>,
+    saved: Mutex<Vec<(PathBuf, ConnectionProfile)>>,
+}
 
 impl FakeProjects {
     pub(crate) fn add(&self, dir: &str, connections: &[&str]) {
-        let project = Project {
-            dir: dir.into(),
-            name: dir.trim_start_matches('/').into(),
-            connections: connections.iter().map(|name| profile(name)).collect(),
-        };
-        self.0.lock().unwrap().insert(dir.into(), project);
+        let connections = connections.iter().map(|name| profile(name)).collect();
+        let project = fake_project(Path::new(dir), connections);
+        self.projects.lock().unwrap().insert(dir.into(), project);
     }
+
+    /// 받은 저장 요청. 받은 순서다.
+    pub(crate) fn saved(&self) -> Vec<(PathBuf, ConnectionProfile)> {
+        self.saved.lock().unwrap().clone()
+    }
+}
+
+/// 이름은 `dir`에서 앞의 `/`를 뗀 것이다(`/p` → `p`).
+fn fake_project(dir: &Path, connections: Vec<ConnectionProfile>) -> Project {
+    let dir = dir.to_path_buf();
+    let name = dir.to_string_lossy().trim_start_matches('/').into();
+    Project {
+        dir,
+        name,
+        connections,
+    }
+}
+
+fn file_in(dir: &Path) -> PathBuf {
+    dir.join("chilla.toml")
 }
 
 impl ProjectStore for FakeProjects {
     fn load(&self, dir: &Path) -> Result<Project, ProjectError> {
-        self.0
-            .lock()
-            .unwrap()
-            .get(dir)
-            .cloned()
-            .ok_or_else(|| ProjectError::NotFound {
-                path: dir.join("chilla.toml"),
-            })
+        let projects = self.projects.lock().unwrap();
+        let project = projects.get(dir).cloned();
+        project.ok_or_else(|| ProjectError::NotFound { path: file_in(dir) })
+    }
+
+    fn create(&self, dir: &Path) -> Result<Project, ProjectError> {
+        let mut projects = self.projects.lock().unwrap();
+        if projects.contains_key(dir) {
+            return Err(ProjectError::AlreadyExists { path: file_in(dir) });
+        }
+        let project = fake_project(dir, Vec::new());
+        projects.insert(dir.to_path_buf(), project.clone());
+        Ok(project)
+    }
+
+    fn save_connection(
+        &self,
+        dir: &Path,
+        profile: &ConnectionProfile,
+    ) -> Result<Project, ProjectError> {
+        let request = (dir.to_path_buf(), profile.clone());
+        self.saved.lock().unwrap().push(request);
+        let mut projects = self.projects.lock().unwrap();
+        let project = projects
+            .get_mut(dir)
+            .ok_or_else(|| ProjectError::NotFound { path: file_in(dir) })?;
+        let same_name = project
+            .connections
+            .iter_mut()
+            .find(|c| c.name == profile.name);
+        match same_name {
+            Some(saved) => *saved = profile.clone(),
+            None => project.connections.push(profile.clone()),
+        }
+        Ok(project.clone())
     }
 }
 
@@ -184,5 +231,52 @@ impl Connector for FakeConnector {
             pid: 1000 + log.links.len() as i32,
             link,
         })
+    }
+}
+
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fake_projects_create_and_save_connection() {
+        let projects = FakeProjects::default();
+        let created = projects.create(Path::new("/new")).unwrap();
+        assert_eq!(created.name, "new");
+        assert!(created.connections.is_empty());
+        assert_eq!(
+            projects.create(Path::new("/new")),
+            Err(ProjectError::AlreadyExists {
+                path: "/new/chilla.toml".into()
+            })
+        );
+
+        let red = ConnectionProfile {
+            color: Some("red".into()),
+            ..profile("a")
+        };
+        projects
+            .save_connection(Path::new("/new"), &profile("a"))
+            .unwrap();
+        projects
+            .save_connection(Path::new("/new"), &profile("b"))
+            .unwrap();
+        let project = projects.save_connection(Path::new("/new"), &red).unwrap();
+        assert_eq!(project.connections, [red.clone(), profile("b")]);
+        assert_eq!(projects.load(Path::new("/new")), Ok(project));
+        assert_eq!(
+            projects.save_connection(Path::new("/none"), &profile("a")),
+            Err(ProjectError::NotFound {
+                path: "/none/chilla.toml".into()
+            })
+        );
+
+        let saved: Vec<_> = projects
+            .saved()
+            .into_iter()
+            .map(|(dir, p)| (dir, p.name))
+            .collect();
+        let expected = [("/new", "a"), ("/new", "b"), ("/new", "a"), ("/none", "a")];
+        let expected = expected.map(|(dir, name)| (PathBuf::from(dir), name.to_string()));
+        assert_eq!(saved, expected);
     }
 }

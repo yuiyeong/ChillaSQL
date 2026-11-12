@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use chilla_core::application::{ProjectError, ProjectStore};
-use chilla_core::domain::{ProfileError, Project, SslMode};
+use chilla_core::domain::{ConnectionProfile, ProfileError, Project, SslMode};
 use chilla_core::infrastructure::TomlProjectStore;
 use tempfile::TempDir;
 
@@ -220,4 +220,345 @@ fn defaults() {
     assert_eq!(local.sslmode, SslMode::Disable);
     assert_eq!(local.tunnel, None);
     assert_eq!(local.color, None);
+}
+
+/// `SPEC_EXAMPLE`의 `production`과 같은 접속.
+fn production() -> ConnectionProfile {
+    ConnectionProfile {
+        name: "production".into(),
+        host: "203.0.113.10".into(),
+        port: 5432,
+        database: "app".into(),
+        user: "app_user".into(),
+        sslmode: SslMode::Require,
+        sslrootcert: None,
+        tunnel: None,
+        color: Some("red".into()),
+    }
+}
+
+fn analytics() -> ConnectionProfile {
+    ConnectionProfile {
+        name: "analytics".into(),
+        host: "10.0.0.5".into(),
+        port: 6432,
+        database: "events".into(),
+        user: "reader".into(),
+        sslmode: SslMode::Require,
+        sslrootcert: None,
+        tunnel: None,
+        color: None,
+    }
+}
+
+/// `toml`을 쓴 디렉토리에 `profile`을 저장하고, 그 결과와 저장 뒤 디스크의 text를 돌려준다.
+fn saved(
+    toml: &str,
+    profile: ConnectionProfile,
+) -> (TempDir, Result<Project, ProjectError>, String) {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("chilla.toml"), toml).unwrap();
+    let result = TomlProjectStore.save_connection(dir.path(), &profile);
+    let text = fs::read_to_string(dir.path().join("chilla.toml")).unwrap();
+    (dir, result, text)
+}
+
+fn names(project: &Project) -> Vec<&str> {
+    project
+        .connections
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect()
+}
+
+#[test]
+fn create_writes_a_minimal_file_that_loads() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(dir.path()).unwrap();
+    let name = root.file_name().unwrap().to_str().unwrap().to_string();
+
+    assert_eq!(
+        TomlProjectStore.create(dir.path()),
+        Ok(Project {
+            dir: root.clone(),
+            name: name.clone(),
+            connections: Vec::new(),
+        })
+    );
+    let path = dir.path().join("chilla.toml");
+    assert_eq!(
+        fs::read_to_string(&path).unwrap(),
+        format!("[project]\nname = \"{name}\"\n")
+    );
+
+    assert_eq!(
+        TomlProjectStore.create(dir.path()),
+        Err(ProjectError::AlreadyExists { path })
+    );
+    let missing = TomlProjectStore.create(&dir.path().join("missing"));
+    assert!(
+        matches!(missing, Err(ProjectError::Read { .. })),
+        "{missing:?}"
+    );
+}
+
+/// Review Focus 5
+#[test]
+fn save_connection_changes_only_that_connection() {
+    let blue = ConnectionProfile {
+        color: Some("blue".into()),
+        ..production()
+    };
+    let (_dir, result, text) = saved(SPEC_EXAMPLE, blue.clone());
+    assert_eq!(
+        text,
+        SPEC_EXAMPLE.replace("color = \"red\"", "color = \"blue\"")
+    );
+    let project = result.unwrap();
+    assert_eq!(project.connection("production"), Some(&blue));
+    assert_eq!(names(&project), ["production", "staging", "local"]);
+
+    let (_dir, result, text) = saved(SPEC_EXAMPLE, production());
+    assert_eq!(text, SPEC_EXAMPLE);
+    assert_eq!(
+        result.unwrap().connection("production"),
+        Some(&production())
+    );
+}
+
+#[test]
+fn save_connection_appends_a_new_connection_at_the_end() {
+    let (dir, result, text) = saved(SPEC_EXAMPLE, analytics());
+    assert!(text.starts_with(SPEC_EXAMPLE), "{text}");
+    let added = &text[SPEC_EXAMPLE.len()..];
+    assert_eq!(
+        added,
+        "\n[connections.analytics]\nhost = \"10.0.0.5\"\nport = 6432\ndatabase = \"events\"\nuser = \"reader\"\nsslmode = \"require\"\n"
+    );
+    assert!(
+        !added.contains("color") && !added.contains("tunnel"),
+        "{added}"
+    );
+
+    let loaded = TomlProjectStore.load(dir.path()).unwrap();
+    assert_eq!(
+        names(&loaded),
+        ["production", "staging", "local", "analytics"]
+    );
+    assert_eq!(loaded.connection("analytics"), Some(&analytics()));
+    assert_eq!(result, Ok(loaded));
+
+    let plain = ConnectionProfile {
+        sslmode: SslMode::Disable,
+        ..analytics()
+    };
+    let (dir, _result, text) = saved(SPEC_EXAMPLE, plain.clone());
+    assert!(!text[SPEC_EXAMPLE.len()..].contains("sslmode"), "{text}");
+    let loaded = TomlProjectStore.load(dir.path()).unwrap();
+    assert_eq!(loaded.connection("analytics"), Some(&plain));
+}
+
+#[test]
+fn save_connection_appends_after_comments_at_the_end_of_the_file() {
+    let toml = format!("{SPEC_EXAMPLE}# sslmode = \"require\"\n");
+    let (_dir, result, text) = saved(&toml, analytics());
+    result.unwrap();
+    assert!(text.starts_with(&toml), "{text}");
+
+    let (_dir, result, text) = saved("", analytics());
+    result.unwrap();
+    assert!(text.starts_with("[connections.analytics]\n"), "{text}");
+}
+
+#[test]
+fn save_connection_removes_optional_keys_that_are_unset() {
+    let staging = ConnectionProfile {
+        name: "staging".into(),
+        host: "localhost".into(),
+        port: 25432,
+        database: "railway".into(),
+        user: "postgres".into(),
+        sslmode: SslMode::Disable,
+        sslrootcert: None,
+        tunnel: None,
+        color: None,
+    };
+    let (dir, _result, text) = saved(SPEC_EXAMPLE, staging);
+    assert!(
+        !text.contains("tunnel") && !text.contains("yellow"),
+        "{text}"
+    );
+    let loaded = TomlProjectStore.load(dir.path()).unwrap();
+    let staging = loaded.connection("staging").unwrap();
+    assert_eq!(staging.tunnel, None);
+    assert_eq!(staging.color, None);
+
+    let disabled = ConnectionProfile {
+        sslmode: SslMode::Disable,
+        ..production()
+    };
+    let (dir, _result, text) = saved(SPEC_EXAMPLE, disabled);
+    assert!(
+        text.contains(
+            "sslmode = \"disable\"        # 서버 인증서까지 확인하려면 \"verify-full\"\n"
+        ),
+        "{text}"
+    );
+    let loaded = TomlProjectStore.load(dir.path()).unwrap();
+    assert_eq!(
+        loaded.connection("production").unwrap().sslmode,
+        SslMode::Disable
+    );
+}
+
+#[test]
+fn save_connection_keeps_comments_above_removed_keys() {
+    // `# sslrootcert` 줄은 `color` 위에 있다. `color`를 지워도 그 줄은 남는다.
+    let colorless = ConnectionProfile {
+        color: None,
+        ..production()
+    };
+    let (_dir, result, text) = saved(SPEC_EXAMPLE, colorless);
+    result.unwrap();
+    assert_eq!(text, SPEC_EXAMPLE.replace("color = \"red\"\n", ""));
+
+    let toml = "[connections.local]\nhost = \"localhost\"\nport = 5432\ndatabase = \"app\"\nuser = \"postgres\"\n\
+                # 터널 없이 바로 붙는다\ntunnel = \"ssh\"\ncolor = \"green\"\n";
+    let local = ConnectionProfile {
+        name: "local".into(),
+        host: "localhost".into(),
+        port: 5432,
+        database: "app".into(),
+        user: "postgres".into(),
+        sslmode: SslMode::Disable,
+        sslrootcert: None,
+        tunnel: None,
+        color: Some("green".into()),
+    };
+    let (_dir, result, text) = saved(toml, local);
+    result.unwrap();
+    assert_eq!(text, toml.replace("tunnel = \"ssh\"\n", ""));
+}
+
+#[test]
+fn save_connection_writes_sslrootcert_relative_to_the_project_dir() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = fs::canonicalize(dir.path()).unwrap();
+    let path = dir.path().join("chilla.toml");
+    let with_cert = |cert: PathBuf| ConnectionProfile {
+        sslmode: SslMode::VerifyFull,
+        sslrootcert: Some(cert),
+        ..production()
+    };
+    // `dir.path()`가 symlink를 거쳐도(macOS의 `/var` 등) 프로젝트 디렉토리 아래로 본다.
+    for cert in [root.join("certs/ca.pem"), dir.path().join("certs/ca.pem")] {
+        fs::write(&path, SPEC_EXAMPLE).unwrap();
+        let project = TomlProjectStore
+            .save_connection(dir.path(), &with_cert(cert))
+            .unwrap();
+        let text = fs::read_to_string(&path).unwrap();
+        assert!(text.contains("sslrootcert = \"certs/ca.pem\""), "{text}");
+        assert_eq!(
+            project.connection("production").unwrap().sslrootcert,
+            Some(root.join("certs/ca.pem"))
+        );
+    }
+
+    let (dir, _result, text) = saved(SPEC_EXAMPLE, with_cert("/etc/ssl/ca.pem".into()));
+    assert!(text.contains("sslrootcert = \"/etc/ssl/ca.pem\""), "{text}");
+    let loaded = TomlProjectStore.load(dir.path()).unwrap();
+    assert_eq!(
+        loaded.connection("production").unwrap().sslrootcert,
+        Some(PathBuf::from("/etc/ssl/ca.pem"))
+    );
+}
+
+#[test]
+fn save_connection_refuses_a_file_it_cannot_load() {
+    let toml = format!("{SPEC_EXAMPLE}password = \"x\"\n");
+    let (_dir, result, text) = saved(&toml, production());
+    assert_eq!(
+        result,
+        Err(ProjectError::PasswordInConfig {
+            connection: "local".into()
+        })
+    );
+    assert_eq!(text, toml);
+
+    let (_dir, result, text) = saved(
+        SPEC_EXAMPLE,
+        ConnectionProfile {
+            port: 0,
+            ..production()
+        },
+    );
+    assert_eq!(
+        result,
+        Err(ProjectError::InvalidConnection {
+            connection: "production".into(),
+            source: ProfileError::ZeroPort
+        })
+    );
+    assert_eq!(text, SPEC_EXAMPLE);
+
+    let dir = tempfile::tempdir().unwrap();
+    assert_eq!(
+        TomlProjectStore.save_connection(dir.path(), &production()),
+        Err(ProjectError::NotFound {
+            path: dir.path().join("chilla.toml")
+        })
+    );
+}
+
+#[test]
+fn save_connection_reports_a_write_failure() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("chilla.toml");
+    fs::write(&path, SPEC_EXAMPLE).unwrap();
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o555)).unwrap();
+    let result = TomlProjectStore.save_connection(dir.path(), &analytics());
+    fs::set_permissions(dir.path(), fs::Permissions::from_mode(0o755)).unwrap();
+
+    assert!(
+        matches!(&result, Err(ProjectError::Write { path: p, .. }) if *p == path),
+        "{result:?}"
+    );
+    assert_eq!(fs::read_to_string(&path).unwrap(), SPEC_EXAMPLE);
+}
+
+#[test]
+fn save_connection_quotes_names_that_need_it() {
+    let quoted = ConnectionProfile {
+        name: "my db.prod".into(),
+        ..analytics()
+    };
+    let (dir, result, text) = saved(SPEC_EXAMPLE, quoted.clone());
+    assert_eq!(result.unwrap().connection("my db.prod"), Some(&quoted));
+    assert!(!text.to_lowercase().contains("password"), "{text}");
+
+    let recolored = ConnectionProfile {
+        color: Some("blue".into()),
+        ..quoted
+    };
+    let project = TomlProjectStore
+        .save_connection(dir.path(), &recolored)
+        .unwrap();
+    let same_name = project
+        .connections
+        .iter()
+        .filter(|c| c.name == "my db.prod");
+    assert_eq!(same_name.collect::<Vec<_>>(), [&recolored]);
+}
+
+#[test]
+fn save_connection_leaves_no_temporary_file() {
+    let (dir, result, _text) = saved(SPEC_EXAMPLE, analytics());
+    result.unwrap();
+    let entries: Vec<_> = fs::read_dir(dir.path())
+        .unwrap()
+        .map(|entry| entry.unwrap().file_name())
+        .collect();
+    assert_eq!(entries, ["chilla.toml"]);
 }
