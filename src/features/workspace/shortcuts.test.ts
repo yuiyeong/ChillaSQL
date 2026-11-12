@@ -6,8 +6,8 @@ vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/dialog");
 
 import { useTabs } from "../editor/tabsStore";
-import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
+import { resetStores } from "../../test/resetStores";
 import { commandFor, useShortcuts } from "./shortcuts";
 
 function key(
@@ -28,10 +28,8 @@ const cmd = { metaKey: true };
 const shiftCmd = { metaKey: true, shiftKey: true };
 
 beforeEach(async () => {
-  await useRuns.getState().reset();
+  await resetStores();
   vi.resetAllMocks();
-  useTabs.getState().reset();
-  useProject.setState(useProject.getInitialState(), true);
 });
 
 test("표의 key마다 command를 고른다", () => {

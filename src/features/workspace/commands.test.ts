@@ -25,20 +25,13 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import { changeConnection, closeTab, execute, switchProject } from "./commands";
+import { deferred } from "../../test/deferred";
+import { resetStores } from "../../test/resetStores";
 
 const project: Project = { name: "demo", dir: "/p", connections: [] };
 
 function session(id: number): Session {
   return { id, connection: "local", backendPid: 100 + id };
-}
-
-/** 끝나는 시점을 test가 정하는 promise. */
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
 }
 
 /** 새 탭을 만들고 text와 접속을 둔다. 활성 탭이 된다. */
@@ -66,15 +59,9 @@ function runOf(tabId: string) {
 
 beforeEach(async () => {
   vi.restoreAllMocks();
-  await useRuns.getState().reset();
+  await resetStores();
   vi.resetAllMocks();
-  useTabs.getState().reset();
-  // spyOn이 바꾼 method를 되돌린다.
-  useRuns.setState(useRuns.getInitialState(), true);
-  useProject.setState(
-    { ...useProject.getInitialState(), status: "ready", project },
-    true,
-  );
+  useProject.setState({ status: "ready", project });
   vi.mocked(openSession).mockResolvedValue(session(3));
   vi.mocked(executeQuery).mockResolvedValue(7);
   vi.mocked(closeSession).mockResolvedValue();
@@ -231,6 +218,8 @@ test("dirty 탭은 물어본 뒤에 닫는다", async () => {
     origin: { line: 1, column: 1 },
   }));
   useTabs.getState().markDirty(id);
+  // 처음 state object를 고치지 않게 새 object에 spy를 단다.
+  useRuns.setState({ ...useRuns.getState() });
   const release = vi.spyOn(useRuns.getState(), "release");
   vi.mocked(confirm).mockResolvedValue(false);
 
@@ -274,6 +263,8 @@ test("접속을 바꾸면 세션을 놓는다", async () => {
     sql: "SELECT 1",
     origin: { line: 1, column: 1 },
   }));
+  // 처음 state object를 고치지 않게 새 object에 spy를 단다.
+  useRuns.setState({ ...useRuns.getState() });
   const release = vi.spyOn(useRuns.getState(), "release");
   let connectionWhenReleased: string | null | undefined;
   release.mockImplementationOnce(async (tabId) => {

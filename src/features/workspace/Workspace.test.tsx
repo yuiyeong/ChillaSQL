@@ -3,6 +3,8 @@ import { act, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
+import { deferred } from "../../test/deferred";
+import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/dialog");
@@ -22,7 +24,6 @@ import type { Connection, Project, QueryEvent } from "../../shared/api/types";
 import { openDocument } from "../editor/documents";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
-import { useRuns } from "../query/runsStore";
 import { Workspace } from "./Workspace";
 
 function connection(name: string, host = "localhost"): Connection {
@@ -67,14 +68,6 @@ function renderWorkspace() {
   return render(<Workspace />);
 }
 
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
-}
-
 function toolbarButton(name: string) {
   return within(screen.getByRole("toolbar")).getByRole("button", { name });
 }
@@ -90,9 +83,8 @@ function connectionForm() {
 }
 
 beforeEach(async () => {
-  await useRuns.getState().reset();
+  await resetStores();
   vi.resetAllMocks();
-  useTabs.getState().reset();
   vi.mocked(listSqlFiles).mockResolvedValue([]);
   vi.mocked(hasPassword).mockResolvedValue(false);
 });

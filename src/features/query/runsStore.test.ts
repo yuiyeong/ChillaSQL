@@ -11,6 +11,7 @@ import {
 import { CommandError } from "../../shared/api/errors";
 import type { QueryEvent, Session } from "../../shared/api/types";
 import { useRuns, type Prepare, type RunRequest } from "./runsStore";
+import { deferred } from "../../test/deferred";
 
 function session(id: number, connection = "local"): Session {
   return { id, connection, backendPid: 100 + id };
@@ -19,17 +20,6 @@ function session(id: number, connection = "local"): Session {
 /** 바로 이 문장을 실행하게 하는 prepare. */
 function prepared(sql = "SELECT 1", connection = "local"): Prepare {
   return () => ({ connection, sql, origin: { line: 1, column: 1 } });
-}
-
-/** 끝나는 시점을 test가 정하는 promise. */
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
 }
 
 const origin = { line: 1, column: 1 };

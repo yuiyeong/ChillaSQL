@@ -2,6 +2,7 @@ import { act, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
+import { deferred } from "../../test/deferred";
 
 vi.mock("../../shared/api/commands");
 
@@ -275,18 +276,10 @@ test("password 입력은 type이 password다", () => {
 });
 
 test("도는 동안 테스트와 저장 버튼은 disabled다", async () => {
-  let finishTest: () => void = () => {};
-  vi.mocked(testConnection).mockReturnValue(
-    new Promise<void>((resolve) => {
-      finishTest = resolve;
-    }),
-  );
-  let finishSave: (project: Project) => void = () => {};
-  vi.mocked(saveConnection).mockReturnValue(
-    new Promise<Project>((resolve) => {
-      finishSave = resolve;
-    }),
-  );
+  const testing = deferred<void>();
+  vi.mocked(testConnection).mockReturnValue(testing.promise);
+  const saving = deferred<Project>();
+  vi.mocked(saveConnection).mockReturnValue(saving.promise);
   renderForm();
   fillNew();
 
@@ -297,7 +290,7 @@ test("도는 동안 테스트와 저장 버튼은 disabled다", async () => {
   await click(saveButton());
   expect(saveConnection).not.toHaveBeenCalled();
 
-  await act(async () => finishTest());
+  await act(async () => testing.resolve());
   expect(testButton()).toBeEnabled();
   expect(saveButton()).toBeEnabled();
 
@@ -305,6 +298,6 @@ test("도는 동안 테스트와 저장 버튼은 disabled다", async () => {
   expect(testButton()).toBeDisabled();
   expect(saveButton()).toBeDisabled();
 
-  await act(async () => finishSave(saved));
+  await act(async () => saving.resolve(saved));
   expect(testButton()).toBeEnabled();
 });

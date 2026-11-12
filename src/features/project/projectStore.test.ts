@@ -11,20 +11,10 @@ import {
 import { CommandError } from "../../shared/api/errors";
 import type { Project } from "../../shared/api/types";
 import { LAST_PROJECT_KEY, useProject } from "./projectStore";
+import { deferred } from "../../test/deferred";
 
 function project(dir: string, name = "demo"): Project {
   return { name, dir, connections: [] };
-}
-
-/** 끝나는 시점을 test가 정하는 promise. */
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  let reject!: (reason: unknown) => void;
-  const promise = new Promise<T>((res, rej) => {
-    resolve = res;
-    reject = rej;
-  });
-  return { promise, resolve, reject };
 }
 
 beforeEach(() => {

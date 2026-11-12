@@ -15,21 +15,14 @@ import { useProject } from "../project/projectStore";
 import { documentState, setDocumentState } from "./documents";
 import { normalizeNewPath, saveTab } from "./saveTab";
 import { useTabs } from "./tabsStore";
+import { deferred } from "../../test/deferred";
+import { resetStores } from "../../test/resetStores";
 
 function type(tabId: string, text: string): void {
   setDocumentState(
     tabId,
     documentState(tabId).update({ changes: { from: 0, insert: text } }).state,
   );
-}
-
-/** 끝나는 시점을 test가 정하는 promise. */
-function deferred<T>() {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((res) => {
-    resolve = res;
-  });
-  return { promise, resolve };
 }
 
 /** 연 파일의 탭. 활성 탭이 된다. */
@@ -50,11 +43,11 @@ function tabOf(id: string) {
   return tab;
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  await resetStores();
   vi.resetAllMocks();
-  useTabs.getState().reset();
   const project: Project = { name: "demo", dir: "/p", connections: [] };
-  useProject.setState({ ...useProject.getInitialState(), project }, true);
+  useProject.setState({ project });
   vi.mocked(listSqlFiles).mockResolvedValue(["queries/a.sql"]);
 });
 

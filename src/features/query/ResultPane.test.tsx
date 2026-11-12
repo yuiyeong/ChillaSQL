@@ -194,7 +194,6 @@ test("NULL과 빈 문자열을 다르게 그린다", () => {
 
   const cells = screen.getAllByRole("cell");
   expect(cells[0]).toHaveTextContent("NULL");
-  expect(cells[1]).toHaveTextContent(/^$/);
   expect(cells[1]).toBeEmptyDOMElement();
 });
 
