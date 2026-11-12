@@ -32,6 +32,7 @@ pub(crate) fn profile(name: &str) -> ConnectionProfile {
 pub(crate) struct FakeProjects {
     projects: Mutex<HashMap<PathBuf, Project>>,
     saved: Mutex<Vec<(PathBuf, ConnectionProfile)>>,
+    gate: Arc<tokio::sync::RwLock<()>>,
 }
 
 impl FakeProjects {
@@ -44,6 +45,12 @@ impl FakeProjects {
     /// 받은 저장 요청. 받은 순서다.
     pub(crate) fn saved(&self) -> Vec<(PathBuf, ConnectionProfile)> {
         self.saved.lock().unwrap().clone()
+    }
+
+    /// 돌려준 guard를 drop할 때까지 `save_connection`이 끝나지 않게 한다. 요청은 받은 즉시
+    /// 기록된다.
+    pub(crate) async fn block(&self) -> tokio::sync::OwnedRwLockWriteGuard<()> {
+        self.gate.clone().write_owned().await
     }
 }
 
@@ -86,6 +93,8 @@ impl ProjectStore for FakeProjects {
     ) -> Result<Project, ProjectError> {
         let request = (dir.to_path_buf(), profile.clone());
         self.saved.lock().unwrap().push(request);
+        // `spawn_blocking`의 thread에서 불린다.
+        let _open = self.gate.blocking_read();
         let mut projects = self.projects.lock().unwrap();
         let project = projects
             .get_mut(dir)

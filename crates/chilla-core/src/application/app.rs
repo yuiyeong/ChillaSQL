@@ -58,6 +58,8 @@ pub struct App<C: Connector> {
     files: Arc<dyn SqlFileStore>,
     connector: C,
     state: Mutex<State>,
+    /// `save_connection`을 하나씩 돌린다. 한 번의 저장이 키체인과 파일에 걸쳐 있어서다.
+    save_lock: Mutex<()>,
 }
 
 #[derive(Default)]
@@ -84,6 +86,7 @@ impl<C: Connector> App<C> {
             files,
             connector,
             state: Mutex::new(State::default()),
+            save_lock: Mutex::new(()),
         }
     }
 
@@ -119,19 +122,23 @@ impl<C: Connector> App<C> {
     }
 
     /// 접속을 `chilla.toml`에 쓰고 열려 있는 프로젝트에 반영한다. 세션은 그대로 둔다(열려
-    /// 있는 세션은 저장 전의 접속 정보로 붙어 있다).
+    /// 있는 세션은 저장 전의 접속 정보로 붙어 있다). 겹친 저장은 차례로 처리한다.
     ///
     /// 같은 이름의 접속이 있었고 연결 대상이 바뀌면 저장된 비밀번호를 파일을 쓰기 *전에*
     /// 지운다(`test_connection`과 같은 규칙). 새 대상이 파일에 적힌 채 옛 비밀번호가 키체인에
     /// 남으면 다음에 프로젝트를 열 때 옛 비밀번호가 새 대상으로 가기 때문이다. 지우지 못하면
     /// 파일을 쓰지 않는다. `password`가 있으면 파일을 쓴 뒤에 저장한다. 그 밖에는 키체인을
     /// 건드리지 않는다.
+    ///
+    /// 쓰는 동안 프로젝트가 다시 열렸으면 열린 프로젝트는 바꾸지 않고 `ProjectChanged`를
+    /// 돌려준다. 이미 쓴 파일에 맞춰 `password`는 그 파일의 디렉토리 기준으로 저장한다.
     pub async fn save_connection(
         &self,
         profile: ConnectionProfile,
         password: Option<Password>,
     ) -> Result<Project, AppError> {
-        let (dir, profile, target_changed, generation) = {
+        let _saving = self.save_lock.lock().await;
+        let (dir, key, profile, target_changed, generation) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
             let profile = profile.resolved_under(&project.dir);
@@ -141,14 +148,11 @@ impl<C: Connector> App<C> {
                 .is_some_and(|previous| !previous.same_target(&profile));
             (
                 project.dir.clone(),
+                password_key(project, &profile.name),
                 profile,
                 target_changed,
                 state.project_generation,
             )
-        };
-        let key = PasswordKey {
-            project_dir: dir.clone(),
-            connection: profile.name.clone(),
         };
 
         if target_changed {
@@ -160,17 +164,21 @@ impl<C: Connector> App<C> {
         let projects = self.projects.clone();
         let project = blocking(move || projects.save_connection(&dir, &profile)).await?;
 
-        {
+        let reloaded = {
             let mut state = self.state.lock().await;
-            if state.project_generation != generation {
-                return Err(AppError::ProjectChanged);
+            let reloaded = state.project_generation != generation;
+            if !reloaded {
+                state.project = Some(project.clone());
             }
-            state.project = Some(project.clone());
-        }
+            reloaded
+        };
 
         if let Some(password) = password {
             let passwords = self.passwords.clone();
             blocking(move || passwords.set(&key, &password)).await?;
+        }
+        if reloaded {
+            return Err(AppError::ProjectChanged);
         }
         Ok(project)
     }
@@ -1062,6 +1070,76 @@ mod tests {
         assert_eq!(f.projects.saved().len(), 1);
         f.passwords.fail_sets(false);
         assert_eq!(f.app.has_password("local").await, Ok(false));
+    }
+
+    /// 쓰는 동안 프로젝트가 다시 열려도 그 프로젝트를 덮지 않는다. 입력한 비밀번호는 쓴
+    /// 파일의 디렉토리 기준으로 저장한다.
+    #[tokio::test]
+    async fn save_connection_across_a_project_reload_keeps_the_new_project() {
+        let f = Arc::new(opened().await);
+        let blocked = f.projects.block().await;
+        let saving = tokio::spawn({
+            let f = f.clone();
+            async move {
+                f.app
+                    .save_connection(profile("local"), Some(pw("typed")))
+                    .await
+            }
+        });
+        while f.projects.saved().is_empty() {
+            tokio::task::yield_now().await;
+        }
+
+        f.app.open_project(Path::new("/q")).await.unwrap();
+        drop(blocked);
+
+        assert_eq!(saving.await.unwrap(), Err(AppError::ProjectChanged));
+        let opened_dir = f
+            .app
+            .state
+            .lock()
+            .await
+            .project
+            .as_ref()
+            .unwrap()
+            .dir
+            .clone();
+        assert_eq!(opened_dir, Path::new("/q"));
+        let key = PasswordKey {
+            project_dir: "/p".into(),
+            connection: "local".into(),
+        };
+        assert_eq!(f.passwords.get(&key).unwrap().unwrap().expose(), "typed");
+    }
+
+    #[tokio::test]
+    async fn concurrent_saves_run_one_at_a_time() {
+        let f = Arc::new(opened().await);
+        let blocked = f.projects.block().await;
+        let save = |name: &'static str| {
+            let f = f.clone();
+            tokio::spawn(async move { f.app.save_connection(profile(name), None).await })
+        };
+        let first = save("analytics");
+        while f.projects.saved().is_empty() {
+            tokio::task::yield_now().await;
+        }
+
+        let second = save("reporting");
+        // 두 번째 save가 store까지 갈 시간을 준다.
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        assert_eq!(f.projects.saved().len(), 1);
+        drop(blocked);
+
+        assert!(first.await.unwrap().is_ok());
+        assert!(second.await.unwrap().is_ok());
+        let names: Vec<_> = f
+            .projects
+            .saved()
+            .into_iter()
+            .map(|(_, p)| p.name)
+            .collect();
+        assert_eq!(names, ["analytics", "reporting"]);
     }
 
     #[tokio::test]
