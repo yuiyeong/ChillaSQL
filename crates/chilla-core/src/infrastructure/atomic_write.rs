@@ -11,8 +11,10 @@ use std::path::{Path, PathBuf};
 const TEMP_SUFFIX: &str = ".chilla-tmp";
 /// 파일 이름 하나의 byte 상한(macOS의 NAME_MAX).
 const NAME_MAX: usize = 255;
-/// target이 없을 때 새 파일의 권한.
+/// target이 없을 때 새 파일의 권한. umask가 적용된다.
 const NEW_FILE_MODE: u32 = 0o644;
+/// target이 있을 때 임시 파일을 처음 만드는 권한. 쓰기 전에 target의 권한으로 바꾼다.
+const PRIVATE_MODE: u32 = 0o600;
 
 /// `write_atomically`의 target이 없을 때.
 pub(super) enum Missing {
@@ -24,13 +26,18 @@ pub(super) enum Missing {
 
 /// target과 같은 디렉토리의 임시 파일에 쓰고 rename한다.
 ///
-/// target이 있으면 그 권한(예: 0600)으로 임시 파일을 연다. 임시 파일을 만든 뒤에 실패하면
-/// 임시 파일을 지운다.
+/// target이 있으면 임시 파일을 0600으로 만든 뒤, 내용을 쓰기 전에 target과 같은 권한(예:
+/// 0664)으로 바꾼다. umask가 기존 권한을 좁히지 않고, 권한이 넓은 채로 내용이 놓이는 순간도
+/// 없다. target이 없으면 0644에 umask를 적용해 만든다. 임시 파일을 만든 뒤에 실패하면 임시
+/// 파일을 지운다.
 pub(super) fn write_atomically(target: &Path, text: &str, missing: Missing) -> io::Result<()> {
-    let mode = match fs::metadata(target) {
-        Ok(existing) => existing.permissions().mode() & 0o7777,
+    let (mode, permissions) = match fs::metadata(target) {
+        Ok(existing) => {
+            let existing = existing.permissions().mode() & 0o7777;
+            (PRIVATE_MODE, Some(fs::Permissions::from_mode(existing)))
+        }
         Err(e) if e.kind() == io::ErrorKind::NotFound && matches!(missing, Missing::Create) => {
-            NEW_FILE_MODE
+            (NEW_FILE_MODE, None)
         }
         Err(e) => return Err(e),
     };
@@ -46,8 +53,9 @@ pub(super) fn write_atomically(target: &Path, text: &str, missing: Missing) -> i
         .create_new(true)
         .mode(mode)
         .open(&temp)?;
-    let result = file
-        .write_all(text.as_bytes())
+    let result = permissions
+        .map_or(Ok(()), |permissions| file.set_permissions(permissions))
+        .and_then(|()| file.write_all(text.as_bytes()))
         .and_then(|()| file.sync_all())
         .and_then(|()| fs::rename(&temp, target));
     if result.is_err() {
@@ -105,6 +113,23 @@ mod tests {
 
         assert_eq!(fs::read_to_string(&target).unwrap(), "x");
         assert_eq!(fs::read_dir(dir.path()).unwrap().count(), 1);
+    }
+
+    /// umask(보통 022)가 기존 파일의 권한을 좁히지 않는다.
+    #[test]
+    fn existing_target_keeps_its_mode() {
+        for mode in [0o664, 0o600] {
+            let dir = tempfile::tempdir().unwrap();
+            let target = dir.path().join("a.sql");
+            fs::write(&target, "old").unwrap();
+            fs::set_permissions(&target, fs::Permissions::from_mode(mode)).unwrap();
+
+            write_atomically(&target, "new", Missing::Create).unwrap();
+
+            assert_eq!(fs::read_to_string(&target).unwrap(), "new");
+            let written = fs::metadata(&target).unwrap().permissions().mode() & 0o7777;
+            assert_eq!(written, mode, "{written:o} != {mode:o}");
+        }
     }
 
     #[test]
