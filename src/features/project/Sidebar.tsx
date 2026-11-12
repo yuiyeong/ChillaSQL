@@ -21,7 +21,7 @@ export function Sidebar({
   if (project === null) return null;
 
   return (
-    <aside className="flex h-full w-64 flex-col gap-4 overflow-y-auto border-r border-zinc-800 bg-zinc-950 p-3 text-sm">
+    <aside className="flex h-full w-full flex-col gap-4 overflow-y-auto border-r border-zinc-800 bg-zinc-950 p-3 text-sm">
       <header className="flex items-center justify-between gap-2">
         <h2 className="truncate font-semibold">{project.name}</h2>
         <button type="button" className={smallButton} onClick={onSwitchProject}>

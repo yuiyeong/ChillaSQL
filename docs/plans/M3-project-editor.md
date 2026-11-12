@@ -1444,14 +1444,16 @@ export function useShortcuts(): void;   // window의 capture 단계 keydown
   3. 아니면 `splitStatements(text)`. 실패하면 `reject(tabId, error.message)`. `statementAt(text, spans, head)`가 `null`이면 `reject(tabId, "커서 위치에 문장이 없습니다")`. `sql = text.slice(span.start, span.end)`, `origin = lineColumn(text, span.start)`.
   4. `useRuns.getState().run(tabId, { connection, sql, origin })`.
 - `execute("cancel")` → `cancel(activeId)`. `"save"` → `saveTab(activeId)`. `"newTab"` → `newTab()`. `"closeTab"` → `closeTab(activeId)`. `"nextTab"` / `"prevTab"` → `next()` / `prev()`.
+- `execute("save")`는 그 탭의 저장이 아직 끝나지 않았으면 아무것도 하지 않는다(같은 stamp로 두 번 쓰면 두 번째가 "파일이 바뀌었다"고 묻는다). 이 guard는 `commands.ts` 안에 둔다.
+- `TabBar`의 `onName`은 공백뿐인 path를 무시한다(`saveTab`을 부르지 않는다).
 - `closeTab`: dirty면 `confirm("'<title>'의 저장하지 않은 변경을 버릴까요?")`를 묻고 `false`면 그만둔다. 그 뒤 `release(tabId)`, `close(tabId)` 순서다.
 - `changeConnection`: `release(tabId)` 뒤 `setConnection(tabId, connection)`.
-- `switchProject`: dirty 탭이 있으면 `confirm("저장하지 않은 변경이 있는 탭이 <n>개 있습니다. 버리고 다른 프로젝트를 열까요?")`. `pickDirectory()`가 `null`이면 그만둔다. `useProject.getState().open(dir)`이 `true`면 `useTabs.getState().reset()`과 `useRuns.getState().reset()`을 부른다. `chilla.toml`이 없는 디렉토리를 고르면 열려 있던 프로젝트가 그대로이고 `error`만 보인다(Task 7의 규칙).
+- `switchProject`: dirty 탭이 있으면 `confirm("저장하지 않은 변경이 있는 탭이 <n>개 있습니다. 버리고 다른 프로젝트를 열까요?")`. `pickDirectory()`가 `null`이면 그만둔다. `useProject.getState().open(dir)`이 `true`면 열린 탭마다 `useRuns.getState().release(tabId)`를 부른 뒤(실패는 무시한다. 옛 프로젝트의 세션은 Rust가 이미 닫았고, 바꾸는 동안 실행이 새 프로젝트에서 연 세션을 여기서 닫는다) `useTabs.getState().reset()`과 `useRuns.getState().reset()`을 부른다. `chilla.toml`이 없는 디렉토리를 고르면 열려 있던 프로젝트가 그대로이고 `error`만 보인다(Task 7의 규칙).
 - `Toolbar`(활성 탭 기준): 접속 `<select>`(`접속 없음`과 프로젝트의 접속들, 바꾸면 `changeConnection`), `실행`, `취소`(run status가 `"running"`일 때만 enabled), `저장`(탭이 dirty이거나 path가 없을 때 enabled). 활성 탭이 없으면 모두 disabled다.
 - `Workspace`: 왼쪽 `Sidebar`(너비 고정 260px), 오른쪽 위에서부터 `TabBar`, `Toolbar`, `SqlEditor`(60%), `ResultPane`(40%). 활성 탭이 없으면 에디터 자리에 `Shift+Cmd+L로 새 탭`을 그린다. `useShortcuts()`를 부른다. `Sidebar`의 handler: `onOpenFile` → `openFile`, `onAddConnection` / `onEditConnection` → `ConnectionForm`을 overlay로 연다(local state), `onSwitchProject` → `switchProject`. `ConnectionForm`의 `onSaved` → `applyProject(project)` 뒤 닫는다. `SqlEditor`의 `onDocChange` → `markDirty`. `TabBar`의 `onClose` → `closeTab`, `onNew` → `newTab`, `onName` → `saveTab(activeId, path)`. `useProject`의 `error`는 sidebar 아래에 보여 준다.
 - `App.tsx`: `<ProjectGate><Workspace /></ProjectGate>`
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 ```ts
 // shortcuts.test.ts
@@ -1488,19 +1490,19 @@ test("sidebar의 파일을 누르면 탭으로 열린다");
 test("접속 추가를 누르면 form이 열리고 저장하면 접속 목록에 나타난다");
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `pnpm vitest run src/features/workspace`
 Expected: FAIL. `./shortcuts`가 없다.
 
-- [ ] **Step 3: `commands.ts`, `shortcuts.ts`, `Toolbar.tsx`, `Workspace.tsx` 구현**
+- [x] **Step 3: `commands.ts`, `shortcuts.ts`, `Toolbar.tsx`, `Workspace.tsx` 구현**
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

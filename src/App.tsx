@@ -1,9 +1,10 @@
 import { ProjectGate } from "./features/project/ProjectGate";
+import { Workspace } from "./features/workspace/Workspace";
 
 function App() {
   return (
     <ProjectGate>
-      <div>작업 화면</div>
+      <Workspace />
     </ProjectGate>
   );
 }
