@@ -15,5 +15,5 @@ pub use query::{
     Column, QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, ServerError,
 };
 pub use session::{SessionId, SessionInfo, SessionState, TxStatus};
-pub use sql_file::{FileStamp, SqlFile, SqlPath, SqlPathError, WriteMode, has_sql_extension};
+pub use sql_file::{FileStamp, SqlFile, SqlPath, SqlPathError, WriteMode};
 pub use statement::StatementSpan;

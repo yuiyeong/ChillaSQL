@@ -34,7 +34,7 @@ impl SqlPath {
 }
 
 /// 대소문자 구분 없이 `.sql`로 끝나는지.
-pub fn has_sql_extension(name: &str) -> bool {
+fn has_sql_extension(name: &str) -> bool {
     let bytes = name.as_bytes();
     bytes.len() >= 4 && bytes[bytes.len() - 4..].eq_ignore_ascii_case(b".sql")
 }

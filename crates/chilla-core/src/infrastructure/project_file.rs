@@ -256,19 +256,16 @@ fn remove(table: &mut dyn TableLike, key: &str) {
         .filter(|lines| lines.contains('#'))
         .map(str::to_string);
     let keys: Vec<String> = table.iter().map(|(k, _)| k.to_string()).collect();
-    if table.remove(key).is_none() {
+    let Some(at) = keys.iter().position(|k| k == key) else {
         return;
-    }
+    };
+    table.remove(key);
     let Some(comments) = comments else { return };
-    let at = keys
-        .iter()
-        .position(|k| k == key)
-        .expect("지운 key는 목록에 있다");
 
     if let Some(mut next) = keys.get(at + 1).and_then(|next| table.key_mut(next)) {
         let decor = next.leaf_decor_mut();
-        let indent = decor.prefix().and_then(|p| p.as_str()).unwrap_or_default();
-        let prefix = format!("{comments}{indent}");
+        let next_prefix = decor.prefix().and_then(|p| p.as_str()).unwrap_or_default();
+        let prefix = format!("{comments}{next_prefix}");
         decor.set_prefix(prefix);
     } else if let Some(previous) = at
         .checked_sub(1)

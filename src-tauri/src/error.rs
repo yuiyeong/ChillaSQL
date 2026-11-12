@@ -27,9 +27,7 @@ impl From<AppError> for CommandError {
             AppError::MultipleStatements { .. } => "multiple_statements",
             AppError::QueryNotActive { .. } => "query_not_active",
             AppError::Cancel(_) => "cancel_failed",
-            AppError::InvalidPath(_) | AppError::File(FileError::OutsideProject { .. }) => {
-                "invalid_path"
-            }
+            AppError::InvalidPath(_) => "invalid_path",
             AppError::File(file) => match file {
                 FileError::NotFound { .. } => "file_not_found",
                 FileError::Exists { .. } => "file_exists",
@@ -148,48 +146,47 @@ mod tests {
             assert_eq!(kind(error), "project_invalid");
         }
 
-        let file = |name: &str| name.to_string();
         let file_errors = [
             (
                 FileError::NotFound {
-                    path: file("a.sql"),
+                    path: "a.sql".into(),
                 },
                 "file_not_found",
             ),
             (
                 FileError::Exists {
-                    path: file("a.sql"),
+                    path: "a.sql".into(),
                 },
                 "file_exists",
             ),
             (
                 FileError::Changed {
-                    path: file("a.sql"),
+                    path: "a.sql".into(),
                 },
                 "file_changed",
             ),
             (
                 FileError::TooLarge {
-                    path: file("a.sql"),
+                    path: "a.sql".into(),
                     bytes: 1,
                 },
                 "file_too_large",
             ),
             (
                 FileError::NotUtf8 {
-                    path: file("a.sql"),
+                    path: "a.sql".into(),
                 },
                 "file_not_utf8",
             ),
             (
                 FileError::OutsideProject {
-                    path: file("a.sql"),
+                    path: "a.sql".into(),
                 },
                 "invalid_path",
             ),
             (
                 FileError::Io {
-                    path: file("a.sql"),
+                    path: "a.sql".into(),
                     message: message.clone(),
                 },
                 "file_io",

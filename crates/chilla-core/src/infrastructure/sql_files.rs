@@ -5,7 +5,7 @@ use std::time::UNIX_EPOCH;
 
 use super::atomic_write::{Missing, create_new_file, write_atomically};
 use crate::application::{FileError, SqlFileStore};
-use crate::domain::{FileStamp, SqlFile, SqlPath, WriteMode, has_sql_extension};
+use crate::domain::{FileStamp, SqlFile, SqlPath, WriteMode};
 
 /// 프로젝트 디렉토리의 `.sql` 파일을 다루는 [`SqlFileStore`].
 pub struct FsSqlFileStore;
@@ -38,13 +38,16 @@ impl SqlFileStore for FsSqlFileStore {
             return Err(too_large(path, meta.len()));
         }
         // 크기를 본 뒤에 파일이 커졌어도 상한을 넘겨 읽지 않는다.
-        let mut bytes = Vec::new();
+        let mut bytes = Vec::with_capacity(meta.len() as usize);
         (&mut file)
             .take(Self::MAX_BYTES + 1)
             .read_to_end(&mut bytes)
             .map_err(|e| io_error(path, &e))?;
         if bytes.len() as u64 > Self::MAX_BYTES {
-            return Err(too_large(path, bytes.len() as u64));
+            let size = file
+                .metadata()
+                .map_or(bytes.len() as u64, |grown| grown.len());
+            return Err(too_large(path, size));
         }
         let text = String::from_utf8(bytes).map_err(|_| FileError::NotUtf8 {
             path: path.as_str().to_string(),
@@ -106,7 +109,6 @@ fn collect(entries: fs::ReadDir, prefix: &str, found: &mut Vec<SqlPath>) {
                 collect(children, &format!("{relative}/"), found);
             }
         } else if kind.is_file()
-            && has_sql_extension(&name)
             && let Ok(path) = SqlPath::parse(&relative)
         {
             found.push(path);

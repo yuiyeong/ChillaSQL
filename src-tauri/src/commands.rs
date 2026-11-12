@@ -504,7 +504,7 @@ pub async fn cancel_query(
 mod tests {
     use std::collections::BTreeSet;
 
-    use chilla_core::domain::{FileStamp, SqlFile, SslMode, WriteMode};
+    use chilla_core::domain::SslMode;
     use serde_json::json;
 
     use super::*;
