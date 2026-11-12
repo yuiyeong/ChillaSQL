@@ -896,7 +896,7 @@ export function Sidebar(props: {
 - `Sidebar`: 맨 위에 프로젝트 이름과 `다른 프로젝트` 버튼. `접속` 구역은 접속마다 이름과 `host:port/database`, `수정` 버튼, 끝에 `접속 추가` 버튼. `SQL 파일` 구역은 `files`의 상대 경로를 그대로 나열하고 `새로고침` 버튼을 둔다. 파일을 누르면 `onOpenFile(path)`다.
 - `App.tsx`: `<ProjectGate><div>…</div></ProjectGate>`. Workspace는 Task 12에서 넣는다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 각 test 앞에서 `localStorage.clear()`와 store 초기화를 한다. `vi.mock("../../shared/api/commands")`, `vi.mock("../../shared/api/dialog")`.
 
@@ -925,19 +925,19 @@ test("파일, 수정, 접속 추가, 다른 프로젝트, 새로고침이 각 ha
 
 `App.test.tsx`는 `"프로젝트가 없으면 프로젝트 열기 버튼을 보여 준다"`로 바꾼다.
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `pnpm vitest run src/features/project`
 Expected: FAIL. `./projectStore`가 없다.
 
-- [ ] **Step 3: store, `ProjectGate`, `Sidebar` 구현**
+- [x] **Step 3: store, `ProjectGate`, `Sidebar` 구현**
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

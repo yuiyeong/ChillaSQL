@@ -1,8 +1,10 @@
+import { ProjectGate } from "./features/project/ProjectGate";
+
 function App() {
   return (
-    <main className="flex h-screen items-center justify-center">
-      <h1 className="text-3xl font-semibold">ChillaSQL</h1>
-    </main>
+    <ProjectGate>
+      <div>작업 화면</div>
+    </ProjectGate>
   );
 }
 

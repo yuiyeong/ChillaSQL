@@ -1,10 +1,22 @@
 import { render, screen } from "@testing-library/react";
-import { expect, test } from "vitest";
-import App from "./App";
+import { beforeEach, expect, test, vi } from "vitest";
 
-test("앱 이름을 보여 준다", () => {
+vi.mock("./shared/api/commands");
+vi.mock("./shared/api/dialog");
+
+import App from "./App";
+import { useProject } from "./features/project/projectStore";
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  localStorage.clear();
+  useProject.setState(useProject.getInitialState(), true);
+});
+
+test("프로젝트가 없으면 프로젝트 열기 버튼을 보여 준다", async () => {
   render(<App />);
+
   expect(
-    screen.getByRole("heading", { name: "ChillaSQL" }),
+    await screen.findByRole("button", { name: "프로젝트 열기" }),
   ).toBeInTheDocument();
 });
