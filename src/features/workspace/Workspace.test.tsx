@@ -315,3 +315,40 @@ test("프로젝트 오류를 보여 주고 누르면 지운다", async () => {
   expect(useProject.getState().error).toBeNull();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
+
+test("접속 form이 열려 있으면 단축키가 동작하지 않는다", async () => {
+  openProjectWith([connection("local")]);
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
+  const id = tabWith("SELECT 1", "local");
+  renderWorkspace();
+  const shortcut = (code: string) =>
+    new KeyboardEvent("keydown", {
+      code,
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+  await click(screen.getByRole("button", { name: "접속 추가" }));
+  const name = screen.getByLabelText("name");
+  const run = shortcut("Enter");
+  const close = shortcut("KeyW");
+  await act(async () => {
+    name.dispatchEvent(run);
+    name.dispatchEvent(close);
+  });
+
+  expect(run.defaultPrevented).toBe(false);
+  expect(close.defaultPrevented).toBe(false);
+  expect(splitStatements).not.toHaveBeenCalled();
+  expect(useTabs.getState().tabs.map((tab) => tab.id)).toEqual([id]);
+
+  // form을 닫으면 다시 잡는다.
+  await click(within(connectionForm()).getByRole("button", { name: "취소" }));
+  const closeAgain = shortcut("KeyW");
+  await act(async () => {
+    window.dispatchEvent(closeAgain);
+  });
+  expect(closeAgain.defaultPrevented).toBe(true);
+  expect(useTabs.getState().tabs).toEqual([]);
+});

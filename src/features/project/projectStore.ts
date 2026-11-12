@@ -26,6 +26,9 @@ export interface ProjectState {
   /** 접속을 저장한 뒤 */
   applyProject(project: Project): void;
   refreshFiles(): Promise<void>;
+  /** 프로젝트를 열기 전에 실패한 일(디렉토리 고르기)을 알린다. */
+  showError(message: string): void;
+  clearError(): void;
 }
 
 function readLastDir(): string | null {
@@ -115,6 +118,14 @@ export const useProject = create<ProjectState>()((set, get) => {
       } catch (error) {
         if (generation === started) set({ error: messageOf(error) });
       }
+    },
+
+    showError(message) {
+      set({ error: message });
+    },
+
+    clearError() {
+      set({ error: null });
     },
   };
 });

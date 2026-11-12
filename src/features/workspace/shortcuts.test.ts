@@ -59,7 +59,7 @@ test("modifier가 다르면 고르지 않는다", () => {
 });
 
 function Shortcuts() {
-  useShortcuts();
+  useShortcuts(true);
   return createElement("div", { "data-testid": "inner", tabIndex: 0 });
 }
 

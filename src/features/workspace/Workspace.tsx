@@ -19,14 +19,16 @@ interface OpenForm {
 
 /** 프로젝트가 열린 뒤의 화면. 왼쪽 sidebar, 오른쪽에 탭, toolbar, 에디터, 결과. */
 export function Workspace() {
-  useShortcuts();
   const activeId = useTabs((s) => s.activeId);
   const openFile = useTabs((s) => s.openFile);
   const markDirty = useTabs((s) => s.markDirty);
   const project = useProject((s) => s.project);
   const error = useProject((s) => s.error);
   const applyProject = useProject((s) => s.applyProject);
+  const clearError = useProject((s) => s.clearError);
   const [form, setForm] = useState<OpenForm | null>(null);
+  // 접속 form이 열려 있으면 뒤의 탭을 실행하거나 닫지 않는다.
+  useShortcuts(form === null);
 
   function editConnection(name: string) {
     const original = project?.connections.find((c) => c.name === name);
@@ -64,7 +66,7 @@ export function Workspace() {
             <button
               type="button"
               className="block w-full px-3 py-2 text-left text-sm break-words text-red-400 hover:bg-zinc-900"
-              onClick={() => useProject.setState({ error: null })}
+              onClick={clearError}
             >
               {error}
             </button>

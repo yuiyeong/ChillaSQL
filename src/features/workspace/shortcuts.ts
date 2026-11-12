@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { execute, type CommandId } from "./commands";
 
 type Keys = Pick<
@@ -28,10 +28,18 @@ export function commandFor(event: Keys): CommandId | null {
 /**
  * window의 capture 단계에서 단축키를 잡는다. 잡은 key는 에디터에 닿지 않는다
  * (CodeMirror의 `Mod-Enter`가 빈 줄을 넣지 않게, Cmd+W가 webview에 가지 않게).
+ * `enabled`가 false인 동안은 event를 건드리지 않는다.
  */
-export function useShortcuts(): void {
+export function useShortcuts(enabled: boolean): void {
+  // listener를 다시 달지 않고 지금 값을 읽는다.
+  const enabledRef = useRef(enabled);
+  useEffect(() => {
+    enabledRef.current = enabled;
+  });
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (!enabledRef.current) return;
       const command = commandFor(event);
       if (command === null) return;
       event.preventDefault();

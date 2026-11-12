@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { pickDirectory } from "../../shared/api/dialog";
+import { messageOf } from "../../shared/api/errors";
 import { useProject } from "./projectStore";
 
 const buttonClass =
@@ -13,6 +14,7 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
   const boot = useProject((s) => s.boot);
   const open = useProject((s) => s.open);
   const create = useProject((s) => s.create);
+  const showError = useProject((s) => s.showError);
 
   // StrictMode가 effect를 두 번 돌려도 boot는 한 번만 부른다.
   const booted = useRef(false);
@@ -23,7 +25,13 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
   }, [boot]);
 
   async function pickAndOpen() {
-    const dir = await pickDirectory();
+    let dir: string | null;
+    try {
+      dir = await pickDirectory();
+    } catch (error) {
+      showError(messageOf(error));
+      return;
+    }
     if (dir !== null) await open(dir);
   }
 

@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import { StrictMode } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { click } from "../../test/click";
 
@@ -134,13 +135,34 @@ test("mount 때 boot를 한 번만 부른다", async () => {
     connections: [],
   });
 
-  const { rerender } = renderGate();
+  // StrictMode는 effect를 두 번 돌린다.
+  const { rerender } = render(
+    <StrictMode>
+      <ProjectGate>
+        <p>작업 화면</p>
+      </ProjectGate>
+    </StrictMode>,
+  );
   rerender(
-    <ProjectGate>
-      <p>작업 화면</p>
-    </ProjectGate>,
+    <StrictMode>
+      <ProjectGate>
+        <p>작업 화면</p>
+      </ProjectGate>
+    </StrictMode>,
   );
 
   expect(await screen.findByText("작업 화면")).toBeInTheDocument();
   expect(openProject).toHaveBeenCalledTimes(1);
+});
+
+test("디렉토리 고르기가 실패하면 오류를 보여 준다", async () => {
+  vi.mocked(pickDirectory).mockRejectedValue(new Error("창을 열 수 없습니다"));
+  renderGate();
+
+  await click(await screen.findByRole("button", { name: "프로젝트 열기" }));
+
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "창을 열 수 없습니다",
+  );
+  expect(openProject).not.toHaveBeenCalled();
 });
