@@ -108,6 +108,7 @@ export function Workspace() {
           <ConnectionForm
             key={form.original?.name ?? "new"}
             original={form.original}
+            existingNames={project?.connections.map((c) => c.name) ?? []}
             onSaved={(saved) => connectionSaved(saved, form)}
             onClose={() => setForm(null)}
           />

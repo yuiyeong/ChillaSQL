@@ -39,12 +39,16 @@ beforeEach(() => {
   vi.mocked(testConnection).mockResolvedValue(undefined);
 });
 
-function renderForm(connection: Connection | null = null) {
+function renderForm(
+  connection: Connection | null = null,
+  existingNames: string[] = [],
+) {
   const onSaved = vi.fn();
   const onClose = vi.fn();
   render(
     <ConnectionForm
       original={connection}
+      existingNames={existingNames}
       onSaved={onSaved}
       onClose={onClose}
     />,
@@ -300,4 +304,17 @@ test("도는 동안 테스트와 저장 버튼은 disabled다", async () => {
 
   await act(async () => saving.resolve(saved));
   expect(testButton()).toBeEnabled();
+});
+
+test("이미 있는 이름이면 저장하지 않는다", async () => {
+  const { onSaved } = renderForm(null, ["local"]);
+  fillNew();
+
+  await click(saveButton());
+
+  expect(saveConnection).not.toHaveBeenCalled();
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "'local'은 이미 있는 접속 이름입니다",
+  );
 });

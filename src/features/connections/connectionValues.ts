@@ -43,9 +43,11 @@ const required = [
 
 const portError = "port는 1~65535의 숫자여야 합니다";
 
+/** `taken`은 프로젝트에 이미 있는 접속 이름이다. 새 접속이 그 이름이면 덮어쓰지 않게 거절한다. */
 export function toConnection(
   values: FormValues,
   original: Connection | null,
+  taken: readonly string[],
 ): { connection: Connection } | { error: string } {
   const trimmed = {
     name: values.name.trim(),
@@ -57,6 +59,9 @@ export function toConnection(
   for (const [key, label] of required) {
     if (key === "name" && original !== null) continue;
     if (trimmed[key] === "") return { error: `${label} 입력하세요` };
+  }
+  if (original === null && taken.includes(trimmed.name)) {
+    return { error: `'${trimmed.name}'은 이미 있는 접속 이름입니다` };
   }
 
   const portText = values.port.trim();

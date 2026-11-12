@@ -67,6 +67,7 @@ test("값의 앞뒤 공백을 빼고 port를 숫자로 바꾼다", () => {
       user: " chilla ",
     },
     null,
+    [],
   );
 
   expect(result).toEqual({
@@ -85,30 +86,30 @@ test("값의 앞뒤 공백을 빼고 port를 숫자로 바꾼다", () => {
 });
 
 test("빈 필수 항목은 error다", () => {
-  expect(toConnection({ ...values, name: "  " }, null)).toEqual({
+  expect(toConnection({ ...values, name: "  " }, null, [])).toEqual({
     error: "name을 입력하세요",
   });
-  expect(toConnection({ ...values, host: "" }, null)).toEqual({
+  expect(toConnection({ ...values, host: "" }, null, [])).toEqual({
     error: "host를 입력하세요",
   });
-  expect(toConnection({ ...values, database: "" }, null)).toEqual({
+  expect(toConnection({ ...values, database: "" }, null, [])).toEqual({
     error: "database를 입력하세요",
   });
-  expect(toConnection({ ...values, user: "" }, null)).toEqual({
+  expect(toConnection({ ...values, user: "" }, null, [])).toEqual({
     error: "user를 입력하세요",
   });
 });
 
 test("잘못된 port는 error다", () => {
   for (const port of ["", "abc", "0", "65536", "54.3", "-1", "1e3"]) {
-    expect(toConnection({ ...values, port }, null)).toEqual({
+    expect(toConnection({ ...values, port }, null, [])).toEqual({
       error: "port는 1~65535의 숫자여야 합니다",
     });
   }
-  expect(toConnection({ ...values, port: "1" }, null)).toHaveProperty(
+  expect(toConnection({ ...values, port: "1" }, null, [])).toHaveProperty(
     "connection",
   );
-  expect(toConnection({ ...values, port: "65535" }, null)).toHaveProperty(
+  expect(toConnection({ ...values, port: "65535" }, null, [])).toHaveProperty(
     "connection",
   );
 });
@@ -117,21 +118,31 @@ test("sslrootcert는 verify-full일 때만 보낸다", () => {
   const cert = " /certs/ca.crt ";
 
   expect(
-    toConnection({ ...values, sslmode: "require", sslrootcert: cert }, null),
+    toConnection(
+      { ...values, sslmode: "require", sslrootcert: cert },
+      null,
+      [],
+    ),
   ).toMatchObject({ connection: { sslrootcert: null } });
   expect(
-    toConnection({ ...values, sslmode: "disable", sslrootcert: cert }, null),
+    toConnection(
+      { ...values, sslmode: "disable", sslrootcert: cert },
+      null,
+      [],
+    ),
   ).toMatchObject({ connection: { sslrootcert: null } });
   expect(
     toConnection(
       { ...values, sslmode: "verify-full", sslrootcert: cert },
       null,
+      [],
     ),
   ).toMatchObject({ connection: { sslrootcert: "/certs/ca.crt" } });
   expect(
     toConnection(
       { ...values, sslmode: "verify-full", sslrootcert: "  " },
       null,
+      [],
     ),
   ).toMatchObject({ connection: { sslrootcert: null } });
 });
@@ -140,6 +151,7 @@ test("수정은 이름, tunnel, color를 original에서 가져온다", () => {
   const result = toConnection(
     { ...values, name: "renamed", host: "db.example" },
     original,
+    [],
   );
 
   expect(result).toEqual({
@@ -155,6 +167,19 @@ test("수정은 이름, tunnel, color를 original에서 가져온다", () => {
       color: "#ff0000",
     },
   });
+});
+
+test("새 접속은 이미 있는 이름을 쓸 수 없다", () => {
+  expect(toConnection({ ...values, name: " local " }, null, ["local"])).toEqual(
+    { error: "'local'은 이미 있는 접속 이름입니다" },
+  );
+  expect(
+    toConnection({ ...values, name: "staging" }, null, ["local"]),
+  ).toHaveProperty("connection");
+  // 수정은 같은 이름으로 저장한다.
+  expect(toConnection(values, original, ["local"])).toHaveProperty(
+    "connection",
+  );
 });
 
 describe("targetChanged", () => {
