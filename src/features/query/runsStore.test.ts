@@ -10,14 +10,15 @@ import {
 } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
 import type { QueryEvent, Session } from "../../shared/api/types";
-import { useRuns, type RunRequest } from "./runsStore";
+import { useRuns, type Prepare, type RunRequest } from "./runsStore";
 
 function session(id: number, connection = "local"): Session {
   return { id, connection, backendPid: 100 + id };
 }
 
-function request(sql = "SELECT 1", connection = "local"): RunRequest {
-  return { connection, sql, origin: { line: 1, column: 1 } };
+/** 바로 이 문장을 실행하게 하는 prepare. */
+function prepared(sql = "SELECT 1", connection = "local"): Prepare {
+  return () => ({ connection, sql, origin: { line: 1, column: 1 } });
 }
 
 /** 끝나는 시점을 test가 정하는 promise. */
@@ -30,6 +31,8 @@ function deferred<T>() {
   });
   return { promise, resolve, reject };
 }
+
+const origin = { line: 1, column: 1 };
 
 function runOf(tabId: string) {
   return useRuns.getState().runs[tabId];
@@ -59,7 +62,7 @@ beforeEach(async () => {
 });
 
 test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () => {
-  await useRuns.getState().run("t", request("SELECT 1"));
+  await useRuns.getState().run("t", prepared("SELECT 1"));
 
   expect(openSession).toHaveBeenCalledTimes(1);
   expect(openSession).toHaveBeenCalledWith("local");
@@ -82,8 +85,8 @@ test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () =>
 });
 
 test("같은 탭의 다음 실행은 세션을 다시 쓴다", async () => {
-  await useRuns.getState().run("t", request("SELECT 1"));
-  await useRuns.getState().run("t", request("SELECT 2"));
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+  await useRuns.getState().run("t", prepared("SELECT 2"));
 
   expect(openSession).toHaveBeenCalledTimes(1);
   expect(executeQuery).toHaveBeenCalledTimes(2);
@@ -98,8 +101,8 @@ test("연결 중에 한 번 더 실행해도 세션은 하나다", async () => {
   const opening = deferred<Session>();
   vi.mocked(openSession).mockReturnValue(opening.promise);
 
-  const first = useRuns.getState().run("t", request("SELECT 1"));
-  const second = useRuns.getState().run("t", request("SELECT 2"));
+  const first = useRuns.getState().run("t", prepared("SELECT 1"));
+  const second = useRuns.getState().run("t", prepared("SELECT 2"));
 
   expect(openSession).toHaveBeenCalledTimes(1);
   expect(runOf("t")).toEqual({ status: "connecting" });
@@ -119,9 +122,9 @@ test("연결 중에 한 번 더 실행해도 세션은 하나다", async () => {
 });
 
 test("앞 실행의 늦은 event는 새 실행의 상태를 바꾸지 않는다", async () => {
-  await useRuns.getState().run("t", request("SELECT 1"));
+  await useRuns.getState().run("t", prepared("SELECT 1"));
   const lateA = onEventOf(0);
-  await useRuns.getState().run("t", request("SELECT 2"));
+  await useRuns.getState().run("t", prepared("SELECT 2"));
   const stateB = runOf("t");
   expect(stateB.status === "running" && stateB.result.sql).toBe("SELECT 2");
 
@@ -135,7 +138,7 @@ test("event는 execute가 query id를 돌려주기 전에도 반영된다", asyn
   const execution = deferred<number>();
   vi.mocked(executeQuery).mockReturnValue(execution.promise);
 
-  const running = useRuns.getState().run("t", request());
+  const running = useRuns.getState().run("t", prepared());
   await vi.waitFor(() => expect(executeQuery).toHaveBeenCalled());
   const onEvent = onEventOf(0);
   onEvent({ type: "columns", columns: [{ name: "id" }] });
@@ -156,7 +159,7 @@ test("접속 실패는 rejected이고 다음 실행에서 다시 연다", async 
     new CommandError("unreachable", "서버에 닿지 못했습니다"),
   );
 
-  await useRuns.getState().run("t", request());
+  await useRuns.getState().run("t", prepared());
 
   expect(runOf("t")).toEqual({
     status: "rejected",
@@ -164,7 +167,7 @@ test("접속 실패는 rejected이고 다음 실행에서 다시 연다", async 
   });
   expect(executeQuery).not.toHaveBeenCalled();
 
-  await useRuns.getState().run("t", request());
+  await useRuns.getState().run("t", prepared());
 
   expect(openSession).toHaveBeenCalledTimes(2);
   expect(runOf("t").status).toBe("running");
@@ -175,7 +178,7 @@ test("execute가 거절되면 rejected다", async () => {
     new CommandError("multiple_statements", "문장을 하나만 보낼 수 있습니다"),
   );
 
-  await useRuns.getState().run("t", request("SELECT 1; SELECT 2"));
+  await useRuns.getState().run("t", prepared("SELECT 1; SELECT 2"));
 
   expect(runOf("t")).toEqual({
     status: "rejected",
@@ -183,7 +186,7 @@ test("execute가 거절되면 rejected다", async () => {
   });
 
   // 세션은 그대로 쓴다.
-  await useRuns.getState().run("t", request());
+  await useRuns.getState().run("t", prepared());
   expect(openSession).toHaveBeenCalledTimes(1);
 });
 
@@ -192,18 +195,18 @@ test("unknown_session으로 거절되면 세션을 버린다", async () => {
     new CommandError("unknown_session", "세션이 없습니다"),
   );
 
-  await useRuns.getState().run("t", request());
+  await useRuns.getState().run("t", prepared());
   expect(runOf("t")).toEqual({
     status: "rejected",
     message: "세션이 없습니다",
   });
 
-  await useRuns.getState().run("t", request());
+  await useRuns.getState().run("t", prepared());
   expect(openSession).toHaveBeenCalledTimes(2);
 });
 
 test("connection_lost로 끝나면 세션을 닫고 버린다", async () => {
-  await useRuns.getState().run("t", request());
+  await useRuns.getState().run("t", prepared());
 
   onEventOf(0)({
     type: "finished",
@@ -219,14 +222,14 @@ test("connection_lost로 끝나면 세션을 닫고 버린다", async () => {
   });
   await vi.waitFor(() => expect(closeSession).toHaveBeenCalledWith(3));
 
-  await useRuns.getState().run("t", request());
+  await useRuns.getState().run("t", prepared());
   expect(openSession).toHaveBeenCalledTimes(2);
 });
 
 test("앞 실행의 늦은 connection_lost도 세션을 닫고 버린다", async () => {
-  await useRuns.getState().run("t", request("SELECT 1"));
+  await useRuns.getState().run("t", prepared("SELECT 1"));
   const lateA = onEventOf(0);
-  await useRuns.getState().run("t", request("SELECT 2"));
+  await useRuns.getState().run("t", prepared("SELECT 2"));
   const stateB = runOf("t");
 
   lateA({
@@ -239,17 +242,17 @@ test("앞 실행의 늦은 connection_lost도 세션을 닫고 버린다", async
   expect(runOf("t")).toBe(stateB);
   await vi.waitFor(() => expect(closeSession).toHaveBeenCalledWith(3));
 
-  await useRuns.getState().run("t", request("SELECT 3"));
+  await useRuns.getState().run("t", prepared("SELECT 3"));
   expect(openSession).toHaveBeenCalledTimes(2);
 });
 
 test("여는 중인 세션에 합류한 실행도 connecting이다", async () => {
   const opening = deferred<Session>();
   vi.mocked(openSession).mockReturnValue(opening.promise);
-  const first = useRuns.getState().run("t", request("SELECT 1"));
-  useRuns.getState().reject("t", "커서 위치에 문장이 없습니다");
+  const first = useRuns.getState().run("t", prepared("SELECT 1"));
+  await useRuns.getState().run("t", () => "커서 위치에 문장이 없습니다");
 
-  const second = useRuns.getState().run("t", request("SELECT 2"));
+  const second = useRuns.getState().run("t", prepared("SELECT 2"));
 
   expect(runOf("t")).toEqual({ status: "connecting" });
   expect(openSession).toHaveBeenCalledTimes(1);
@@ -266,8 +269,8 @@ test("첫 세션이 여는 중일 때 접속을 바꾸면 앞 세션을 닫은 �
     .mockReturnValueOnce(opening.promise)
     .mockResolvedValueOnce(session(4, "staging"));
 
-  const first = useRuns.getState().run("t", request("SELECT 1", "local"));
-  const second = useRuns.getState().run("t", request("SELECT 2", "staging"));
+  const first = useRuns.getState().run("t", prepared("SELECT 1", "local"));
+  const second = useRuns.getState().run("t", prepared("SELECT 2", "staging"));
   expect(runOf("t")).toEqual({ status: "connecting" });
   expect(openSession).toHaveBeenCalledTimes(1);
 
@@ -295,16 +298,16 @@ test("늦은 unknown_session은 새 세션을 건드리지 않는다", async () 
     .mockResolvedValueOnce(session(4, "staging"));
   vi.mocked(executeQuery).mockReturnValueOnce(execution.promise);
 
-  const first = useRuns.getState().run("t", request("SELECT 1", "local"));
+  const first = useRuns.getState().run("t", prepared("SELECT 1", "local"));
   await vi.waitFor(() => expect(executeQuery).toHaveBeenCalledTimes(1));
-  await useRuns.getState().run("t", request("SELECT 2", "staging"));
+  await useRuns.getState().run("t", prepared("SELECT 2", "staging"));
   const stateB = runOf("t");
 
   execution.reject(new CommandError("unknown_session", "세션이 없습니다"));
   await first;
 
   expect(runOf("t")).toBe(stateB);
-  await useRuns.getState().run("t", request("SELECT 3", "staging"));
+  await useRuns.getState().run("t", prepared("SELECT 3", "staging"));
   expect(openSession).toHaveBeenCalledTimes(2);
   expect(executeQuery).toHaveBeenLastCalledWith(
     4,
@@ -316,7 +319,7 @@ test("늦은 unknown_session은 새 세션을 건드리지 않는다", async () 
 test("cancel은 execute가 query id를 돌려준 뒤 보낸다", async () => {
   const execution = deferred<number>();
   vi.mocked(executeQuery).mockReturnValue(execution.promise);
-  const running = useRuns.getState().run("t", request());
+  const running = useRuns.getState().run("t", prepared());
   await vi.waitFor(() => expect(executeQuery).toHaveBeenCalled());
 
   const cancelling = useRuns.getState().cancel("t");
@@ -338,7 +341,7 @@ test("실행 중이 아니면 cancel은 아무것도 하지 않는다", async ()
   // connecting
   const opening = deferred<Session>();
   vi.mocked(openSession).mockReturnValue(opening.promise);
-  const running = useRuns.getState().run("t", request());
+  const running = useRuns.getState().run("t", prepared());
   expect(runOf("t").status).toBe("connecting");
   await useRuns.getState().cancel("t");
 
@@ -362,8 +365,8 @@ test("접속이 바뀐 탭은 앞 세션을 닫고 새로 연다", async () => {
     .mockResolvedValueOnce(session(3, "local"))
     .mockResolvedValueOnce(session(4, "staging"));
 
-  await useRuns.getState().run("t", request("SELECT 1", "local"));
-  await useRuns.getState().run("t", request("SELECT 2", "staging"));
+  await useRuns.getState().run("t", prepared("SELECT 1", "local"));
+  await useRuns.getState().run("t", prepared("SELECT 2", "staging"));
 
   expect(closeSession).toHaveBeenCalledTimes(1);
   expect(closeSession).toHaveBeenCalledWith(3);
@@ -379,7 +382,7 @@ test("접속이 바뀐 탭은 앞 세션을 닫고 새로 연다", async () => {
 });
 
 test("release는 세션을 닫고 그 뒤의 event를 무시한다", async () => {
-  await useRuns.getState().run("t", request());
+  await useRuns.getState().run("t", prepared());
   const onEvent = onEventOf(0);
 
   await useRuns.getState().release("t");
@@ -395,7 +398,7 @@ test("release는 세션을 닫고 그 뒤의 event를 무시한다", async () =>
 test("release는 여는 중인 세션을 연 뒤에 닫고 실행하지 않는다", async () => {
   const opening = deferred<Session>();
   vi.mocked(openSession).mockReturnValue(opening.promise);
-  const running = useRuns.getState().run("t", request());
+  const running = useRuns.getState().run("t", prepared());
 
   const releasing = useRuns.getState().release("t");
   expect(closeSession).not.toHaveBeenCalled();
@@ -413,8 +416,8 @@ test("reset은 열린 세션을 모두 닫는다", async () => {
     .mockResolvedValueOnce(session(3))
     .mockResolvedValueOnce(session(4))
     .mockResolvedValueOnce(session(5));
-  await useRuns.getState().run("a", request());
-  await useRuns.getState().run("b", request());
+  await useRuns.getState().run("a", prepared());
+  await useRuns.getState().run("b", prepared());
   const lateA = onEventOf(0);
 
   const resetting = useRuns.getState().reset();
@@ -430,7 +433,7 @@ test("reset은 열린 세션을 모두 닫는다", async () => {
   expect(useRuns.getState().runs).toEqual({});
 
   // 세션도 잊었다. 다음 실행은 새로 연다.
-  await useRuns.getState().run("a", request());
+  await useRuns.getState().run("a", prepared());
   expect(openSession).toHaveBeenCalledTimes(3);
   expect(executeQuery).toHaveBeenLastCalledWith(
     5,
@@ -444,8 +447,8 @@ test("탭마다 세션이 따로다", async () => {
     .mockResolvedValueOnce(session(3))
     .mockResolvedValueOnce(session(4));
 
-  await useRuns.getState().run("a", request("SELECT 1"));
-  await useRuns.getState().run("b", request("SELECT 2"));
+  await useRuns.getState().run("a", prepared("SELECT 1"));
+  await useRuns.getState().run("b", prepared("SELECT 2"));
 
   expect(openSession).toHaveBeenCalledTimes(2);
   expect(executeQuery).toHaveBeenNthCalledWith(
@@ -464,11 +467,64 @@ test("탭마다 세션이 따로다", async () => {
   expect(runOf("b").status).toBe("running");
 });
 
-test("reject는 그 탭을 rejected로 둔다", () => {
-  useRuns.getState().reject("t", "접속을 고르세요");
+test("prepare가 문구를 돌려주면 rejected다", async () => {
+  await useRuns.getState().run("t", () => "접속을 고르세요");
 
   expect(runOf("t")).toEqual({
     status: "rejected",
     message: "접속을 고르세요",
   });
+  expect(openSession).not.toHaveBeenCalled();
+});
+
+test("prepare가 throw하면 그 message로 rejected다", async () => {
+  await useRuns.getState().run("t", () => {
+    throw new Error("문서가 없습니다");
+  });
+  expect(runOf("t")).toEqual({
+    status: "rejected",
+    message: "문서가 없습니다",
+  });
+
+  await useRuns
+    .getState()
+    .run("t", () =>
+      Promise.reject(new CommandError("split_failed", "나눌 수 없습니다")),
+    );
+  expect(runOf("t")).toEqual({
+    status: "rejected",
+    message: "나눌 수 없습니다",
+  });
+  expect(openSession).not.toHaveBeenCalled();
+});
+
+test("prepare가 끝나기 전에 release하면 실행하지 않는다", async () => {
+  const preparing = deferred<string | RunRequest>();
+  const running = useRuns.getState().run("t", () => preparing.promise);
+
+  await useRuns.getState().release("t");
+  preparing.resolve({ connection: "local", sql: "SELECT 1", origin });
+  await running;
+
+  expect(openSession).not.toHaveBeenCalled();
+  expect(executeQuery).not.toHaveBeenCalled();
+  expect(runOf("t")).toBeUndefined();
+});
+
+test("prepare가 늦게 끝난 앞 실행은 뒤 실행을 덮지 않는다", async () => {
+  const preparingA = deferred<string | RunRequest>();
+  const runningA = useRuns.getState().run("t", () => preparingA.promise);
+
+  await useRuns.getState().run("t", prepared("SELECT B"));
+  const stateB = runOf("t");
+  preparingA.resolve({ connection: "local", sql: "SELECT A", origin });
+  await runningA;
+
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "SELECT B",
+    expect.any(Function),
+  );
+  expect(runOf("t")).toBe(stateB);
 });

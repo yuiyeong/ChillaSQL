@@ -63,7 +63,7 @@ function Shortcuts() {
   return createElement("div", { "data-testid": "inner", tabIndex: 0 });
 }
 
-test("잡은 key는 기본 동작과 전파를 막고 command를 실행한다", () => {
+test("잡은 key는 기본 동작과 전파를 막고 command를 실행한다", async () => {
   const { getByTestId } = render(createElement(Shortcuts));
   const inner = getByTestId("inner");
   const bubble = vi.fn();
@@ -76,10 +76,12 @@ test("잡은 key는 기본 동작과 전파를 막고 command를 실행한다", 
 
   expect(run.defaultPrevented).toBe(true);
   expect(bubble).not.toHaveBeenCalled();
-  expect(useRuns.getState().runs[tabId]).toEqual({
-    status: "rejected",
-    message: "접속을 먼저 고르세요",
-  });
+  await vi.waitFor(() =>
+    expect(useRuns.getState().runs[tabId]).toEqual({
+      status: "rejected",
+      message: "접속을 먼저 고르세요",
+    }),
+  );
 
   const typing = key("KeyA", {}, { key: "a" });
   inner.dispatchEvent(typing);

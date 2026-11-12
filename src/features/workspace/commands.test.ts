@@ -189,12 +189,28 @@ test("문장을 나누는 동안 탭을 닫으면 실행하지 않는다", async
   const id = tabWith("SELECT 1");
 
   const running = execute("run");
-  useTabs.getState().close(id);
+  await closeTab(id);
   split.resolve([{ start: 0, end: 8 }]);
   await running;
 
   expect(openSession).not.toHaveBeenCalled();
   expect(runOf(id)).toBeUndefined();
+});
+
+test("문장을 나누는 동안 접속을 바꾸면 실행하지 않는다", async () => {
+  const split = deferred<{ start: number; end: number }[]>();
+  vi.mocked(splitStatements).mockReturnValue(split.promise);
+  const id = tabWith("SELECT 1");
+
+  const running = execute("run");
+  await changeConnection(id, "staging");
+  split.resolve([{ start: 0, end: 8 }]);
+  await running;
+
+  expect(openSession).not.toHaveBeenCalled();
+  expect(executeQuery).not.toHaveBeenCalled();
+  expect(runOf(id)).toBeUndefined();
+  expect(tabOf(id)?.connection).toBe("staging");
 });
 
 test("활성 탭이 없으면 command는 아무것도 하지 않는다", async () => {
@@ -209,11 +225,11 @@ test("활성 탭이 없으면 command는 아무것도 하지 않는다", async (
 
 test("dirty 탭은 물어본 뒤에 닫는다", async () => {
   const id = tabWith("SELECT 1");
-  await useRuns.getState().run(id, {
+  await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
     origin: { line: 1, column: 1 },
-  });
+  }));
   useTabs.getState().markDirty(id);
   const release = vi.spyOn(useRuns.getState(), "release");
   vi.mocked(confirm).mockResolvedValue(false);
@@ -253,11 +269,11 @@ test("dirty가 아닌 탭은 묻지 않고 닫는다", async () => {
 
 test("접속을 바꾸면 세션을 놓는다", async () => {
   const id = tabWith("SELECT 1");
-  await useRuns.getState().run(id, {
+  await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
     origin: { line: 1, column: 1 },
-  });
+  }));
   const release = vi.spyOn(useRuns.getState(), "release");
   let connectionWhenReleased: string | null | undefined;
   release.mockImplementationOnce(async (tabId) => {
@@ -276,11 +292,11 @@ test("접속을 바꾸면 세션을 놓는다", async () => {
 test("프로젝트를 바꾸면 탭과 실행 상태를 비운다", async () => {
   const other: Project = { name: "other", dir: "/q", connections: [] };
   const id = tabWith("SELECT 1");
-  await useRuns.getState().run(id, {
+  await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
     origin: { line: 1, column: 1 },
-  });
+  }));
 
   // 폴더를 고르지 않으면 아무것도 하지 않는다.
   vi.mocked(pickDirectory).mockResolvedValue(null);
@@ -318,11 +334,11 @@ test("세션을 닫지 못해도 프로젝트를 바꾼다", async () => {
     new CommandError("unknown_session", "세션이 없습니다"),
   );
   const id = tabWith("SELECT 1");
-  await useRuns.getState().run(id, {
+  await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
     origin: { line: 1, column: 1 },
-  });
+  }));
   vi.mocked(pickDirectory).mockResolvedValue("/q");
   vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
 
@@ -365,11 +381,11 @@ test("save, cancel, newTab, nextTab, prevTab은 활성 탭에 한다", async () 
   });
   expect(tabOf(second)?.dirty).toBe(false);
 
-  await useRuns.getState().run(second, {
+  await useRuns.getState().run(second, () => ({
     connection: "local",
     sql: "SELECT 2",
     origin: { line: 1, column: 1 },
-  });
+  }));
   await execute("cancel");
   expect(cancelQuery).toHaveBeenCalledWith(3, 7);
 

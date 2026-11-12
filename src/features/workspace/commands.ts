@@ -6,7 +6,8 @@ import { saveTab } from "../editor/saveTab";
 import { lineColumn, statementAt } from "../editor/statementAt";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
-import { useRuns } from "../query/runsStore";
+import type { Origin } from "../query/runReducer";
+import { useRuns, type RunRequest } from "../query/runsStore";
 
 export type CommandId =
   "run" | "cancel" | "save" | "newTab" | "closeTab" | "nextTab" | "prevTab";
@@ -15,50 +16,40 @@ function findTab(tabId: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === tabId);
 }
 
-/** 선택 영역이 있으면 그것을, 없으면 커서가 가리키는 문장을 실행한다. */
-async function runTab(tabId: string): Promise<void> {
-  const tab = findTab(tabId);
-  if (tab === undefined) return;
-  const { reject } = useRuns.getState();
-  const { connection } = tab;
-  if (connection === null) {
-    reject(tabId, "접속을 먼저 고르세요");
-    return;
-  }
-
+/** 선택 영역이 있으면 그것을, 없으면 커서가 가리키는 문장을 고른다. */
+async function statementToRun(
+  tabId: string,
+): Promise<{ sql: string; origin: Origin } | string> {
   const text = documentText(tabId);
   const { from, to, head } = documentSelection(tabId);
   if (from !== to) {
     const sql = text.slice(from, to);
-    if (sql.trim() === "") {
-      reject(tabId, "실행할 문장이 없습니다");
-      return;
-    }
-    await useRuns
-      .getState()
-      .run(tabId, { connection, sql, origin: lineColumn(text, from) });
-    return;
+    if (sql.trim() === "") return "실행할 문장이 없습니다";
+    return { sql, origin: lineColumn(text, from) };
   }
 
   let spans;
   try {
     spans = await splitStatements(text);
   } catch (error) {
-    if (findTab(tabId) !== undefined) reject(tabId, messageOf(error));
-    return;
+    return messageOf(error);
   }
-  // 나누는 동안 탭을 닫았거나 접속을 바꿨으면 그 세션을 열지 않는다.
-  if (findTab(tabId)?.connection !== connection) return;
   const span = statementAt(text, spans, head);
-  if (span === null) {
-    reject(tabId, "커서 위치에 문장이 없습니다");
-    return;
-  }
-  await useRuns.getState().run(tabId, {
-    connection,
+  if (span === null) return "커서 위치에 문장이 없습니다";
+  return {
     sql: text.slice(span.start, span.end),
     origin: lineColumn(text, span.start),
-  });
+  };
+}
+
+/** 탭에서 실행할 것을 정한다. store를 바꾸지 않는다. */
+async function prepareRun(tabId: string): Promise<RunRequest | string> {
+  const connection = findTab(tabId)?.connection ?? null;
+  if (connection === null) return "접속을 먼저 고르세요";
+  const statement = await statementToRun(tabId);
+  return typeof statement === "string"
+    ? statement
+    : { connection, ...statement };
 }
 
 // 저장 중인 tab id. 같은 stamp로 두 번 쓰면 두 번째가 "파일이 바뀌었다"고 묻게 된다.
@@ -93,7 +84,8 @@ export async function execute(command: CommandId): Promise<void> {
   if (tabId === null) return;
   switch (command) {
     case "run":
-      return runTab(tabId);
+      // 문장을 나누는 동안 탭을 닫거나 접속을 바꾸면 release가 이 실행을 버린다.
+      return useRuns.getState().run(tabId, () => prepareRun(tabId));
     case "cancel":
       return useRuns.getState().cancel(tabId);
     case "save":

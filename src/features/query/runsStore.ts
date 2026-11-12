@@ -15,11 +15,14 @@ export interface RunRequest {
   origin: Origin;
 }
 
+/** 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 문구를 돌려준다. */
+export type Prepare = () => Promise<RunRequest | string> | RunRequest | string;
+
 export interface RunsState {
   /** tab id → 상태. 없으면 idle로 본다. */
   runs: Record<string, RunState>;
-  run(tabId: string, request: RunRequest): Promise<void>;
-  reject(tabId: string, message: string): void;
+  /** `prepare`가 끝나기 전에 같은 탭의 다음 동작이 오면 실행하지 않는다. */
+  run(tabId: string, prepare: Prepare): Promise<void>;
   cancel(tabId: string): Promise<void>;
   /** 탭을 닫거나 접속을 바꿀 때. 상태는 바로 지우고 세션을 닫는다. */
   release(tabId: string): Promise<void>;
@@ -106,9 +109,24 @@ export const useRuns = create<RunsState>()((set, get) => {
   return {
     runs: {},
 
-    async run(tabId, { connection, sql, origin }) {
+    async run(tabId, prepare) {
       const token = bump(tabId);
       const current = () => tokens.get(tabId) === token;
+
+      let request: RunRequest | string;
+      try {
+        // 바로 정해지면 기다리지 않는다. 같은 tick에 connecting이 보인다.
+        const prepared = prepare();
+        request = prepared instanceof Promise ? await prepared : prepared;
+      } catch (error) {
+        request = messageOf(error);
+      }
+      if (!current()) return;
+      if (typeof request === "string") {
+        setRun(tabId, { status: "rejected", message: request });
+        return;
+      }
+      const { connection, sql, origin } = request;
 
       const slot = slotFor(tabId, connection);
       if (slot.id === null) setRun(tabId, { status: "connecting" });
@@ -155,11 +173,6 @@ export const useRuns = create<RunsState>()((set, get) => {
           setRun(tabId, { status: "rejected", message: messageOf(error) });
         }
       }
-    },
-
-    reject(tabId, message) {
-      bump(tabId);
-      setRun(tabId, { status: "rejected", message });
     },
 
     async cancel(tabId) {
