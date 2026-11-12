@@ -1,6 +1,8 @@
 import { splitStatements } from "../../shared/api/commands";
 import { confirm, pickDirectory } from "../../shared/api/dialog";
 import { messageOf } from "../../shared/api/errors";
+import type { Project } from "../../shared/api/types";
+import { targetChanged } from "../connections/connectionValues";
 import { documentSelection, documentText } from "../editor/documents";
 import { saveTab } from "../editor/saveTab";
 import { lineColumn, statementAt } from "../editor/statementAt";
@@ -107,6 +109,30 @@ export async function changeConnection(
   const released = useRuns.getState().release(tabId);
   useTabs.getState().setConnection(tabId, connection);
   await released;
+}
+
+/**
+ * 접속을 저장한 뒤의 project를 반영한다. 연결 대상이 바뀐 접속을 쓰는 탭은 세션을 놓아서
+ * 다음 실행이 새 대상으로 연다. 세션은 접속 이름이 같으면 다시 쓰이기 때문이다.
+ */
+export async function applySavedProject(project: Project): Promise<void> {
+  const before = useProject.getState().project?.connections ?? [];
+  const changed = new Set(
+    project.connections
+      .filter((connection) => {
+        const previous = before.find((c) => c.name === connection.name);
+        return previous !== undefined && targetChanged(connection, previous);
+      })
+      .map((connection) => connection.name),
+  );
+  const released = useTabs
+    .getState()
+    .tabs.filter(
+      (tab) => tab.connection !== null && changed.has(tab.connection),
+    )
+    .map((tab) => useRuns.getState().release(tab.id));
+  useProject.getState().applyProject(project);
+  await Promise.all(released);
 }
 
 /** 다른 프로젝트를 연다. 열리면 탭과 실행 상태를 비운다. */

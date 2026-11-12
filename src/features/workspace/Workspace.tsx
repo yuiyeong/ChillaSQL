@@ -8,7 +8,12 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { Sidebar } from "../project/Sidebar";
 import { ResultPane } from "../query/ResultPane";
-import { closeTab, execute, switchProject } from "./commands";
+import {
+  applySavedProject,
+  closeTab,
+  execute,
+  switchProject,
+} from "./commands";
 import { useShortcuts } from "./shortcuts";
 import { Toolbar } from "./Toolbar";
 
@@ -24,7 +29,6 @@ export function Workspace() {
   const markDirty = useTabs((s) => s.markDirty);
   const project = useProject((s) => s.project);
   const error = useProject((s) => s.error);
-  const applyProject = useProject((s) => s.applyProject);
   const clearError = useProject((s) => s.clearError);
   const [form, setForm] = useState<OpenForm | null>(null);
   // 접속 form이 열려 있으면 뒤의 탭을 실행하거나 닫지 않는다.
@@ -37,7 +41,7 @@ export function Workspace() {
 
   /** form을 닫은 뒤에 저장이 끝나도 접속은 반영한다. 그 사이 새로 연 form은 닫지 않는다. */
   function connectionSaved(saved: Project, from: OpenForm) {
-    applyProject(saved);
+    void applySavedProject(saved);
     setForm((current) => (current === from ? null : current));
   }
 

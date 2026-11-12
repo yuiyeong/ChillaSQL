@@ -15,7 +15,7 @@ import {
 } from "../../shared/api/commands";
 import { confirm, pickDirectory } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
-import type { Project, Session } from "../../shared/api/types";
+import type { Connection, Project, Session } from "../../shared/api/types";
 import {
   documentState,
   openDocument,
@@ -24,7 +24,13 @@ import {
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
-import { changeConnection, closeTab, execute, switchProject } from "./commands";
+import {
+  applySavedProject,
+  changeConnection,
+  closeTab,
+  execute,
+  switchProject,
+} from "./commands";
 import { deferred } from "../../test/deferred";
 import { resetStores } from "../../test/resetStores";
 
@@ -414,4 +420,81 @@ test("저장이 끝나기 전에는 다시 저장하지 않는다", async () => 
     mode: "replace",
     stamp: "s2",
   });
+});
+
+function connection(name: string, host = "a.internal"): Connection {
+  return {
+    name,
+    host,
+    port: 5432,
+    database: "app",
+    user: "chilla",
+    sslmode: "disable",
+    sslrootcert: null,
+    tunnel: null,
+    color: null,
+  };
+}
+
+/** 그 접속으로 실행한 탭. 세션이 열려 있다. */
+async function ranTab(name: string, sessionId: number): Promise<string> {
+  const id = tabWith("SELECT 1", name);
+  vi.mocked(openSession).mockResolvedValueOnce({
+    id: sessionId,
+    connection: name,
+    backendPid: 100 + sessionId,
+  });
+  await useRuns.getState().run(id, () => ({
+    connection: name,
+    sql: "SELECT 1",
+    origin: { line: 1, column: 1 },
+  }));
+  return id;
+}
+
+test("대상이 바뀐 접속을 쓰는 탭의 세션을 놓는다", async () => {
+  useProject.setState({
+    project: {
+      ...project,
+      connections: [connection("local"), connection("staging")],
+    },
+  });
+  const local = await ranTab("local", 3);
+  const staging = await ranTab("staging", 4);
+  const saved: Project = {
+    ...project,
+    connections: [connection("local", "b.internal"), connection("staging")],
+  };
+
+  await applySavedProject(saved);
+
+  expect(useProject.getState().project).toEqual(saved);
+  expect(closeSession).toHaveBeenCalledTimes(1);
+  expect(closeSession).toHaveBeenCalledWith(3);
+  expect(runOf(local)).toBeUndefined();
+  expect(runOf(staging)?.status).toBe("running");
+
+  vi.mocked(openSession).mockResolvedValueOnce(session(5));
+  useTabs.getState().activate(local);
+  select(local, 0, 8);
+  await execute("run");
+  expect(openSession).toHaveBeenCalledTimes(3);
+  expect(openSession).toHaveBeenLastCalledWith("local");
+});
+
+test("대상이 그대로면 세션을 놓지 않는다", async () => {
+  useProject.setState({
+    project: { ...project, connections: [connection("local")] },
+  });
+  const id = await ranTab("local", 3);
+  const saved: Project = {
+    ...project,
+    connections: [{ ...connection("local"), color: "#ff0000" }],
+  };
+
+  await applySavedProject(saved);
+
+  expect(useProject.getState().project).toEqual(saved);
+  expect(closeSession).not.toHaveBeenCalled();
+  expect(runOf(id)?.status).toBe("running");
 });
