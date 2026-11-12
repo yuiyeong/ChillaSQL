@@ -41,3 +41,13 @@ test("닫은 문서는 없다", () => {
 
   expect(() => documentState("t")).toThrow();
 });
+
+test("닫은 문서에 setDocumentState를 불러도 다시 열리지 않는다", () => {
+  openDocument("t", "SELECT 1");
+  const state = documentState("t");
+  closeDocument("t");
+
+  setDocumentState("t", state);
+
+  expect(() => documentState("t")).toThrow();
+});

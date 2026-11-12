@@ -1200,7 +1200,7 @@ export function TabBar(props: { onClose(id: string): void; onNew(): void; onName
   - text는 `documentText(tabId)`다.
 - `TabBar`: 탭마다 title, dirty면 `●`, 닫기 버튼(`onClose(id)`). 탭을 누르면 `activate`. 끝에 새 탭 버튼(`onNew`). `naming`이 활성 탭이면 그 아래에 경로 입력(placeholder `queries/이름.sql`)과 `저장` 버튼을 그리고, 제출하면 `onName(입력값)`, `Escape`면 `requestName(null)`. `error`가 있으면 한 줄로 보여 주고 누르면 지운다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 ```ts
 // tabsStore.test.ts
@@ -1231,19 +1231,19 @@ test("닫기와 새 탭 버튼이 handler를 부른다");
 test("naming인 탭은 경로 입력을 그리고 제출하면 onName을 부른다"); // Escape면 naming이 null
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `pnpm vitest run src/features/editor`
 Expected: FAIL. `./tabsStore`가 없다.
 
-- [ ] **Step 3: `tabsStore.ts`, `saveTab.ts`, `TabBar.tsx` 구현**
+- [x] **Step 3: `tabsStore.ts`, `saveTab.ts`, `TabBar.tsx` 구현**
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

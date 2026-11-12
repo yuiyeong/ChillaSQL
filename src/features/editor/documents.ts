@@ -17,8 +17,9 @@ export function documentState(tabId: string): EditorState {
   return state;
 }
 
+/** 열려 있는 문서만 바꾼다. 닫은 문서는 mounted editor가 다음 transaction에서 부르더라도 다시 열리지 않는다. */
 export function setDocumentState(tabId: string, state: EditorState): void {
-  documents.set(tabId, state);
+  if (documents.has(tabId)) documents.set(tabId, state);
 }
 
 export function documentText(tabId: string): string {
