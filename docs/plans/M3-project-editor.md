@@ -987,7 +987,7 @@ export function ConnectionForm(props: {
 - 수정 중에 `targetChanged`이고 `password`가 비었고 저장된 비밀번호가 있으면 `연결 대상을 바꾸면 저장된 비밀번호를 지웁니다. 비밀번호를 다시 입력하세요`를 보여 준다.
 - 테스트나 저장이 도는 동안 두 버튼은 disabled다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 ```ts
 // connectionForm.test.ts
@@ -1007,19 +1007,19 @@ test("연결 대상을 바꾸고 비밀번호를 비우면 지워진다고 알�
 test("도는 동안 테스트와 저장 버튼은 disabled다");
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `pnpm vitest run src/features/connections`
 Expected: FAIL. `./connectionForm`이 없다.
 
-- [ ] **Step 3: `connectionForm.ts`, `ConnectionForm.tsx` 구현**
+- [x] **Step 3: `connectionForm.ts`, `ConnectionForm.tsx` 구현**
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
