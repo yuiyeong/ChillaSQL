@@ -792,7 +792,7 @@ export function confirm(message: string): Promise<boolean>; // ask(message, { ki
 
 `set_password`, `delete_password`, `session_state`, `fetch_more`는 M3 화면이 쓰지 않아 감싸지 않는다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `commands.test.ts`. `vi.mock("@tauri-apps/api/core")`로 `invoke`를 `vi.fn()`으로, `Channel`을 `onmessage` field만 가진 class로 바꾼다.
 
@@ -824,19 +824,19 @@ test("Rust의 오류 object는 CommandError가 된다", async () => {
 });
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `pnpm vitest run src/shared/api`
 Expected: FAIL. `./commands`가 없다.
 
-- [ ] **Step 3: `types.ts`, `errors.ts`, `commands.ts`, `dialog.ts` 구현**
+- [x] **Step 3: `types.ts`, `errors.ts`, `commands.ts`, `dialog.ts` 구현**
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

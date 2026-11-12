@@ -1,0 +1,142 @@
+import { beforeEach, expect, test, vi } from "vitest";
+
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+  Channel: class {
+    onmessage: (event: unknown) => void = () => {};
+  },
+}));
+
+import { invoke, Channel } from "@tauri-apps/api/core";
+import {
+  cancelQuery,
+  closeSession,
+  createProject,
+  executeQuery,
+  hasPassword,
+  listSqlFiles,
+  openProject,
+  openSession,
+  readSqlFile,
+  saveConnection,
+  splitStatements,
+  testConnection,
+  writeSqlFile,
+} from "./commands";
+import { CommandError } from "./errors";
+import type { Connection, QueryEvent } from "./types";
+
+const invokeMock = vi.mocked(invoke);
+
+const conn: Connection = {
+  name: "local",
+  host: "127.0.0.1",
+  port: 5432,
+  database: "app",
+  user: "chilla",
+  sslmode: "disable",
+  sslrootcert: null,
+  tunnel: null,
+  color: null,
+};
+
+beforeEach(() => {
+  invokeMock.mockReset();
+  invokeMock.mockResolvedValue(undefined);
+});
+
+test("command 이름과 인자 key를 그대로 보낸다", async () => {
+  await openProject("/p");
+  expect(invokeMock).toHaveBeenLastCalledWith("open_project", { path: "/p" });
+
+  await createProject("/p");
+  expect(invokeMock).toHaveBeenLastCalledWith("create_project", { path: "/p" });
+
+  await saveConnection(conn, "pw");
+  expect(invokeMock).toHaveBeenLastCalledWith("save_connection", {
+    connection: conn,
+    password: "pw",
+  });
+
+  await hasPassword("local");
+  expect(invokeMock).toHaveBeenLastCalledWith("has_password", {
+    connection: "local",
+  });
+
+  await testConnection(conn, null);
+  expect(invokeMock).toHaveBeenLastCalledWith("test_connection", {
+    connection: conn,
+    password: null,
+  });
+
+  await openSession("local");
+  expect(invokeMock).toHaveBeenLastCalledWith("open_session", {
+    connection: "local",
+  });
+
+  await closeSession(3);
+  expect(invokeMock).toHaveBeenLastCalledWith("close_session", {
+    sessionId: 3,
+  });
+
+  await splitStatements("a; b");
+  expect(invokeMock).toHaveBeenLastCalledWith("split_statements", {
+    sql: "a; b",
+  });
+
+  await cancelQuery(3, 7);
+  expect(invokeMock).toHaveBeenLastCalledWith("cancel_query", {
+    sessionId: 3,
+    queryId: 7,
+  });
+
+  await listSqlFiles();
+  expect(invokeMock).toHaveBeenLastCalledWith("list_sql_files");
+
+  await readSqlFile("a.sql");
+  expect(invokeMock).toHaveBeenLastCalledWith("read_sql_file", {
+    path: "a.sql",
+  });
+
+  await writeSqlFile("a.sql", "x", { mode: "replace", stamp: "s" });
+  expect(invokeMock).toHaveBeenLastCalledWith("write_sql_file", {
+    path: "a.sql",
+    text: "x",
+    mode: { mode: "replace", stamp: "s" },
+  });
+});
+
+test("executeQuery는 Channel의 message를 onEvent로 넘긴다", async () => {
+  invokeMock.mockResolvedValue(7);
+  const onEvent = vi.fn();
+
+  const queryId = await executeQuery(3, "SELECT 1", onEvent);
+
+  expect(invokeMock).toHaveBeenCalledTimes(1);
+  const [name, args] = invokeMock.mock.calls[0]!;
+  expect(name).toBe("execute_query");
+  expect(args).toEqual({
+    sessionId: 3,
+    sql: "SELECT 1",
+    onEvent: expect.any(Channel),
+  });
+  const channel = (args as { onEvent: Channel<QueryEvent> }).onEvent;
+  const event: QueryEvent = { type: "columns", columns: [{ name: "id" }] };
+  channel.onmessage(event);
+  expect(onEvent).toHaveBeenCalledWith(event);
+  expect(queryId).toBe(7);
+});
+
+test("Rust의 오류 object는 CommandError가 된다", async () => {
+  invokeMock.mockRejectedValueOnce({ kind: "unreachable", message: "m" });
+  const error = await openProject("/p").catch((e: unknown) => e);
+  expect(error).toBeInstanceOf(CommandError);
+  expect((error as CommandError).kind).toBe("unreachable");
+  expect((error as CommandError).message).toBe("m");
+
+  invokeMock.mockRejectedValueOnce("command not found");
+  const other = await openProject("/p").catch((e: unknown) => e);
+  expect(other).toBeInstanceOf(CommandError);
+  expect((other as CommandError).kind).toBe("internal");
+  expect((other as CommandError).message).toContain("command not found");
+});
