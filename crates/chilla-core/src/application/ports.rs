@@ -4,8 +4,8 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use crate::domain::{
-    Column, ConnectionProfile, Password, ProfileError, Project, Row, ServerError, StatementSpan,
-    TxStatus,
+    Column, ConnectionProfile, FileStamp, Password, ProfileError, Project, Row, ServerError,
+    SqlFile, SqlPath, StatementSpan, TxStatus, WriteMode,
 };
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽는다.
@@ -30,6 +30,39 @@ pub enum ProjectError {
         connection: String,
         source: ProfileError,
     },
+}
+
+/// 프로젝트 디렉토리 아래의 `.sql` 파일. `path`는 모두 프로젝트 디렉토리 기준이다.
+pub trait SqlFileStore: Send + Sync {
+    /// 프로젝트 디렉토리 아래의 `.sql` 파일. 경로 오름차순이다.
+    fn list(&self, project_dir: &Path) -> Result<Vec<SqlPath>, FileError>;
+    fn read(&self, project_dir: &Path, path: &SqlPath) -> Result<SqlFile, FileError>;
+    /// `mode`가 허락할 때만 쓰고, 쓴 뒤의 stamp를 돌려준다.
+    fn write(
+        &self,
+        project_dir: &Path,
+        path: &SqlPath,
+        text: &str,
+        mode: &WriteMode,
+    ) -> Result<FileStamp, FileError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum FileError {
+    #[error("{path} 파일이 없습니다")]
+    NotFound { path: String },
+    #[error("{path} 파일이 이미 있습니다")]
+    Exists { path: String },
+    #[error("{path} 파일이 연 뒤에 밖에서 바뀌었습니다")]
+    Changed { path: String },
+    #[error("{path} 파일이 너무 큽니다 ({bytes} byte). 16 MiB까지 엽니다")]
+    TooLarge { path: String, bytes: u64 },
+    #[error("{path} 파일이 UTF-8이 아닙니다")]
+    NotUtf8 { path: String },
+    #[error("{path}는 프로젝트 디렉토리 밖을 가리킵니다")]
+    OutsideProject { path: String },
+    #[error("{path} 파일을 다루지 못했습니다: {message}")]
+    Io { path: String, message: String },
 }
 
 /// 키체인 항목 하나를 가리킨다. 프로젝트 디렉토리를 옮기면 다른 항목이 된다.

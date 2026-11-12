@@ -10,7 +10,7 @@ pub use app::{App, AppError};
 pub use session_actor::QuerySink;
 
 pub use ports::{
-    CancelError, ConnectError, Connector, DbConnection, PasswordKey, PasswordStore,
+    CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey, PasswordStore,
     PasswordStoreError, ProjectError, ProjectStore, QueryCancel, QueryError, RowItem, RowSource,
-    SplitError, StatementSplitter,
+    SplitError, SqlFileStore, StatementSplitter,
 };

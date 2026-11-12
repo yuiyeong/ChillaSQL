@@ -5,6 +5,7 @@ mod password;
 mod project;
 mod query;
 mod session;
+mod sql_file;
 mod statement;
 
 pub use connection::{ConnectionProfile, ProfileError, SslMode};
@@ -14,4 +15,5 @@ pub use query::{
     Column, QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, ServerError,
 };
 pub use session::{SessionId, SessionInfo, SessionState, TxStatus};
+pub use sql_file::{FileStamp, SqlFile, SqlPath, SqlPathError, WriteMode, has_sql_extension};
 pub use statement::StatementSpan;

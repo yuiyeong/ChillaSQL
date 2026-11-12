@@ -330,7 +330,7 @@ impl FsSqlFileStore { pub const MAX_BYTES: u64 = 16 * 1024 * 1024; }
 - stamp는 `"{mtime의 UNIX epoch nanosecond}-{byte 크기}"`다.
 - `write`: text가 `MAX_BYTES`를 넘으면 `TooLarge`. `Create`는 경로 확인 뒤 부모 디렉토리를 만들고(`create_dir_all`) `create_new`로 연다(있으면 `Exists`). `Replace`는 파일이 없으면 `NotFound`, 지금 stamp가 `expected`와 다르면 `Changed`. `Replace`와 `Overwrite`는 같은 디렉토리의 임시 파일(`.<이름>.chilla-tmp`)에 쓰고 `rename`한다. 쓴 뒤의 stamp를 돌려준다.
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `sql_file.rs`의 단위 test:
 
@@ -395,21 +395,21 @@ impl FsSqlFileStore { pub const MAX_BYTES: u64 = 16 * 1024 * 1024; }
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chilla-core --test sql_files`
 Expected: FAIL. `FsSqlFileStore`가 없어 compile error가 난다.
 
-- [ ] **Step 3: `SqlPath`, `SqlFileStore`, `FsSqlFileStore` 구현**
+- [x] **Step 3: `SqlPath`, `SqlFileStore`, `FsSqlFileStore` 구현**
 
 위 규칙대로 구현한다.
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A
