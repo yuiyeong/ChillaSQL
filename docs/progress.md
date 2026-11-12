@@ -5,11 +5,17 @@
 ## 지금
 
 - **진행 중**: M3 ([계획](plans/M3-project-editor.md)). Task 1~12 구현, simplify, code review(high)와 그 수정까지 끝남. `pnpm check` 통과(HEAD `bc5c420`, vitest 211, cargo test 219 passed / 1 ignored)
-- **다음 할 일**: 계획의 Task 13
-  - Step 1: 손으로 확인(15항목)을 사용자와 함께 한다. 하나라도 다르면 원인을 찾아 고치고 처음부터 다시 한다
-  - Step 2: 시작 시간 측정(1초 이내)
+- **작업 위치**: branch `m3-project-editor`(main `e3a420b`에서 갈라짐, push하지 않음). main은 건드리지 않았다. M3를 닫을 때 main에 합칠지 정한다
+- **멈춘 곳**: 계획의 Task 13 Step 1 도중에 세션을 끝냄(2026-11-12). 앱을 `pnpm tauri dev`로 띄워 사용자가 15항목을 눌러 보던 중이고, **결과는 아직 받지 못함**
+  - 받은 것은 하나: 사용자가 `Cmd+Q`로 끝낸 직후 `pg_stat_activity`의 `ChillaSQL` 세션이 0개였고 dev log에 panic이 없었음. 그때 `pg_sleep(600)`이 돌고 있었는지는 확인하지 못해 14행은 아직 미확정
+  - 확인용 프로젝트는 사용자가 picker로 고른 디렉토리에 있다(경로는 기록하지 않음). `localStorage`의 마지막 프로젝트로 남아 있으면 다음에 앱을 띄울 때 바로 열린다(15행)
+- **다음 할 일**: 계획의 Task 13을 이어서 한다
+  - Step 1: `scripts/test-db.sh up && pnpm tauri dev`로 앱을 띄우고, 사용자에게 15항목 중 기대와 달랐던 번호를 묻는다. 하나라도 다르면 원인을 찾아 고치고 처음부터 다시 한다. 14행은 `pg_sleep(600)` 실행 중에 `Cmd+Q`를 누른 뒤 `docker compose exec -T db psql -U chilla chilla_test -Atc "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'ChillaSQL'"`이 0인지 본다
+  - Step 2: 시작 시간 측정(1초 이내). 임시 probe가 필요하다(계획의 Step 2)
   - Step 3: 빌드된 앱에서 CSP 재확인
   - Step 5: 완료 기록(M3 상태를 `완료`로, "지금"을 M4로, "M4에서 챙길 것"을 적음)
+  - 그 뒤 branch를 main에 합치는 방법을 사용자와 정한다
+- **실행 기록**: 이 Mac의 `.superpowers/sdd/M3-project-editor/progress.md`(git에 올리지 않는 local 파일)에 task별 review 결과와 controller가 내린 Ruling 1~15가 있다. 결정은 아래 결정 기록에도 옮겨 두었다. M3를 닫을 때 Ruling 목록을 사용자에게 보여 준다
 - **손으로만 확인할 수 있는 것**: 구현 중 diff와 test로 확인할 수 없어 Step 1에 남긴 것
   - 기본 menu의 `Cmd+W`가 webview의 `keydown`에 닿고 창이 닫히지 않는 것(12행), 에디터의 `Cmd+Z`/`Cmd+C`/`Cmd+V`(11행)
   - 실제 webview에서 Channel의 `onmessage`로 batch가 오는 것(4행)
