@@ -8,6 +8,11 @@ test("formatElapsed", () => {
   expect(formatElapsed(1234567)).toBe("1.23 s");
 });
 
+test("formatElapsed는 반올림한 뒤에 단위를 고른다", () => {
+  expect(formatElapsed(999)).toBe("1.00 ms");
+  expect(formatElapsed(999_600)).toBe("1.00 s");
+});
+
 test("errorLocation은 보낸 text의 위치를 문서의 줄과 칸으로 바꾼다", () => {
   const result = emptyResult("SELECT *\nFROM nope", { line: 3, column: 5 });
 

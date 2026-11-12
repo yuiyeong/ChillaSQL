@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("../../shared/api/commands");
@@ -210,4 +210,35 @@ test("300자를 넘는 값은 줄여 그린다", () => {
   expect(cells[0].textContent).toHaveLength(301);
   expect(cells[0].textContent).toBe(`${"x".repeat(300)}…`);
   expect(cells[1].textContent).toBe(exact);
+});
+
+test("300자 경계의 emoji를 가르지 않는다", () => {
+  const value = `${"x".repeat(299)}😀${"y".repeat(10)}`;
+  finished(
+    { outcome: "completed", rows: 1 },
+    { columns: ["v"], rows: [[value]] },
+  );
+
+  expect(screen.getByRole("cell").textContent).toBe(`${"x".repeat(299)}…`);
+});
+
+test("끝나도 표를 다시 만들지 않는다", () => {
+  const running = result({ columns: ["id", "name"], rows: someRows });
+  show({ status: "running", result: running });
+  const table = screen.getByRole("table");
+
+  act(() =>
+    useRuns.setState({
+      runs: {
+        t: {
+          status: "finished",
+          result: running,
+          outcome: { outcome: "completed", rows: 3 },
+        },
+      },
+    }),
+  );
+
+  expect(screen.getByText("3행 · 1.23 s")).toBeInTheDocument();
+  expect(screen.getByRole("table")).toBe(table);
 });

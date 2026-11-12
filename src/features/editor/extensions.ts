@@ -18,26 +18,29 @@ import {
   lineNumbers,
 } from "@codemirror/view";
 
+// 모든 문서가 같은 extension 값을 나눠 쓴다.
+const extensions: Extension = [
+  lineNumbers(),
+  highlightActiveLine(),
+  history(),
+  drawSelection(),
+  indentOnInput(),
+  bracketMatching(),
+  closeBrackets(),
+  highlightSelectionMatches(),
+  keymap.of([
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...historyKeymap,
+    ...searchKeymap,
+    indentWithTab,
+  ]),
+  sql({ dialect: PostgreSQL }),
+  oneDark,
+  EditorView.theme({ "&": { height: "100%" } }),
+];
+
 /** SQL 편집기의 extension. 자동 완성은 넣지 않는다. */
 export function editorExtensions(): Extension {
-  return [
-    lineNumbers(),
-    highlightActiveLine(),
-    history(),
-    drawSelection(),
-    indentOnInput(),
-    bracketMatching(),
-    closeBrackets(),
-    highlightSelectionMatches(),
-    keymap.of([
-      ...closeBracketsKeymap,
-      ...defaultKeymap,
-      ...historyKeymap,
-      ...searchKeymap,
-      indentWithTab,
-    ]),
-    sql({ dialect: PostgreSQL }),
-    oneDark,
-    EditorView.theme({ "&": { height: "100%" } }),
-  ];
+  return extensions;
 }

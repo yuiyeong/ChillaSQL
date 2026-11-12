@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type { Cell, Outcome } from "../../shared/api/types";
 import { errorLocation, formatElapsed } from "./format";
 import type { ResultData } from "./runReducer";
@@ -7,7 +7,12 @@ import { useRuns } from "./runsStore";
 /** 이보다 긴 값은 앞부분만 그린다. */
 const CELL_LIMIT = 300;
 
-export function ResultPane({ tabId }: { tabId: string | null }) {
+// running과 finished가 같은 자리에 같은 component로 표를 그린다. 끝나도 표가 다시 mount되지 않는다.
+export const ResultPane = memo(function ResultPane({
+  tabId,
+}: {
+  tabId: string | null;
+}) {
   const state = useRuns((s) => (tabId === null ? undefined : s.runs[tabId]));
 
   switch (state?.status) {
@@ -25,19 +30,14 @@ export function ResultPane({ tabId }: { tabId: string | null }) {
         </Pane>
       );
     case "finished":
-      return <Finished result={state.result} outcome={state.outcome} />;
+      return finishedView(state.result, state.outcome);
     case "rejected":
       return <Message error>{state.message}</Message>;
   }
-}
+});
 
-function Finished({
-  result,
-  outcome,
-}: {
-  result: ResultData;
-  outcome: Outcome;
-}) {
+/** component가 아닌 함수다. 돌려준 element가 ResultPane의 자리에 바로 놓인다. */
+function finishedView(result: ResultData, outcome: Outcome): ReactNode {
   const elapsed = formatElapsed(result.elapsedMicros ?? 0);
   switch (outcome.outcome) {
     case "completed":
@@ -174,8 +174,16 @@ function ResultTable({ result }: { result: ResultData }) {
   );
 }
 
+function isHighSurrogate(code: number): boolean {
+  return code >= 0xd800 && code <= 0xdbff;
+}
+
 function CellText({ value }: { value: Cell }) {
   if (value === null) return <span className="text-zinc-600">NULL</span>;
   if (value.length <= CELL_LIMIT) return value;
-  return `${value.slice(0, CELL_LIMIT)}…`;
+  // surrogate pair를 가르지 않는다.
+  const end = isHighSurrogate(value.charCodeAt(CELL_LIMIT - 1))
+    ? CELL_LIMIT - 1
+    : CELL_LIMIT;
+  return `${value.slice(0, end)}…`;
 }
