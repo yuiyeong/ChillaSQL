@@ -689,7 +689,7 @@ pub fn build<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<t
 - `lib.rs`: `.plugin(tauri_plugin_dialog::init())`, `.menu(menu::build)`, 새 command 5개 등록. `.run(context)` 대신 `.build(context)`로 만든 app에 `.run(|handle, event| …)`을 부르고 `RunEvent::Exit`에서 `tauri::async_runtime::block_on(handle.state::<CoreApp>().close_all_sessions())`를 부른다.
 - `capabilities/default.json`의 `permissions`: `["core:default", "dialog:allow-open", "dialog:allow-ask"]`
 
-- [ ] **Step 1: 실패하는 test 작성**
+- [x] **Step 1: 실패하는 test 작성**
 
 `commands.rs`의 test module에 더한다.
 
@@ -704,14 +704,14 @@ pub fn build<R: tauri::Runtime>(handle: &tauri::AppHandle<R>) -> tauri::Result<t
 }
 ```
 
-- [ ] **Step 2: 실패 확인**
+- [x] **Step 2: 실패 확인**
 
 Run: `cargo test -p chillasql write_mode_dto_shapes`
 Expected: FAIL. `WriteModeDto`가 없어 compile error가 난다.
 
-- [ ] **Step 3: command, DTO, menu, 종료 처리 구현**
+- [x] **Step 3: command, DTO, menu, 종료 처리 구현**
 
-- [ ] **Step 4: 통과 확인**
+- [x] **Step 4: 통과 확인**
 
 Run: `pnpm check`
 Expected: PASS
@@ -719,7 +719,7 @@ Expected: PASS
 Run: `pnpm tauri dev` (background)
 Expected: 창이 뜨고 menu bar에 `ChillaSQL`, `Edit`, `View`, `Window`가 있다. `File`이 없다. process를 끝낸다.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A

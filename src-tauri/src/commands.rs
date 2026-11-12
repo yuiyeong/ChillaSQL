@@ -9,8 +9,9 @@ use std::time::Duration;
 
 use chilla_core::application::{App, AppError};
 use chilla_core::domain::{
-    Column, ConnectionProfile, Password, ProfileError, Project, QueryEvent, QueryId, QueryOutcome,
-    RowBatch, ServerError, SessionId, SessionInfo, SessionState, StatementSpan, TxStatus,
+    Column, ConnectionProfile, FileStamp, Password, ProfileError, Project, QueryEvent, QueryId,
+    QueryOutcome, RowBatch, ServerError, SessionId, SessionInfo, SessionState, SqlFile,
+    StatementSpan, TxStatus, WriteMode,
 };
 use chilla_core::infrastructure::PgConnector;
 use serde::{Deserialize, Serialize};
@@ -92,6 +93,47 @@ impl TryFrom<ConnectionDto> for ConnectionProfile {
             tunnel: dto.tunnel,
             color: dto.color,
         })
+    }
+}
+
+/// 연 파일의 내용. `stamp`는 화면이 뜻을 모르고 저장할 때 그대로 돌려준다.
+#[derive(Debug, Serialize)]
+pub struct SqlFileDto {
+    pub text: String,
+    pub stamp: String,
+}
+
+impl From<SqlFile> for SqlFileDto {
+    fn from(file: SqlFile) -> Self {
+        Self {
+            text: file.text,
+            stamp: file.stamp.0,
+        }
+    }
+}
+
+/// 저장 방식. `mode`가 구분자다.
+///
+/// `Create {}`와 `Overwrite {}`를 unit variant로 쓰지 않는 이유: serde는 internally tagged enum의
+/// unit variant에서 `deny_unknown_fields`를 적용하지 않아 `{"mode":"create","stamp":"s"}`가
+/// 통과한다. 빈 struct variant는 막는다.
+#[derive(Debug, Deserialize)]
+#[serde(tag = "mode", rename_all = "snake_case", deny_unknown_fields)]
+pub enum WriteModeDto {
+    Create {},
+    Replace { stamp: String },
+    Overwrite {},
+}
+
+impl From<WriteModeDto> for WriteMode {
+    fn from(mode: WriteModeDto) -> Self {
+        match mode {
+            WriteModeDto::Create {} => Self::Create,
+            WriteModeDto::Replace { stamp } => Self::Replace {
+                expected: FileStamp(stamp),
+            },
+            WriteModeDto::Overwrite {} => Self::Overwrite,
+        }
     }
 }
 
@@ -313,6 +355,49 @@ pub async fn open_project(app: State<'_, CoreApp>, path: String) -> CommandResul
 }
 
 #[tauri::command]
+pub async fn create_project(app: State<'_, CoreApp>, path: String) -> CommandResult<ProjectDto> {
+    let project = app.create_project(Path::new(&path)).await?;
+    Ok(ProjectDto::from(&project))
+}
+
+#[tauri::command]
+pub async fn save_connection(
+    app: State<'_, CoreApp>,
+    connection: ConnectionDto,
+    password: Option<String>,
+) -> CommandResult<ProjectDto> {
+    let password = password.map(Password::new);
+    let profile = ConnectionProfile::try_from(connection).map_err(AppError::from)?;
+    let project = app.save_connection(profile, password).await?;
+    Ok(ProjectDto::from(&project))
+}
+
+#[tauri::command]
+pub async fn list_sql_files(app: State<'_, CoreApp>) -> CommandResult<Vec<String>> {
+    let files = app.list_sql_files().await?;
+    Ok(files
+        .into_iter()
+        .map(|path| path.as_str().to_string())
+        .collect())
+}
+
+#[tauri::command]
+pub async fn read_sql_file(app: State<'_, CoreApp>, path: String) -> CommandResult<SqlFileDto> {
+    Ok(app.read_sql_file(&path).await?.into())
+}
+
+/// 쓴 뒤의 stamp를 돌려준다.
+#[tauri::command]
+pub async fn write_sql_file(
+    app: State<'_, CoreApp>,
+    path: String,
+    text: String,
+    mode: WriteModeDto,
+) -> CommandResult<String> {
+    Ok(app.write_sql_file(&path, text, mode.into()).await?.0)
+}
+
+#[tauri::command]
 pub async fn set_password(
     app: State<'_, CoreApp>,
     connection: String,
@@ -419,7 +504,7 @@ pub async fn cancel_query(
 mod tests {
     use std::collections::BTreeSet;
 
-    use chilla_core::domain::SslMode;
+    use chilla_core::domain::{FileStamp, SqlFile, SslMode, WriteMode};
     use serde_json::json;
 
     use super::*;
@@ -512,6 +597,48 @@ mod tests {
         assert_eq!(json["name"], "my-service");
         assert_eq!(json["dir"], "/p");
         assert_eq!(json["connections"][0]["name"], "production");
+    }
+
+    fn write_mode(json: serde_json::Value) -> Result<WriteMode, serde_json::Error> {
+        serde_json::from_value::<WriteModeDto>(json).map(WriteMode::from)
+    }
+
+    #[test]
+    fn write_mode_dto_shapes() {
+        assert_eq!(
+            write_mode(json!({ "mode": "create" })).unwrap(),
+            WriteMode::Create
+        );
+        assert_eq!(
+            write_mode(json!({ "mode": "replace", "stamp": "s" })).unwrap(),
+            WriteMode::Replace {
+                expected: FileStamp("s".into())
+            }
+        );
+        assert_eq!(
+            write_mode(json!({ "mode": "overwrite" })).unwrap(),
+            WriteMode::Overwrite
+        );
+
+        for invalid in [
+            json!({ "mode": "replace" }),
+            json!({ "mode": "append" }),
+            json!({ "mode": "create", "stamp": "s" }),
+            json!({}),
+        ] {
+            assert!(write_mode(invalid.clone()).is_err(), "{invalid}");
+        }
+    }
+
+    #[test]
+    fn sql_file_dto_shape() {
+        let file = SqlFile {
+            text: "SELECT 1".into(),
+            stamp: FileStamp("9-8".into()),
+        };
+        let json = serde_json::to_value(SqlFileDto::from(file)).unwrap();
+        assert_eq!(json, json!({ "text": "SELECT 1", "stamp": "9-8" }));
+        assert_eq!(keys(&json), BTreeSet::from(["text", "stamp"]));
     }
 
     #[test]

@@ -1,5 +1,6 @@
 mod commands;
 mod error;
+mod menu;
 
 use std::sync::Arc;
 
@@ -8,6 +9,7 @@ use chilla_core::infrastructure::{
 };
 
 use commands::CoreApp;
+use tauri::{Manager, RunEvent};
 
 pub fn run() {
     // 여기서만 port 구현을 고른다. command는 `CoreApp`만 안다.
@@ -20,10 +22,17 @@ pub fn run() {
         PgConnector::new(),
     );
 
-    tauri::Builder::default()
+    let app = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .menu(menu::build)
         .manage(app)
         .invoke_handler(tauri::generate_handler![
             commands::open_project,
+            commands::create_project,
+            commands::save_connection,
+            commands::list_sql_files,
+            commands::read_sql_file,
+            commands::write_sql_file,
             commands::set_password,
             commands::has_password,
             commands::delete_password,
@@ -36,6 +45,12 @@ pub fn run() {
             commands::fetch_more,
             commands::cancel_query,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(|handle, event| {
+        if let RunEvent::Exit = event {
+            tauri::async_runtime::block_on(handle.state::<CoreApp>().close_all_sessions());
+        }
+    });
 }
