@@ -1,11 +1,11 @@
 # ChillaSQL 진행상황
 
-마지막 갱신: 2026-11-11
+마지막 갱신: 2026-11-12
 
 ## 지금
 
-- **진행 중**: 없음 (M2 완료)
-- **다음 할 일**: M3 계획 작성 → `docs/plans/M3-project-editor.md`
+- **진행 중**: M3 계획 중. 계획은 [M3](plans/M3-project-editor.md)에 썼고 사용자 검토를 기다린다
+- **다음 할 일**: 계획이 확정되면 Task 1(dev 빌드 서명, CSP, 결정 기록)부터 시작한다. Task 1에서 상태를 `진행 중`으로 바꾼다
 - **M3에서 챙길 것** (M2가 화면에 주는 계약)
   - 화면은 `rows` event의 `retainedFrom`보다 앞의 행을 버리고 그 구간을 "다시 실행해야 볼 수 있음"으로 그린다
   - `split_statements`의 span과 server 오류의 `position`은 모두 보낸 text 기준 0-based UTF-16 code unit offset이다
@@ -24,7 +24,7 @@
 | M0 셋업 | 1 | 완료 | [M0](plans/M0-setup.md) | 2026-11-11 | 2026-11-11 |
 | M1 접속·세션 코어 | 1 | 완료 | [M1](plans/M1-session-core.md) | 2026-11-11 | 2026-11-11 |
 | M2 쿼리 실행 코어 | 1 | 완료 | [M2](plans/M2-query-core.md) | 2026-11-11 | 2026-11-11 |
-| M3 프로젝트·에디터 화면 | 1 | 대기 | | | |
+| M3 프로젝트·에디터 화면 | 1 | 계획 중 | [M3](plans/M3-project-editor.md) | 2026-11-12 | |
 | M4 결과 표 | 1 | 대기 | | | |
 | M5 터널 | 2 | 대기 | | | |
 | M6 트랜잭션과 안전장치 | 2 | 대기 | | | |
@@ -85,6 +85,10 @@
 ## 작업 로그
 
 최신 항목이 위에 온다.
+
+### 2026-11-12
+
+- M3 계획 작성. 마일스톤의 "먼저 확인할 것" 중 커서 문장 고르기는 계획에서 정했고(M2의 `split_statements`를 씀), CSP와 dev 빌드 서명은 계획을 쓰면서 `tauri` 2.12.5, tauri-cli, `style-mod` 4.1.4의 source와 scratch script(저장소 밖)로 확인한 사실을 계획 맨 위 표에 적음: desktop `tauri dev`에는 CSP가 붙지 않음(빌드된 앱에만), CodeMirror는 `<style>` tag를 넣어 `style-src`에 `'unsafe-inline'`이 필요함, 기본 menu의 `Cmd+W`가 창을 닫음, `tauri dev`는 `cargo run`이라 cargo의 runner에서 서명할 수 있음, 이 Mac에 유효한 code signing identity가 이미 있음, `lang-sql`의 `PostgreSQL` dialect가 `$$`·`::`·JSONB 연산자를 오류 없이 나눔. webview가 있어야 하는 확인(서명 뒤 키체인 확인 창, 실제 CSP header)은 Task 1에 둠. 결정 기록에는 Task 1에서 옮김
 
 ### 2026-11-11
 
