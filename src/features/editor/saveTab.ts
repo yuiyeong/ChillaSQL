@@ -2,7 +2,7 @@ import { writeSqlFile } from "../../shared/api/commands";
 import { confirm } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import { useProject } from "../project/projectStore";
-import { documentText } from "./documents";
+import { documentState, findDocument } from "./documents";
 import { useTabs } from "./tabsStore";
 
 export type SaveResult = "saved" | "needs_name" | "cancelled" | "failed";
@@ -13,25 +13,27 @@ export function normalizeNewPath(input: string): string {
   return path.toLowerCase().endsWith(".sql") ? path : `${path}.sql`;
 }
 
-/** 쓰는 동안 바뀐 text를 dirty로 남기며 저장을 기록한다. */
-function recordSaved(
-  tabId: string,
-  path: string,
-  stamp: string,
-  savedText: string,
-): void {
-  const tabs = useTabs.getState();
-  tabs.markSaved(tabId, path, stamp);
-  // 쓰는 동안 탭이 닫혔거나 더 입력했을 수 있다.
-  if (!useTabs.getState().tabs.some((tab) => tab.id === tabId)) return;
-  if (documentText(tabId) !== savedText) tabs.markDirty(tabId);
-}
+// 저장 중인 tab id. 같은 stamp로 두 번 쓰면 두 번째가 "파일이 바뀌었다"고 묻게 된다.
+const inFlight = new Set<string>();
 
-/** 새 파일로 쓰거나(newPath) 연 파일에 덮어쓴다. 이름이 필요하면 묻는다. */
+/**
+ * 새 파일로 쓰거나(newPath) 연 파일에 덮어쓴다. 이름이 필요하면 묻는다.
+ * 그 탭의 저장이 진행 중이거나 newPath가 공백뿐이면 아무것도 하지 않는다.
+ */
 export async function saveTab(
   tabId: string,
   newPath?: string,
 ): Promise<SaveResult> {
+  if (newPath?.trim() === "" || inFlight.has(tabId)) return "cancelled";
+  inFlight.add(tabId);
+  try {
+    return await save(tabId, newPath);
+  } finally {
+    inFlight.delete(tabId);
+  }
+}
+
+async function save(tabId: string, newPath?: string): Promise<SaveResult> {
   const tabs = useTabs.getState();
   const tab = tabs.tabs.find((t) => t.id === tabId);
   if (tab === undefined) return "failed";
@@ -41,13 +43,22 @@ export async function saveTab(
     return "needs_name";
   }
 
-  const text = documentText(tabId);
+  const doc = documentState(tabId).doc;
+  const text = doc.toString();
+  /** 쓰는 동안 더 입력했으면 dirty로 남긴다. 탭이 닫혔으면 markSaved가 아무것도 하지 않는다. */
+  const recordSaved = (path: string, stamp: string) =>
+    tabs.markSaved(
+      tabId,
+      path,
+      stamp,
+      !(findDocument(tabId)?.doc.eq(doc) ?? true),
+    );
   try {
     if (newPath !== undefined) {
       const path = normalizeNewPath(newPath);
       const stamp = await writeSqlFile(path, text, { mode: "create" });
-      recordSaved(tabId, path, stamp, text);
-      await useProject.getState().refreshFiles();
+      recordSaved(path, stamp);
+      void useProject.getState().refreshFiles();
       return "saved";
     }
 
@@ -60,15 +71,13 @@ export async function saveTab(
         stamp: tab.stamp ?? "",
       });
     } catch (error) {
-      if (!isCommandError(error, "file_changed")) {
-        throw error;
-      }
+      if (!isCommandError(error, "file_changed")) throw error;
       if (!(await confirm(`${path} 파일이 밖에서 바뀌었습니다. 덮어쓸까요?`))) {
         return "cancelled";
       }
       stamp = await writeSqlFile(path, text, { mode: "overwrite" });
     }
-    recordSaved(tabId, path, stamp, text);
+    recordSaved(path, stamp);
     return "saved";
   } catch (error) {
     tabs.setError(messageOf(error));

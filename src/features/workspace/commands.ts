@@ -52,19 +52,6 @@ async function prepareRun(tabId: string): Promise<RunRequest | string> {
     : { connection, ...statement };
 }
 
-// 저장 중인 tab id. 같은 stamp로 두 번 쓰면 두 번째가 "파일이 바뀌었다"고 묻게 된다.
-const saving = new Set<string>();
-
-async function saveOnce(tabId: string): Promise<void> {
-  if (saving.has(tabId)) return;
-  saving.add(tabId);
-  try {
-    await saveTab(tabId);
-  } finally {
-    saving.delete(tabId);
-  }
-}
-
 /** 활성 탭에 대해 command를 실행한다. */
 export async function execute(command: CommandId): Promise<void> {
   const tabs = useTabs.getState();
@@ -89,7 +76,8 @@ export async function execute(command: CommandId): Promise<void> {
     case "cancel":
       return useRuns.getState().cancel(tabId);
     case "save":
-      return saveOnce(tabId);
+      await saveTab(tabId);
+      return;
     case "closeTab":
       return closeTab(tabId);
   }

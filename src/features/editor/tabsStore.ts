@@ -28,7 +28,8 @@ export interface TabsState {
   prev(): void;
   setConnection(id: string, connection: string | null): void;
   markDirty(id: string): void;
-  markSaved(id: string, path: string, stamp: string): void;
+  /** 저장을 기록한다. 쓰는 동안 더 고쳤으면 `dirty`가 true다. */
+  markSaved(id: string, path: string, stamp: string, dirty?: boolean): void;
   requestName(id: string | null): void;
   setError(message: string | null): void;
   reset(): void;
@@ -52,6 +53,19 @@ export const useTabs = create<TabsState>()((set, get) => {
     set((state) => ({ tabs: [...state.tabs, tab], activeId: tab.id }));
   }
 
+  function activeConnection(): string | null {
+    const { tabs, activeId } = get();
+    return tabs.find((tab) => tab.id === activeId)?.connection ?? null;
+  }
+
+  /** `path`를 연 탭이 있으면 활성으로 한다. 있었으면 true. */
+  function activatePath(path: string): boolean {
+    const opened = get().tabs.find((tab) => tab.path === path);
+    if (opened === undefined) return false;
+    set({ activeId: opened.id, error: null });
+    return true;
+  }
+
   function step(delta: number): void {
     const { tabs, activeId } = get();
     if (tabs.length <= 1) return;
@@ -67,9 +81,7 @@ export const useTabs = create<TabsState>()((set, get) => {
     error: null,
 
     newTab() {
-      const { tabs, activeId } = get();
       const id = crypto.randomUUID();
-      const connection = tabs.find((tab) => tab.id === activeId)?.connection;
       add(
         {
           id,
@@ -77,7 +89,7 @@ export const useTabs = create<TabsState>()((set, get) => {
           path: null,
           stamp: null,
           dirty: false,
-          connection: connection ?? null,
+          connection: activeConnection(),
         },
         "",
       );
@@ -86,11 +98,7 @@ export const useTabs = create<TabsState>()((set, get) => {
     },
 
     async openFile(path) {
-      const existing = get().tabs.find((tab) => tab.path === path);
-      if (existing !== undefined) {
-        set({ activeId: existing.id });
-        return;
-      }
+      if (activatePath(path)) return;
       let file;
       try {
         file = await readSqlFile(path);
@@ -99,12 +107,8 @@ export const useTabs = create<TabsState>()((set, get) => {
         return;
       }
       // 읽는 동안 같은 파일이 다른 경로로 열렸을 수 있다.
-      const opened = get().tabs.find((tab) => tab.path === path);
-      if (opened !== undefined) {
-        set({ activeId: opened.id });
-        return;
-      }
-      const { tabs, activeId } = get();
+      if (activatePath(path)) return;
+      set({ error: null });
       add(
         {
           id: crypto.randomUUID(),
@@ -112,8 +116,7 @@ export const useTabs = create<TabsState>()((set, get) => {
           path,
           stamp: file.stamp,
           dirty: false,
-          connection:
-            tabs.find((tab) => tab.id === activeId)?.connection ?? null,
+          connection: activeConnection(),
         },
         file.text,
       );
@@ -132,7 +135,11 @@ export const useTabs = create<TabsState>()((set, get) => {
         activeId !== id
           ? activeId
           : (rest[index]?.id ?? rest[index - 1]?.id ?? null);
-      set({ tabs: rest, activeId: nextActive });
+      set((s) => ({
+        tabs: rest,
+        activeId: nextActive,
+        naming: s.naming === id ? null : s.naming,
+      }));
       closeDocument(id);
     },
 
@@ -149,15 +156,16 @@ export const useTabs = create<TabsState>()((set, get) => {
       set((state) => ({ tabs: updateTab(state.tabs, id, { dirty: true }) }));
     },
 
-    markSaved(id, path, stamp) {
+    markSaved(id, path, stamp, dirty = false) {
       set((state) => ({
         tabs: updateTab(state.tabs, id, {
           path,
           stamp,
-          dirty: false,
+          dirty,
           title: lastComponent(path),
         }),
-        naming: null,
+        naming: state.naming === id ? null : state.naming,
+        error: null,
       }));
     },
 

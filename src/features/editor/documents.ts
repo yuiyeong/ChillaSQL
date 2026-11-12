@@ -11,8 +11,13 @@ export function openDocument(tabId: string, text: string): void {
   );
 }
 
+/** 닫은 문서는 undefined */
+export function findDocument(tabId: string): EditorState | undefined {
+  return documents.get(tabId);
+}
+
 export function documentState(tabId: string): EditorState {
-  const state = documents.get(tabId);
+  const state = findDocument(tabId);
   if (state === undefined) throw new Error(`열린 문서가 없습니다: ${tabId}`);
   return state;
 }

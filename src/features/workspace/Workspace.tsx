@@ -40,8 +40,7 @@ export function Workspace() {
   }
 
   function nameTab(path: string) {
-    if (activeId === null || path.trim() === "") return;
-    void saveTab(activeId, path);
+    if (activeId !== null) void saveTab(activeId, path);
   }
 
   return (

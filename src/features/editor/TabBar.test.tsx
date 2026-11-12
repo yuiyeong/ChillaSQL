@@ -68,7 +68,8 @@ test("naming 입력에서 Escape를 누르면 naming이 null이다", () => {
   act(() => useTabs.getState().requestName(id));
   const input = screen.getByPlaceholderText("queries/이름.sql");
 
-  fireEvent.keyDown(input, { key: "Escape" });
+  // 한글 입력 중에도 key가 아닌 code로 판별한다.
+  fireEvent.keyDown(input, { code: "Escape", key: "Process" });
 
   expect(useTabs.getState().naming).toBeNull();
   expect(screen.queryByPlaceholderText("queries/이름.sql")).toBeNull();

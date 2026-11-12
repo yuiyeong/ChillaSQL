@@ -42,8 +42,10 @@ export function SqlEditor({ tabId, onDocChange }: SqlEditorProps) {
   useEffect(() => {
     const view = viewRef.current;
     if (view === null || shownTabRef.current === tabId) return;
+    // 문서가 없어 throw하면 view가 보이는 탭을 바꾸지 않는다.
+    const state = documentState(tabId);
     shownTabRef.current = tabId;
-    view.setState(documentState(tabId));
+    view.setState(state);
     view.focus();
   }, [tabId]);
 

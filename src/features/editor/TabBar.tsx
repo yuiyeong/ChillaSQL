@@ -91,7 +91,7 @@ function NameForm({
   }
 
   function keyDown(event: KeyboardEvent) {
-    if (event.key === "Escape") onCancel();
+    if (event.code === "Escape") onCancel();
   }
 
   return (

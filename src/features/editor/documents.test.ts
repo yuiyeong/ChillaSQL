@@ -5,6 +5,7 @@ import {
   documentSelection,
   documentState,
   documentText,
+  findDocument,
   openDocument,
   setDocumentState,
 } from "./documents";
@@ -36,10 +37,12 @@ test("setDocumentState 뒤에는 새 state의 값을 준다", () => {
 
 test("닫은 문서는 없다", () => {
   openDocument("t", "SELECT 1");
+  expect(findDocument("t")).toBe(documentState("t"));
 
   closeDocument("t");
 
   expect(() => documentState("t")).toThrow();
+  expect(findDocument("t")).toBeUndefined();
 });
 
 test("닫은 문서에 setDocumentState를 불러도 다시 열리지 않는다", () => {

@@ -198,3 +198,27 @@ test("reset은 탭과 문서를 모두 지우고 번호를 처음으로 돌린�
   useTabs.getState().newTab();
   expect(useTabs.getState().tabs[0].title).toBe("쿼리 1");
 });
+
+test("파일을 열면 앞선 오류를 지운다", async () => {
+  vi.mocked(readSqlFile).mockResolvedValue({ text: "SELECT 1", stamp: "s1" });
+  useTabs.getState().setError("읽을 수 없습니다");
+
+  await useTabs.getState().openFile("queries/a.sql");
+  expect(useTabs.getState().error).toBeNull();
+
+  useTabs.getState().setError("읽을 수 없습니다");
+  await useTabs.getState().openFile("queries/a.sql");
+  expect(useTabs.getState().error).toBeNull();
+});
+
+test("close는 그 탭의 이름을 묻고 있을 때만 naming을 비운다", () => {
+  const a = useTabs.getState().newTab();
+  const b = useTabs.getState().newTab();
+  useTabs.getState().requestName(b);
+
+  useTabs.getState().close(a);
+  expect(useTabs.getState().naming).toBe(b);
+
+  useTabs.getState().close(b);
+  expect(useTabs.getState().naming).toBeNull();
+});
