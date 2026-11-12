@@ -68,7 +68,7 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **목표**: 1단계 완료 기준 달성
 - **범위**: TanStack Table + TanStack Virtual 결과 표, 가상 스크롤과 스크롤 시 이어서 가져오기, 보관 상한을 넘어 버려진 구간에 "다시 실행해야 볼 수 있음" 표시, 컬럼 너비 조절, 셀과 행 복사
 - **완료 기준 (1단계)**: 로컬 DB에서 100만 행 결과를 끊김 없이 스크롤. 못 맞추면 기획서 2장대로 canvas 기반 그리드로 교체를 검토한다
-- **먼저 확인할 것**: 없음
+- **먼저 확인할 것**: release 빌드(`pnpm tauri build`)를 dev 빌드와 같은 identity로 서명할지(`bundle.macOS.signingIdentity`). 서명이 다르면 키체인이 다른 앱으로 본다
 
 ---
 
@@ -107,7 +107,9 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **목표**: 3단계 완료 기준 달성
 - **범위**: Formatting(sql-formatter, 선택 영역 또는 파일 전체, Opt+Cmd+L), DB가 알려준 오류 위치 밑줄, 파일 전체 실행과 문장별 결과 탭(오류 난 문장에서 멈춤), 타입별 표시(JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, 긴 값 줄임), 읽기 전용 접속(4.8), 접속별 타임아웃(4.5), 저장하지 않은 탭 내용을 SQLite에 보관하고 재시작 후 복원, 최근 프로젝트 목록, 전역 설정 파일 `~/.config/chilla/config.toml`(5장)
 - **완료 기준 (3단계)**: 하루 업무를 DataGrip 없이 처리
-- **먼저 확인할 것**: simple query protocol은 컬럼의 type OID를 주지 않는다(M2 결정). 타입별 표시에 필요한 type을 `TxTap`이 RowDescription을 읽어 얻을지, `prepare`로 Describe할지 정한다
+- **먼저 확인할 것**:
+  - simple query protocol은 컬럼의 type OID를 주지 않는다(M2 결정). 타입별 표시에 필요한 type을 `TxTap`이 RowDescription을 읽어 얻을지, `prepare`로 Describe할지 정한다
+  - M3는 마지막 프로젝트를 `localStorage`에 두고, 앱을 끝낼 때 저장하지 않은 탭을 묻지 않는다. 최근 프로젝트 목록과 자동 보관이 이 둘을 대신한다
 
 ---
 

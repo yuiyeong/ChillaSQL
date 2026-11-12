@@ -127,7 +127,7 @@ test는 대상 파일 옆에 `<이름>.test.ts(x)`로 둔다. Rust의 각 `mod.r
 **Interfaces:**
 - Produces: 서명된 dev binary(뒤 task가 키체인을 확인 창 없이 쓴다), 확정된 CSP, CodeMirror package, 진행상황의 결정 기록
 
-- [ ] **Step 1: runner script와 cargo 설정**
+- [x] **Step 1: runner script와 cargo 설정**
 
 `.cargo/config.toml`:
 
@@ -157,7 +157,7 @@ exec "$bin" "$@"
 Run: `pnpm tauri dev` (background). 창이 뜨면 `codesign -dvv target/debug/chillasql 2>&1 | grep -E '^(Identifier|Authority|Signature)'`
 Expected: `Identifier=com.yuiyeong.chillasql`과 `Authority=` 줄이 있고 `Signature=adhoc`이 없다. `codesign`이 key 사용을 묻는 창을 띄우면 사용자에게 "항상 허용"을 눌러 달라고 한다. `pnpm check`도 통과한다(test binary는 이름이 달라 서명하지 않는다).
 
-- [ ] **Step 2: 키체인 probe**
+- [x] **Step 2: 키체인 probe**
 
 `probe.rs`에 command를 둔다. `main.tsx`가 render 뒤에 한 번 부른다.
 
@@ -179,7 +179,7 @@ Run: `pnpm tauri dev` → `KEYCHAIN_PROBE … created`. `src-tauri/src/lib.rs`�
 
 끝나면 `security delete-generic-password -s com.yuiyeong.chillasql -a '/chilla-probe::signing'`로 항목을 지운다.
 
-- [ ] **Step 3: CSP probe**
+- [x] **Step 3: CSP probe**
 
 Run: `pnpm add @codemirror/state@^6.7.6 @codemirror/view@^6.43.15 @codemirror/commands@^6.11.1 @codemirror/language@^6.13.1 @codemirror/lang-sql@^6.10.0 @codemirror/search@^6.7.2 @codemirror/autocomplete@^6.20.4 @codemirror/theme-one-dark@^6.1.3`
 
@@ -226,14 +226,14 @@ Run: `pnpm tauri build --debug --no-bundle && ./target/debug/chillasql` (backgro
 | `connect-src` violation이 있다 | `blockedURI`의 scheme을 `connect-src`에 더하고 다시 잰다 |
 | `script-src`를 풀어야 통과한다 | 여기서 멈추고 사용자에게 보고한다 |
 
-- [ ] **Step 4: probe 삭제**
+- [x] **Step 4: probe 삭제**
 
 `probe.rs`와 `probe.ts`를 지우고 `lib.rs`와 `main.tsx`를 되돌린다.
 
 Run: `git status --short`
 Expected: `.cargo/config.toml`, `scripts/cargo-runner.sh`, `src-tauri/tauri.conf.json`, `package.json`, `pnpm-lock.yaml`, `docs/`만 있다.
 
-- [ ] **Step 5: 결정 기록**
+- [x] **Step 5: 결정 기록**
 
 - `docs/progress.md`: M3 상태를 `진행 중`으로 바꾼다. 결정 기록에 "이 계획에서 정한 것"의 항목을 한 줄씩, Step 2와 Step 3의 수치와 결정을 한 줄씩 남긴다.
 - `docs/spec.md`
@@ -247,7 +247,7 @@ Expected: `.cargo/config.toml`, `scripts/cargo-runner.sh`, `src-tauri/tauri.conf
   - M4 "먼저 확인할 것": "release 빌드(`pnpm tauri build`)를 dev 빌드와 같은 identity로 서명할지(`bundle.macOS.signingIdentity`). 서명이 다르면 키체인이 다른 앱으로 본다"
   - M8 "먼저 확인할 것": "M3는 마지막 프로젝트를 `localStorage`에 두고, 앱을 끝낼 때 저장하지 않은 탭을 묻지 않는다. 최근 프로젝트 목록과 자동 보관이 이 둘을 대신한다"
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A

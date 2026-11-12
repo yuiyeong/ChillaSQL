@@ -4,8 +4,8 @@
 
 ## 지금
 
-- **진행 중**: M3 계획 중. 계획은 [M3](plans/M3-project-editor.md)에 썼고 사용자 검토를 기다린다
-- **다음 할 일**: 계획이 확정되면 Task 1(dev 빌드 서명, CSP, 결정 기록)부터 시작한다. Task 1에서 상태를 `진행 중`으로 바꾼다
+- **진행 중**: M3 ([계획](plans/M3-project-editor.md)). Task 1(dev 빌드 서명, CSP, 결정 기록) 완료
+- **다음 할 일**: Task 2
 - **M3에서 챙길 것** (M2가 화면에 주는 계약)
   - 화면은 `rows` event의 `retainedFrom`보다 앞의 행을 버리고 그 구간을 "다시 실행해야 볼 수 있음"으로 그린다
   - `split_statements`의 span과 server 오류의 `position`은 모두 보낸 text 기준 0-based UTF-16 code unit offset이다
@@ -24,7 +24,7 @@
 | M0 셋업 | 1 | 완료 | [M0](plans/M0-setup.md) | 2026-11-11 | 2026-11-11 |
 | M1 접속·세션 코어 | 1 | 완료 | [M1](plans/M1-session-core.md) | 2026-11-11 | 2026-11-11 |
 | M2 쿼리 실행 코어 | 1 | 완료 | [M2](plans/M2-query-core.md) | 2026-11-11 | 2026-11-11 |
-| M3 프로젝트·에디터 화면 | 1 | 계획 중 | [M3](plans/M3-project-editor.md) | 2026-11-12 | |
+| M3 프로젝트·에디터 화면 | 1 | 진행 중 | [M3](plans/M3-project-editor.md) | 2026-11-12 | |
 | M4 결과 표 | 1 | 대기 | | | |
 | M5 터널 | 2 | 대기 | | | |
 | M6 트랜잭션과 안전장치 | 2 | 대기 | | | |
@@ -81,6 +81,26 @@
 | 2026-11-11 | M2 | cancel 요청은 연결할 때의 peer address로 보냄 | cancel마다 host를 다시 resolve하면 DNS round-robin host에서 다른 서버로 갈 수 있음(libpq와 같음) |
 | 2026-11-11 | M2 | server 오류의 `position`은 DTO에서 보낸 text 기준 0-based UTF-16 offset으로 바꿔 보냄 | 서버는 1부터 세는 글자 번호를 주는데 문장 span은 UTF-16 offset이라 emoji 같은 non-BMP 문자가 앞에 있으면 위치가 어긋남 |
 | 2026-11-11 | M2 | `split_statements` command는 async로 돌림(`#[tauri::command(async)]`) | sync command는 main thread에서 돌아 1만 줄 scan(약 40ms)이 화면을 막음 |
+| 2026-11-12 | M3 | 커서 문장은 M2의 `split_statements`로 고름. 실행할 때 문서 전체를 한 번 보내고 화면에서 따로 판별하지 않음. 커서가 문장 안이나 끝이면 그 문장, 아니면 같은 줄의 앞 문장, 없으면 같은 줄의 뒤 문장, 그것도 없으면 실행하지 않음 | 1만 줄 scan이 약 40ms이고 async command라 실행마다 보내도 됨. 다른 줄의 문장을 고르지 않는 것은 엉뚱한 DML을 실행하지 않게 하려고 |
+| 2026-11-12 | M3 | 나눌 수 없는 text(닫히지 않은 따옴표 등)에서 커서 실행은 보내지 않고 `split_failed`의 message를 보여 줌. 선택 영역은 받은 그대로 보냄 | 어느 문장인지 알 수 없음. 선택 영역은 M2의 결정(앞뒤를 자르지 않음)을 따름 |
+| 2026-11-12 | M3 | CSP `default-src 'self'; connect-src ipc: http://ipc.localhost; img-src 'self' data:; style-src 'self' 'unsafe-inline'`. 빌드된 앱에만 적용되고 `devCsp`는 두지 않음 | desktop `tauri dev`는 webview가 `devUrl`(Vite)을 직접 열어 CSP header가 붙지 않음(`tauri` 2.12.5 source). CodeMirror(`style-mod`)가 `<style>` tag를 넣어 `'unsafe-inline'`이 필요하고, nonce는 Tauri가 HTML마다 새로 만들어 화면이 알 수 없음. `script-src`는 풀지 않음 |
+| 2026-11-12 | M3 | dev 빌드는 cargo runner script(`scripts/cargo-runner.sh`)에서 이 Mac의 code signing identity로 서명함(identifier `com.yuiyeong.chillasql`). `CHILLA_DEV_IDENTITY`가 있으면 그것을, 없으면 첫 유효 identity를 쓰고, identity가 없으면 서명 없이 실행. release 빌드의 서명은 M4에서 정함 | M1에서 ad-hoc 빌드는 다시 빌드할 때마다 키체인 확인 창이 떴음. `tauri dev`는 `cargo run`이라 cargo의 runner가 걸림. self-signed identity를 새로 만들지 않고 이미 있는 identity를 씀 |
+| 2026-11-12 | M3 | menu를 직접 만들고 Close Window를 뺌. `Cmd+W`는 탭을 닫고 창은 `Cmd+Q`나 닫기 버튼으로 닫음. Edit의 undo, redo, cut, copy, paste, select all은 둠 | 기본 menu의 `close_window`(`Cmd+W`)가 webview의 `keydown`보다 먼저 잡힘. Edit menu가 없으면 WKWebView에서 `Cmd+C`/`Cmd+V`가 되지 않음 |
+| 2026-11-12 | M3 | M3의 단축키: 실행 `Cmd+Enter`, 취소 `Cmd+F2`, 저장 `Cmd+S`, 새 탭 `Shift+Cmd+L`, 탭 닫기 `Cmd+W`, 다음 탭 `Shift+Cmd+]`, 이전 탭 `Shift+Cmd+[`. `KeyboardEvent.code`로 판별 | DataGrip macOS 키맵(4.10). 한글 입력 상태에서 `key`는 `ㄴ` 같은 자모임 |
+| 2026-11-12 | M3 | 마지막으로 연 프로젝트 디렉토리를 `localStorage`(`chilla.lastProjectDir`)에 두고 시작할 때 엶 | 최근 프로젝트 목록(M8)이 생기면 SQLite로 옮김 |
+| 2026-11-12 | M3 | `chilla.toml`이 없는 디렉토리는 앱이 `[project]`만 든 파일을 만들어 프로젝트로 만들 수 있음 | 새 디렉토리도 설정 파일을 손으로 만들지 않고 앱에서 프로젝트로 열 수 있게 함 |
+| 2026-11-12 | M3 | 접속 저장은 `toml_edit`로 그 접속의 table만 고침. 저장 전에 결과를 `load`와 같은 검사로 다시 읽어 봄. `sslrootcert`가 프로젝트 디렉토리 안이면 상대 경로로 씀 | 주석, 다른 접속, 순서를 그대로 둠. 7장의 "저장 시 검사" |
+| 2026-11-12 | M3 | 접속 이름은 만든 뒤에 바꿀 수 없고 접속 지우기는 만들지 않음. `tunnel`(M5)과 `color`(M6)는 form에 없고 저장할 때 그대로 둠 | 필요하면 `chilla.toml`을 직접 고침 |
+| 2026-11-12 | M3 | 접속의 연결 대상(host, port, database, user, SSL 설정, 터널)을 바꿔 저장하면 저장된 비밀번호를 지움. 같이 새 비밀번호를 넣으면 그것을 저장 | M1의 접속 테스트와 같은 이유: 저장된 비밀번호가 다른 host로 가지 않게 함 |
+| 2026-11-12 | M3 | `has_password`는 접속 수정 form을 열 때만 부름. 구현(값을 읽음)은 그대로 둠 | M1에서 미룬 것. 접속 목록을 그릴 때 키체인을 읽지 않음 |
+| 2026-11-12 | M3 | SQL 파일 목록은 프로젝트 디렉토리 아래의 `.sql` 파일. `.`으로 시작하는 이름, `node_modules`, `target`, symlink는 빼고 16 MiB를 넘는 파일은 열지 않음. 읽을 때의 stamp(mtime과 크기)를 화면이 갖고 있다가 저장할 때 돌려주고, 그 사이 디스크의 파일이 바뀌었으면 덮어쓰기 전에 물음 | 밖에서 바뀐 파일을 모르고 덮어쓰지 않게 함 |
+| 2026-11-12 | M3 | 세션은 탭의 첫 실행 때 엶. 새 탭은 활성 탭의 접속을 물려받고, 활성 탭이 없으면 접속이 없음 | 첫 접속을 자동으로 고르지 않음. `chilla.toml`의 첫 접속이 운영일 수 있음 |
+| 2026-11-12 | M3 | 임시 표는 첫 batch(최대 500행)만 보여 주고 `fetch_more`를 부르지 않음. 받다 만 결과는 다음 실행, 취소, 탭 닫기에서 버려짐. `retainedFrom`보다 앞의 행은 reducer가 버림 | 결과 표와 "다시 실행해야 볼 수 있음" 표시는 M4 |
+| 2026-11-12 | M3 | 앱이 끝날 때 `close_all_sessions`를 부름 | 실행 중인 쿼리가 서버에 남지 않게 함 |
+| 2026-11-12 | M3 | CodeMirror의 `autocompletion()`은 켜지 않음 | 자동완성은 M7 |
+| 2026-11-12 | M3 | 저장하지 않은 변경은 탭을 닫을 때와 프로젝트를 바꿀 때만 묻고 앱을 끝낼 때는 묻지 않음. 가상 스크롤과 이어서 가져오기(M4), 터널과 접속별 색상(M5, M6), 트랜잭션 표시(M6), 자동완성(M7), 오류 위치 밑줄·여러 문장 실행·저장하지 않은 탭 자동 보관·최근 프로젝트 목록(M8)은 넣지 않음 | M8의 자동 보관이 앱을 끝낼 때의 확인을 대신함. 나머지는 각 마일스톤의 범위 |
+| 2026-11-12 | M3 | dev 빌드 서명 확정. runner로 서명한 binary가 키체인 항목을 만들고(`KEYCHAIN_PROBE 18.89 created`), 다시 빌드한 binary가 확인 창 없이 읽음(`lib.rs`에 빈 줄을 더해 다시 빌드 `9.03 existing`, probe 문구를 바꿔 CDHash가 바뀐 binary `9.669 existing`). `codesign -dvv`는 `Identifier=com.yuiyeong.chillasql`, Authority 줄 3개, `Signature=adhoc` 없음. cargo의 `runner` 상대 경로는 `.cargo/`가 있는 디렉토리 기준으로 풀림(tauri CLI가 `src-tauri/`에서 cargo를 불러도 됨) | 기준(확인 창 없음, 500ms 이내) 안. 빈 줄만 더한 빌드는 binary가 바뀌지 않았을 수 있어 code를 바꿔 한 번 더 잼. `pnpm tauri dev`에서 잼 |
+| 2026-11-12 | M3 | CSP 확정(위 값 그대로). `pnpm tauri build --debug --no-bundle`로 만든 binary에서 `CSP_PROBE {"violations":[],"cmStyled":true,"channelChars":20000}`. `dangerousDisableAssetCspModification`은 필요 없음 | CodeMirror의 `<style>`이 막히지 않고(`.cm-scroller`의 `overflow-x`가 `auto`), 8,192 byte를 넘어 fetch 경로를 타는 20,000자 Channel 메시지도 `connect-src`에 막히지 않음. `style-src`에 nonce가 붙지 않아 `'unsafe-inline'`이 그대로 들음 |
 
 ## 작업 로그
 
@@ -88,6 +108,7 @@
 
 ### 2026-11-12
 
+- M3 Task 1: dev 빌드를 cargo runner에서 이 Mac의 code signing identity로 서명하게 하고(다시 빌드해도 키체인 확인 창 없음, 읽기 9~10ms), CSP를 켬(빌드된 앱에서 violation 없음, CodeMirror style과 20,000자 Channel 메시지 통과). CodeMirror package를 더하고 계획에서 정한 것을 결정 기록과 기획서, 마일스톤에 옮김. 임시 probe(`probe.rs`, `probe.ts`)는 확인 뒤 지움
 - M3 계획 작성. 마일스톤의 "먼저 확인할 것" 중 커서 문장 고르기는 계획에서 정했고(M2의 `split_statements`를 씀), CSP와 dev 빌드 서명은 계획을 쓰면서 `tauri` 2.12.5, tauri-cli, `style-mod` 4.1.4의 source와 scratch script(저장소 밖)로 확인한 사실을 계획 맨 위 표에 적음: desktop `tauri dev`에는 CSP가 붙지 않음(빌드된 앱에만), CodeMirror는 `<style>` tag를 넣어 `style-src`에 `'unsafe-inline'`이 필요함, 기본 menu의 `Cmd+W`가 창을 닫음, `tauri dev`는 `cargo run`이라 cargo의 runner에서 서명할 수 있음, 이 Mac에 유효한 code signing identity가 이미 있음, `lang-sql`의 `PostgreSQL` dialect가 `$$`·`::`·JSONB 연산자를 오류 없이 나눔. webview가 있어야 하는 확인(서명 뒤 키체인 확인 창, 실제 CSP header)은 Task 1에 둠. 결정 기록에는 Task 1에서 옮김
 
 ### 2026-11-11
