@@ -21,7 +21,7 @@ use crate::domain::{
 pub enum AppError {
     #[error("프로젝트를 먼저 열어야 합니다")]
     NoProject,
-    #[error("연결하는 동안 프로젝트가 다시 열렸습니다. 다시 시도하세요")]
+    #[error("그동안 프로젝트가 다시 열렸습니다. 다시 시도하세요")]
     ProjectChanged,
     #[error("접속 '{name}'이 프로젝트에 없습니다")]
     UnknownConnection { name: String },
@@ -124,11 +124,11 @@ impl<C: Connector> App<C> {
     /// 접속을 `chilla.toml`에 쓰고 열려 있는 프로젝트에 반영한다. 세션은 그대로 둔다(열려
     /// 있는 세션은 저장 전의 접속 정보로 붙어 있다). 겹친 저장은 차례로 처리한다.
     ///
-    /// 같은 이름의 접속이 있었고 연결 대상이 바뀌면 저장된 비밀번호를 파일을 쓰기 *전에*
+    /// 같은 이름의 접속이 없었거나 연결 대상이 바뀌면 저장된 비밀번호를 파일을 쓰기 *전에*
     /// 지운다(`test_connection`과 같은 규칙). 새 대상이 파일에 적힌 채 옛 비밀번호가 키체인에
     /// 남으면 다음에 프로젝트를 열 때 옛 비밀번호가 새 대상으로 가기 때문이다. 지우지 못하면
-    /// 파일을 쓰지 않는다. `password`가 있으면 파일을 쓴 뒤에 저장한다. 그 밖에는 키체인을
-    /// 건드리지 않는다.
+    /// 파일을 쓰지 않는다. `password`가 있으면 파일을 쓴 뒤에 저장한다. 대상이 같고
+    /// `password`가 없을 때만 키체인을 건드리지 않는다.
     ///
     /// 쓰는 동안 프로젝트가 다시 열렸으면 열린 프로젝트는 바꾸지 않고 `ProjectChanged`를
     /// 돌려준다. 이미 쓴 파일에 맞춰 `password`는 그 파일의 디렉토리 기준으로 저장한다.
@@ -143,9 +143,11 @@ impl<C: Connector> App<C> {
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
             let profile = profile.resolved_under(&project.dir);
             profile.validate()?;
+            // 같은 이름의 접속이 없었어도 키체인에는 그 이름의 비밀번호가 남아 있을 수 있다
+            // (`chilla.toml`에서 접속을 손으로 지운 경우).
             let target_changed = project
                 .connection(&profile.name)
-                .is_some_and(|previous| !previous.same_target(&profile));
+                .is_none_or(|previous| !previous.same_target(&profile));
             (
                 project.dir.clone(),
                 password_key(project, &profile.name),
@@ -1093,7 +1095,13 @@ mod tests {
         f.app.open_project(Path::new("/q")).await.unwrap();
         drop(blocked);
 
-        assert_eq!(saving.await.unwrap(), Err(AppError::ProjectChanged));
+        let error = saving.await.unwrap().unwrap_err();
+        assert_eq!(error, AppError::ProjectChanged);
+        // 연결이 아니라 저장 중에도 나는 오류다.
+        assert_eq!(
+            error.to_string(),
+            "그동안 프로젝트가 다시 열렸습니다. 다시 시도하세요"
+        );
         let opened_dir = f
             .app
             .state
@@ -1142,8 +1150,9 @@ mod tests {
         assert_eq!(names, ["analytics", "reporting"]);
     }
 
+    /// 남아 있던 비밀번호가 없으면 저장 뒤에도 키체인은 비어 있다.
     #[tokio::test]
-    async fn save_connection_of_a_new_connection_touches_no_password() {
+    async fn save_connection_of_a_new_connection_leaves_no_password() {
         let f = opened().await;
 
         f.app
@@ -1152,6 +1161,32 @@ mod tests {
             .unwrap();
 
         assert!(f.passwords.is_empty());
+    }
+
+    /// `chilla.toml`에서 접속을 손으로 지운 뒤 같은 이름으로 다시 추가하면, 키체인에 남아
+    /// 있던 옛 비밀번호가 새 대상으로 가면 안 된다.
+    #[tokio::test]
+    async fn save_connection_of_a_new_name_forgets_a_leftover_password() {
+        let key = PasswordKey {
+            project_dir: "/p".into(),
+            connection: "analytics".into(),
+        };
+
+        let f = opened().await;
+        f.passwords.set(&key, &pw("leftover")).unwrap();
+        f.app
+            .save_connection(profile("analytics"), None)
+            .await
+            .unwrap();
+        assert!(f.passwords.get(&key).unwrap().is_none());
+
+        let f = opened().await;
+        f.passwords.set(&key, &pw("leftover")).unwrap();
+        f.app
+            .save_connection(profile("analytics"), Some(pw("new")))
+            .await
+            .unwrap();
+        assert_eq!(f.passwords.get(&key).unwrap().unwrap().expose(), "new");
     }
 
     #[tokio::test]
