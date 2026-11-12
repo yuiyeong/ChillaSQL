@@ -576,9 +576,10 @@ impl<C: Connector> App<C> {
 - `create_project`: `projects.create(dir)`가 성공하면 `open_project`와 같은 순서로 프로젝트를 바꾼다(generation을 올리고 열려 있던 세션을 모두 닫는다). 실패하면 지금 프로젝트와 세션은 그대로다.
 - `save_connection`:
   1. 프로젝트가 없으면 `NoProject`. `profile.resolved_under(dir)` 뒤 `validate()`가 실패하면 `InvalidProfile`이고 쓰지 않는다.
-  2. 저장 전의 같은 이름 접속(`previous`)을 기억하고 `projects.save_connection`을 부른다(blocking).
-  3. 쓰는 동안 프로젝트가 다시 열렸으면(generation이 다르면) state를 건드리지 않고 `ProjectChanged`다. 아니면 `state.project`를 돌려받은 프로젝트로 바꾼다. generation은 올리지 않고 세션은 닫지 않는다(열려 있는 세션은 저장 전의 접속 정보로 붙어 있다).
-  4. 비밀번호: `password`가 `Some`이면 저장한다. `None`이고 `previous`가 있고 `!previous.same_target(&profile)`이면 저장된 비밀번호를 지운다. 그 밖에는 키체인을 건드리지 않는다.
+  2. 저장 전의 같은 이름 접속(`previous`)을 기억한다. `previous`가 있고 `!previous.same_target(&profile)`이면(`target_changed`) 새 비밀번호를 받았는지와 상관없이 저장된 비밀번호를 `projects.save_connection`을 부르기 *전에* 지운다. 지우지 못하면 그 오류를 돌려주고 파일을 쓰지 않는다.
+  3. `projects.save_connection`을 부른다(blocking). 실패하면 그 오류를 돌려준다(대상이 바뀌었다면 저장된 비밀번호는 이미 지워져 있다. 안전한 쪽이다).
+  4. 쓰는 동안 프로젝트가 다시 열렸으면(generation이 다르면) state를 건드리지 않고 `ProjectChanged`다. 아니면 `state.project`를 돌려받은 프로젝트로 바꾼다. generation은 올리지 않고 세션은 닫지 않는다(열려 있는 세션은 저장 전의 접속 정보로 붙어 있다).
+  5. `password`가 `Some`이면 파일을 쓴 뒤에 저장한다. 저장하지 못하면 `PasswordStore` 오류를 돌려주고, 접속은 저장된 채 비밀번호만 없다. `previous`가 없거나 대상이 같고 `password`도 없으면 키체인을 건드리지 않는다.
 - 파일 use case: 프로젝트가 없으면 `NoProject`. `SqlPath::parse`가 실패하면 `InvalidPath`이고 store를 부르지 않는다. store 호출은 `blocking`으로 한다.
 - `FakeFiles`(test_support): `calls(&self) -> Vec<(PathBuf, String)>`로 받은 (프로젝트 디렉토리, 경로)를 돌려준다. `list`는 빈 Vec, `read`는 `SqlFile { text: "", stamp: FileStamp("s".into()) }`, `write`는 `FileStamp("s".into())`를 돌려준다.
 - `src-tauri/src/lib.rs`는 `Arc::new(FsSqlFileStore)`를 넘긴다. `tests/support/mod.rs`의 `app_with_project`도 같다.

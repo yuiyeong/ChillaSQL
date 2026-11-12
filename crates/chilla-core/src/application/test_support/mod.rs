@@ -5,6 +5,7 @@ mod connection;
 use std::collections::HashMap;
 use std::ops::Range;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -102,27 +103,54 @@ impl ProjectStore for FakeProjects {
 }
 
 #[derive(Default)]
-pub(crate) struct FakePasswords(Mutex<HashMap<PasswordKey, String>>);
+pub(crate) struct FakePasswords {
+    entries: Mutex<HashMap<PasswordKey, String>>,
+    fail_sets: AtomicBool,
+    fail_deletes: AtomicBool,
+}
 
 impl FakePasswords {
     pub(crate) fn is_empty(&self) -> bool {
-        self.0.lock().unwrap().is_empty()
+        self.entries.lock().unwrap().is_empty()
+    }
+
+    /// 이 뒤의 `set`이 실패한다. `false`를 주면 다시 성공한다.
+    pub(crate) fn fail_sets(&self, fail: bool) {
+        self.fail_sets.store(fail, Ordering::SeqCst);
+    }
+
+    /// 이 뒤의 `delete`가 실패한다. `false`를 주면 다시 성공한다.
+    pub(crate) fn fail_deletes(&self, fail: bool) {
+        self.fail_deletes.store(fail, Ordering::SeqCst);
+    }
+}
+
+fn denied() -> PasswordStoreError {
+    PasswordStoreError {
+        message: "거부했다".into(),
     }
 }
 
 impl PasswordStore for FakePasswords {
     fn get(&self, key: &PasswordKey) -> Result<Option<Password>, PasswordStoreError> {
-        Ok(self.0.lock().unwrap().get(key).cloned().map(Password::new))
+        let entries = self.entries.lock().unwrap();
+        Ok(entries.get(key).cloned().map(Password::new))
     }
 
     fn set(&self, key: &PasswordKey, password: &Password) -> Result<(), PasswordStoreError> {
-        let mut entries = self.0.lock().unwrap();
+        if self.fail_sets.load(Ordering::SeqCst) {
+            return Err(denied());
+        }
+        let mut entries = self.entries.lock().unwrap();
         entries.insert(key.clone(), password.expose().to_string());
         Ok(())
     }
 
     fn delete(&self, key: &PasswordKey) -> Result<(), PasswordStoreError> {
-        self.0.lock().unwrap().remove(key);
+        if self.fail_deletes.load(Ordering::SeqCst) {
+            return Err(denied());
+        }
+        self.entries.lock().unwrap().remove(key);
         Ok(())
     }
 }

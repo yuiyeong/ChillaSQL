@@ -121,30 +121,44 @@ impl<C: Connector> App<C> {
     /// 접속을 `chilla.toml`에 쓰고 열려 있는 프로젝트에 반영한다. 세션은 그대로 둔다(열려
     /// 있는 세션은 저장 전의 접속 정보로 붙어 있다).
     ///
-    /// `password`가 있으면 키체인에 저장한다. 없을 때는 같은 이름의 접속이 있었고 연결 대상이
-    /// 바뀐 경우에만 저장된 비밀번호를 지운다. 새 대상으로 옛 비밀번호가 나가지 않게
-    /// 하려는 것이다(`test_connection`과 같은 규칙). 그 밖에는 키체인을 건드리지 않는다.
+    /// 같은 이름의 접속이 있었고 연결 대상이 바뀌면 저장된 비밀번호를 파일을 쓰기 *전에*
+    /// 지운다(`test_connection`과 같은 규칙). 새 대상이 파일에 적힌 채 옛 비밀번호가 키체인에
+    /// 남으면 다음에 프로젝트를 열 때 옛 비밀번호가 새 대상으로 가기 때문이다. 지우지 못하면
+    /// 파일을 쓰지 않는다. `password`가 있으면 파일을 쓴 뒤에 저장한다. 그 밖에는 키체인을
+    /// 건드리지 않는다.
     pub async fn save_connection(
         &self,
         profile: ConnectionProfile,
         password: Option<Password>,
     ) -> Result<Project, AppError> {
-        let (dir, profile, previous, generation) = {
+        let (dir, profile, target_changed, generation) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
             let profile = profile.resolved_under(&project.dir);
             profile.validate()?;
+            let target_changed = project
+                .connection(&profile.name)
+                .is_some_and(|previous| !previous.same_target(&profile));
             (
                 project.dir.clone(),
-                profile.clone(),
-                project.connection(&profile.name).cloned(),
+                profile,
+                target_changed,
                 state.project_generation,
             )
         };
+        let key = PasswordKey {
+            project_dir: dir.clone(),
+            connection: profile.name.clone(),
+        };
+
+        if target_changed {
+            let passwords = self.passwords.clone();
+            let key = key.clone();
+            blocking(move || passwords.delete(&key)).await?;
+        }
 
         let projects = self.projects.clone();
-        let (save_dir, saved) = (dir.clone(), profile.clone());
-        let project = blocking(move || projects.save_connection(&save_dir, &saved)).await?;
+        let project = blocking(move || projects.save_connection(&dir, &profile)).await?;
 
         {
             let mut state = self.state.lock().await;
@@ -154,17 +168,9 @@ impl<C: Connector> App<C> {
             state.project = Some(project.clone());
         }
 
-        let key = PasswordKey {
-            project_dir: dir,
-            connection: profile.name.clone(),
-        };
-        let passwords = self.passwords.clone();
-        match password {
-            Some(password) => blocking(move || passwords.set(&key, &password)).await?,
-            None if previous.is_some_and(|previous| !previous.same_target(&profile)) => {
-                blocking(move || passwords.delete(&key)).await?;
-            }
-            None => {}
+        if let Some(password) = password {
+            let passwords = self.passwords.clone();
+            blocking(move || passwords.set(&key, &password)).await?;
         }
         Ok(project)
     }
@@ -1024,6 +1030,38 @@ mod tests {
             connection: "local".into(),
         };
         assert_eq!(f.passwords.get(&key).unwrap().unwrap().expose(), "new");
+    }
+
+    /// 비밀번호를 지우지 못했는데 새 대상을 파일에 쓰면, 다음에 프로젝트를 열 때 옛 비밀번호가
+    /// 새 대상으로 간다.
+    #[tokio::test]
+    async fn save_connection_does_not_write_when_the_stored_password_cannot_be_forgotten() {
+        let f = opened().await;
+        f.app.set_password("local", pw("stored")).await.unwrap();
+        f.passwords.fail_deletes(true);
+        let mut moved = profile("local");
+        moved.host = "db.internal".into();
+
+        let result = f.app.save_connection(moved, None).await;
+
+        assert!(matches!(result, Err(AppError::PasswordStore(_))));
+        assert!(f.projects.saved().is_empty());
+    }
+
+    #[tokio::test]
+    async fn save_connection_forgets_the_old_password_even_when_storing_the_new_one_fails() {
+        let f = opened().await;
+        f.app.set_password("local", pw("stored")).await.unwrap();
+        f.passwords.fail_sets(true);
+        let mut moved = profile("local");
+        moved.host = "db.internal".into();
+
+        let result = f.app.save_connection(moved, Some(pw("new"))).await;
+
+        assert!(matches!(result, Err(AppError::PasswordStore(_))));
+        assert_eq!(f.projects.saved().len(), 1);
+        f.passwords.fail_sets(false);
+        assert_eq!(f.app.has_password("local").await, Ok(false));
     }
 
     #[tokio::test]
