@@ -2,7 +2,7 @@ import { writeSqlFile } from "../../shared/api/commands";
 import { confirm } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import { useProject } from "../project/projectStore";
-import { documentState, findDocument } from "./documents";
+import { documentFileText, documentState, findDocument } from "./documents";
 import { useTabs } from "./tabsStore";
 
 export type SaveResult = "saved" | "needs_name" | "cancelled" | "failed";
@@ -44,7 +44,7 @@ async function save(tabId: string, newPath?: string): Promise<SaveResult> {
   }
 
   const doc = documentState(tabId).doc;
-  const text = doc.toString();
+  const text = documentFileText(tabId);
   /** 쓰는 동안 더 입력했으면 dirty로 남긴다. 탭이 닫혔으면 markSaved가 아무것도 하지 않는다. */
   const recordSaved = (path: string, stamp: string) =>
     tabs.markSaved(

@@ -201,6 +201,25 @@ test("밖에서 지워진 파일은 물어본 뒤 다시 만든다", async () =>
   expect(listSqlFiles).toHaveBeenCalled();
 });
 
+test("CRLF 파일을 고쳐 저장하면 줄 끝이 CRLF다", async () => {
+  vi.mocked(readSqlFile).mockResolvedValue({
+    text: "SELECT 1\r\nFROM t\r\n",
+    stamp: "s1",
+  });
+  vi.mocked(writeSqlFile).mockResolvedValue("s2");
+  await useTabs.getState().openFile("queries/a.sql");
+  const id = useTabs.getState().tabs[0].id;
+  type(id, "-- ");
+  useTabs.getState().markDirty(id);
+
+  expect(await saveTab(id)).toBe("saved");
+  expect(writeSqlFile).toHaveBeenCalledWith(
+    "queries/a.sql",
+    "-- SELECT 1\r\nFROM t\r\n",
+    { mode: "replace", stamp: "s1" },
+  );
+});
+
 test("덮어쓰기가 실패하면 error를 두고 failed다", async () => {
   vi.mocked(readSqlFile).mockResolvedValue({ text: "SELECT 1", stamp: "s1" });
   vi.mocked(writeSqlFile)
