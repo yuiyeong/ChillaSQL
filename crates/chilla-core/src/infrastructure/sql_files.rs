@@ -3,6 +3,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
+use super::atomic_write::write_atomically;
 use crate::application::{FileError, SqlFileStore};
 use crate::domain::{FileStamp, SqlFile, SqlPath, WriteMode, has_sql_extension};
 
@@ -177,35 +178,17 @@ fn create_new(path: &SqlPath, full: &Path, text: &str) -> Result<FileStamp, File
     }
 }
 
-/// 같은 디렉토리의 임시 파일에 쓰고 `rename`해서 쓰다 만 파일이 남지 않게 한다.
+/// 같은 디렉토리의 임시 파일에 쓰고 `rename`한다. 파일이 없으면 새로 만든다.
 fn replace(path: &SqlPath, full: &Path, text: &str) -> Result<FileStamp, FileError> {
     let name = full
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
     let tmp = full.with_file_name(format!(".{name}.chilla-tmp"));
-    let result = write_tmp_and_rename(full, &tmp, text);
-    if result.is_err() {
-        let _ = fs::remove_file(&tmp);
-    }
-    result.map_err(|e| io_error(path, &e))
-}
-
-fn write_tmp_and_rename(full: &Path, tmp: &Path, text: &str) -> io::Result<FileStamp> {
-    // 지난번에 남은 임시 파일(symlink일 수도 있다)을 따라가 쓰지 않도록 치우고 새로 만든다.
-    match fs::remove_file(tmp) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
-        _ => {}
-    }
-    let mut file = OpenOptions::new().write(true).create_new(true).open(tmp)?;
-    file.write_all(text.as_bytes())?;
-    if let Ok(existing) = fs::metadata(full) {
-        // 새 파일이 기존 파일의 권한(예: 0600)을 잃지 않게 한다.
-        file.set_permissions(existing.permissions())?;
-    }
-    drop(file);
-    fs::rename(tmp, full)?;
-    Ok(stamp(&fs::metadata(full)?))
+    write_atomically(full, &tmp, text)
+        .and_then(|()| fs::metadata(full))
+        .map(|meta| stamp(&meta))
+        .map_err(|e| io_error(path, &e))
 }
 
 fn stamp(meta: &fs::Metadata) -> FileStamp {

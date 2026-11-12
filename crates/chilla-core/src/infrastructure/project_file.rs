@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use serde::Deserialize;
 use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
+use super::atomic_write::write_atomically;
 use crate::application::{ProjectError, ProjectStore};
 use crate::domain::{ConnectionProfile, Project, SslMode};
 
@@ -93,7 +94,9 @@ impl ProjectStore for TomlProjectStore {
         });
         let edited = with_connection(&text, profile, sslrootcert)?;
         let project = parse(&root, &edited).map_err(|e| write_error(&path, e))?;
-        replace(&path, &edited).map_err(|e| write_error(&path, e))?;
+        // 1에서 읽은 파일이라 있다. 그 권한을 그대로 둔다.
+        let temp = path.with_file_name(TEMP_FILE_NAME);
+        write_atomically(&path, &temp, &edited).map_err(|e| write_error(&path, e))?;
         Ok(project)
     }
 }
@@ -148,31 +151,6 @@ fn parse(dir: &Path, text: &str) -> Result<Project, ProjectError> {
         name,
         connections,
     })
-}
-
-/// 같은 디렉토리의 임시 파일에 쓰고 바꿔 넣는다. 도중에 멈춰도 `chilla.toml`이 반만 쓰이지 않는다.
-fn replace(path: &Path, text: &str) -> io::Result<()> {
-    let temp = path.with_file_name(TEMP_FILE_NAME);
-    let result = write_temp_and_rename(path, &temp, text);
-    if result.is_err() {
-        let _ = fs::remove_file(&temp);
-    }
-    result
-}
-
-fn write_temp_and_rename(path: &Path, temp: &Path, text: &str) -> io::Result<()> {
-    // 남아 있던 임시 파일(clone한 저장소에 심어 둔 symlink일 수도 있다)을 따라가 쓰지 않도록
-    // 치우고 `create_new`로 새로 만든다.
-    match fs::remove_file(temp) {
-        Err(e) if e.kind() != io::ErrorKind::NotFound => return Err(e),
-        _ => {}
-    }
-    let mut file = OpenOptions::new().write(true).create_new(true).open(temp)?;
-    file.write_all(text.as_bytes())?;
-    // 새 파일이 기존 파일의 권한(예: 0600)을 잃지 않게 한다.
-    file.set_permissions(fs::metadata(path)?.permissions())?;
-    drop(file);
-    fs::rename(temp, path)
 }
 
 /// `text`에서 `[connections.<name>]`만 `profile`로 고친 text. 다른 줄과 주석은 그대로 둔다.
