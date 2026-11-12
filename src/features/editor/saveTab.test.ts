@@ -165,6 +165,42 @@ test("밖에서 바뀐 파일은 물어본 뒤에만 덮어쓴다", async () => 
   expect(tabOf(id)).toMatchObject({ dirty: false, stamp: "s3" });
 });
 
+test("밖에서 지워진 파일은 물어본 뒤 다시 만든다", async () => {
+  const id = await fileTab();
+  type(id, "-- ");
+  useTabs.getState().markDirty(id);
+  vi.mocked(writeSqlFile).mockRejectedValueOnce(
+    new CommandError("file_not_found", "파일이 없습니다"),
+  );
+
+  vi.mocked(confirm).mockResolvedValueOnce(false);
+  expect(await saveTab(id)).toBe("cancelled");
+  expect(confirm).toHaveBeenCalledWith(
+    "queries/a.sql 파일이 밖에서 지워졌습니다. 다시 만들까요?",
+  );
+  expect(writeSqlFile).toHaveBeenCalledTimes(1);
+  expect(tabOf(id)).toMatchObject({ dirty: true, stamp: "s1" });
+  expect(useTabs.getState().error).toBeNull();
+
+  vi.mocked(writeSqlFile).mockReset();
+  vi.mocked(writeSqlFile)
+    .mockRejectedValueOnce(
+      new CommandError("file_not_found", "파일이 없습니다"),
+    )
+    .mockResolvedValueOnce("s2");
+  vi.mocked(confirm).mockResolvedValueOnce(true);
+
+  expect(await saveTab(id)).toBe("saved");
+  expect(writeSqlFile).toHaveBeenCalledTimes(2);
+  expect(writeSqlFile).toHaveBeenLastCalledWith(
+    "queries/a.sql",
+    "-- SELECT 1",
+    { mode: "overwrite" },
+  );
+  expect(tabOf(id)).toMatchObject({ dirty: false, stamp: "s2" });
+  expect(listSqlFiles).toHaveBeenCalled();
+});
+
 test("덮어쓰기가 실패하면 error를 두고 failed다", async () => {
   vi.mocked(readSqlFile).mockResolvedValue({ text: "SELECT 1", stamp: "s1" });
   vi.mocked(writeSqlFile)
