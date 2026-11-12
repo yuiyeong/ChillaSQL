@@ -498,3 +498,49 @@ test("대상이 그대로면 세션을 놓지 않는다", async () => {
   expect(closeSession).not.toHaveBeenCalled();
   expect(runOf(id)?.status).toBe("running");
 });
+
+test("디렉토리 고르기가 실패하면 프로젝트 오류로 보여 준다", async () => {
+  const id = tabWith("SELECT 1");
+  await useRuns.getState().run(id, () => ({
+    connection: "local",
+    sql: "SELECT 1",
+    origin: { line: 1, column: 1 },
+  }));
+  vi.mocked(pickDirectory).mockRejectedValue(new Error("창을 열지 못했습니다"));
+
+  await switchProject();
+
+  expect(useProject.getState().error).toBe("창을 열지 못했습니다");
+  expect(useProject.getState().project).toEqual(project);
+  expect(tabOf(id)).toBeDefined();
+  expect(runOf(id)?.status).toBe("running");
+
+  // dirty 탭을 묻는 확인 창이 실패해도 같다.
+  useProject.getState().clearError();
+  useTabs.getState().markDirty(id);
+  vi.mocked(confirm).mockRejectedValue(new Error("확인 창 오류"));
+
+  await switchProject();
+
+  expect(useProject.getState().error).toBe("확인 창 오류");
+  expect(tabOf(id)).toBeDefined();
+  expect(runOf(id)?.status).toBe("running");
+});
+
+test("확인 창이 실패하면 탭을 닫지 않고 오류를 보여 준다", async () => {
+  const id = tabWith("SELECT 1");
+  await useRuns.getState().run(id, () => ({
+    connection: "local",
+    sql: "SELECT 1",
+    origin: { line: 1, column: 1 },
+  }));
+  useTabs.getState().markDirty(id);
+  vi.mocked(confirm).mockRejectedValue(new Error("확인 창 오류"));
+
+  await closeTab(id);
+
+  expect(useTabs.getState().error).toBe("확인 창 오류");
+  expect(tabOf(id)).toBeDefined();
+  expect(runOf(id)?.status).toBe("running");
+  expect(closeSession).not.toHaveBeenCalled();
+});

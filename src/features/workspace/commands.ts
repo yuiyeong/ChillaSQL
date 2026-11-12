@@ -89,11 +89,18 @@ export async function execute(command: CommandId): Promise<void> {
 export async function closeTab(tabId: string): Promise<void> {
   const tab = findTab(tabId);
   if (tab === undefined) return;
-  if (
-    tab.dirty &&
-    !(await confirm(`'${tab.title}'의 저장하지 않은 변경을 버릴까요?`))
-  ) {
-    return;
+  if (tab.dirty) {
+    let discard: boolean;
+    try {
+      discard = await confirm(
+        `'${tab.title}'의 저장하지 않은 변경을 버릴까요?`,
+      );
+    } catch (error) {
+      // 묻지 못했으면 닫지 않는다.
+      useTabs.getState().setError(messageOf(error));
+      return;
+    }
+    if (!discard) return;
   }
   // release는 store에서 세션을 바로 떼어 낸다. 세션을 닫는 응답은 탭을 닫은 뒤에 기다린다.
   const released = useRuns.getState().release(tabId);
@@ -137,16 +144,13 @@ export async function applySavedProject(project: Project): Promise<void> {
 
 /** 다른 프로젝트를 연다. 열리면 탭과 실행 상태를 비운다. */
 export async function switchProject(): Promise<void> {
-  const dirty = useTabs.getState().tabs.filter((tab) => tab.dirty).length;
-  if (
-    dirty > 0 &&
-    !(await confirm(
-      `저장하지 않은 변경이 있는 탭이 ${dirty}개 있습니다. 버리고 다른 프로젝트를 열까요?`,
-    ))
-  ) {
+  let dir: string | null;
+  try {
+    dir = await askProjectDir();
+  } catch (error) {
+    useProject.getState().showError(messageOf(error));
     return;
   }
-  const dir = await pickDirectory();
   if (dir === null) return;
   if (!(await useProject.getState().open(dir))) return;
 
@@ -155,4 +159,18 @@ export async function switchProject(): Promise<void> {
   const closing = useRuns.getState().reset();
   useTabs.getState().reset();
   await closing;
+}
+
+/** dirty 탭이 있으면 버릴지 묻고 디렉토리를 고르게 한다. 그만두면 null이다. */
+async function askProjectDir(): Promise<string | null> {
+  const dirty = useTabs.getState().tabs.filter((tab) => tab.dirty).length;
+  if (
+    dirty > 0 &&
+    !(await confirm(
+      `저장하지 않은 변경이 있는 탭이 ${dirty}개 있습니다. 버리고 다른 프로젝트를 열까요?`,
+    ))
+  ) {
+    return null;
+  }
+  return pickDirectory();
 }
