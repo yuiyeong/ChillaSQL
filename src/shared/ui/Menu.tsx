@@ -39,19 +39,29 @@ export function Menu({ open, onClose, anchor, label, children }: MenuProps) {
     menu.style.left = `${rect.left}px`;
   }, [open, anchor]);
 
+  // 열릴 때만 첫 항목으로 간다. 다시 그려질 때마다 가면 화살표로 옮긴 자리를 잃는다.
+  useEffect(() => {
+    if (open) ref.current?.querySelector<HTMLElement>(ITEMS)?.focus();
+  }, [open]);
+
+  // inline arrow로 넘어온 onClose가 매번 달라도 listener를 다시 달지 않는다.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   useEffect(() => {
     if (!open) return;
-    ref.current?.querySelector<HTMLElement>(ITEMS)?.focus();
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node;
       if (ref.current?.contains(target) || anchor.current?.contains(target)) {
         return;
       }
-      onClose();
+      onCloseRef.current();
     };
     document.addEventListener("pointerdown", onPointerDown);
     return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [open, anchor, onClose]);
+  }, [open, anchor]);
 
   if (!open) return null;
 

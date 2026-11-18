@@ -107,3 +107,20 @@ test("checked가 있는 항목은 menuitemradio다", () => {
   expect(screen.getByRole("menuitemradio", { name: "local" })).toBeChecked();
   expect(screen.getByRole("menuitemradio", { name: "prod" })).not.toBeChecked();
 });
+
+test("부모가 다시 그려져도 화살표로 옮긴 focus가 첫 항목으로 돌아가지 않는다", () => {
+  const anchor = createRef<HTMLButtonElement>();
+  const view = (tick: number) => (
+    <Menu open onClose={() => void tick} anchor={anchor} label="Actions">
+      <MenuItem onSelect={vi.fn()}>First</MenuItem>
+      <MenuItem onSelect={vi.fn()}>Second</MenuItem>
+    </Menu>
+  );
+  const { rerender } = render(view(0));
+  fireEvent.keyDown(screen.getByRole("menuitem", { name: "First" }), {
+    key: "ArrowDown",
+  });
+  expect(screen.getByRole("menuitem", { name: "Second" })).toHaveFocus();
+  rerender(view(1));
+  expect(screen.getByRole("menuitem", { name: "Second" })).toHaveFocus();
+});
