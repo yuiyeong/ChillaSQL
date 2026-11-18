@@ -5,7 +5,7 @@
 ## 지금
 
 - **진행 중**: M3 ([계획](plans/M3-project-editor.md)). Task 1~12 구현, simplify, code review(high)와 그 수정까지 끝남. `pnpm check` 통과는 `bc5c420`에서 기록함(vitest 211, cargo test 219 passed / 1 ignored). 그 뒤 `4cd0db6`이 더해졌고 그때의 `pnpm check` 결과는 기록이 없다
-- **작업 위치**: main. M3 commit은 main에 있다. origin/main은 `4fb0eb9`이고 local main은 `4cd0db6`으로 1 commit 앞서 있다(push하지 않음). branch `m3-project-editor`는 없다
+- **작업 위치**: main. M3 commit은 main에 있다. origin/main은 `4fb0eb9`이고, 그 뒤의 local commit(`4cd0db6`과 2026-11-18의 문서 commit)은 push하지 않았다. branch `m3-project-editor`는 없다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
 - **멈춘 곳**: 계획의 Task 13 Step 1. 사용자가 15항목 중 일부를 눌러 봤고, 확인한 것은 모두 기대대로 동작했다(2026-11-18에 받음). 어느 번호를 확인했는지는 기록이 없다
   - 2026-11-12에 받은 것: 사용자가 `Cmd+Q`로 끝낸 직후 `pg_stat_activity`의 `ChillaSQL` 세션이 0개였고 dev log에 panic이 없었음. 그때 `pg_sleep(600)`이 돌고 있었는지는 확인하지 못해 14행은 아직 미확정
