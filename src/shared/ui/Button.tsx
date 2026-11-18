@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ComponentProps } from "react";
 
 type Variant = "primary" | "secondary" | "ghost";
 
@@ -12,7 +12,7 @@ const VARIANT: Record<Variant, string> = {
 /** small은 표 안의 줄처럼 좁은 자리에 쓴다(캔버스 States 7의 "Run again"). */
 const SIZE = { regular: "h-7 text-body", small: "h-6 text-small" } as const;
 
-interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
+interface Props extends ComponentProps<"button"> {
   variant?: Variant;
   size?: keyof typeof SIZE;
 }

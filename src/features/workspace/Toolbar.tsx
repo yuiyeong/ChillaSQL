@@ -67,12 +67,14 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
   const [connectionMenu, setConnectionMenu] = useState(false);
   const [runMenu, setRunMenu] = useState(false);
   const chipRef = useRef<HTMLButtonElement>(null);
-  const splitRef = useRef<HTMLSpanElement>(null);
+  const chooseRef = useRef<HTMLButtonElement>(null);
 
   const current = connections.find((c) => c.name === tab?.connection);
   const connected = tab?.connection != null;
   const busy = status === "connecting" || status === "running";
   const canRun = tab !== undefined && connected;
+  // 실행이 시작되면 열려 있던 run menu를 닫는다. 안 닫으면 실행이 끝나 split 버튼이 돌아올 때 다시 열린다.
+  if (busy && runMenu) setRunMenu(false);
   const runLabel = hasSelection
     ? t("toolbar.runSelection")
     : t("toolbar.runStatement");
@@ -155,6 +157,7 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
 
         {busy ? (
           <Button
+            disabled={status === "connecting"}
             style={{ width: CANCEL_WIDTH }}
             className="pr-2 pl-3"
             onClick={() => void execute("cancel")}
@@ -164,7 +167,7 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
             <Kbd>{CANCEL_KEYS}</Kbd>
           </Button>
         ) : (
-          <span ref={splitRef} className="flex">
+          <span className="flex">
             <Button
               variant="primary"
               disabled={!canRun}
@@ -177,6 +180,7 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
               <Kbd>{RUN_KEYS}</Kbd>
             </Button>
             <Button
+              ref={chooseRef}
               variant="primary"
               aria-label={t("toolbar.chooseWhatToRun")}
               aria-haspopup="menu"
@@ -191,7 +195,8 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
             <Menu
               open={runMenu}
               onClose={() => setRunMenu(false)}
-              anchor={splitRef}
+              anchor={chooseRef}
+              align="end"
               label={t("toolbar.whatToRun")}
             >
               <div style={{ width: RUN_MENU_WIDTH }}>
@@ -213,9 +218,9 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
         <div
           aria-hidden="true"
           data-testid="progress-bar"
-          className="bg-bg-2 absolute inset-x-0 top-full z-10 h-0.5 overflow-hidden"
+          className="bg-bg-2 pointer-events-none absolute inset-x-0 top-full z-10 h-0.5 overflow-hidden"
         >
-          <span className="bg-accent/28 animate-progress block h-full w-[28%] motion-reduce:animate-none" />
+          <span className="bg-accent animate-progress block h-full w-[28%] motion-reduce:animate-none" />
         </div>
       )}
     </div>

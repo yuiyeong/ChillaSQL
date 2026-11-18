@@ -124,3 +124,29 @@ test("부모가 다시 그려져도 화살표로 옮긴 focus가 첫 항목으�
   rerender(view(1));
   expect(screen.getByRole("menuitem", { name: "Second" })).toHaveFocus();
 });
+
+test("align=end는 menu의 오른쪽 끝을 anchor의 오른쪽 끝에 맞춘다", () => {
+  vi.spyOn(document.documentElement, "clientWidth", "get").mockReturnValue(
+    1000,
+  );
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({
+    left: 874,
+    right: 900,
+    bottom: 40,
+  } as DOMRect);
+  const anchor = createRef<HTMLButtonElement>();
+  render(
+    <>
+      <button ref={anchor} type="button">
+        anchor
+      </button>
+      <Menu open onClose={vi.fn()} anchor={anchor} align="end" label="Actions">
+        <MenuItem onSelect={vi.fn()}>First</MenuItem>
+      </Menu>
+    </>,
+  );
+
+  expect(screen.getByRole("menu").style.right).toBe("100px");
+  expect(screen.getByRole("menu").style.left).toBe("");
+  vi.restoreAllMocks();
+});

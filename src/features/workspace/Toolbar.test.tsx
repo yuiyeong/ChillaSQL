@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { click } from "../../test/click";
 import { resetStores } from "../../test/resetStores";
@@ -187,14 +187,78 @@ test("실행 중에는 Cancel이고 누르면 취소한다", async () => {
   expect(execute).toHaveBeenCalledWith("cancel");
 });
 
-test("연결 중에도 Cancel이다", () => {
+test("연결 중에는 Cancel이 disabled이고 실행 중에는 enabled다", () => {
+  openProjectWith([connection("local")]);
+  const id = tabWith("local");
+  render(<Toolbar onAddConnection={vi.fn()} />);
+
+  setRun(id, { status: "connecting" });
+  expect(runButton("Cancel")).toBeDisabled();
+
+  setRun(id, { status: "running", result: emptyResult("SELECT 1", ORIGIN, 0) });
+  expect(runButton("Cancel")).toBeEnabled();
+});
+
+test("진행 막대는 accent 색 그대로이고 pointer를 받지 않는다", () => {
   openProjectWith([connection("local")]);
   const id = tabWith("local");
   render(<Toolbar onAddConnection={vi.fn()} />);
 
   setRun(id, { status: "connecting" });
 
-  expect(runButton("Cancel")).toBeEnabled();
+  const bar = screen.getByTestId("progress-bar");
+  const fill = bar.firstElementChild as HTMLElement;
+  expect(fill).toHaveClass("bg-accent", "w-[28%]");
+  expect(fill).not.toHaveClass("bg-accent/28");
+  expect(bar).toHaveClass("pointer-events-none");
+});
+
+test("실행 menu에서 항목을 고르거나 Escape를 누르면 focus가 chevron button으로 돌아온다", async () => {
+  openProjectWith([connection("local")]);
+  tabWith("local");
+  render(<Toolbar onAddConnection={vi.fn()} />);
+
+  await click(runButton("Choose what to run"));
+  await click(screen.getByRole("menuitem", { name: /^Run statement/ }));
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(runButton("Choose what to run")).toHaveFocus();
+
+  await click(runButton("Choose what to run"));
+  fireEvent.keyDown(screen.getByRole("menu", { name: "What to run" }), {
+    key: "Escape",
+  });
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(runButton("Choose what to run")).toHaveFocus();
+});
+
+test("실행 menu를 연 채 실행이 시작되면 닫히고 실행이 끝나도 다시 열리지 않는다", async () => {
+  openProjectWith([connection("local")]);
+  const id = tabWith("local");
+  render(<Toolbar onAddConnection={vi.fn()} />);
+
+  await click(runButton("Choose what to run"));
+  expect(screen.getByRole("menu", { name: "What to run" })).toBeInTheDocument();
+
+  setRun(id, { status: "running", result: emptyResult("SELECT 1", ORIGIN, 0) });
+  expect(screen.queryByRole("menu")).toBeNull();
+
+  setRun(id, { status: "idle" });
+  expect(runButton("Choose what to run")).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
+test("실행 menu를 연 채 왼쪽 실행 button을 누르면 menu가 닫힌다", () => {
+  openProjectWith([connection("local")]);
+  tabWith("local");
+  render(<Toolbar onAddConnection={vi.fn()} />);
+
+  fireEvent.click(runButton("Choose what to run"));
+  fireEvent.pointerDown(runButton("Run statement"));
+
+  expect(screen.queryByRole("menu")).toBeNull();
 });
 
 test("실행 menu의 Run file은 disabled다", async () => {

@@ -18,6 +18,8 @@ interface MenuProps {
   onClose(): void;
   /** menu를 이 element 아래에 붙인다. 이 element를 누르는 것은 "바깥"이 아니다(여닫기는 그 element가 정한다). */
   anchor: RefObject<HTMLElement | null>;
+  /** `end`면 menu의 오른쪽 끝을 anchor의 오른쪽 끝에 맞춘다. 창 오른쪽 끝의 anchor에 쓴다. 기본은 `start`다. */
+  align?: "start" | "end";
   /** `aria-label` */
   label: string;
   children: ReactNode;
@@ -27,7 +29,14 @@ interface MenuProps {
  * anchor 아래에 뜨는 menu. 열리면 첫 항목에 focus가 가고,
  * 위아래 화살표로 항목을 옮기고, `Escape`나 바깥 누르기로 닫는다.
  */
-export function Menu({ open, onClose, anchor, label, children }: MenuProps) {
+export function Menu({
+  open,
+  onClose,
+  anchor,
+  align = "start",
+  label,
+  children,
+}: MenuProps) {
   const ref = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -36,8 +45,12 @@ export function Menu({ open, onClose, anchor, label, children }: MenuProps) {
     const menu = ref.current;
     if (!rect || !menu) return;
     menu.style.top = `${rect.bottom + 4}px`;
-    menu.style.left = `${rect.left}px`;
-  }, [open, anchor]);
+    if (align === "end") {
+      menu.style.right = `${document.documentElement.clientWidth - rect.right}px`;
+    } else {
+      menu.style.left = `${rect.left}px`;
+    }
+  }, [open, anchor, align]);
 
   // 열릴 때만 첫 항목으로 간다. 다시 그려질 때마다 가면 화살표로 옮긴 자리를 잃는다.
   useEffect(() => {
