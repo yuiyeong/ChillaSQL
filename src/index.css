@@ -3,9 +3,11 @@
 /*
  * 디자인 token. 이름과 값은 docs/design/canvas/Tokens.dc.html 그대로다.
  * static이라 쓰지 않는 변수도 :root에 남는다. CodeMirror theme과 inline style이 var()로 읽는다.
- * M4 Task 12가 마지막 zinc 사용을 걷어 내면 여기에 `--color-*: initial;`을 더해 기본 palette를 끈다.
+ * 기본 palette는 끈다. 색은 아래 token만 쓰고, 색 literal은 이 파일에만 둔다(src/test/sourceRules.test.ts).
  */
 @theme static {
+  --color-*: initial;
+
   --color-bg-0: #0f1014;
   --color-bg-1: #15161b;
   --color-bg-2: #1c1d23;
@@ -18,6 +20,8 @@
   --color-fg-3: #8a8e99;
   --color-accent: #7c9cff;
   --color-danger: #ef6461;
+  /* modal 뒤를 덮는 막. */
+  --color-scrim: rgb(0 0 0 / 0.5);
 
   --color-conn-green: #3fb68b;
   --color-conn-yellow: #e8b04b;
@@ -45,6 +49,10 @@
   --text-label--line-height: 1.4;
 
   --radius-control: 7px;
+
+  /* popover(menu, toast)와 dialog의 그림자. 캔버스 Dialogs와 ConnectionForm 그대로다. */
+  --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.5);
+  --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.55);
 
   /* 접속 중이거나 첫 행을 기다리는 동안 toolbar 아래 막대가 좌우로 움직인다. */
   --animate-progress: progress 1.4s ease-in-out infinite alternate;

@@ -57,6 +57,20 @@ function renderForm(
   return { onSaved, onClose };
 }
 
+test("제목이 새 접속과 수정을 가른다", () => {
+  renderForm();
+  expect(
+    screen.getByRole("form", { name: "New Connection" }),
+  ).toBeInTheDocument();
+});
+
+test("수정 form의 제목은 Edit Connection이다", () => {
+  renderForm(original);
+  expect(
+    screen.getByRole("form", { name: "Edit Connection" }),
+  ).toBeInTheDocument();
+});
+
 function fillNew() {
   change(screen.getByLabelText("name"), "local");
   change(screen.getByLabelText("host"), "localhost");

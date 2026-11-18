@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import {
   hasPassword,
   saveConnection,
@@ -6,6 +6,8 @@ import {
 } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
 import type { Connection, Project, SslMode } from "../../shared/api/types";
+import { Button } from "../../shared/ui/Button";
+import { CheckIcon, ErrorIcon, WarningIcon } from "../../shared/ui/icons";
 import { noTextCorrection } from "../../shared/ui/noTextCorrection";
 import {
   initialValues,
@@ -15,10 +17,8 @@ import {
 } from "./connectionValues";
 import { t } from "../../shared/i18n/t";
 
-const buttonClass =
-  "rounded bg-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-600 focus-visible:outline-2 focus-visible:outline-zinc-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-zinc-700";
 const inputClass =
-  "w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1 text-sm text-zinc-100 placeholder:text-zinc-500 focus-visible:outline-2 focus-visible:outline-zinc-400 disabled:opacity-50";
+  "border-line-2 bg-bg-1 text-fg placeholder:text-fg-3 focus-visible:outline-accent rounded-control text-small h-7 w-full border px-2.5 font-mono focus-visible:outline-2 focus-visible:-outline-offset-1 disabled:opacity-50";
 
 const sslmodes: SslMode[] = ["disable", "require", "verify-full"];
 
@@ -32,8 +32,8 @@ function Field({
   children: React.ReactNode;
 }) {
   return (
-    <label className="flex flex-col gap-1 text-sm text-zinc-300">
-      {label}
+    <label className="text-small text-fg-2 flex flex-col gap-1.5">
+      <span className="font-mono">{label}</span>
       {children}
     </label>
   );
@@ -59,6 +59,7 @@ export function ConnectionForm({
   const [stored, setStored] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const headingId = useId();
 
   // StrictMode가 effect를 두 번 돌려도 hasPassword는 한 번만 부른다.
   const asked = useRef(false);
@@ -115,12 +116,18 @@ export function ConnectionForm({
 
   return (
     <form
-      className="flex w-96 flex-col gap-3 rounded border border-zinc-700 bg-zinc-800 p-4 text-zinc-100"
+      aria-labelledby={headingId}
+      className="border-line-2 bg-bg-2 text-fg shadow-dialog flex w-96 flex-col gap-3 rounded-[10px] border p-5"
       onSubmit={(event) => {
         event.preventDefault();
         void save();
       }}
     >
+      <h2 id={headingId} className="text-title">
+        {original === null
+          ? t("connectionForm.titleNew")
+          : t("connectionForm.titleEdit")}
+      </h2>
       <Field label="name">
         <input
           className={inputClass}
@@ -198,38 +205,35 @@ export function ConnectionForm({
       </Field>
 
       {passwordWillBeCleared && (
-        <p className="text-sm text-amber-400">
+        <p className="text-small text-fg-2 flex items-start gap-2">
+          <WarningIcon className="text-conn-yellow mt-0.5 shrink-0" />
           {t("connectionForm.passwordWillClear")}
         </p>
       )}
       {notice !== null && (
         <p
           role={notice.kind === "error" ? "alert" : "status"}
-          className={
-            notice.kind === "error"
-              ? "text-sm text-red-400"
-              : "text-sm text-green-400"
-          }
+          className="text-small text-fg flex items-start gap-2"
         >
+          {notice.kind === "error" ? (
+            <ErrorIcon className="text-fg-2 mt-0.5 shrink-0" size={14} />
+          ) : (
+            <CheckIcon className="text-conn-green mt-0.5 shrink-0" />
+          )}
           {notice.text}
         </p>
       )}
 
       <div className="flex justify-end gap-2">
-        <button type="button" className={buttonClass} onClick={onClose}>
-          {t("common.cancel")}
-        </button>
-        <button
-          type="button"
-          className={buttonClass}
-          disabled={busy}
-          onClick={() => void test()}
-        >
+        <Button disabled={busy} onClick={() => void test()}>
           {t("connectionForm.test")}
-        </button>
-        <button type="submit" className={buttonClass} disabled={busy}>
+        </Button>
+        <Button variant="ghost" onClick={onClose}>
+          {t("common.cancel")}
+        </Button>
+        <Button variant="primary" type="submit" disabled={busy}>
           {t("common.save")}
-        </button>
+        </Button>
       </div>
     </form>
   );

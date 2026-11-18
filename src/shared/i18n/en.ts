@@ -68,6 +68,8 @@ export const en = {
   "sidebar.files": "SQL Files",
   "sidebar.refresh": "Refresh file list",
 
+  "connectionForm.titleNew": "New Connection",
+  "connectionForm.titleEdit": "Edit Connection",
   "connectionForm.connected": "Connected",
   "connectionForm.test": "Test",
   "connectionForm.keepPassword": "Keep saved password",

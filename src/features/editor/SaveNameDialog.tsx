@@ -27,12 +27,12 @@ export function SaveNameDialog({
   }
 
   return (
-    <div className="fixed inset-0 z-10 flex items-start justify-center bg-black/60 pt-[84px]">
+    <div className="bg-scrim fixed inset-0 z-10 flex items-start justify-center pt-[84px]">
       <form
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="border-line-2 bg-bg-2 flex w-[452px] flex-col gap-3.5 rounded-xl border p-5 shadow-[0_24px_60px_rgba(0,0,0,0.55)]"
+        className="border-line-2 bg-bg-2 shadow-dialog flex w-[452px] flex-col gap-3.5 rounded-xl border p-5"
         onSubmit={submit}
         onKeyDown={keyDown}
       >

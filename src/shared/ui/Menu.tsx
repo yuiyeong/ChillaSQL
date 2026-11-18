@@ -123,7 +123,7 @@ export function Menu({
         role="menu"
         aria-label={label}
         onKeyDown={onKeyDown}
-        className="border-line-2 bg-bg-3 fixed z-50 min-w-48 rounded-lg border p-1 shadow-[0_12px_32px_rgba(0,0,0,0.5)]"
+        className="border-line-2 bg-bg-3 shadow-popover fixed z-50 min-w-48 rounded-lg border p-1"
       >
         {children}
       </div>

@@ -794,25 +794,25 @@ git commit -m "feat: toolbar의 접속 chip과 menu, 너비를 고정한 split �
 
 접속 form은 sheet 모양(bg-2, line-2 테두리, radius 10px, 제목 17 semibold, 입력 28px bg-1 line-2, label은 key 이름이면 mono, 결과 줄은 icon과 문장, 아래에 `Test`, `Cancel`(ghost), `Save`(primary))으로 token만 바꾸고 칸의 배치는 그대로 둔다. 프로젝트 열기 화면은 `ChillaSQL` 제목과 primary `Open Project…` 버튼, 상태 문구를 token으로 바꾼다. overlay 배경은 `rgba(0,0,0,0.5)`를 token(`--color-scrim`)으로 둔다.
 
-- [ ] **Step 1: source 규칙 test를 더한다**
+- [x] **Step 1: source 규칙 test를 더한다**
 
 `sourceRules.test.ts`에 둘을 더한다.
 - `기본 palette class를 쓰지 않는다`: string literal과 template 조각에 `/\b(?:bg|text|border|outline|ring|divide|fill|stroke)-(?:zinc|gray|slate|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3}\b/`가 없다
 - `색 literal을 쓰지 않는다`: string literal에 `/#[0-9a-fA-F]{3,8}\b/`과 `rgb(`가 없다
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/test/sourceRules.test.ts`
 Expected: FAIL(남은 파일 목록)
 
-- [ ] **Step 3: 남은 화면을 token으로 바꾼다**
+- [x] **Step 3: 남은 화면을 token으로 바꾼다**
 
-- [ ] **Step 4: 전체 검사를 통과하는지 확인한다**
+- [x] **Step 4: 전체 검사를 통과하는지 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src

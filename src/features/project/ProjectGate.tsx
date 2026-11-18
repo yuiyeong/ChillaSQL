@@ -2,10 +2,9 @@ import { useEffect, useRef } from "react";
 import { pickDirectory } from "../../shared/api/dialog";
 import { messageOf } from "../../shared/api/errors";
 import { useProject } from "./projectStore";
+import { Button } from "../../shared/ui/Button";
+import { ErrorIcon } from "../../shared/ui/icons";
 import { t } from "../../shared/i18n/t";
-
-const buttonClass =
-  "rounded bg-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-600 focus-visible:outline-2 focus-visible:outline-zinc-400";
 
 /** "ready"일 때만 children을 그린다. 그 전에는 프로젝트를 열거나 만드는 화면이다. */
 export function ProjectGate({ children }: { children: React.ReactNode }) {
@@ -41,38 +40,29 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
 
   return (
     <main className="flex h-screen flex-col items-center justify-center gap-4 p-6">
-      <h1 className="text-3xl font-semibold">ChillaSQL</h1>
+      <h1 className="text-title">ChillaSQL</h1>
       {status === "missing" && missingDir !== null ? (
         <>
-          <p>{t("project.missing", { dir: missingDir })}</p>
+          <p className="text-body text-fg-2">
+            {t("project.missing", { dir: missingDir })}
+          </p>
           <div className="flex gap-2">
-            <button
-              type="button"
-              className={buttonClass}
-              onClick={() => void create(missingDir)}
-            >
+            <Button variant="primary" onClick={() => void create(missingDir)}>
               {t("project.create")}
-            </button>
-            <button
-              type="button"
-              className={buttonClass}
-              onClick={() => void pickAndOpen()}
-            >
+            </Button>
+            <Button onClick={() => void pickAndOpen()}>
               {t("project.chooseAnother")}
-            </button>
+            </Button>
           </div>
         </>
       ) : (
-        <button
-          type="button"
-          className={buttonClass}
-          onClick={() => void pickAndOpen()}
-        >
+        <Button variant="primary" onClick={() => void pickAndOpen()}>
           {t("project.open")}
-        </button>
+        </Button>
       )}
       {error !== null && (
-        <p role="alert" className="text-sm text-red-400">
+        <p role="alert" className="text-small text-fg flex items-start gap-2">
+          <ErrorIcon className="text-fg-2 mt-0.5 shrink-0" size={14} />
           {error}
         </p>
       )}

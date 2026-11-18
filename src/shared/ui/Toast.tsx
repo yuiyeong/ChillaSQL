@@ -10,7 +10,7 @@ export function Toast({ message }: { message: string | null }) {
       className="pointer-events-none fixed bottom-10 left-1/2 -translate-x-1/2"
     >
       {message !== null && (
-        <div className="text-small border-line-2 bg-bg-3 text-fg rounded-lg border px-3 py-1.5 shadow-[0_12px_32px_rgba(0,0,0,0.5)]">
+        <div className="text-small border-line-2 bg-bg-3 text-fg shadow-popover rounded-lg border px-3 py-1.5">
           {message}
         </div>
       )}
