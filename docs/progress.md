@@ -7,7 +7,7 @@
 - **진행 중**: 없음. M4 결과 표를 끝내 1단계(M0~M4)가 끝났다(2026-11-18). 계획은 [M4](plans/M4-result-table.md)
 - **작업 위치**: branch `m4-result-table`(main의 `d2be9bf`에서 나눔). main과 origin/main은 `d2be9bf`이고, branch의 commit은 main에 merge하지 않았고 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. 그 전에 branch를 main에 합칠지 정한다. M4 Task 13에서 찾은 7가지는 고쳤다(아래 작업 로그 2026-11-18의 "M4 Task 13에서 찾은 것 고침"). 그 뒤 simplify(품질 정리)도 적용했다(작업 로그 "M4 simplify")
+- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. 그 전에 branch를 main에 합칠지 정한다. M4 Task 13에서 찾은 7가지는 고쳤다(아래 작업 로그 2026-11-18의 "M4 Task 13에서 찾은 것 고침"). 그 뒤 simplify(품질 정리)와 code-review(high)의 지적 고침도 했다(작업 로그 "M4 simplify", "M4 code-review")
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -181,6 +181,10 @@
 | 2026-11-18 | M4 | 끝난(`finished`) 결과는 reducer가 `fetch`를 `none`으로 둠. 표는 `fetch`만 보고 다음 batch를 요청함 | 끝난 결과가 마지막 `fetch` 값을 그대로 가져서 결과 panel, 표, footer가 각각 따로 막았음(simplify) |
 | 2026-11-18 | M4 | `Kbd`는 `aria-hidden`이고 단축키는 그 버튼이나 menu 항목의 `aria-keyshortcuts`(`Meta+Enter`, `Meta+F2`)로 알림. 단축키 표시와 `aria-keyshortcuts`는 `shortcuts.ts`의 keymap에서 만듦 | 버튼 이름에 `⌘↵` 같은 기호가 붙어 읽혔고, 표시가 keymap과 따로 적혀 있었음(simplify) |
 | 2026-11-18 | M4 | 저장 경로 dialog와 접속 form은 dialog 틀과 input class를 공유하지 않음 | 저장 경로 dialog는 캔버스 Dialogs(radius 12px, input 32px `bg-0`)를 따르고, 접속 form은 M3의 모양(radius 10px, input 28px `bg-1`)이라 하나로 모으면 어느 한쪽이 바뀜. 접속 form은 M5에서 캔버스의 sheet로 다시 만들 때 맞춤(simplify에서 뺀 항목) |
+| 2026-11-18 | M4 | 결과 표의 view(열 너비, 선택, 스크롤 위치)를 탭마다 하나씩 module의 Map(`gridViews.ts`)에 둠. 표가 사라질 때(layout effect cleanup) 한 번 저장하고, 같은 실행(`startedAt`과 `sql`)으로 돌아오면 이어 감. 그 사이 앞 행이 버려졌으면 스크롤을 그만큼 당김. 다시 실행하면 처음부터 그리고, `release`(탭 닫기, 접속 바꾸기)와 `reset`(프로젝트 바꾸기)이 지움 | 결과 panel 하나를 모든 탭이 같이 써서 탭을 바꿨다 돌아오면 표가 다시 mount되어 직접 맞춘 너비, 선택, 스크롤을 잃고 자동 너비를 다시 셌음. 스크롤마다 저장하지 않아 frame마다 하는 일은 늘지 않음(code-review) |
+| 2026-11-18 | M4 | `fetch_more`가 실패해도 `fetch`를 `fetching`에서 되돌리거나 다시 요청하지 않음 | Rust의 `fetch_more`는 그 세션이 발급한 query id면 끝난 쿼리에도 `Ok`(M2)라 실패는 세션이 없어졌을 때뿐이고, 그때는 `release`/`reset`이 상태를 지우거나 `connection_lost`로 끝남. 실패마다 다시 요청하면 되풀이될 수 있음. 틀렸다면 Run again 전까지 spinner가 남음(code-review에서 고치지 않은 지적) |
+| 2026-11-18 | M4 | Run again은 처음 실행의 `origin`(문서 안 위치)을 그대로 씀 | 다시 보내는 text가 지금 문서에 없을 수 있어, 그 text를 가져온 때의 위치가 정해진 유일한 위치임. 고친 문서에 맞춰 옮기는 것은 M8의 오류 위치로 가기와 함께 다룸. 그 사이 문서를 고쳤으면 오류의 Ln/Col이 옛 자리를 가리킬 수 있음(code-review에서 고치지 않은 지적) |
+| 2026-11-18 | M4 | 결과 탭 label과 행 수 문구는 SQL을 token으로 나눠 정함. 문자열(`'…'`, `E'…'`, `$tag$…$tag$`)과 주석은 건너뛰고, 앞의 `(`를 건너뛰고, 대상 앞의 `IF NOT EXISTS`, `IF EXISTS`, `ONLY`를 건너뜀. `WITH`는 CTE 목록 뒤 같은 괄호 깊이의 첫 `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`SELECT`를 본 문장으로 봄. 첫 단어가 없으면 label은 `Result`. 함수 안의 `FROM`(`extract(year FROM ts)`)은 가려내지 않음 | 함수 안의 `FROM`을 가려내려면 parser가 필요함. 틀려도 label이 조금 이상할 뿐임(code-review에서 일부만 고친 지적) |
 
 ## 작업 로그
 
@@ -188,6 +192,13 @@
 
 ### 2026-11-18
 
+- M4 code-review(high): 지적 10개를 `superpowers:receiving-code-review`로 하나씩 검토해 7개를 고치고, 1개를 일부 고치고, 2개를 고치지 않음(`4d60113`..`2a48884`). 고친 것마다 실패하는 test를 먼저 씀
+  - 고침: (2) 탭을 바꿨다 돌아오면 결과 표의 너비, 선택, 스크롤이 이어짐(결정 기록), (3) 고른 행이 모두 버려지면 header 복사 버튼이 꺼짐(`selectionRetained`), (4) 저장 경로 dialog가 떠 있는 동안 단축키가 꺼짐(Cmd+Enter가 뒤의 쿼리를 실행하고 Cmd+W가 뒤의 탭을 닫았음), (5) `(`로 시작하는 문장의 label이 비지 않음(없으면 `Result`), (7) `WITH … UPDATE` 같은 문장이 `Done` 대신 행 수를 알림, (8) 프로젝트가 없을 때 toolbar의 접속 selector가 매번 새 `[]`를 돌려줘 그리기를 멈추지 않던 것(module 상수로 바꿈. 같은 꼴의 selector는 이것 하나), (10) 접속 대상 문자열(`host:port/database`)을 `connectionTarget` 하나로
+  - 일부 고침: (6) label의 대상 찾기가 문자열과 주석을 건너뛰고 `IF NOT EXISTS`, `IF EXISTS`, `ONLY`를 건너뜀. 함수 안의 `FROM`은 그대로(결정 기록)
+  - 고치지 않음: (1) `fetch_more` 실패 처리, (9) Run again의 `origin`(둘 다 결정 기록)
+  - test를 더함: format(괄호, 문자열, 주석, IF EXISTS, ONLY, WITH), 복사할 선택이 버려질 때, 저장 경로 dialog 아래의 단축키, 프로젝트 없는 toolbar, `connectionTarget`, 탭을 바꿨다 돌아올 때의 표(같은 실행, 앞 행이 버려진 뒤, 다시 실행, release, reset). vitest 380 → 395
+  - 앱은 띄우지 않고 unit test로 확인함
+  - `pnpm check` 통과
 - M4 simplify: 네 reviewer의 품질 지적을 한 목록(25항목)으로 모아 24항목을 적용함(`526e357`..`48f51d1`). 동작은 바꾸지 않았고 기존 test는 그대로 통과함
   - 결과 표와 reducer: 끝난 결과의 `fetch`는 `none`(결정 기록), `rows` batch마다 행 배열을 한 번만 복사, `ResultGrid`와 header 줄을 `memo`하고 너비 변수를 `useMemo`, header 이름 측정 함수를 한 번만 만듦(`--font-weight-semibold` token을 `@theme static`에 둠), 전각 판별의 ASCII fast path, `rowSpan`, SQL label helper를 `format.ts`로 옮김, 안 쓰는 export를 없앰, 결과 panel의 오류 블록을 `MessageBlock` 하나로
   - `t()`가 number를 묶지 않음(결정 기록). `ConnectionDot`와 `connectionColor`의 fallback(결정 기록). 단축키 표시와 `aria-keyshortcuts`를 keymap에서 만들고 `Kbd`는 `aria-hidden`(결정 기록). `Button`의 size에 padding을 넣고 `chip`, `kbd`, `icon` size와 `dashed` variant를 더함. 실행 split 버튼을 `RunSplitButton`으로 떼어 menu 상태가 실행 중에 함께 사라짐
