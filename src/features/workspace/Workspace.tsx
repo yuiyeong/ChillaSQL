@@ -26,6 +26,9 @@ interface OpenForm {
 /** 프로젝트가 열린 뒤의 화면. 왼쪽 sidebar, 오른쪽에 탭, toolbar, 에디터, 결과. */
 export function Workspace() {
   const activeId = useTabs((s) => s.activeId);
+  const hasConnection = useTabs(
+    (s) => s.tabs.find((tab) => tab.id === s.activeId)?.connection != null,
+  );
   const openFile = useTabs((s) => s.openFile);
   const markDirty = useTabs((s) => s.markDirty);
   const project = useProject((s) => s.project);
@@ -99,7 +102,7 @@ export function Workspace() {
         </div>
         <div className="relative min-h-0 flex-2 border-t border-zinc-800">
           <div className="absolute inset-0">
-            <ResultPane tabId={activeId} />
+            <ResultPane tabId={activeId} hasConnection={hasConnection} />
           </div>
         </div>
       </main>

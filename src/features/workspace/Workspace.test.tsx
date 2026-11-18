@@ -102,6 +102,21 @@ test("탭이 없으면 새 탭 안내를 그리고 toolbar는 disabled다", () =
   expect(toolbarButton("Save")).toBeDisabled();
 });
 
+test("접속이 없는 탭의 결과 panel은 접속을 고르라고 한다", () => {
+  openProjectWith([connection("local")]);
+  tabWith("SELECT 1", null);
+  renderWorkspace();
+
+  expect(
+    screen.getByText("Choose a connection to run queries."),
+  ).toBeInTheDocument();
+  act(() =>
+    useTabs.getState().setConnection(useTabs.getState().activeId!, "local"),
+  );
+  expect(screen.queryByText("Choose a connection to run queries.")).toBeNull();
+  expect(screen.getByText("Run statement at cursor")).toBeInTheDocument();
+});
+
 test("실행 중일 때만 취소 버튼이 enabled다", async () => {
   openProjectWith([connection("local")]);
   vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);

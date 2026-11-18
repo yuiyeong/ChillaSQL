@@ -602,7 +602,7 @@ header(36px, 아래 line-1): 왼쪽에 결과 탭 하나(24px, bg-3, `resultLabe
 
 알림(`Toast`)은 결과 panel 아래 가운데에 뜬다(bg-3, line-2 테두리, 32px, CheckIcon). 문구는 `ResultGrid`의 `onCopied`와 `Copy message`가 정한다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 M3의 `ResultPane.test.tsx`를 위 표에 맞춰 고친다. 더하는 test:
 - `실행 중이고 행이 없으면 경과 시간을 보여 준다`: fake timer로 `startedAt`에서 4,230ms 뒤 `Running 4.2 s`
@@ -615,21 +615,21 @@ M3의 `ResultPane.test.tsx`를 위 표에 맞춰 고친다. 더하는 test:
 - `split_failed 거절은 제목과 설명을 보여 준다`
 - `접속이 없는 탭은 접속을 고르라고 한다`
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/query/ResultPane.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: `ResultPane`을 구현한다**
+- [x] **Step 3: `ResultPane`을 구현한다**
 
 M3의 `memo`와 "running과 finished가 같은 자리에 같은 component로 표를 그린다"는 그대로 둔다(끝나도 `ResultGrid`가 다시 mount되지 않아 스크롤 위치가 남는다).
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src/features/query
