@@ -1,6 +1,6 @@
 import { useEffect, useId, useState } from "react";
 import { homeDir } from "../../shared/api/path";
-import { connectionColor } from "../connections/colors";
+import { ConnectionDot } from "../connections/ConnectionDot";
 import { useTabs } from "../editor/tabsStore";
 import {
   ChevronDownIcon,
@@ -160,14 +160,7 @@ export function Sidebar({
             className="hover:bg-bg-2 focus-visible:outline-accent flex w-full cursor-pointer items-center gap-2.5 rounded-[6px] border-0 bg-transparent px-2 py-[5px] text-left focus-visible:outline-2"
             onClick={() => onEditConnection(connection.name)}
           >
-            <span
-              aria-hidden="true"
-              className="size-2 shrink-0 rounded-full"
-              style={{
-                background:
-                  connectionColor(connection.color) ?? "var(--color-line-2)",
-              }}
-            />
+            <ConnectionDot color={connection.color} />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="flex items-center gap-1.5 font-medium">
                 <span className="truncate">{connection.name}</span>

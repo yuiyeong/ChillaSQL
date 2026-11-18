@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { connectionColor } from "../connections/colors";
+import { ConnectionDot } from "../connections/ConnectionDot";
 import { useProject } from "../project/projectStore";
 import { CloseIcon, PlusIcon } from "../../shared/ui/icons";
 import { IconButton } from "../../shared/ui/IconButton";
@@ -41,11 +41,10 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
       ? tabs.find((tab) => tab.id === naming)
       : undefined;
 
-  /** 접속이 없으면 null, 색을 정하지 않은 접속이면 line-2다. */
-  function dotColor(connection: string | null): string | null {
-    if (connection === null) return null;
-    const color = connections?.find((c) => c.name === connection)?.color;
-    return connectionColor(color ?? null) ?? "var(--color-line-2)";
+  /** 접속이 없으면 undefined(빈 원), 있으면 그 접속의 color 이름이다. */
+  function dotColor(connection: string | null): string | null | undefined {
+    if (connection === null) return undefined;
+    return connections?.find((c) => c.name === connection)?.color ?? null;
   }
 
   return (
@@ -87,16 +86,7 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
                     className="focus-visible:outline-accent flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent pr-1 pl-3 text-inherit focus-visible:outline-2 focus-visible:-outline-offset-2"
                     onClick={() => activate(tab.id)}
                   >
-                    <span
-                      aria-hidden="true"
-                      data-testid="tab-dot"
-                      className={
-                        color === null
-                          ? "border-fg-3 size-2 shrink-0 rounded-full border-[1.5px]"
-                          : "size-2 shrink-0 rounded-full"
-                      }
-                      style={color === null ? undefined : { background: color }}
-                    />
+                    <ConnectionDot color={color} testId="tab-dot" />
                     <span className="truncate">{tab.title}</span>
                   </button>
                   <span className="relative size-[18px] shrink-0">

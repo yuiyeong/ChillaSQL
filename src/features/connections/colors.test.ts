@@ -7,7 +7,7 @@ test("정해 둔 색 이름은 token 변수가 된다", () => {
   }
 });
 
-test("모르는 이름과 null은 null이다", () => {
-  expect(connectionColor("orange")).toBeNull();
-  expect(connectionColor(null)).toBeNull();
+test("모르는 이름과 null은 line-2다", () => {
+  expect(connectionColor("orange")).toBe("var(--color-line-2)");
+  expect(connectionColor(null)).toBe("var(--color-line-2)");
 });

@@ -52,11 +52,9 @@ export function Workspace() {
     startHeight: number;
     max: number;
   } | null>(null);
-  const barColor =
-    connectionColor(
-      project?.connections.find((c) => c.name === connectionName)?.color ??
-        null,
-    ) ?? "var(--color-line-2)";
+  const barColor = connectionColor(
+    project?.connections.find((c) => c.name === connectionName)?.color ?? null,
+  );
   // 처음 그린 뒤의 aria-valuemax. layout을 재야 알 수 있어서 effect에서 정한다. 이후는 끌 때마다 다시 잰다.
   useLayoutEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect

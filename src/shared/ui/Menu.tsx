@@ -134,6 +134,8 @@ export function Menu({
 interface MenuItemProps {
   onSelect(): void;
   disabled?: boolean;
+  /** `aria-keyshortcuts`. 항목 안의 Kbd는 읽어 주지 않으므로 단축키는 이것으로 알린다. */
+  keyShortcuts?: string;
   /** 있으면 `menuitemradio`다. */
   checked?: boolean;
   children: ReactNode;
@@ -143,6 +145,7 @@ interface MenuItemProps {
 export function MenuItem({
   onSelect,
   disabled,
+  keyShortcuts,
   checked,
   children,
 }: MenuItemProps) {
@@ -153,6 +156,7 @@ export function MenuItem({
       type="button"
       role={radio ? "menuitemradio" : "menuitem"}
       aria-checked={radio ? checked : undefined}
+      aria-keyshortcuts={keyShortcuts}
       disabled={disabled}
       onClick={() => {
         onSelect();

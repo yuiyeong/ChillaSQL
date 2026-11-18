@@ -60,9 +60,8 @@ function setRun(tabId: string, run: RunState) {
 const ORIGIN = { line: 1, column: 1 };
 const chip = () =>
   screen.getByRole("button", { name: "Change this tab's connection" });
-/** 실행 버튼의 이름은 label 뒤에 단축키가 붙는다. */
-const runButton = (name: string) =>
-  screen.getByRole("button", { name: new RegExp(`^${name}`) });
+/** 단축키 표시(Kbd)는 읽어 주지 않으므로 이름은 label 그대로다. */
+const runButton = (name: string) => screen.getByRole("button", { name });
 const progress = () => screen.queryByTestId("progress-bar");
 
 beforeEach(async () => {
@@ -146,6 +145,10 @@ test("Run statement를 누르면 실행한다", async () => {
   tabWith("local");
   render(<Toolbar onAddConnection={vi.fn()} />);
 
+  expect(runButton("Run statement")).toHaveAttribute(
+    "aria-keyshortcuts",
+    "Meta+Enter",
+  );
   await click(runButton("Run statement"));
 
   expect(execute).toHaveBeenCalledWith("run");
@@ -159,7 +162,7 @@ test("선택이 있으면 Run selection이다", () => {
   act(() => useEditorStatus.setState({ tabId: id, hasSelection: true }));
 
   expect(runButton("Run selection")).toBeEnabled();
-  expect(screen.queryByRole("button", { name: /^Run statement/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Run statement" })).toBeNull();
 });
 
 test("다른 탭의 선택은 Run selection으로 보이지 않는다", () => {
@@ -179,10 +182,11 @@ test("실행 중에는 Cancel이고 누르면 취소한다", async () => {
 
   setRun(id, { status: "running", result: emptyResult("SELECT 1", ORIGIN, 0) });
 
-  expect(screen.queryByRole("button", { name: /^Run statement/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Run statement" })).toBeNull();
   expect(
     screen.queryByRole("button", { name: "Choose what to run" }),
   ).toBeNull();
+  expect(runButton("Cancel")).toHaveAttribute("aria-keyshortcuts", "Meta+F2");
   await click(runButton("Cancel"));
   expect(execute).toHaveBeenCalledWith("cancel");
 });
@@ -219,7 +223,7 @@ test("실행 menu에서 항목을 고르거나 Escape를 누르면 focus가 chev
   render(<Toolbar onAddConnection={vi.fn()} />);
 
   await click(runButton("Choose what to run"));
-  await click(screen.getByRole("menuitem", { name: /^Run statement/ }));
+  await click(screen.getByRole("menuitem", { name: "Run statement" }));
   expect(screen.queryByRole("menu")).toBeNull();
   expect(runButton("Choose what to run")).toHaveFocus();
 
@@ -272,7 +276,9 @@ test("실행 menu의 Run file은 disabled다", async () => {
   expect(
     within(menu).getByRole("menuitem", { name: "Run file" }),
   ).toBeDisabled();
-  await click(within(menu).getByRole("menuitem", { name: /Run statement/ }));
+  const run = within(menu).getByRole("menuitem", { name: "Run statement" });
+  expect(run).toHaveAttribute("aria-keyshortcuts", "Meta+Enter");
+  await click(run);
   expect(execute).toHaveBeenCalledWith("run");
 });
 
@@ -286,7 +292,7 @@ test("실행 menu의 첫 항목 label은 선택 여부를 따른다", async () =
 
   const menu = screen.getByRole("menu", { name: "What to run" });
   expect(
-    within(menu).getByRole("menuitem", { name: /Run selection/ }),
+    within(menu).getByRole("menuitem", { name: "Run selection" }),
   ).toBeInTheDocument();
 });
 

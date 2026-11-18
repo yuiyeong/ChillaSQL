@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { connectionColor } from "../connections/colors";
+import { ConnectionDot } from "../connections/ConnectionDot";
 import { useEditorStatus } from "../editor/editorStatus";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
@@ -14,6 +14,7 @@ import {
 import { Kbd } from "../../shared/ui/Kbd";
 import { Menu, MenuItem, MenuSeparator } from "../../shared/ui/Menu";
 import { changeConnection, execute } from "./commands";
+import { shortcutKeys, shortcutLabel } from "./shortcuts";
 import { t } from "../../shared/i18n/t";
 
 /** 실행 버튼의 너비. label이 바뀌어도 toolbar가 움직이지 않도록 고정한다. */
@@ -23,28 +24,6 @@ const CANCEL_WIDTH = 227;
 /** menu 너비에서 border 2px과 padding 8px을 뺀 안쪽 너비 */
 const CONNECTION_MENU_WIDTH = 290;
 const RUN_MENU_WIDTH = 230;
-
-const RUN_KEYS = "⌘↵";
-const CANCEL_KEYS = "⌘F2";
-
-/** 접속의 색 dot. 색을 정하지 않은 접속은 line-2, 접속이 없으면 빈 원이다. */
-function Dot({ color }: { color: string | null | undefined }) {
-  if (color === undefined) {
-    return (
-      <span
-        aria-hidden="true"
-        className="border-fg-3 size-2 shrink-0 rounded-full border-[1.5px]"
-      />
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      className="size-2 shrink-0 rounded-full"
-      style={{ background: connectionColor(color) ?? "var(--color-line-2)" }}
-    />
-  );
-}
 
 /** 활성 탭의 접속 chip과 menu, 실행 버튼. 활성 탭이 없으면 모두 disabled다. */
 export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
@@ -65,19 +44,11 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
     (s) => s.tabId === tabId && s.hasSelection,
   );
   const [connectionMenu, setConnectionMenu] = useState(false);
-  const [runMenu, setRunMenu] = useState(false);
   const chipRef = useRef<HTMLButtonElement>(null);
-  const chooseRef = useRef<HTMLButtonElement>(null);
 
   const current = connections.find((c) => c.name === tab?.connection);
   const connected = tab?.connection != null;
   const busy = status === "connecting" || status === "running";
-  const canRun = tab !== undefined && connected;
-  // 실행이 시작되면 열려 있던 run menu를 닫는다. 안 닫으면 실행이 끝나 split 버튼이 돌아올 때 다시 열린다.
-  if (busy && runMenu) setRunMenu(false);
-  const runLabel = hasSelection
-    ? t("toolbar.runSelection")
-    : t("toolbar.runStatement");
 
   return (
     <div className="relative shrink-0">
@@ -86,24 +57,19 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
         aria-label={t("toolbar.label")}
         className="border-line-1 bg-bg-1 flex h-11 items-center gap-2.5 border-b px-3"
       >
-        <button
+        <Button
           ref={chipRef}
-          type="button"
+          variant={connected ? "secondary" : "dashed"}
+          size="chip"
           aria-label={t("toolbar.changeConnection")}
           aria-haspopup="menu"
           aria-expanded={connectionMenu}
           disabled={tab === undefined}
-          className={[
-            "text-body text-fg rounded-control focus-visible:outline-accent inline-flex h-7 cursor-pointer items-center gap-2 border px-2.5 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-1 disabled:cursor-default disabled:opacity-50",
-            connected
-              ? "border-line-2 bg-bg-2"
-              : "border-line-2 border-dashed bg-transparent",
-          ].join(" ")}
           onClick={() => setConnectionMenu((open) => !open)}
         >
           {connected ? (
             <>
-              <Dot color={current?.color ?? null} />
+              <ConnectionDot color={current?.color ?? null} />
               <span className="font-medium">{tab.connection}</span>
               {current !== undefined && (
                 <span className="text-small text-fg-2 font-mono">
@@ -113,14 +79,14 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
             </>
           ) : (
             <>
-              <Dot color={undefined} />
+              <ConnectionDot color={undefined} />
               <span className="text-fg-2">{t("toolbar.chooseConnection")}</span>
             </>
           )}
           <ChevronDownIcon
             className={`text-fg-2 ${connectionMenu ? "rotate-180" : ""}`}
           />
-        </button>
+        </Button>
         <Menu
           open={connectionMenu}
           onClose={() => setConnectionMenu(false)}
@@ -136,7 +102,7 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
                   if (tabId !== null) void changeConnection(tabId, c.name);
                 }}
               >
-                <Dot color={c.color} />
+                <ConnectionDot color={c.color} />
                 <span className="font-medium">{c.name}</span>
                 {c.tunnel !== null && (
                   <TunnelIcon className="text-fg-2 shrink-0" />
@@ -157,61 +123,25 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
 
         {busy ? (
           <Button
+            size="kbd"
             disabled={status === "connecting"}
+            aria-keyshortcuts={shortcutKeys("cancel")}
             style={{ width: CANCEL_WIDTH }}
-            className="pr-2 pl-3"
             onClick={() => void execute("cancel")}
           >
             <StopIcon />
             <span className="flex-1 text-left">{t("common.cancel")}</span>
-            <Kbd>{CANCEL_KEYS}</Kbd>
+            <Kbd>{shortcutLabel("cancel")}</Kbd>
           </Button>
         ) : (
-          <span className="flex">
-            <Button
-              variant="primary"
-              disabled={!canRun}
-              style={{ width: RUN_WIDTH }}
-              className="rounded-r-none pr-2 pl-3"
-              onClick={() => void execute("run")}
-            >
-              <PlayIcon />
-              <span className="flex-1 text-left">{runLabel}</span>
-              <Kbd>{RUN_KEYS}</Kbd>
-            </Button>
-            <Button
-              ref={chooseRef}
-              variant="primary"
-              aria-label={t("toolbar.chooseWhatToRun")}
-              aria-haspopup="menu"
-              aria-expanded={runMenu}
-              disabled={!canRun}
-              style={{ width: CHOOSE_WIDTH, padding: 0 }}
-              className="ml-px justify-center rounded-l-none"
-              onClick={() => setRunMenu((open) => !open)}
-            >
-              <ChevronDownIcon />
-            </Button>
-            <Menu
-              open={runMenu}
-              onClose={() => setRunMenu(false)}
-              anchor={chooseRef}
-              align="end"
-              label={t("toolbar.whatToRun")}
-            >
-              <div style={{ width: RUN_MENU_WIDTH }}>
-                <MenuItem onSelect={() => void execute("run")}>
-                  <span className="flex-1 text-left">{runLabel}</span>
-                  <Kbd>{RUN_KEYS}</Kbd>
-                </MenuItem>
-                <MenuItem disabled onSelect={() => {}}>
-                  <span className="flex-1 text-left">
-                    {t("toolbar.runFile")}
-                  </span>
-                </MenuItem>
-              </div>
-            </Menu>
-          </span>
+          <RunSplitButton
+            disabled={!connected}
+            label={
+              hasSelection
+                ? t("toolbar.runSelection")
+                : t("toolbar.runStatement")
+            }
+          />
         )}
       </div>
       {waitingForRow && (
@@ -224,5 +154,70 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * 실행 버튼과 실행할 것을 고르는 menu. 실행 중에는 취소 버튼이 이 자리를 차지하므로
+ * menu 상태도 함께 사라진다(실행이 끝나 돌아와도 menu가 다시 열리지 않는다).
+ */
+function RunSplitButton({
+  disabled,
+  label,
+}: {
+  disabled: boolean;
+  label: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const chooseRef = useRef<HTMLButtonElement>(null);
+  const keys = shortcutKeys("run");
+  const keyLabel = shortcutLabel("run");
+  return (
+    <span className="flex">
+      <Button
+        variant="primary"
+        size="kbd"
+        disabled={disabled}
+        aria-keyshortcuts={keys}
+        style={{ width: RUN_WIDTH }}
+        className="rounded-r-none"
+        onClick={() => void execute("run")}
+      >
+        <PlayIcon />
+        <span className="flex-1 text-left">{label}</span>
+        <Kbd>{keyLabel}</Kbd>
+      </Button>
+      <Button
+        ref={chooseRef}
+        variant="primary"
+        size="icon"
+        aria-label={t("toolbar.chooseWhatToRun")}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        style={{ width: CHOOSE_WIDTH }}
+        className="ml-px rounded-l-none"
+        onClick={() => setOpen((value) => !value)}
+      >
+        <ChevronDownIcon />
+      </Button>
+      <Menu
+        open={open}
+        onClose={() => setOpen(false)}
+        anchor={chooseRef}
+        align="end"
+        label={t("toolbar.whatToRun")}
+      >
+        <div style={{ width: RUN_MENU_WIDTH }}>
+          <MenuItem keyShortcuts={keys} onSelect={() => void execute("run")}>
+            <span className="flex-1 text-left">{label}</span>
+            <Kbd>{keyLabel}</Kbd>
+          </MenuItem>
+          <MenuItem disabled onSelect={() => {}}>
+            <span className="flex-1 text-left">{t("toolbar.runFile")}</span>
+          </MenuItem>
+        </div>
+      </Menu>
+    </span>
   );
 }

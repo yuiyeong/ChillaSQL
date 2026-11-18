@@ -17,6 +17,36 @@ const keymap: { code: string; shift: boolean; command: CommandId }[] = [
   { code: "BracketLeft", shift: true, command: "prevTab" },
 ];
 
+/** 화면에 쓰지 않는 key의 이름. 나머지 `KeyX`는 `X`다. */
+const KEY_GLYPHS: Record<string, string> = {
+  Enter: "↵",
+  BracketRight: "]",
+  BracketLeft: "[",
+};
+
+function bindingOf(command: CommandId) {
+  const binding = keymap.find((key) => key.command === command);
+  if (binding === undefined) throw new Error(`no shortcut: ${command}`);
+  return binding;
+}
+
+function keyOf(code: string): string {
+  return code.startsWith("Key") ? code.slice(3) : code;
+}
+
+/** 화면에 보이는 단축키 표시. 예: `⌘↵`, `⇧⌘L` */
+export function shortcutLabel(command: CommandId): string {
+  const { code, shift } = bindingOf(command);
+  return `${shift ? "⇧" : ""}⌘${KEY_GLYPHS[code] ?? keyOf(code)}`;
+}
+
+/** `aria-keyshortcuts`의 값. 예: `Meta+Enter`, `Shift+Meta+L` */
+export function shortcutKeys(command: CommandId): string {
+  const { code, shift } = bindingOf(command);
+  const key = code.startsWith("Bracket") ? KEY_GLYPHS[code] : keyOf(code);
+  return `${shift ? "Shift+" : ""}Meta+${key}`;
+}
+
 export function commandFor(event: Keys): CommandId | null {
   if (!event.metaKey || event.altKey || event.ctrlKey) return null;
   const binding = keymap.find(

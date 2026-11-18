@@ -70,11 +70,9 @@ function renderWorkspace() {
   return render(<Workspace />);
 }
 
-/** 실행 버튼의 이름은 label 뒤에 단축키가 붙는다. */
+/** 단축키 표시(Kbd)는 읽어 주지 않으므로 이름은 label 그대로다. */
 function toolbarButton(name: string) {
-  return within(screen.getByRole("toolbar")).getByRole("button", {
-    name: new RegExp(`^${name}`),
-  });
+  return within(screen.getByRole("toolbar")).getByRole("button", { name });
 }
 
 function connectionChip() {
@@ -133,7 +131,7 @@ test("실행 중에는 실행 버튼이 취소 버튼으로 바뀐다", async ()
   renderWorkspace();
 
   expect(toolbarButton("Run statement")).toBeEnabled();
-  expect(screen.queryByRole("button", { name: /^Cancel/ })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Cancel" })).toBeNull();
 
   await click(toolbarButton("Run statement"));
 

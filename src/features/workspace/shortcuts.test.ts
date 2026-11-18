@@ -8,7 +8,12 @@ vi.mock("../../shared/api/dialog");
 import { useTabs } from "../editor/tabsStore";
 import { useRuns } from "../query/runsStore";
 import { resetStores } from "../../test/resetStores";
-import { commandFor, useShortcuts } from "./shortcuts";
+import {
+  commandFor,
+  shortcutKeys,
+  shortcutLabel,
+  useShortcuts,
+} from "./shortcuts";
 
 function key(
   code: string,
@@ -23,6 +28,17 @@ function key(
     ...init,
   });
 }
+
+test("단축키 표시와 aria-keyshortcuts는 keymap에서 만든다", () => {
+  expect(shortcutLabel("run")).toBe("⌘↵");
+  expect(shortcutLabel("cancel")).toBe("⌘F2");
+  expect(shortcutLabel("newTab")).toBe("⇧⌘L");
+  expect(shortcutLabel("nextTab")).toBe("⇧⌘]");
+  expect(shortcutKeys("run")).toBe("Meta+Enter");
+  expect(shortcutKeys("cancel")).toBe("Meta+F2");
+  expect(shortcutKeys("newTab")).toBe("Shift+Meta+L");
+  expect(shortcutKeys("prevTab")).toBe("Shift+Meta+[");
+});
 
 const cmd = { metaKey: true };
 const shiftCmd = { metaKey: true, shiftKey: true };

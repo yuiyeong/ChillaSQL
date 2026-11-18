@@ -24,6 +24,7 @@ import {
 import { Kbd } from "../../shared/ui/Kbd";
 import { Toast, useToast } from "../../shared/ui/Toast";
 import { runAgain } from "../workspace/commands";
+import { shortcutLabel } from "../workspace/shortcuts";
 import {
   affectedText,
   errorLocation,
@@ -321,11 +322,11 @@ export function Hints() {
   return (
     <div className="text-small text-fg-2 flex h-full min-h-16 items-center justify-center gap-7 p-4">
       <span className="flex items-center gap-2">
-        <Kbd>⌘↵</Kbd>
+        <Kbd>{shortcutLabel("run")}</Kbd>
         {t("result.hintRun")}
       </span>
       <span className="flex items-center gap-2">
-        <Kbd>⇧⌘L</Kbd>
+        <Kbd>{shortcutLabel("newTab")}</Kbd>
         {t("result.hintNewTab")}
       </span>
     </div>
