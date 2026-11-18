@@ -1,11 +1,82 @@
 @import "tailwindcss";
 
+/*
+ * 디자인 token. 이름과 값은 docs/design/canvas/Tokens.dc.html 그대로다.
+ * static이라 쓰지 않는 변수도 :root에 남는다. CodeMirror theme과 inline style이 var()로 읽는다.
+ * M4 Task 12가 마지막 zinc 사용을 걷어 내면 여기에 `--color-*: initial;`을 더해 기본 palette를 끈다.
+ */
+@theme static {
+  --color-bg-0: #0f1014;
+  --color-bg-1: #15161b;
+  --color-bg-2: #1c1d23;
+  --color-bg-3: #262830;
+  --color-line-1: #23252b;
+  --color-line-2: #33363e;
+
+  --color-fg: #e8e9ed;
+  --color-fg-2: #a3a6b0;
+  --color-fg-3: #8a8e99;
+  --color-accent: #7c9cff;
+  --color-danger: #ef6461;
+
+  --color-conn-green: #3fb68b;
+  --color-conn-yellow: #e8b04b;
+  --color-conn-red: #ef6461;
+  --color-conn-blue: #56a8dc;
+  --color-conn-purple: #a98bff;
+
+  --color-syntax-keyword: #c792ea;
+  --color-syntax-function: #82c8e5;
+  --color-syntax-string: #a8d49b;
+  --color-syntax-number: #f0b47d;
+  --color-syntax-comment: #8a8e99;
+  --color-syntax-operator: #a3a6b0;
+  --color-syntax-identifier: #e8e9ed;
+  --color-syntax-type: #ffcb6b;
+
+  --text-title: 17px;
+  --text-title--line-height: 1.3;
+  --text-title--font-weight: 600;
+  --text-body: 15px;
+  --text-body--line-height: 1.4;
+  --text-small: 13px;
+  --text-small--line-height: 1.4;
+  --text-label: 12px;
+  --text-label--line-height: 1.4;
+
+  --radius-control: 7px;
+
+  --font-sans:
+    -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  --font-mono: "D2Coding", ui-monospace, Menlo, monospace;
+}
+
+@font-face {
+  font-family: "D2Coding";
+  src: url("/fonts/D2Coding-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "D2Coding";
+  src: url("/fonts/D2Coding-Bold.ttf") format("truetype");
+  font-weight: 600 700;
+  font-style: normal;
+}
+
 :root {
   color-scheme: dark;
 }
 
 @layer base {
   body {
-    @apply bg-zinc-900 text-zinc-100;
+    @apply bg-bg-0 text-fg text-body font-sans;
+  }
+
+  .font-mono,
+  code,
+  pre {
+    font-variant-ligatures: none;
   }
 }

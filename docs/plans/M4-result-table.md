@@ -299,35 +299,35 @@ git commit -m "feat: Rust가 화면으로 보내는 오류 message를 영어로 
   - `Toast({ message: string | null })`: `role="status"`, message가 있으면 보임. `useToast(): { message: string | null; show(message: string): void }`는 2,000ms 뒤에 비운다(다시 `show`하면 시간을 새로 잰다)
   - `icons.tsx`: 캔버스의 SVG path를 그대로 옮긴 `PlayIcon`, `StopIcon`, `ChevronDownIcon`, `ChevronRightIcon`, `PlusIcon`, `CloseIcon`, `CopyIcon`, `RefreshIcon`, `FolderIcon`, `FileIcon`, `TunnelIcon`, `CheckIcon`, `ErrorIcon`, `WarningIcon`, `CancelledIcon`, `LinkBrokenIcon`, `TrashIcon`, `SwitchIcon`, `SpinnerIcon`. 모두 `aria-hidden`이고 `currentColor`를 쓴다
 
-- [ ] **Step 1: font file test를 쓴다**
+- [x] **Step 1: font file test를 쓴다**
 
 `src/test/fonts.test.ts`: `public/fonts/D2Coding-Regular.ttf`와 `D2Coding-Bold.ttf`의 sha256이 `docs/design/README.md` 표의 값(`d5f2b6bf…682f`, `14a0cfa4…2752`, 전체 값은 README에서 복사)과 같고, `public/fonts/OFL.txt`가 있다.
 
-- [ ] **Step 2: `Menu`와 `Toast` test를 쓴다**
+- [x] **Step 2: `Menu`와 `Toast` test를 쓴다**
 
 `Menu`: `열리면 첫 항목에 focus가 간다`, `Escape는 닫는다`, `바깥을 누르면 닫는다`, `ArrowDown은 다음 항목으로 간다`, `disabled 항목은 onSelect를 부르지 않는다`, `항목을 고르면 onSelect 뒤에 닫는다`. `Toast`: fake timer로 `show 뒤 2초가 지나면 사라진다`, `다시 show하면 2초를 새로 잰다`.
 
-- [ ] **Step 3: 에디터 theme test를 쓴다**
+- [x] **Step 3: 에디터 theme test를 쓴다**
 
 `extensions.test.ts`의 `문법 색은 token을 쓴다`: `editorExtensions()`로 만든 `EditorState`에서 `HighlightStyle`이 `tags.keyword`, `tags.string`, `tags.number`, `tags.comment`, `tags.operator`, `tags.typeName`에 `var(--color-syntax-keyword)` 등을 준다(`highlightingFor(state, [tags.keyword])`로 class를 얻어 그 rule을 확인하는 방식은 구현이 고른다). `oneDark`가 없다.
 
-- [ ] **Step 4: test가 실패하는지 확인한다**
+- [x] **Step 4: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/test/fonts.test.ts src/shared/ui src/features/editor/extensions.test.ts`
 Expected: FAIL
 
-- [ ] **Step 5: font를 복사하고 token, 공용 UI, theme을 쓴다**
+- [x] **Step 5: font를 복사하고 token, 공용 UI, theme을 쓴다**
 
 `src/index.css`: `@theme`에 Global Constraints의 token(색은 `--color-<이름>`, 글자 크기는 `--text-title` 등과 각 `--line-height`, `--font-sans`, `--font-mono`)을 둔다. Tailwind 기본 palette는 `--color-*: initial`로 끈다. `@font-face`는 `D2Coding` Regular(400)와 Bold(600 700)를 `/fonts/…ttf`에서 읽는다. `body`는 `bg-bg-0 text-fg font-sans text-body`다.
 
 `extensions.ts`: `oneDark`를 빼고 `EditorView.theme`(배경 bg-1, 글자 fg, `font-mono` 15px, 줄 24px, gutter 56px 폭에 fg-3, cursor fg, 선택 accent 16%, `font-variant-ligatures: none`)과 `syntaxHighlighting(HighlightStyle.define([...]))`(위 tag와 `tags.function(tags.variableName)`, `tags.standard(tags.name)` → function 색)을 넣는다. `highlightActiveLine()`을 뺀다(캔버스에 없음. 실행 범위 강조는 M8). `pnpm remove @codemirror/theme-one-dark`.
 
-- [ ] **Step 6: test가 통과하는지 확인한다**
+- [x] **Step 6: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 7: commit한다**
+- [x] **Step 7: commit한다**
 
 ```bash
 git add public src package.json pnpm-lock.yaml

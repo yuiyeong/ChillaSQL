@@ -1,7 +1,9 @@
 import { PostgreSQL } from "@codemirror/lang-sql";
+import { highlightingFor } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
+import { tags } from "@lezer/highlight";
 import { expect, test } from "vitest";
-import { editorExtensions } from "./extensions";
+import { editorExtensions, syntaxStyle } from "./extensions";
 
 interface ParsedNode {
   name: string;
@@ -66,4 +68,32 @@ test("extension으로 문서를 만들 수 있다", () => {
     extensions: editorExtensions(),
   });
   expect(state.doc.toString()).toBe("SELECT 1");
+});
+
+test("문법 색은 token을 쓴다", () => {
+  const state = EditorState.create({ extensions: editorExtensions() });
+  const rules = syntaxStyle.module?.getRules() ?? "";
+  const expected: [string, Parameters<typeof highlightingFor>[1], string][] = [
+    ["keyword", [tags.keyword], "keyword"],
+    ["string", [tags.string], "string"],
+    ["number", [tags.number], "number"],
+    ["comment", [tags.comment], "comment"],
+    ["operator", [tags.operator], "operator"],
+    ["typeName", [tags.typeName], "type"],
+    ["function", [tags.function(tags.variableName)], "function"],
+    ["standard", [tags.standard(tags.name)], "function"],
+    ["name", [tags.name], "identifier"],
+  ];
+  for (const [label, tagList, token] of expected) {
+    const cls = highlightingFor(state, tagList);
+    expect(cls, label).toBeTruthy();
+    expect(rules, label).toContain(
+      `.${cls} {color: var(--color-syntax-${token})`,
+    );
+  }
+  expect(rules).toContain("font-style: italic");
+});
+
+test("문법 색에 hex literal이 없다(oneDark 등 외부 theme을 쓰지 않는다)", () => {
+  expect(syntaxStyle.module?.getRules()).not.toMatch(/#[0-9a-f]{3,6}/i);
 });
