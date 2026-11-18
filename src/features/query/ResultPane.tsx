@@ -238,7 +238,7 @@ export const ResultPane = memo(function ResultPane({
   };
 
   return (
-    <section className="bg-bg-0 text-fg flex h-full min-h-0 flex-col">
+    <section className="bg-bg-0 text-fg relative flex h-full min-h-0 flex-col">
       {header !== null && (
         <div className="border-line-1 flex h-9 shrink-0 items-center gap-3 border-b px-3">
           {header}

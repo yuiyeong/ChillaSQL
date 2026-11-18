@@ -2,15 +2,18 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 const TOAST_MS = 2000;
 
-/** 잠깐 보이는 알림. message가 null이면 비어 있다. */
+/**
+ * 잠깐 보이는 알림. message가 null이면 비어 있다.
+ * 가장 가까운 positioned 조상(`relative`)의 아래 가운데에 붙는다.
+ */
 export function Toast({ message }: { message: string | null }) {
   return (
     <div
       role="status"
-      className="pointer-events-none fixed bottom-10 left-1/2 -translate-x-1/2"
+      className="pointer-events-none absolute bottom-3 left-1/2 z-20 -translate-x-1/2"
     >
       {message !== null && (
-        <div className="text-small border-line-2 bg-bg-3 text-fg shadow-popover rounded-lg border px-3 py-1.5">
+        <div className="text-small border-line-2 bg-bg-3 text-fg shadow-popover rounded-lg border px-3 py-1.5 whitespace-nowrap">
           {message}
         </div>
       )}

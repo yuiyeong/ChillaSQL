@@ -382,6 +382,24 @@ test("선택이 있어야 header의 복사 button이 켜지고, 누르면 복사
   expect(await screen.findByText("Copied cell")).toBeInTheDocument();
 });
 
+test("복사 알림은 창이 아니라 결과 panel의 아래 가운데에 붙는다", async () => {
+  finished(
+    { outcome: "completed", rows: 3 },
+    { columns: ["id", "name"], rows: someRows },
+  );
+
+  fireEvent.click(screen.getByText("b"));
+  fireEvent.click(screen.getByRole("button", { name: "Copy selected cells" }));
+
+  const status = await screen.findByRole("status");
+  expect(status).toHaveTextContent("Copied cell");
+  // jsdom은 layout이 없어 class로 본다. panel(section)이 기준이라 아래의 status bar와 겹치지 않는다.
+  expect(status).toHaveClass("absolute", "bottom-3", "left-1/2");
+  expect(status).not.toHaveClass("fixed");
+  expect(status.parentElement).toBe(status.closest("section"));
+  expect(status.closest("section")).toHaveClass("relative");
+});
+
 test("끝나도 표를 다시 만들지 않는다", () => {
   const running = result({ columns: ["id", "name"], rows: someRows });
   show({ status: "running", result: running });
