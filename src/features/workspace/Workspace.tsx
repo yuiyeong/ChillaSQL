@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent } from "react";
+import { useLayoutEffect, useRef, useState, type PointerEvent } from "react";
 import type { Connection, Project } from "../../shared/api/types";
 import { ConnectionForm } from "../connections/ConnectionForm";
 import { saveTab } from "../editor/saveTab";
@@ -44,7 +44,9 @@ export function Workspace() {
   const clearError = useProject((s) => s.clearError);
   const [form, setForm] = useState<OpenForm | null>(null);
   const [resultHeight, setResultHeight] = useState(RESULT_HEIGHT);
+  const [maxHeight, setMaxHeight] = useState(MIN_PANE);
   const editorRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{
     startY: number;
     startHeight: number;
@@ -55,6 +57,12 @@ export function Workspace() {
       project?.connections.find((c) => c.name === connectionName)?.color ??
         null,
     ) ?? "var(--color-line-2)";
+  // 처음 그린 뒤의 aria-valuemax. layout을 재야 알 수 있어서 effect에서 정한다. 이후는 끌 때마다 다시 잰다.
+  useLayoutEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMaxHeight(measure().max);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 처음 한 번만 잰다
+  }, []);
   // 접속 form이 열려 있으면 뒤의 탭을 실행하거나 닫지 않는다.
   useShortcuts(form === null);
 
@@ -73,14 +81,23 @@ export function Workspace() {
     if (activeId !== null) void saveTab(activeId, path);
   }
 
+  /** 에디터와 결과 panel이 지금 그려진 높이로 나눠 가진 공간에서, 에디터에 120px을 남긴 결과 panel의 최대 높이 */
+  function measure(): { rendered: number; max: number } {
+    const rendered = resultRef.current?.clientHeight ?? resultHeight;
+    const editorHeight = editorRef.current?.clientHeight ?? 0;
+    return {
+      rendered,
+      max: Math.max(MIN_PANE, editorHeight + rendered - MIN_PANE),
+    };
+  }
+
   function startDrag(e: PointerEvent<HTMLDivElement>) {
     e.currentTarget.setPointerCapture(e.pointerId);
-    const editorHeight = editorRef.current?.clientHeight ?? 0;
-    drag.current = {
-      startY: e.clientY,
-      startHeight: resultHeight,
-      max: Math.max(MIN_PANE, editorHeight + resultHeight - MIN_PANE),
-    };
+    // 창이 줄어 flex-shrink로 작아진 panel이 있으면 저장한 높이가 아니라 그려진 높이에서 시작한다.
+    const { rendered, max } = measure();
+    drag.current = { startY: e.clientY, startHeight: rendered, max };
+    setResultHeight(rendered);
+    setMaxHeight(max);
   }
 
   function moveDrag(e: PointerEvent<HTMLDivElement>) {
@@ -140,6 +157,7 @@ export function Workspace() {
           <Toolbar />
           <div
             ref={editorRef}
+            data-testid="editor-area"
             className="bg-bg-1 relative min-h-[120px] min-w-0 flex-1"
           >
             <div className="absolute inset-0">
@@ -156,6 +174,7 @@ export function Workspace() {
             aria-label={t("workspace.resizeResults")}
             aria-valuenow={resultHeight}
             aria-valuemin={MIN_PANE}
+            aria-valuemax={maxHeight}
             className="border-line-1 bg-bg-0 flex h-[5px] shrink-0 touch-none items-center justify-center border-t"
             style={{ cursor: "row-resize" }}
             onPointerDown={startDrag}
@@ -166,6 +185,8 @@ export function Workspace() {
             <span className="bg-line-2 h-[3px] w-9 rounded-[2px]" />
           </div>
           <div
+            ref={resultRef}
+            data-testid="result-panel"
             className="relative min-h-[120px] shrink"
             style={{ flex: `0 1 ${resultHeight}px` }}
           >

@@ -403,10 +403,18 @@ test("접속 없는 탭과 탭이 없을 때 창 상단 bar는 line-2다", () =>
   expect(connectionBarColor()).toBe("var(--color-line-2)");
 });
 
+let rendered: Record<string, number> = {};
+
 describe("결과 panel 경계", () => {
   beforeEach(() => {
-    // jsdom은 layout이 없어서 에디터 영역의 높이를 정해 준다. 600 + 396 - 120 = 876이 최대다.
-    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+    // jsdom은 layout이 없어서 에디터 영역과 결과 panel의 높이를 정해 준다.
+    // 600 + 396 - 120 = 876이 최대다.
+    rendered = { "editor-area": 600, "result-panel": 396 };
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return rendered[this.dataset.testid ?? ""] ?? 0;
+      },
+    );
     Element.prototype.setPointerCapture = vi.fn();
     Element.prototype.releasePointerCapture = vi.fn();
   });
@@ -429,6 +437,34 @@ describe("결과 panel 경계", () => {
     drag(-100);
 
     expect(boundary()).toHaveAttribute("aria-valuenow", "496");
+  });
+
+  test("aria-valuemin과 aria-valuemax가 있다", () => {
+    openProjectWith();
+    renderWorkspace();
+
+    expect(boundary()).toHaveAttribute("aria-valuemin", "120");
+    expect(boundary()).toHaveAttribute("aria-valuemax", "876");
+  });
+
+  test("창이 줄어 그려진 높이가 저장한 높이보다 작으면 그려진 높이에서 시작한다", () => {
+    openProjectWith();
+    renderWorkspace();
+    // flex-shrink로 결과 panel이 300px로 줄고 에디터는 692px이 됐다.
+    rendered = { "editor-area": 692, "result-panel": 300 };
+
+    fireEvent.pointerDown(boundary(), { pointerId: 1, clientY: 500 });
+
+    expect(boundary()).toHaveAttribute("aria-valuenow", "300");
+    expect(boundary()).toHaveAttribute("aria-valuemax", "872");
+
+    // 1px만 끌어도 뛰지 않고 그려진 높이에서 1px 움직인다.
+    fireEvent.pointerMove(boundary(), { pointerId: 1, clientY: 499 });
+    expect(boundary()).toHaveAttribute("aria-valuenow", "301");
+
+    // 최대는 그려진 높이로 구한 872다. 저장한 높이로 구한 값이 아니다.
+    fireEvent.pointerMove(boundary(), { pointerId: 1, clientY: -5000 });
+    expect(boundary()).toHaveAttribute("aria-valuenow", "872");
   });
 
   test("끝낸 뒤의 pointermove는 높이를 바꾸지 않는다", () => {
