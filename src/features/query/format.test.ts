@@ -4,6 +4,7 @@ import {
   errorLocation,
   formatElapsed,
   formatLive,
+  resultLabel,
 } from "./format";
 import { emptyResult } from "./runReducer";
 
@@ -39,4 +40,20 @@ test("affectedText", () => {
   );
   expect(affectedText("merge into t using s on true", 3)).toBe("3 rows merged");
   expect(affectedText("create table t()", 0)).toBe("Done");
+});
+
+test("resultLabel", () => {
+  expect(resultLabel("-- 최근\nselect * from users u")).toBe("SELECT users");
+  expect(resultLabel("UPDATE public.users SET a = 1")).toBe(
+    "UPDATE public.users",
+  );
+  expect(resultLabel('insert into "Order" values (1)')).toBe('INSERT "Order"');
+  expect(resultLabel("select pg_sleep(1)")).toBe("SELECT");
+});
+
+test("resultLabel은 주석을 건너뛰고 긴 label을 자른다", () => {
+  expect(resultLabel("/* a */ -- b\n  delete from t")).toBe("DELETE t");
+  const label = resultLabel(`select * from ${"a".repeat(60)}`);
+  expect(label).toBe(`SELECT ${"a".repeat(24)}…`);
+  expect([...label]).toHaveLength(32);
 });

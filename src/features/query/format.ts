@@ -1,6 +1,5 @@
 import { lineColumn } from "../editor/statementAt";
 import { t, tc } from "../../shared/i18n/t";
-import { firstWord } from "./grid";
 import type { ResultData } from "./runReducer";
 
 /** 1 ms 밑은 소수 둘째 자리 ms, 1 s 밑은 정수 ms, 그 위는 소수 둘째 자리 s. 반올림한 값으로 단위를 고른다. */
@@ -41,4 +40,45 @@ export function affectedText(sql: string, rows: number): string {
   return word in AFFECTED_KEYS
     ? tc(AFFECTED_KEYS[word as keyof typeof AFFECTED_KEYS], rows)
     : t("result.done");
+}
+
+/** 앞의 공백과 `--`, `/* *\/` 주석을 건너뛴 나머지 */
+function skipLeading(sql: string): string {
+  let rest = sql;
+  for (;;) {
+    rest = rest.trimStart();
+    if (rest.startsWith("--")) {
+      const end = rest.indexOf("\n");
+      if (end === -1) return "";
+      rest = rest.slice(end + 1);
+    } else if (rest.startsWith("/*")) {
+      const end = rest.indexOf("*/", 2);
+      if (end === -1) return "";
+      rest = rest.slice(end + 2);
+    } else {
+      return rest;
+    }
+  }
+}
+
+/** 주석을 건너뛴 첫 단어(대문자). 없으면 빈 문자열이다. */
+function firstWord(sql: string): string {
+  return /^[\p{L}_]+/u.exec(skipLeading(sql))?.[0].toUpperCase() ?? "";
+}
+
+const NAME = String.raw`(?:"(?:[^"]|"")*"|[\p{L}_][\p{L}\p{N}_$]*)`;
+const TARGET = new RegExp(
+  String.raw`\b(?:FROM|INTO|UPDATE|TABLE|JOIN)\s+(${NAME}(?:\.${NAME})?)`,
+  "iu",
+);
+const LABEL_LIMIT = 32;
+
+/** 결과 tab 이름. 첫 단어와 대상 이름이다. 예: `SELECT users` */
+export function resultLabel(sql: string): string {
+  const body = skipLeading(sql);
+  const word = firstWord(sql);
+  const target = TARGET.exec(body)?.[1];
+  const label = target === undefined ? word : `${word} ${target}`;
+  if ([...label].length <= LABEL_LIMIT) return label;
+  return `${[...label].slice(0, LABEL_LIMIT - 1).join("")}…`;
 }

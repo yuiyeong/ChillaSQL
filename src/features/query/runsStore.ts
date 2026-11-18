@@ -31,7 +31,7 @@ function rejectionOf(error: unknown): Rejection {
   return { title: messageOf(error), detail: null };
 }
 
-export interface RunsState {
+interface RunsState {
   /** tab id → 상태. 없으면 idle로 본다. */
   runs: Record<string, RunState>;
   /**

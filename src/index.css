@@ -50,6 +50,9 @@
 
   --radius-control: 7px;
 
+  /* 결과 표 header의 굵기. canvas로 header 이름을 잴 때 :root에서 읽는다(grid.ts). */
+  --font-weight-semibold: 600;
+
   /* popover(menu, toast)와 dialog의 그림자. 캔버스 Dialogs와 ConnectionForm 그대로다. */
   --shadow-popover: 0 12px 32px rgba(0, 0, 0, 0.5);
   --shadow-dialog: 0 24px 60px rgba(0, 0, 0, 0.55);

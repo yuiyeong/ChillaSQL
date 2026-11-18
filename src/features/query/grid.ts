@@ -8,26 +8,26 @@ export const HEADER_HEIGHT = 32;
 export const GAP_HEIGHT = 40;
 export const FOOTER_HEIGHT = 30;
 /** 마지막으로 보이는 행이 보관한 행의 끝에서 이만큼 안에 들면 다음 batch를 요청한다. */
-export const FETCH_AHEAD = 100;
+const FETCH_AHEAD = 100;
 /** D2Coding 13px 반각 글자의 advance. 값과 행 번호를 이것으로 센다. */
-export const HALF_WIDTH = 6.5;
+const HALF_WIDTH = 6.5;
 /**
  * canvas로 잴 수 없을 때(jsdom) header 이름의 반각 한 칸 너비. header는 system font 13px semibold라
  * 글자 평균이 7~8.7px이다(`amount` 7.96, `name` 8.65). 넉넉히 잡는다.
  */
-export const HEADER_HALF_WIDTH = 9;
+const HEADER_HALF_WIDTH = 9;
 /** 칸 좌우의 padding(`px-2.5`) */
-export const CELL_PADDING = 20;
+const CELL_PADDING = 20;
 /** 칸의 `border-r`. box-sizing이 border-box라 칸 너비 안에 든다. */
-export const CELL_BORDER = 1;
-export const MIN_FIT = 64;
-export const MAX_FIT = 480;
+const CELL_BORDER = 1;
+const MIN_FIT = 64;
+const MAX_FIT = 480;
 export const MIN_DRAG = 48;
-export const MIN_ROW_NUMBER_WIDTH = 52;
+const MIN_ROW_NUMBER_WIDTH = 52;
 /** 자동 너비는 앞 이만큼의 값만 보고 정한다. */
-export const FIT_SAMPLE = 2000;
+const FIT_SAMPLE = 2000;
 /** 이보다 긴 값은 앞부분만 그리고 센다. */
-export const CELL_LIMIT = 300;
+const CELL_LIMIT = 300;
 
 const FULL_WIDTH_RANGES: readonly (readonly [number, number])[] = [
   [0x1100, 0x115f],
@@ -42,6 +42,8 @@ const FULL_WIDTH_RANGES: readonly (readonly [number, number])[] = [
 ];
 
 function isFullWidth(codePoint: number): boolean {
+  // 대부분의 값은 ASCII라 범위를 훑지 않는다.
+  if (codePoint < 0x1100) return false;
   return FULL_WIDTH_RANGES.some(
     ([from, to]) => codePoint >= from && codePoint <= to,
   );
@@ -59,30 +61,38 @@ export function displayColumns(text: string): number {
 }
 
 /** 글자의 그려진 너비(px) */
-export type MeasureText = (text: string) => number;
+type MeasureText = (text: string) => number;
 
 export function estimateHeaderWidth(text: string): number {
   return displayColumns(text) * HEADER_HALF_WIDTH;
 }
 
 /**
- * header 이름(system font, `text-small`, semibold)의 너비를 canvas로 재는 함수. 글꼴은 index.css의 token에서 읽는다.
+ * header 이름(system font, `text-small`, semibold)의 너비를 canvas로 재는 함수를 만든다. 글꼴은 index.css의 token에서 읽는다.
  * canvas나 token이 없으면(jsdom) `estimateHeaderWidth`다.
  */
-export function headerMeasure(): MeasureText {
-  if (typeof OffscreenCanvas === "undefined") return estimateHeaderWidth;
+export function createHeaderMeasure(): MeasureText {
+  const context =
+    typeof OffscreenCanvas === "undefined"
+      ? null
+      : new OffscreenCanvas(1, 1).getContext("2d");
   const style = getComputedStyle(document.documentElement);
-  const [weight, size, family] = [
-    "--font-weight-semibold",
-    "--text-small",
-    "--font-sans",
-  ].map((name) => style.getPropertyValue(name).trim());
-  const context = new OffscreenCanvas(1, 1).getContext("2d");
-  if (context === null || !weight || !size || !family) {
+  const font = ["--font-weight-semibold", "--text-small", "--font-sans"].map(
+    (name) => style.getPropertyValue(name).trim(),
+  );
+  if (context === null || font.some((part) => part === "")) {
     return estimateHeaderWidth;
   }
-  context.font = `${weight} ${size} ${family}`;
+  context.font = font.join(" ");
   return (text) => context.measureText(text).width;
+}
+
+let headerMeasureCache: MeasureText | null = null;
+
+/** `createHeaderMeasure`의 결과. 처음 부를 때 한 번 만든다. */
+export function headerMeasure(): MeasureText {
+  headerMeasureCache ??= createHeaderMeasure();
+  return headerMeasureCache;
 }
 
 /**
@@ -165,51 +175,19 @@ export function anchorShift(
   return gapAppears - (nextFirstRow - prevFirstRow) * ROW_HEIGHT;
 }
 
-/** 앞의 공백과 `--`, `/* *\/` 주석을 건너뛴 나머지 */
-export function skipLeading(sql: string): string {
-  let rest = sql;
-  for (;;) {
-    rest = rest.trimStart();
-    if (rest.startsWith("--")) {
-      const end = rest.indexOf("\n");
-      if (end === -1) return "";
-      rest = rest.slice(end + 1);
-    } else if (rest.startsWith("/*")) {
-      const end = rest.indexOf("*/", 2);
-      if (end === -1) return "";
-      rest = rest.slice(end + 2);
-    } else {
-      return rest;
-    }
-  }
-}
-
-/** 주석을 건너뛴 첫 단어(대문자). 없으면 빈 문자열이다. */
-export function firstWord(sql: string): string {
-  return /^[\p{L}_]+/u.exec(skipLeading(sql))?.[0].toUpperCase() ?? "";
-}
-
-const NAME = String.raw`(?:"(?:[^"]|"")*"|[\p{L}_][\p{L}\p{N}_$]*)`;
-const TARGET = new RegExp(
-  String.raw`\b(?:FROM|INTO|UPDATE|TABLE|JOIN)\s+(${NAME}(?:\.${NAME})?)`,
-  "iu",
-);
-const LABEL_LIMIT = 32;
-
-/** 결과 tab 이름. 첫 단어와 대상 이름이다. 예: `SELECT users` */
-export function resultLabel(sql: string): string {
-  const body = skipLeading(sql);
-  const word = firstWord(sql);
-  const target = TARGET.exec(body)?.[1];
-  const label = target === undefined ? word : `${word} ${target}`;
-  if ([...label].length <= LABEL_LIMIT) return label;
-  return `${[...label].slice(0, LABEL_LIMIT - 1).join("")}…`;
-}
-
 export type Selection =
   | { kind: "cell"; row: number; column: number }
   | { kind: "rows"; anchor: number; focus: number }
   | null;
+
+/** 행 선택이면 위아래 끝 행 번호(둘 다 포함), 아니면 null이다. */
+export function rowSpan(selection: Selection): [number, number] | null {
+  if (selection?.kind !== "rows") return null;
+  return [
+    Math.min(selection.anchor, selection.focus),
+    Math.max(selection.anchor, selection.focus),
+  ];
+}
 
 /** 행 선택 범위 중 보관한 행만, 위에서 아래 순서로 돌려준다. 행 선택이 아니면 빈 배열이다. */
 export function selectedRows(
@@ -217,14 +195,9 @@ export function selectedRows(
   firstRow: number,
   rows: readonly Cell[][],
 ): Cell[][] {
-  if (selection?.kind !== "rows") return [];
-  const from = Math.max(
-    Math.min(selection.anchor, selection.focus) - firstRow,
-    0,
-  );
-  const to = Math.min(
-    Math.max(selection.anchor, selection.focus) - firstRow,
-    rows.length - 1,
-  );
+  const span = rowSpan(selection);
+  if (span === null) return [];
+  const from = Math.max(span[0] - firstRow, 0);
+  const to = Math.min(span[1] - firstRow, rows.length - 1);
   return rows.slice(from, Math.max(to + 1, from));
 }

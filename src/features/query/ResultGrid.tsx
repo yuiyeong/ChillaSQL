@@ -19,6 +19,7 @@ import {
   useTable,
   type ColumnDef,
   type ColumnSizingState,
+  type Header,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Cell } from "../../shared/api/types";
@@ -37,6 +38,7 @@ import {
   MIN_DRAG,
   ROW_HEIGHT,
   rowNumberWidth,
+  rowSpan,
   selectedRows,
   shouldFetch,
   tsv,
@@ -47,7 +49,7 @@ import { receivedRows, type ResultData } from "./runReducer";
 /** 지금 선택을 복사할 text와 알림 문구. 선택이 없으면 null */
 export type CopyTarget = { text: string; message: string } | null;
 
-export interface ResultGridProps {
+interface ResultGridProps {
   /** columns가 null이 아니다 */
   result: ResultData;
   /** 결과가 끝났으면 서버가 알려 준 전체 행 수 */
@@ -75,11 +77,12 @@ const estimateSize = () => ROW_HEIGHT;
 /**
  * 가상 스크롤 결과 표. 같은 실행 동안에는 batch마다 `result` object가 바뀌어도 상태를 이어 가고,
  * 다른 실행(`startedAt`이나 `sql`이 다름)이 오면 처음부터 다시 그린다(선택, 스크롤, 너비).
+ * props가 그대로면(알림, header 복사 버튼) 다시 그리지 않는다.
  */
-export function ResultGrid(props: ResultGridProps) {
+export const ResultGrid = memo(function ResultGrid(props: ResultGridProps) {
   const { startedAt, sql } = props.result;
   return <Grid key={`${startedAt}:${sql}`} {...props} />;
-}
+});
 
 function Grid({
   result,
@@ -143,7 +146,12 @@ function Grid({
   // 아래 effect와 handler가 읽는 최신 값. render 중에는 쓰지 않는다.
   const latest = useRef({ selection, firstRow, rows, onCopied, onFetchMore });
   useLayoutEffect(() => {
-    latest.current = { selection, firstRow, rows, onCopied, onFetchMore };
+    const current = latest.current;
+    current.selection = selection;
+    current.firstRow = firstRow;
+    current.rows = rows;
+    current.onCopied = onCopied;
+    current.onFetchMore = onFetchMore;
   });
 
   // 앞 행이 버려지면 버린 만큼 당겨 보던 행을 그 자리에 둔다.
@@ -164,10 +172,10 @@ function Grid({
       anchored.current = false;
       return;
     }
-    if (endRows === null && shouldFetch(lastVisible, rows.length, fetch)) {
+    if (shouldFetch(lastVisible, rows.length, fetch)) {
       latest.current.onFetchMore();
     }
-  }, [lastVisible, rows.length, fetch, endRows, firstRow]);
+  }, [lastVisible, rows.length, fetch, firstRow]);
 
   const hasSelection = selection !== null;
   useEffect(() => {
@@ -234,38 +242,43 @@ function Grid({
     element.scrollTop = toEnd ? element.scrollHeight : 0;
   };
 
-  const fitColumn = (index: number) =>
-    setColumnSizing((old) => ({
-      ...old,
-      [String(index)]: fitWidth(
-        columns[index],
-        columnValues(rows, index),
-        headerMeasure(),
-      ),
-    }));
-
-  const numberWidth = rowNumberWidth(receivedRows(result));
-  const gridColumns = useMemo(
-    () =>
-      ["var(--col-rn)", ...columns.map((_, i) => `var(--col-${i})`)].join(" "),
+  // 행은 누른 때의 것을 읽는다. 그래서 batch가 와도 header를 다시 그리지 않는다.
+  const fitColumn = useCallback(
+    (index: number) =>
+      setColumnSizing((old) => ({
+        ...old,
+        [String(index)]: fitWidth(
+          columns[index],
+          columnValues(latest.current.rows, index),
+          headerMeasure(),
+        ),
+      })),
     [columns],
   );
-  const sizeVars: Record<string, string> = {
-    "--col-rn": `${numberWidth}px`,
-    "--grid-cols": gridColumns,
-    "--row-width": `${numberWidth + table.getTotalSize()}px`,
-  };
-  for (const header of headers) {
-    sizeVars[`--col-${header.id}`] = `${header.getSize()}px`;
-  }
 
-  const rowRange =
-    selection?.kind === "rows"
-      ? [
-          Math.min(selection.anchor, selection.focus),
-          Math.max(selection.anchor, selection.focus),
-        ]
-      : null;
+  const numberWidth = rowNumberWidth(receivedRows(result));
+  // header의 getSize는 columnSizing을 읽는다. 스크롤만 한 frame에서는 다시 만들지 않는다.
+  const sizeVars = useMemo(() => {
+    const vars: Record<string, string> = {
+      "--col-rn": `${numberWidth}px`,
+      "--grid-cols": [
+        "var(--col-rn)",
+        ...columns.map((_, i) => `var(--col-${i})`),
+      ].join(" "),
+    };
+    let total = numberWidth;
+    for (const header of headers) {
+      const size = header.getSize();
+      vars[`--col-${header.id}`] = `${size}px`;
+      total += size;
+    }
+    vars["--row-width"] = `${total}px`;
+    return vars as CSSProperties;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- getSize가 columnSizing을 읽는다
+  }, [headers, columns, columnSizing, numberWidth]);
+  const resizing = table.state.columnResizing.isResizingColumn;
+
+  const rowRange = rowSpan(selection);
 
   return (
     <div
@@ -274,33 +287,16 @@ function Grid({
       tabIndex={0}
       aria-rowcount={receivedRows(result) + 1}
       className="bg-bg-0 text-small text-fg @container relative min-h-0 flex-1 overflow-auto font-mono outline-none"
-      style={sizeVars as CSSProperties}
+      style={sizeVars}
       onKeyDown={onGridKeyDown}
     >
-      <div
-        role="row"
-        className="border-line-1 bg-bg-1 sticky top-0 z-10 grid h-8 w-(--row-width) min-w-full grid-cols-(--grid-cols) border-b font-sans font-semibold select-none"
-      >
-        <div role="columnheader" className="border-line-1 border-r" />
-        {headers.map((header, index) => (
-          <div
-            key={header.id}
-            role="columnheader"
-            className="border-line-1 relative flex min-w-0 items-center border-r px-2.5"
-            style={{ width: header.getSize() }}
-          >
-            <span className="truncate">{columns[index]}</span>
-            <div
-              role="separator"
-              aria-orientation="vertical"
-              aria-label={t("result.resizeColumn", { name: columns[index] })}
-              className={header.column.getIsResizing() ? HANDLE_ACTIVE : HANDLE}
-              onMouseDown={header.getResizeHandler()}
-              onDoubleClick={() => fitColumn(index)}
-            />
-          </div>
-        ))}
-      </div>
+      <HeaderRow
+        headers={headers}
+        columns={columns}
+        columnSizing={columnSizing}
+        resizing={resizing}
+        onFit={fitColumn}
+      />
       <div
         className="relative w-(--row-width) min-w-full select-none"
         style={{ height: totalSize }}
@@ -351,6 +347,51 @@ function Grid({
     </div>
   );
 }
+
+interface HeaderRowProps {
+  headers: Header<Features, Cell[]>[];
+  columns: string[];
+  /** 너비가 바뀌면 다시 그린다. header object는 그대로라 크기는 이것으로 안다. */
+  columnSizing: ColumnSizingState;
+  /** 끄는 중인 column의 id. 없으면 false */
+  resizing: string | false;
+  onFit(index: number): void;
+}
+
+// 스크롤하는 동안에는 header 칸을 다시 그리지 않는다.
+const HeaderRow = memo(function HeaderRow({
+  headers,
+  columns,
+  resizing,
+  onFit,
+}: HeaderRowProps) {
+  return (
+    <div
+      role="row"
+      className="border-line-1 bg-bg-1 sticky top-0 z-10 grid h-8 w-(--row-width) min-w-full grid-cols-(--grid-cols) border-b font-sans font-semibold select-none"
+    >
+      <div role="columnheader" className="border-line-1 border-r" />
+      {headers.map((header, index) => (
+        <div
+          key={header.id}
+          role="columnheader"
+          className="border-line-1 relative flex min-w-0 items-center border-r px-2.5"
+          style={{ width: header.getSize() }}
+        >
+          <span className="truncate">{columns[index]}</span>
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label={t("result.resizeColumn", { name: columns[index] })}
+            className={resizing === header.id ? HANDLE_ACTIVE : HANDLE}
+            onMouseDown={header.getResizeHandler()}
+            onDoubleClick={() => onFit(index)}
+          />
+        </div>
+      ))}
+    </div>
+  );
+});
 
 const HANDLE =
   "absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize after:absolute after:inset-y-0 after:right-0 after:w-0.5 hover:after:bg-accent";
@@ -437,7 +478,6 @@ function Footer({
   fetching: boolean;
   endRows: number | null;
 }) {
-  // 끝난 결과는 마지막 fetch 값을 그대로 두므로 endRows를 먼저 본다.
   const content =
     endRows !== null ? (
       tc("result.end", endRows)

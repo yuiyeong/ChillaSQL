@@ -150,8 +150,12 @@ test("가져오는 중이거나 끝난 결과는 onFetchMore를 부르지 않는
   expect(screen.getByText("Fetching next 500 rows")).toBeInTheDocument();
 });
 
-test("끝난 결과는 fetch가 남아 있어도 onFetchMore를 부르지 않고 끝을 알린다", () => {
-  const done = setup({ result: result({ rows: rowsOf(500) }), endRows: 500 });
+test("끝난 결과는 onFetchMore를 부르지 않고 끝을 알린다", () => {
+  // 끝난 결과는 reducer가 fetch를 none으로 둔다.
+  const done = setup({
+    result: result({ rows: rowsOf(500), fetch: "none" }),
+    endRows: 500,
+  });
   done.grid().scrollTop = 500 * 26;
   fireEvent.scroll(done.grid());
   expect(done.props.onFetchMore).not.toHaveBeenCalled();
@@ -301,9 +305,12 @@ test("handle을 두 번 누르면 내용에 맞춘다", () => {
   const handle = within(header).getByRole("separator");
 
   fireEvent.mouseDown(handle, { clientX: 500 });
+  // 끄는 동안 handle의 선이 켜져 있다.
+  expect(handle).toHaveClass("after:bg-accent");
   fireEvent.mouseMove(document, { clientX: 470 });
   fireEvent.mouseUp(document, { clientX: 470 });
   expect(header.style.width).toBe(`${fit - 30}px`);
+  expect(handle).not.toHaveClass("after:bg-accent");
 
   fireEvent.doubleClick(handle);
   expect(header.style.width).toBe(`${fit}px`);

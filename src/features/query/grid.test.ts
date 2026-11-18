@@ -4,11 +4,12 @@ import {
   cellDisplay,
   copyCell,
   displayColumns,
+  createHeaderMeasure,
   estimateHeaderWidth,
   fitWidth,
   headerMeasure,
-  resultLabel,
   rowNumberWidth,
+  rowSpan,
   selectedRows,
   shouldFetch,
   tsv,
@@ -18,6 +19,11 @@ test("displayColumns는 한글과 emoji를 2칸으로 센다", () => {
   expect(displayColumns("abc")).toBe(3);
   expect(displayColumns("가나")).toBe(4);
   expect(displayColumns("a😀")).toBe(3);
+});
+
+test("displayColumns는 U+1100부터 전각 범위를 본다", () => {
+  expect(displayColumns("\u10ff")).toBe(1);
+  expect(displayColumns("\u1100")).toBe(2);
 });
 
 test("displayColumns는 CELL_LIMIT자까지만 센다", () => {
@@ -52,12 +58,12 @@ afterEach(() => {
   document.documentElement.removeAttribute("style");
 });
 
-test("headerMeasure는 canvas가 없으면 어림값을 쓴다", () => {
-  expect(headerMeasure()).toBe(estimateHeaderWidth);
+test("createHeaderMeasure는 canvas가 없으면 어림값을 쓴다", () => {
+  expect(createHeaderMeasure()).toBe(estimateHeaderWidth);
   expect(estimateHeaderWidth("가a")).toBe(3 * 9);
 });
 
-test("headerMeasure는 header의 글꼴 token으로 canvas에서 잰다", () => {
+test("createHeaderMeasure는 header의 글꼴 token으로 canvas에서 잰다", () => {
   const fonts: string[] = [];
   class FakeCanvas {
     getContext() {
@@ -76,11 +82,11 @@ test("headerMeasure는 header의 글꼴 token으로 canvas에서 잰다", () => 
   root.setProperty("--text-small", "13px");
   root.setProperty("--font-sans", "-apple-system, sans-serif");
 
-  expect(headerMeasure()("amount")).toBe(6 * 7.25);
+  expect(createHeaderMeasure()("amount")).toBe(6 * 7.25);
   expect(fonts).toEqual(["600 13px -apple-system, sans-serif"]);
 });
 
-test("headerMeasure는 글꼴 token이 없으면 어림값을 쓴다", () => {
+test("createHeaderMeasure는 글꼴 token이 없으면 어림값을 쓴다", () => {
   vi.stubGlobal(
     "OffscreenCanvas",
     class {
@@ -90,7 +96,11 @@ test("headerMeasure는 글꼴 token이 없으면 어림값을 쓴다", () => {
     },
   );
 
-  expect(headerMeasure()).toBe(estimateHeaderWidth);
+  expect(createHeaderMeasure()).toBe(estimateHeaderWidth);
+});
+
+test("headerMeasure는 처음 만든 함수를 다시 쓴다", () => {
+  expect(headerMeasure()).toBe(headerMeasure());
 });
 
 test("fitWidth는 가장 긴 값과 padding에 칸의 border-r 1px까지 더한다", () => {
@@ -139,20 +149,11 @@ test("anchorShift는 버린 행만큼 당기고 처음 생긴 버린 구간 줄�
   expect(anchorShift(500, 0)).toBe(0);
 });
 
-test("resultLabel", () => {
-  expect(resultLabel("-- 최근\nselect * from users u")).toBe("SELECT users");
-  expect(resultLabel("UPDATE public.users SET a = 1")).toBe(
-    "UPDATE public.users",
-  );
-  expect(resultLabel('insert into "Order" values (1)')).toBe('INSERT "Order"');
-  expect(resultLabel("select pg_sleep(1)")).toBe("SELECT");
-});
-
-test("resultLabel은 주석을 건너뛰고 긴 label을 자른다", () => {
-  expect(resultLabel("/* a */ -- b\n  delete from t")).toBe("DELETE t");
-  const label = resultLabel(`select * from ${"a".repeat(60)}`);
-  expect(label).toBe(`SELECT ${"a".repeat(24)}…`);
-  expect([...label]).toHaveLength(32);
+test("rowSpan은 행 선택의 위아래 끝이다", () => {
+  expect(rowSpan({ kind: "rows", anchor: 12, focus: 9 })).toEqual([9, 12]);
+  expect(rowSpan({ kind: "rows", anchor: 3, focus: 3 })).toEqual([3, 3]);
+  expect(rowSpan({ kind: "cell", row: 1, column: 0 })).toBeNull();
+  expect(rowSpan(null)).toBeNull();
 });
 
 test("selectedRows는 보관된 행만 위에서 아래로", () => {

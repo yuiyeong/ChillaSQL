@@ -6,7 +6,7 @@ export interface Origin {
   column: number;
 }
 
-/** 다음 batch를 요청할 수 있는지. rows가 오면 ready, 요청하면 fetching이다. */
+/** 다음 batch를 요청할 수 있는지. rows가 오면 ready, 요청하면 fetching, 끝나면 none이다. */
 export type FetchState = "none" | "ready" | "fetching";
 
 /** 실행하지 못한 이유. title은 한 줄, detail은 덧붙일 설명이다. */
@@ -77,24 +77,36 @@ export function reduce(state: RunState, event: QueryEvent): RunState {
         result: { ...result, columns: event.columns.map((c) => c.name) },
       };
     case "rows": {
-      const base = result.rows.length === 0 ? event.firstRow : result.firstRow;
-      const rows = [...result.rows, ...event.rows];
+      const kept = result.rows.length;
+      const base = kept === 0 ? event.firstRow : result.firstRow;
       const drop = Math.max(0, event.retainedFrom - base);
+      // batch마다 행 배열을 한 번만 복사한다.
+      const rows =
+        drop >= kept
+          ? event.rows.slice(drop - kept)
+          : (drop === 0 ? result.rows : result.rows.slice(drop)).concat(
+              event.rows,
+            );
       return {
         status: "running",
         result: {
           ...result,
           firstRow: base + drop,
-          rows: drop === 0 ? rows : rows.slice(drop),
+          rows,
           elapsedMicros: event.elapsedMicros,
           fetch: "ready",
         },
       };
     }
     case "finished":
+      // 끝난 결과는 더 가져오지 않는다.
       return {
         status: "finished",
-        result: { ...result, elapsedMicros: event.elapsedMicros },
+        result: {
+          ...result,
+          elapsedMicros: event.elapsedMicros,
+          fetch: "none",
+        },
         outcome: outcomeOf(event),
       };
   }

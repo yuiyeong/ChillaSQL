@@ -47,7 +47,7 @@ test("columns, rows, finished를 차례로 쌓는다", () => {
         ["2", null],
       ],
       elapsedMicros: 300,
-      fetch: "ready",
+      fetch: "none",
       startedAt: 1000,
     },
     outcome: { outcome: "completed", rows: 2 },
@@ -75,6 +75,64 @@ test("retainedFrom보다 앞의 행을 버린다", () => {
   expect(state.result.rows).toEqual([["c"], ["d"]]);
   expect(state.result.firstRow).toBe(2);
   expect(state.result.elapsedMicros).toBe(20);
+});
+
+test("버릴 행이 보관한 행보다 많으면 새 batch의 앞도 버린다", () => {
+  let state = reduce(running(), {
+    type: "rows",
+    firstRow: 0,
+    rows: [["a"], ["b"]],
+    retainedFrom: 0,
+    elapsedMicros: 10,
+  });
+  state = reduce(state, {
+    type: "rows",
+    firstRow: 2,
+    rows: [["c"], ["d"], ["e"]],
+    retainedFrom: 3,
+    elapsedMicros: 20,
+  });
+
+  expect(state.status === "running" && state.result).toMatchObject({
+    firstRow: 3,
+    rows: [["d"], ["e"]],
+  });
+});
+
+test("앞 행을 버리지 않으면 받은 행을 뒤에 붙인다", () => {
+  const first = reduce(running(), {
+    type: "rows",
+    firstRow: 0,
+    rows: [["a"]],
+    retainedFrom: 0,
+    elapsedMicros: 10,
+  });
+  const second = reduce(first, {
+    type: "rows",
+    firstRow: 1,
+    rows: [["b"]],
+    retainedFrom: 0,
+    elapsedMicros: 20,
+  });
+
+  expect(second.status === "running" && second.result.rows).toEqual([
+    ["a"],
+    ["b"],
+  ]);
+  // 앞 state의 배열은 그대로다.
+  expect(first.status === "running" && first.result.rows).toEqual([["a"]]);
+});
+
+test("끝나면 가져오는 중이었어도 fetch가 none이다", () => {
+  const fetching = requestFetch(reduce(running(), rowsEvent));
+  const state = reduce(fetching, {
+    type: "finished",
+    elapsedMicros: 2,
+    outcome: "cancelled",
+  });
+
+  expect(state.status).toBe("finished");
+  expect(state.status === "finished" && state.result.fetch).toBe("none");
 });
 
 test("running이 아닌 상태는 event를 무시한다", () => {

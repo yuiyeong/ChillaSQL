@@ -2,6 +2,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -28,8 +29,8 @@ import {
   errorLocation,
   formatElapsed,
   formatLive,
+  resultLabel,
 } from "./format";
-import { resultLabel } from "./grid";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
@@ -77,7 +78,6 @@ export const ResultPane = memo(function ResultPane({
   let notice: ReactNode = null;
   let grid: ReactNode = null;
   let body: ReactNode = null;
-  let showCopy = false;
 
   const gridOf = (result: ResultData, endRows: number | null) => (
     <ResultGrid
@@ -118,7 +118,6 @@ export const ResultPane = memo(function ResultPane({
       );
       if (hasRows) {
         grid = gridOf(result, null);
-        showCopy = true;
       } else {
         body = <Centered>{t("result.waiting")}</Centered>;
       }
@@ -151,7 +150,6 @@ export const ResultPane = memo(function ResultPane({
               </Header>
             );
             grid = gridOf(result, outcome.rows);
-            showCopy = true;
           }
           break;
         case "failed": {
@@ -176,11 +174,7 @@ export const ResultPane = memo(function ResultPane({
                 : t("result.stopped")}
             </Notice>
           );
-          if (retained > 0) {
-            // 끝난 결과라 더 가져오지 않는다. 마지막 fetch 값(fetching)이 spinner로 남지 않게 한다.
-            grid = gridOf({ ...result, fetch: "none" }, null);
-            showCopy = true;
-          }
+          if (retained > 0) grid = gridOf(result, null);
           break;
         }
         case "discarded":
@@ -208,10 +202,9 @@ export const ResultPane = memo(function ResultPane({
         case "client_error":
           header = name;
           body = (
-            <div className="flex gap-3 p-4">
-              <ErrorIcon size={16} className="text-fg mt-px shrink-0" />
+            <MessageBlock icon={ErrorIcon}>
               <p className="text-body font-mono">{outcome.message}</p>
-            </div>
+            </MessageBlock>
           );
           break;
       }
@@ -219,15 +212,14 @@ export const ResultPane = memo(function ResultPane({
     }
     case "rejected":
       body = (
-        <div className="flex gap-3 p-4">
-          <WarningIcon size={16} className="text-fg mt-px shrink-0" />
+        <MessageBlock icon={WarningIcon}>
           <div className="flex flex-col gap-1">
             <p className="text-body text-fg">{state.rejection.title}</p>
             {state.rejection.detail !== null && (
               <p className="text-small text-fg-2">{state.rejection.detail}</p>
             )}
           </div>
-        </div>
+        </MessageBlock>
       );
       break;
   }
@@ -243,7 +235,7 @@ export const ResultPane = memo(function ResultPane({
         <div className="border-line-1 flex h-9 shrink-0 items-center gap-3 border-b px-3">
           {header}
           <div className="flex-1" />
-          {showCopy && (
+          {grid !== null && (
             <IconButton
               label={t("result.copySelected")}
               disabled={!hasSelection}
@@ -273,6 +265,8 @@ function rowsMeta(result: ResultData): string {
 
 /** header의 결과 탭. 탭은 하나뿐이다. */
 function Header({ sql, children }: { sql: string; children?: ReactNode }) {
+  // batch, 알림, 선택마다 다시 그려지므로 label은 실행마다 한 번 만든다.
+  const label = useMemo(() => resultLabel(sql), [sql]);
   return (
     <>
       <div
@@ -286,7 +280,7 @@ function Header({ sql, children }: { sql: string; children?: ReactNode }) {
           aria-selected="true"
           className="text-small bg-bg-3 text-fg h-6 cursor-default rounded-[6px] border-0 px-2.5 font-medium"
         >
-          {resultLabel(sql)}
+          {label}
         </button>
       </div>
       {children}
@@ -361,6 +355,22 @@ function Notice({
   );
 }
 
+/** 16px icon과 그 옆의 내용. 오류와 실행하지 못한 이유에 쓴다. */
+function MessageBlock({
+  icon: Icon,
+  children,
+}: {
+  icon: typeof ErrorIcon;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-3 p-4">
+      <Icon size={16} className="text-fg mt-px shrink-0" />
+      {children}
+    </div>
+  );
+}
+
 function ServerError({
   result,
   outcome,
@@ -374,8 +384,7 @@ function ServerError({
   const location =
     error.position === null ? null : errorLocation(result, error.position);
   return (
-    <div className="flex gap-3 p-4">
-      <ErrorIcon size={16} className="text-fg mt-px shrink-0" />
+    <MessageBlock icon={ErrorIcon}>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
         <p className="text-body font-mono break-words">{error.message}</p>
         {error.detail !== null && (
@@ -407,6 +416,6 @@ function ServerError({
           </Button>
         </div>
       </div>
-    </div>
+    </MessageBlock>
   );
 }
