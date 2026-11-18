@@ -7,7 +7,7 @@
 - **진행 중**: 없음. M4 결과 표를 끝내 1단계(M0~M4)가 끝났다(2026-11-18). 계획은 [M4](plans/M4-result-table.md)
 - **작업 위치**: branch `m4-result-table`(main의 `d2be9bf`에서 나눔). main과 origin/main은 `d2be9bf`이고, branch의 commit은 main에 merge하지 않았고 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. 그 전에 branch를 main에 합칠지 정한다. M4 Task 13에서 찾고 고치지 않은 것(아래 작업 로그 2026-11-18의 "M4 완료")을 고칠지도 정한다
+- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. 그 전에 branch를 main에 합칠지 정한다. M4 Task 13에서 찾은 7가지는 고쳤다(아래 작업 로그 2026-11-18의 "M4 Task 13에서 찾은 것 고침")
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -144,7 +144,7 @@
 | 2026-11-18 | M4 | TanStack Table(v9)은 column 정의와 너비 조절에만 씀. 몸통은 virtualizer의 index로 `rows[i]`를 바로 그림. 정렬(M10)이 row model을 쓰게 되면 그때 다시 봄 | row model(`getRowModel`)은 10만 행마다 `Row` object를 만들어 batch마다 수십 ms가 듦 |
 | 2026-11-18 | M4 | 이어서 가져오기: 마지막으로 보이는 행이 보관된 행의 끝에서 100행(`FETCH_AHEAD`) 안이고 `fetch === "ready"`이면 `fetch_more`를 한 번 보냄. 다음 `rows`나 `finished`가 올 때까지 다시 보내지 않음. 맨 아래에 있으면 batch가 올 때마다 바로 다음을 요청함 | 스크롤 event가 batch 하나에 수십 번 와도 `fetch_more`는 한 번이어야 함. 맨 아래에서 끝까지 내려가는 동안 멈추지 않게 함 |
 | 2026-11-18 | M4 | 버린 구간: `firstRow > 0`이면 몸통 맨 위에 높이 40px 줄("Rows 1–{n} were dropped · run again to see them"과 "Run again")을 둠. 앞쪽 행이 버려지면 `scrollTop`을 `(줄이 새로 생겼으면 40) − 버린 행 수 × 26`만큼 바꿈. "Run again"은 그 결과의 SQL을 지금 탭의 접속으로 다시 실행함 | 기획서 4.6의 "다시 실행해야 볼 수 있음" 표시. 스크롤 중에 앞쪽 행이 버려지거나 줄이 처음 생겨도 보던 행이 그 자리에 있어야 함 |
-| 2026-11-18 | M4 | 컬럼 너비: 처음 너비는 header와 첫 batch의 값에 맞추고 64~480px로 자름. handle을 두 번 누르면 header와 보관된 행 중 앞 2,000행에 맞춤(같은 범위). 끌어서는 48px까지 줄임. 행 번호 column은 조절하지 않음. 실행마다 새로 정하고 저장하지 않음 | D2Coding의 advance가 반각 500, 전각 1000(unitsPerEm 1000)이라 글자로 계산하고 canvas로 재지 않음. 100 KB 값이나 10만 행에서도 계산이 멈추지 않게 범위를 자름 |
+| 2026-11-18 | M4 | 컬럼 너비: 처음 너비는 header와 첫 batch의 값에 맞추고 64~480px로 자름. handle을 두 번 누르면 header와 보관된 행 중 앞 2,000행에 맞춤(같은 범위). 끌어서는 48px까지 줄임. 행 번호 column은 조절하지 않음. 실행마다 새로 정하고 저장하지 않음 | D2Coding의 advance가 반각 500, 전각 1000(unitsPerEm 1000)이라 값은 글자로 계산하고 canvas로 재지 않음(header 이름은 아래 header 너비 행). 100 KB 값이나 10만 행에서도 계산이 멈추지 않게 범위를 자름 |
 | 2026-11-18 | M4 | 선택과 복사: 셀을 누르면 그 셀, 행 번호를 누르면 그 행, Shift와 누르면 범위를 고름. 셀 복사는 값 그대로(NULL은 빈 문자열), 행 복사는 header 없는 TSV. tab, 줄바꿈, CR, `"`가 든 값은 `"`로 감싸고 안의 `"`를 `""`로 씀. 복사하면 결과 panel 아래 가운데에 2초 동안 알림. 버린 구간의 행은 고를 수 없음 | Numbers, Google Sheets가 읽는 형식. 붙여 넣은 spreadsheet에서 칸이 밀리거나 NULL이 `NULL` 글자가 되지 않게 함 |
 | 2026-11-18 | M4 | 표시: NULL은 fg-3 기울임의 `NULL`, 빈 문자열은 fg-3의 `''`. 300자를 넘는 값은 앞부분과 `…`만 그림(M3와 같음). 한 줄로 그리고 넘치면 `…`로 자름. column header의 type 표시와 숫자 오른쪽 정렬은 M8 | type 표시와 정렬은 column type이 필요한데 simple query protocol은 type OID를 주지 않음(M2 결정, M8에서 정함) |
 | 2026-11-18 | M4 | 결과 header의 이름은 SQL의 첫 단어(대문자)와 `FROM`, `INTO`, `UPDATE`, `TABLE`, `JOIN` 뒤의 첫 이름. 없으면 첫 단어만(`SELECT users`, `UPDATE users`, `SELECT`). 32자에서 자름 | 캔버스의 결과 header처럼 무엇을 실행한 결과인지 보여 줌. 실행한 SQL text만으로 정함 |
@@ -163,8 +163,8 @@
 | 2026-11-18 | M4 | 결과 표의 `Cmd+C`는 DOM `copy` event로 처리함(Task 7). 결과 표에 focus가 있을 때만 `clipboardData.setData("text/plain", …)`와 `preventDefault()`. menu의 Copy와 `Cmd+C`가 한 경로 | 글자 선택이 없는 `tabIndex=0` div에서 `Cmd+C`를 누르면 `keydown`(`code` `KeyC`, `metaKey`)과 `copy` event가 둘 다 옴. `copy`의 target은 focus된 그 div이고 setData 값이 pasteboard에 들어감(`pbpaste` `PROBE_COPY_1`). Edit menu의 Copy를 눌러도 같은 `copy` event가 옴. CodeMirror에서 고른 text의 `Cmd+C`는 M3처럼 그 text가 복사됨 |
 | 2026-11-18 | M4 | clipboard는 `tauri-plugin-clipboard-manager` 2(2.5.0)와 permission `clipboard-manager:allow-write-text`. 화면은 `copyText`(`src/shared/api/clipboard.ts`)로 씀 | 결과 header의 복사 버튼과 "Copy message"처럼 `copy` event 밖에서 복사할 때 씀. `copyText("a\tb")` 뒤 `pbpaste`가 `a<TAB>b`이고 CSP violation 없음 |
 | 2026-11-18 | M4 | D2Coding은 `public/fonts/`에 두고 `@font-face`의 `url("/fonts/…")`로 읽음. CSP는 바꾸지 않음 | 빌드된 앱에서 `document.fonts.check("13px D2Coding")`이 `true`, FontFace status `loaded`, `a가` 폭 19.5px(반각 6.5 + 전각 13. monospace는 19.05). `default-src 'self'`에 막히지 않음 |
-| 2026-11-18 | M4 | 행 번호 column의 폭은 `en-US`로 묶은 행 번호(쉼표 포함)의 글자 수로 셈: `max(52, 글자 수 × 6.5 + 20)` | 화면에 그리는 것이 `1,000,000`처럼 쉼표가 든 글자라 자릿수만 세면 좁아짐 |
-| 2026-11-18 | M4 | 새 실행은 `ResultGrid`를 다시 mount함(key `${startedAt}:${sql}`). 선택, 스크롤 위치, 컬럼 너비가 처음으로 돌아감. 같은 실행이 `running`에서 `finished`로 바뀔 때는 mount를 유지함 | 앞 결과의 선택, 스크롤, 너비, table과 virtualizer가 남지 않게 함(Review Focus 5). 같은 실행 안에서는 batch마다 `result` object가 바뀌어도 상태를 이어 감 |
+| 2026-11-18 | M4 | 행 번호 column의 폭은 `en-US`로 묶은 행 번호(쉼표 포함)의 글자 수로 셈: `max(52, 글자 수 × 6.5 + 20 + 1)` | 화면에 그리는 것이 `1,000,000`처럼 쉼표가 든 글자라 자릿수만 세면 좁아짐. `+ 1`은 칸의 `border-r`(아래 border 행) |
+| 2026-11-18 | M4 | 새 실행은 `ResultGrid`를 다시 mount함(key `${startedAt}:${sql}`). 선택, 스크롤 위치, 컬럼 너비가 처음으로 돌아감. 같은 실행이 `running`에서 `finished`로 바뀔 때는 mount를 유지함 | 앞 결과의 선택은 새 결과의 다른 행과 칸을 가리키고, 스크롤 위치와 컬럼 너비는 앞 결과의 행 수와 column에 맞춘 값이라 새 결과에 남으면 안 됨. table과 virtualizer도 앞 결과의 상태를 들고 있어 다시 만듦. 같은 실행 안에서는 batch마다 `result` object가 바뀌어도 상태를 이어 감 |
 | 2026-11-18 | M4 | 앞쪽 행이 버려진 commit에서는 이어서 가져오기 검사를 건너뜀. 위치를 당긴 뒤의 scroll event가 다시 셈 | 그 commit의 보이는 범위는 당기기 전 scroll 위치로 센 것이라, 검사하면 맨 아래로 보고 batch마다 다음을 요청해 결과 전체를 가져옴 |
 | 2026-11-18 | M4 | `Button`에 `size="small"`(높이 24px, 13px 글자)을 더함. 표 안의 "Run again"에 씀 | 캔버스 States의 "Run again"이 높이 24px, 13px 글자임. 기본값(28px)은 그대로 |
 | 2026-11-18 | M4 | 에디터와 결과 panel의 경계는 keyboard로 움직이지 않음(mouse만) | 기획서와 계획이 요구하지 않고 mouse로 쓰는 desktop 앱임. 필요하면 화살표 key로 나중에 더할 수 있음 |
@@ -172,6 +172,10 @@
 | 2026-11-18 | M4 | toolbar의 진행 막대는 toolbar 아래에 absolute로 겹쳐 그림. 캔버스처럼 흐름 안에 두지 않음 | 막대가 나타나고 사라질 때 에디터가 밀리지 않게 함. 대가로 막대가 에디터의 맨 위 2px를 덮음 |
 | 2026-11-18 | M4 | overlay 배경은 `--color-scrim`(검정 50%, 캔버스 값), popover와 dialog의 그림자도 token(`--shadow-popover`, `--shadow-dialog`)으로 둠. Tailwind 기본 palette는 `--color-*: initial`로 끄고 source 규칙 test(기본 palette class, `#hex`, `rgb(` literal 금지)로 지킴 | 색은 Tokens의 token으로만 쓴다는 규칙(Global Constraints)을 사람이 아니라 test가 확인하게 함 |
 | 2026-11-18 | M4 | 접속 form의 테스트와 저장 결과는 icon과 문장 한 줄로 그림. 캔버스의 테두리 있는 안내 상자는 쓰지 않음 | 계획(Task 12)이 결과 줄을 icon과 문장으로 정함. 상태는 icon과 문장으로 구분한다는 Tokens의 규칙과 같음. icon도 접속 색을 쓰지 않음 |
+| 2026-11-18 | M4 | 자동 너비와 행 번호 column에 칸의 `border-r` 1px을 더함(`CELL_BORDER`): `내용 + 20 + 1` | 칸이 `box-sizing: border-box`라 border가 너비 안에 들어감. 빼면 가장 긴 값과 행 번호가 1px 모자라 `…`로 잘렸음(M4 Task 13) |
+| 2026-11-18 | M4 | column header 이름의 너비는 `OffscreenCanvas`의 `measureText`로 잼. 글꼴은 index.css token(`--font-weight-semibold`, `--text-small`, `--font-sans`)으로 만듦. canvas나 token이 없으면(jsdom) 반각 한 칸 9px로 어림함. 값은 그대로 D2Coding 반각으로 셈 | header는 system font 13px semibold라 D2Coding 반각(6.5px)으로 세면 `amount`가 `amo…`로 잘렸음. system font는 글자마다 폭이 달라 글자 수로 셀 수 없음(13px semibold에서 `amount` 7.96px, `name` 8.65px, `m` 11.7px/글자) |
+| 2026-11-18 | M4 | 결과 표에 focus가 있을 때 `Home`, `End`, `Cmd+Up`, `Cmd+Down`은 표가 처리해 `scrollTop`을 맨 위나 맨 아래로 바로 옮김(애니메이션 없음). `PageUp`, `PageDown`, wheel은 그대로 둠 | WebKit은 `End`를 약 200ms 애니메이션으로 스크롤하는데 frame마다 수천 행을 지나가 화면이 행보다 먼저 움직여 빈 몸통이 약 130ms 보였음(M4 Task 13). 바로 옮기면 scroll event가 한 번이고 그 frame에 행이 그려짐. PageDown은 한 frame에 overscan(10행)보다 덜 움직임 |
+| 2026-11-18 | M4 | 복사 알림은 결과 panel(`relative`)의 아래 가운데, 바닥에서 12px에 띄움(`absolute`). 캔버스(TabsConn 6)의 위치 | 창 기준(`fixed`)이면 결과 panel이 아니라 창 가운데에 뜸. panel 안이라 아래 24px status bar를 가리지 않음 |
 
 ## 작업 로그
 
@@ -179,6 +183,17 @@
 
 ### 2026-11-18
 
+- M4 Task 13에서 찾은 것 고침. 7가지 중 6가지를 고치고(`3d742ed`..`8983e15`), 1가지(7)는 결함이 아니었다. 고친 것마다 실패하는 test를 먼저 쓰고(jsdom으로 나타낼 수 있는 것), `scripts/build-app.sh --debug`의 `.app`에서 확인함
+  1. 자동 너비와 행 번호 column: `fitWidth`와 새 `rowNumberWidth`가 칸의 `border-r` 1px(`CELL_BORDER`)을 더함. 앱에서 `2026-07-30 02:00:00+00`, `user_302520`, 행 번호 `1,000,000`이 잘리지 않음
+  2. 결과 header의 행 수: `receivedRows(result)`(`firstRow + rows.length`)로 셈. 실행 중 `310,500+ rows`, 끝나면 `1,000,000 rows`. cancel한 결과의 header도 받은 행 수이고, 안내 문장("The {n} rows received stay visible")은 표에 남은 행 수
+  3. 경계 끌기: `pointerdown`에서 `preventDefault`함. pointer capture는 그대로이고, 앱에서 대각선으로 끌어도 글자가 선택되지 않음
+  4. header 너비: header 이름을 canvas `measureText`로 잼(결정 기록). 앱에서 `amount`, `created_at`, `is_active`, `payload`가 잘리지 않음
+  5. 복사 알림: 결과 panel(`section`, `relative`)의 아래 가운데에 `absolute`로 띄움. 앱에서 panel 가운데, status bar 위에 뜸
+  6. 빈 몸통: 진단용 probe가 `End` 뒤의 scroll event를 기록하니 약 200ms 동안 17ms마다 한 번씩 수천 행씩 움직임(4,619 → 22,264 → 51,913 → 83,611px …). WebKit의 `End` 스크롤 애니메이션이다. scroll 위치는 scrolling thread가 먼저 그리고 행은 다음 frame에 오므로, frame마다 overscan(10행)보다 훨씬 멀리 가는 동안 빈 몸통이 보였다. 표가 `Home`, `End`, `Cmd+Up`, `Cmd+Down`을 받아 `scrollTop`을 바로 옮기게 함(결정 기록). 고친 뒤 scroll event는 한 번이고, 60fps `screencapture -v` recording에서 1행에서 7,490행으로 한 frame에 넘어가며 빈 frame이 없음. scrollbar thumb 끌기는 CGEvent로 보낸 끌기가 thumb를 잡지 못해 확인하지 못함
+  7. 접속 menu와 에디터: 진단용 probe로 menu가 열린 동안에도 `.cm-line` 2개, 글자, `visibility`, 위치가 그대로이고, menu를 `visibility: hidden`으로 하거나 옆으로 옮기면 글자가 보임. menu가 문서의 두 줄을 덮은 것이었다. 16줄 문서에서 menu 아래의 줄만 가려짐을 확인함. 고칠 것 없음
+  - 100만 행 스크롤 probe(Task 13 Step 1과 같은 방법, 확인 뒤 지움)를 두 번 돌림: `{"frames":3999,"p95":17,"max":44,"rows":1000000,"firstRow":900000,"seconds":66.6}` median 17ms, p99 18ms, 20ms를 넘은 frame 9개, 33ms를 넘은 frame 1개. 다시 `{"frames":4001,"p95":17,"max":26,…,"seconds":66.7}`, 20ms를 넘은 frame 5개, 33ms를 넘은 frame 0개. 기준(p95 ≤ 20ms, max ≤ 100ms) 안. 이번에 바꾼 것은 frame마다 하는 일을 늘리지 않음(header 너비는 mount와 두 번 누를 때만 잼)
+  - `pnpm check` 통과(vitest 371)
+  - 확인용 프로젝트(scratchpad의 `m4fix`)와 그것이 만든 키체인 항목(`…/m4fix::local`)을 지움
 - M4 완료. Task 2~12를 구현하고(`d020ebf`..`d7c964b`) Task 13에서 완료 기준을 확인함. 앱 동작은 Bash(CGEvent, System Events, `screencapture`와 녹화, Vision OCR)로 `scripts/build-app.sh --debug`의 `.app`에서 확인함
   - Step 1(100만 행 스크롤): 임시 probe(`VITE_CHILLA_SCROLL_PROBE`일 때만 켜짐, 확인 뒤 지움)가 결과가 오는 동안 매 frame 맨 아래로 스크롤하며 `SELECT * FROM big_table`을 끝까지 받음. `SCROLL_PROBE {"frames":4004,"p95":18,"max":29,"rows":1000000,"firstRow":900000,"seconds":66.7}`, median 17ms, p99 18ms, 20ms를 넘은 frame 7개, 33ms를 넘은 frame 0개. 맨 위 줄은 `Rows 1–900,000 were dropped · run again to see them`. 기준(p95 ≤ 20ms, max ≤ 100ms) 안이라 성능은 고치지 않음. 60Hz display, debug build
   - Step 2: 15항목 중 13항목은 기대대로, 2항목(4행, 6행)은 일부만 확인함
@@ -186,7 +201,7 @@
     - 에디터 글자 폭 7.5px(D2Coding 15px), 표 6.5px(13px). `Running 1.1 s`(9행에서 봄), `500+ rows · 6 ms`
     - wheel 스크롤 녹화(60fps)에서 빈 frame과 위치 튐이 없음. 10만 행을 넘긴 뒤 batch가 앞 500행을 버리는 동안(`Rows 1–30,500` → `31,000`) 보던 행이 그 자리에 있음. 합성한 trackpad momentum 스크롤 중에 앞 행이 버려져도 momentum이 끝까지 감(버림 없이 450행, 버리며 449행 이동). `Run again`이 다시 실행함
     - 4행: `Fetching next 500 rows`는 보지 못함. 로컬 DB에서는 batch가 녹화의 한 frame(16ms)보다 먼저 와서 끝 줄이 그려지지 않음. 행은 멈추지 않고 이어짐
-    - 6행: 끄는 동안 너비가 바뀌고 두 번 누르면 맞춰지지만 맞춘 너비가 1px 좁아 가장 긴 값이 `…`로 잘림(아래 "찾았고 고치지 않은 것" 1)
+    - 6행: 끄는 동안 너비가 바뀌고 두 번 누르면 맞춰지지만 맞춘 너비가 1px 좁아 가장 긴 값이 `…`로 잘림(아래 "찾은 것" 1)
     - 셀 복사는 `569553`, 행 두 개는 TSV 두 줄(각 8칸, JSON 안의 `"`는 `""`), 알림 `Copied cell`, `Copied 2 rows (tab-separated)`. TextEdit 대신 `pbpaste`로 확인함. 표에 행이 선택된 채 에디터에서 고른 `big_table`을 `Cmd+C`하면 `big_table`이 복사되고 버튼은 `Run selection`
     - Cancel 앞뒤로 버튼 자리 폭이 같고 `Cancelled` 화면. `syntax error at or near "SELEC"`, `SQLSTATE 42601`, `Ln 1, Col 1`, `Copy message` 뒤 `pbpaste`가 그 message. `UPDATE big_table SET name = name WHERE id = 1;`은 `1 row updated`
     - 결과 panel과 에디터가 각각 120px에서 멈춤. tree의 `billing`을 접고 `users.sql`을 열면 강조되고 고치면 `Unsaved` 점
@@ -195,14 +210,14 @@
     - 리뷰에서 앱으로만 볼 수 있다고 한 것: 앞 행을 버릴 때 빈 frame 없음, momentum 유지, 버린 구간 줄과 끝 줄은 가로 스크롤해도 제자리(`sticky`), 컬럼 경계 끌기 동작, 탭 줄과 sidebar 위 줄로 창 끌기 동작, 탭 15개에서 탭 줄 가로 스크롤 동작(새 탭이 보이게 스크롤되고 `+`는 오른쪽에 남음), 알림은 바닥에서 40px라 24px status bar를 가리지 않음
   - Step 3: release `.app`(`scripts/build-app.sh`, 58초)이 debug `.app`에서 저장한 비밀번호로 확인 창 없이(SecurityAgent process 없음) 실행함
   - `pnpm check` 통과(vitest 356, cargo test 220 passed / 1 ignored)
-  - 찾았고 고치지 않은 것. Task 13은 Step 1의 성능 문제만 고칠 수 있어 그대로 둠. 고칠지는 사용자가 정한다
-    1. 자동 너비와 행 번호 column이 1px 좁다. 칸의 `border-r` 1px이 너비 안에 들어가는데 `CELL_PADDING`(20)이 이를 세지 않는다. 가장 긴 값(`2026-09-24 04:07:00+00`, `user_569553`)과 결과의 행 수와 자릿수가 같은 행 번호(`1,8…`, `1,000,0…`)가 `…`로 잘린다
-    2. 결과 header의 `{n}+ rows`가 보관한 행 수(`rows.length`)라 10만 행 상한을 넘으면 128,000번째 행을 볼 때도 `100,000+ rows`에 머문다. 끝나면 `1,000,000 rows`로 맞게 나온다
-    3. 에디터와 결과 panel의 경계를 끌면 화면의 글자가 선택된다(`pointerdown`에서 `preventDefault`하지 않음)
-    4. column header 이름은 system font semibold인데 너비는 D2Coding 반각으로 센다. `amount`가 64px에서 `amo…`로 잘린다
-    5. 복사 알림은 창 가운데 아래에 뜬다(`fixed`). 계획은 결과 panel 아래 가운데
-    6. `End` key처럼 한 번에 멀리 가면 행이 그려지기 전의 빈 몸통이 약 130ms(30fps 녹화의 4 frame) 보인다. wheel 스크롤에서는 없다
-    7. toolbar의 접속 menu가 열려 있는 동안 에디터의 글자와 줄 번호가 그려지지 않는다(status bar의 `Ln 1, Col 1`은 그대로). menu를 닫으면 다시 보이고, 다시 열면 또 사라진다. probe build와 일반 debug build에서 재현함. 원인은 보지 않았다
+  - 찾은 것. Task 13은 Step 1의 성능 문제만 고칠 수 있어 그대로 두었고, 뒤에 모두 다룸(위의 "M4 Task 13에서 찾은 것 고침")
+    1. 자동 너비와 행 번호 column이 1px 좁다. 칸의 `border-r` 1px이 너비 안에 들어가는데 `CELL_PADDING`(20)이 이를 세지 않는다. 가장 긴 값(`2026-09-24 04:07:00+00`, `user_569553`)과 결과의 행 수와 자릿수가 같은 행 번호(`1,8…`, `1,000,0…`)가 `…`로 잘린다 → 고침(`3d742ed`)
+    2. 결과 header의 `{n}+ rows`가 보관한 행 수(`rows.length`)라 10만 행 상한을 넘으면 128,000번째 행을 볼 때도 `100,000+ rows`에 머문다. 끝나면 `1,000,000 rows`로 맞게 나온다 → 고침(`b92d210`)
+    3. 에디터와 결과 panel의 경계를 끌면 화면의 글자가 선택된다(`pointerdown`에서 `preventDefault`하지 않음) → 고침(`560e6e0`)
+    4. column header 이름은 system font semibold인데 너비는 D2Coding 반각으로 센다. `amount`가 64px에서 `amo…`로 잘린다 → 고침(`7447fc7`)
+    5. 복사 알림은 창 가운데 아래에 뜬다(`fixed`). 계획은 결과 panel 아래 가운데 → 고침(`299af53`)
+    6. `End` key처럼 한 번에 멀리 가면 행이 그려지기 전의 빈 몸통이 약 130ms(30fps 녹화의 4 frame) 보인다. wheel 스크롤에서는 없다 → 고침(`8983e15`). 원인은 WebKit의 `End` 스크롤 애니메이션
+    7. toolbar의 접속 menu가 열려 있는 동안 에디터의 글자와 줄 번호가 그려지지 않는다(status bar의 `Ln 1, Col 1`은 그대로). menu를 닫으면 다시 보이고, 다시 열면 또 사라진다. probe build와 일반 debug build에서 재현함. 원인은 보지 않았다 → 결함이 아니었다. 문서가 두 줄뿐이라 열린 menu(불투명, 높이 약 73px)가 그 두 줄을 덮었을 뿐이다. 16줄 문서에서는 menu 아래의 1~3행만 가려지고 나머지는 그대로 보인다
   - 이미 있던 Rust test `first_500_rows_of_a_million_arrive_within_100ms`(`crates/chilla-core/tests/queries.rs`)가 M4 동안 두 번의 `pnpm check`에서 부하 중에 한 번씩 실패하고 다시 돌리면 통과함(flaky). 고치지 않음
   - 확인용 프로젝트(scratchpad의 `m4check`)와 그것이 만든 키체인 항목(`…/m4check::local`)을 지움. 다른 키체인 항목은 건드리지 않음
 - M4 Task 1: release `.app`을 dev 빌드와 같은 identity로 서명하는 `scripts/build-app.sh`를 만들고 identity 고르기를 `scripts/signing-identity.sh`로 모음(release `.app`이 dev가 만든 키체인 항목을 확인 창 없이 16.84ms에 읽음). overlay title bar를 켜고 `trafficLightPosition`을 `{13, 24}`로 맞춤(신호등 원이 지름 14pt라 계획 값 `{14, 22}`에서 1pt, 2pt 어긋났음). clipboard plugin을 더하고 `copyText`를 씀. 결과 표의 `Cmd+C`는 `copy` event로 처리하기로 함. D2Coding은 CSP를 바꾸지 않고 읽힘. 계획에서 정한 것 18개와 확인 결과 4개를 결정 기록에 옮기고 기획서 1장·4.6과 마일스톤 M4, M5, M6, M8을 고침. 임시 probe(`KEYCHAIN_PROBE`, probe 화면, 임시 글꼴)는 확인 뒤 지우고, probe가 만든 키체인 항목(`/private/tmp/chilla-m4-probe::probe`)도 지움
