@@ -92,6 +92,8 @@ export function Workspace() {
   }
 
   function startDrag(e: PointerEvent<HTMLDivElement>) {
+    // 끄는 동안 화면의 글자가 선택되지 않게 한다. pointer capture에는 영향이 없다.
+    e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     // 창이 줄어 flex-shrink로 작아진 panel이 있으면 저장한 높이가 아니라 그려진 높이에서 시작한다.
     const { rendered, max } = measure();

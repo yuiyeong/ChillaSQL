@@ -483,6 +483,19 @@ describe("결과 panel 경계", () => {
     expect(boundary()).toHaveAttribute("aria-valuenow", "872");
   });
 
+  test("경계를 누르면 기본 동작(글자 선택 시작)을 막는다", () => {
+    openProjectWith();
+    renderWorkspace();
+
+    const notPrevented = fireEvent.pointerDown(boundary(), {
+      pointerId: 1,
+      clientY: 500,
+    });
+
+    expect(notPrevented).toBe(false);
+    expect(Element.prototype.setPointerCapture).toHaveBeenCalledWith(1);
+  });
+
   test("끝낸 뒤의 pointermove는 높이를 바꾸지 않는다", () => {
     openProjectWith();
     renderWorkspace();
