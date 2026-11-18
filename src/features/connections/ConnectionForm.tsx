@@ -6,6 +6,7 @@ import {
 } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
 import type { Connection, Project, SslMode } from "../../shared/api/types";
+import { noTextCorrection } from "../../shared/ui/noTextCorrection";
 import {
   initialValues,
   targetChanged,
@@ -122,6 +123,7 @@ export function ConnectionForm({
       <Field label="name">
         <input
           className={inputClass}
+          {...noTextCorrection}
           value={values.name}
           disabled={original !== null}
           onChange={(e) => edit({ name: e.target.value })}
@@ -130,6 +132,7 @@ export function ConnectionForm({
       <Field label="host">
         <input
           className={inputClass}
+          {...noTextCorrection}
           value={values.host}
           onChange={(e) => edit({ host: e.target.value })}
         />
@@ -137,6 +140,7 @@ export function ConnectionForm({
       <Field label="port">
         <input
           className={inputClass}
+          {...noTextCorrection}
           inputMode="numeric"
           value={values.port}
           onChange={(e) => edit({ port: e.target.value })}
@@ -145,6 +149,7 @@ export function ConnectionForm({
       <Field label="database">
         <input
           className={inputClass}
+          {...noTextCorrection}
           value={values.database}
           onChange={(e) => edit({ database: e.target.value })}
         />
@@ -152,6 +157,7 @@ export function ConnectionForm({
       <Field label="user">
         <input
           className={inputClass}
+          {...noTextCorrection}
           value={values.user}
           onChange={(e) => edit({ user: e.target.value })}
         />
@@ -159,6 +165,7 @@ export function ConnectionForm({
       <Field label="password">
         <input
           className={inputClass}
+          {...noTextCorrection}
           type="password"
           autoComplete="off"
           value={password}
@@ -182,6 +189,7 @@ export function ConnectionForm({
       <Field label="sslrootcert">
         <input
           className={inputClass}
+          {...noTextCorrection}
           value={values.sslrootcert}
           disabled={values.sslmode !== "verify-full"}
           onChange={(e) => edit({ sslrootcert: e.target.value })}

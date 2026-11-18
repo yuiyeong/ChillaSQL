@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
+import { expectNoTextCorrection } from "../../test/textCorrection";
 import { TabBar } from "./TabBar";
 import { useTabs } from "./tabsStore";
 
@@ -73,6 +74,14 @@ test("naming 입력에서 Escape를 누르면 naming이 null이다", () => {
 
   expect(useTabs.getState().naming).toBeNull();
   expect(screen.queryByPlaceholderText("queries/이름.sql")).toBeNull();
+});
+
+test("경로 입력은 자동 수정, 자동 대문자, 맞춤법 검사를 끈다", () => {
+  const id = useTabs.getState().newTab();
+  renderBar();
+  act(() => useTabs.getState().requestName(id));
+
+  expectNoTextCorrection(screen.getByPlaceholderText("queries/이름.sql"));
 });
 
 test("naming이 활성이 아닌 탭이면 입력을 그리지 않는다", () => {

@@ -3,6 +3,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
 import { deferred } from "../../test/deferred";
+import { expectNoTextCorrection } from "../../test/textCorrection";
 
 vi.mock("../../shared/api/commands");
 
@@ -317,4 +318,20 @@ test("이미 있는 이름이면 저장하지 않는다", async () => {
   expect(screen.getByRole("alert")).toHaveTextContent(
     "'local'은 이미 있는 접속 이름입니다",
   );
+});
+
+test("입력란은 자동 수정, 자동 대문자, 맞춤법 검사를 끈다", () => {
+  renderForm();
+
+  for (const label of [
+    "name",
+    "host",
+    "port",
+    "database",
+    "user",
+    "password",
+    "sslrootcert",
+  ]) {
+    expectNoTextCorrection(screen.getByLabelText(label));
+  }
 });

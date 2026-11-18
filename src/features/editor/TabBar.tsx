@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
+import { noTextCorrection } from "../../shared/ui/noTextCorrection";
 import { useTabs } from "./tabsStore";
 
 interface TabBarProps {
@@ -101,6 +102,7 @@ function NameForm({
     >
       <input
         autoFocus
+        {...noTextCorrection}
         aria-label="파일 경로"
         placeholder="queries/이름.sql"
         className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100 outline-none focus:border-zinc-500"
