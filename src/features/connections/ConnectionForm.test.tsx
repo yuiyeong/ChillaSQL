@@ -231,6 +231,22 @@ test("취소는 onClose를 부른다", async () => {
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 
+test("결과 줄과 경고 줄의 icon은 접속 색(conn-*)을 쓰지 않는다", async () => {
+  vi.mocked(hasPassword).mockResolvedValue(true);
+  renderForm(original);
+  await screen.findByPlaceholderText("Keep saved password");
+  change(screen.getByLabelText("host"), "db.example");
+  const warningIcon = screen.getByText(warning).querySelector("svg");
+  expect(warningIcon).not.toBeNull();
+  expect(warningIcon?.getAttribute("class") ?? "").not.toMatch(/conn-/);
+
+  change(screen.getByLabelText("host"), "localhost");
+  await click(testButton());
+  const checkIcon = (await screen.findByText("Connected")).querySelector("svg");
+  expect(checkIcon).not.toBeNull();
+  expect(checkIcon?.getAttribute("class") ?? "").not.toMatch(/conn-/);
+});
+
 test("연결 대상을 바꾸고 비밀번호를 비우면 지워진다고 알린다", async () => {
   vi.mocked(hasPassword).mockResolvedValue(true);
   renderForm(original);

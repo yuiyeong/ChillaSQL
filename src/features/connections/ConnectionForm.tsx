@@ -206,7 +206,7 @@ export function ConnectionForm({
 
       {passwordWillBeCleared && (
         <p className="text-small text-fg-2 flex items-start gap-2">
-          <WarningIcon className="text-conn-yellow mt-0.5 shrink-0" />
+          <WarningIcon className="mt-0.5 shrink-0" />
           {t("connectionForm.passwordWillClear")}
         </p>
       )}
@@ -218,7 +218,7 @@ export function ConnectionForm({
           {notice.kind === "error" ? (
             <ErrorIcon className="text-fg-2 mt-0.5 shrink-0" size={14} />
           ) : (
-            <CheckIcon className="text-conn-green mt-0.5 shrink-0" />
+            <CheckIcon className="mt-0.5 shrink-0" size={14} />
           )}
           {notice.text}
         </p>
