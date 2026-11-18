@@ -253,6 +253,34 @@ test("선택이 없으면 copy를 건드리지 않는다", () => {
   expect(p.copyTargetRef.current?.()).toBeNull();
 });
 
+test("고른 행이 모두 버려지면 복사할 것이 없다고 알린다", () => {
+  const { props: p, rerender } = setup({
+    result: result({ rows: rowsOf(1000) }),
+  });
+  fireEvent.click(rowHeader("2"));
+  fireEvent.click(rowHeader("3"), { shiftKey: true });
+  expect(p.onSelectionChange).toHaveBeenLastCalledWith(true);
+
+  // 범위의 일부(3번째 행)가 남아 있으면 그대로다.
+  rerender({ result: result({ firstRow: 2, rows: rowsOf(1000, 2) }) });
+  expect(p.onSelectionChange).toHaveBeenLastCalledWith(true);
+
+  rerender({ result: result({ firstRow: 500, rows: rowsOf(1000, 500) }) });
+  expect(p.onSelectionChange).toHaveBeenLastCalledWith(false);
+  expect(p.copyTargetRef.current?.()).toBeNull();
+});
+
+test("고른 셀의 행이 버려지면 복사할 것이 없다고 알린다", () => {
+  const { props: p, rerender } = setup({
+    result: result({ rows: rowsOf(1000) }),
+  });
+  fireEvent.click(cell("user1@example.com"));
+  expect(p.onSelectionChange).toHaveBeenLastCalledWith(true);
+
+  rerender({ result: result({ firstRow: 500, rows: rowsOf(1000, 500) }) });
+  expect(p.onSelectionChange).toHaveBeenLastCalledWith(false);
+});
+
 test("다시 실행하면 선택과 스크롤을 처음으로 돌린다", () => {
   const {
     props: p,

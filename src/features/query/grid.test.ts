@@ -11,6 +11,7 @@ import {
   rowNumberWidth,
   rowSpan,
   selectedRows,
+  selectionRetained,
   shouldFetch,
   tsv,
 } from "./grid";
@@ -192,4 +193,24 @@ test("cellDisplay는 긴 값을 surrogate pair를 가르지 않고 자른다", (
   expect(cellDisplay(long).text).toBe(`${"a".repeat(299)}…`);
   expect(cellDisplay("a".repeat(301)).text).toBe(`${"a".repeat(300)}…`);
   expect(cellDisplay("a".repeat(300)).text).toBe("a".repeat(300));
+});
+
+test("selectionRetained는 선택이 보관한 행에 걸치는지 본다", () => {
+  // 보관한 행은 100~199번이다.
+  expect(selectionRetained(null, 100, 100)).toBe(false);
+  expect(
+    selectionRetained({ kind: "cell", row: 99, column: 0 }, 100, 100),
+  ).toBe(false);
+  expect(
+    selectionRetained({ kind: "cell", row: 100, column: 0 }, 100, 100),
+  ).toBe(true);
+  expect(
+    selectionRetained({ kind: "cell", row: 200, column: 0 }, 100, 100),
+  ).toBe(false);
+  expect(
+    selectionRetained({ kind: "rows", anchor: 120, focus: 10 }, 100, 100),
+  ).toBe(true);
+  expect(
+    selectionRetained({ kind: "rows", anchor: 99, focus: 10 }, 100, 100),
+  ).toBe(false);
 });

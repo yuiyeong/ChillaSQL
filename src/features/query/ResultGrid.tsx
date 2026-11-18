@@ -40,6 +40,7 @@ import {
   rowNumberWidth,
   rowSpan,
   selectedRows,
+  selectionRetained,
   shouldFetch,
   tsv,
   type Selection,
@@ -59,7 +60,7 @@ interface ResultGridProps {
   onCopied(message: string): void;
   /** ResultPane header의 복사 버튼이 부른다 */
   copyTargetRef: RefObject<(() => CopyTarget) | null>;
-  /** 선택이 생기거나 없어질 때. header 복사 버튼의 disabled에 쓴다 */
+  /** 복사할 선택이 생기거나 없어질 때(고른 행이 모두 버려진 때도). header 복사 버튼의 disabled에 쓴다 */
   onSelectionChange(hasSelection: boolean): void;
 }
 
@@ -177,7 +178,8 @@ function Grid({
     }
   }, [lastVisible, rows.length, fetch, firstRow]);
 
-  const hasSelection = selection !== null;
+  // 고른 행이 모두 버려졌으면 복사할 것이 없다. header 복사 버튼은 이것으로 disabled가 된다.
+  const hasSelection = selectionRetained(selection, firstRow, rows.length);
   useEffect(() => {
     onSelectionChange(hasSelection);
   }, [hasSelection, onSelectionChange]);

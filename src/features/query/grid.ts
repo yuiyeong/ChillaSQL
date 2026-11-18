@@ -201,3 +201,18 @@ export function selectedRows(
   const to = Math.min(span[1] - firstRow, rows.length - 1);
   return rows.slice(from, Math.max(to + 1, from));
 }
+
+/** 선택 중 보관한 행(`firstRow`부터 `retained`개)에 남은 것이 있는지. 행을 복사하지 않고 범위만 본다. */
+export function selectionRetained(
+  selection: Selection,
+  firstRow: number,
+  retained: number,
+): boolean {
+  if (selection === null) return false;
+  const last = firstRow + retained - 1;
+  if (selection.kind === "cell") {
+    return selection.row >= firstRow && selection.row <= last;
+  }
+  const [top, bottom] = rowSpan(selection)!;
+  return bottom >= firstRow && top <= last;
+}
