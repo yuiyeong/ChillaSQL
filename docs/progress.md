@@ -5,9 +5,9 @@
 ## 지금
 
 - **진행 중**: 없음. M4 결과 표를 끝내 1단계(M0~M4)가 끝났다(2026-11-18). 계획은 [M4](plans/M4-result-table.md)
-- **작업 위치**: branch `m4-result-table`(main의 `d2be9bf`에서 나눔). main과 origin/main은 `d2be9bf`이고, branch의 commit은 main에 merge하지 않았고 push하지 않았다
+- **작업 위치**: main. 2026-11-18에 branch `m4-result-table`을 main에 fast-forward로 합치고 branch를 지웠다. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. 그 전에 branch를 main에 합칠지 정한다. M4 Task 13에서 찾은 7가지는 고쳤다(아래 작업 로그 2026-11-18의 "M4 Task 13에서 찾은 것 고침"). 그 뒤 simplify(품질 정리)와 code-review(high)의 지적 고침도 했다(작업 로그 "M4 simplify", "M4 code-review")
+- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. M4 Task 13에서 찾은 7가지는 고쳤다(아래 작업 로그 2026-11-18의 "M4 Task 13에서 찾은 것 고침"). 그 뒤 simplify(품질 정리)와 code-review(high)의 지적 고침도 했다(작업 로그 "M4 simplify", "M4 code-review")
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
