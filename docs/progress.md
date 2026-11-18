@@ -1,22 +1,23 @@
 # ChillaSQL 진행상황
 
-마지막 갱신: 2026-11-12
+마지막 갱신: 2026-11-18
 
 ## 지금
 
-- **진행 중**: M3 ([계획](plans/M3-project-editor.md)). Task 1~12 구현, simplify, code review(high)와 그 수정까지 끝남. `pnpm check` 통과(HEAD `bc5c420`, vitest 211, cargo test 219 passed / 1 ignored)
-- **작업 위치**: branch `m3-project-editor`(main `e3a420b`에서 갈라짐, push하지 않음). main은 건드리지 않았다. M3를 닫을 때 main에 합칠지 정한다
-- **멈춘 곳**: 계획의 Task 13 Step 1 도중에 세션을 끝냄(2026-11-12). 앱을 `pnpm tauri dev`로 띄워 사용자가 15항목을 눌러 보던 중이고, **결과는 아직 받지 못함**
-  - 받은 것은 하나: 사용자가 `Cmd+Q`로 끝낸 직후 `pg_stat_activity`의 `ChillaSQL` 세션이 0개였고 dev log에 panic이 없었음. 그때 `pg_sleep(600)`이 돌고 있었는지는 확인하지 못해 14행은 아직 미확정
+- **진행 중**: M3 ([계획](plans/M3-project-editor.md)). Task 1~12 구현, simplify, code review(high)와 그 수정까지 끝남. `pnpm check` 통과는 `bc5c420`에서 기록함(vitest 211, cargo test 219 passed / 1 ignored). 그 뒤 `4cd0db6`이 더해졌고 그때의 `pnpm check` 결과는 기록이 없다
+- **작업 위치**: main. M3 commit은 main에 있다. origin/main은 `4fb0eb9`이고 local main은 `4cd0db6`으로 1 commit 앞서 있다(push하지 않음). branch `m3-project-editor`는 없다
+- **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
+- **멈춘 곳**: 계획의 Task 13 Step 1. 사용자가 15항목 중 일부를 눌러 봤고, 확인한 것은 모두 기대대로 동작했다(2026-11-18에 받음). 어느 번호를 확인했는지는 기록이 없다
+  - 2026-11-12에 받은 것: 사용자가 `Cmd+Q`로 끝낸 직후 `pg_stat_activity`의 `ChillaSQL` 세션이 0개였고 dev log에 panic이 없었음. 그때 `pg_sleep(600)`이 돌고 있었는지는 확인하지 못해 14행은 아직 미확정
   - 확인용 프로젝트는 사용자가 picker로 고른 디렉토리에 있다(경로는 기록하지 않음). `localStorage`의 마지막 프로젝트로 남아 있으면 다음에 앱을 띄울 때 바로 열린다(15행)
 - **다음 할 일**: 계획의 Task 13을 이어서 한다
-  - Step 1: `scripts/test-db.sh up && pnpm tauri dev`로 앱을 띄우고, 사용자에게 15항목 중 기대와 달랐던 번호를 묻는다. 하나라도 다르면 원인을 찾아 고치고 처음부터 다시 한다. 14행은 `pg_sleep(600)` 실행 중에 `Cmd+Q`를 누른 뒤 `docker compose exec -T db psql -U chilla chilla_test -Atc "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'ChillaSQL'"`이 0인지 본다
+  - Step 1: 사용자에게 해도 되는지 묻고, Claude가 `scripts/test-db.sh up && pnpm tauri dev`로 앱을 띄워 15항목을 직접 확인한다(사용자에게 결과를 받아 오지 않는다). 하나라도 다르면 원인을 찾아 고치고 처음부터 다시 한다. 14행은 `pg_sleep(600)` 실행 중에 `Cmd+Q`를 누른 뒤 `docker compose exec -T db psql -U chilla chilla_test -Atc "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'ChillaSQL'"`이 0인지 본다
   - Step 2: 시작 시간 측정(1초 이내). 임시 probe가 필요하다(계획의 Step 2)
   - Step 3: 빌드된 앱에서 CSP 재확인
   - Step 5: 완료 기록(M3 상태를 `완료`로, "지금"을 M4로, "M4에서 챙길 것"을 적음)
-  - 그 뒤 branch를 main에 합치는 방법을 사용자와 정한다
+  - 그 뒤 local main을 push할지 사용자에게 묻는다
 - **실행 기록**: 이 Mac의 `.superpowers/sdd/M3-project-editor/progress.md`(git에 올리지 않는 local 파일)에 task별 review 결과와 controller가 내린 Ruling 1~15가 있다. 결정은 아래 결정 기록에도 옮겨 두었다. M3를 닫을 때 Ruling 목록을 사용자에게 보여 준다
-- **손으로만 확인할 수 있는 것**: 구현 중 diff와 test로 확인할 수 없어 Step 1에 남긴 것
+- **앱을 띄워야 확인할 수 있는 것**: 구현 중 diff와 test로 확인할 수 없어 Step 1에 남긴 것
   - 기본 menu의 `Cmd+W`가 webview의 `keydown`에 닿고 창이 닫히지 않는 것(12행), 에디터의 `Cmd+Z`/`Cmd+C`/`Cmd+V`(11행)
   - 실제 webview에서 Channel의 `onmessage`로 batch가 오는 것(4행)
   - 앱을 끝낼 때 `close_all_sessions`가 불리는 것(14행)
@@ -136,10 +137,34 @@
 | 2026-11-12 | M3 | CRLF 파일은 줄 끝을 CRLF로 돌려 씀. tab id를 Set에 두고 저장할 때만 `\r\n`으로 이음(`EditorState.lineSeparator`는 쓰지 않음). 줄 끝이 섞인 파일은 모두 CRLF로 저장됨 | CodeMirror가 줄 끝을 `\n`으로 맞춰 한 글자만 고쳐도 모든 줄이 LF가 됨. `lineSeparator` facet은 붙여 넣은 `\n` text를 줄 하나 안의 문자로 넣어 화면의 줄과 어긋나고 LF가 섞임. 대부분 LF인 파일에 CRLF가 하나라도 있으면 전부 CRLF로 저장되는 것은 드물어서 둠(code review) |
 | 2026-11-12 | M3 | `switchProject`의 `pickDirectory()`와 `confirm()`, `closeTab`의 `confirm()`이 실패하면 오류를 보여 줌. `closeTab`은 탭을 닫지 않음 | reject가 unhandled rejection이 되어 화면에 아무것도 없었음. 같은 실패를 `ProjectGate`만 처리했음(code review) |
 | 2026-11-12 | M3 | 프로젝트를 바꾸면 모든 탭의 세션을 닫음(`reset`이 모두 `release`). 옛 세션의 닫기가 실패해도 무시 | Rust가 전환하고 화면이 reset하기 전에 시작된 실행의 세션이 새 프로젝트에서 열린 채 잊히는 창을 없앰. 옛 세션의 `closeSession`은 `unknown_session`으로 실패하고 무시됨(Ruling 11) |
+| 2026-11-18 | 디자인 | 접속 색은 창 상단 bar(창 전체 폭, 모든 접속이 같은 두께), 탭 dot, toolbar의 접속 chip에만 씀. 오류, 트랜잭션, 연결 성공 같은 상태는 icon과 문장으로 구분하고 배경 tint를 쓰지 않음. 빨강(danger)은 위험 dialog의 실행 버튼과 에디터 오류 밑줄에만 | 접속 색은 사용자가 고르므로 상태 색과 겹치는 것을 막을 수 없음. prod(빨강) 탭에서 오류(빨강)가 나면 구분이 안 됨(디자인 리뷰) |
+| 2026-11-18 | 디자인 | "운영" 같은 환경 구분 항목(`env`)을 `chilla.toml`에 두지 않음. 화면에서 "운영" label과 운영 전용 강조를 뺌 | 4.8이 이미 색으로 구분하기로 함. `color = "red"`에 의미를 붙이면 숨은 규칙이 생김. 운영 보호는 읽기 전용과 위험 쿼리 확인이 맡음 |
+| 2026-11-18 | 디자인 | 읽기 전용 접속에서는 위험 쿼리 확인을 띄우지 않고 실행해 DB의 거부(SQLSTATE 25006)를 보여 줌 | 세션이 read only라 DB가 어차피 거부함. 확인 dialog의 "지웁니다" 문구가 사실과 달라짐 |
+| 2026-11-18 | 디자인 | 탭의 접속은 toolbar에서만 바꿈. sidebar의 접속 목록은 추가와 수정에만 씀(M3 구현과 같음). 열린 트랜잭션이 있는 탭에서 접속을 바꾸면 탭 닫기처럼 Commit 또는 Rollback을 고르게 함. 스키마 탭은 활성 탭의 접속을 보여 줌 | 탭 = 세션 구조에서 접속을 바꾸는 곳이 두 군데면 sidebar를 누를 때 현재 탭이 바뀌는지 새 탭이 열리는지 알 수 없음 |
+| 2026-11-18 | 디자인 | 트랜잭션이 열린 탭이 있을 때 앱을 끝내면 "모두 Rollback하고 끝내기"와 취소만 고름. 한꺼번에 Commit하는 선택지는 두지 않음 | 여러 탭의 변경을 한 번에 Commit하면 무엇이 반영되는지 확인하지 않고 넘어가게 됨. Commit하려면 취소하고 각 탭에서 함 |
+| 2026-11-18 | 디자인 | 화면 문구는 영어가 기본, 한국어는 전역 설정 파일의 `language = "ko"`로 바꿈. 자체 TypeScript dictionary(`en`, `ko`)와 `t(key)`. 영어 dictionary로 옮기는 일은 M4, 한국어와 언어 설정은 M8 | 사용자 요청. library는 두 언어에 비해 큼. M3가 이미 한국어 문구를 써서 결과 표를 다시 만드는 M4에서 함께 옮김 |
+| 2026-11-18 | 디자인 | 글꼴 2종: 화면은 macOS system font, SQL 에디터와 결과 data는 D2Coding 1.4.0(표준 build, Regular와 Bold). 공식 GitHub release에서 받아 앱에 넣음 | 사용자 선택. 한글 폭이 영문의 2배라 한글 주석과 data가 열에 맞음. 가나와 KS X 1001 한자는 있지만 일본 신자체와 중국어 간체는 없어 macOS font로 대신 그려짐(CoreText로 확인). ligature build는 `<>`, `->>`를 합쳐 SQL을 잘못 읽게 할 수 있어 쓰지 않음 |
+| 2026-11-18 | 디자인 | 캔버스에 있는 기능은 모두 구현함. 캔버스 디자인 적용(token, 화면 틀)은 M4에서 함. 캔버스에서 생긴 작은 기능(트랜잭션 경과 시간과 문장 수, 실행 범위 강조와 버튼 label, 값 보기 panel, 복사 알림, 트리 항목 menu와 이름 복사, EXPLAIN tree와 원문 보기, DDL을 새 탭에 열기)을 기획서와 milestone M4~M9에 넣음 | 사용자 결정. 화면 모양을 정한 캔버스가 구현 범위의 기준이 되도록 함. M4는 결과 표를 다시 만들고 문구도 옮기므로 화면 틀을 함께 바꿈 |
+| 2026-11-18 | 디자인 | 명령·파일·테이블 찾기(`Cmd+K`), `postgres://` URL 붙여넣기, 결과에서 찾기는 만들지 않음 | 기획서에 없는 기능. `Cmd+K`는 JetBrains macOS keymap의 VCS Commit이라 4.10과도 어긋남 |
 
 ## 작업 로그
 
 최신 항목이 위에 온다.
+
+### 2026-11-18
+
+- UI 디자인 캔버스(claude.ai artifact "ChillaSQL UI 리디자인", 비공개)에 디자인 리뷰를 반영함. Main을 고치고 결과 panel 상태, 위험 쿼리와 트랜잭션 확인, 접속 sheet, 프로젝트 열기 화면을 다시 그림. 터널 상태와 시각 system token artboard를 새로 만듦. 결정 5개를 결정 기록에 남기고 기획서 4.1, 4.3, 4.7, 4.8을 고침
+- milestone 범위와 캔버스를 맞춰 보고 빠진 화면을 채움. 새 artboard: 탭과 접속(M3·M4·M6), 확인 dialog 모음(M3·M6), sidebar 스키마와 기록(M7·M8·M9), 에디터와 결과 도구(M7~M10). 결과 panel 상태에 timeout과 나눌 수 없는 text를 더함
+- 앱 종료 dialog는 "모두 Rollback"과 취소만 두기로 하고 기획서 4.3을 고침
+- 화면 언어(영어 기본, 한국어 선택)와 글꼴(system font, D2Coding 1.4.0)을 정하고 기획서 1장, 2장, 5장과 M4, M8을 고침. 캔버스 문구를 영어로 바꿈. 상태를 설명하는 heading은 디자인 메모라 한국어로 둠
+- 캔버스를 다듬음: 글자 크기 token을 17/15/13/12로 키움(에디터 15px에 줄 24px, 결과 표 13px, control 높이 28px은 그대로). 문장 안의 SQL은 inline code로 씀. label이 바뀌는 실행 버튼과 취소 버튼은 너비를 고정함. dialog 본문은 fg-2로 제목과 구분함
+- 캔버스의 기능은 모두 구현하기로 하고, 빠져 있던 것을 기획서 4.3, 4.5, 4.6, 4.7과 M4~M9에 넣음. 디자인 적용은 M4
+- 캔버스 사본과 D2Coding을 `docs/design/`에 받아 둠. 구현할 때는 사본을 읽고, artifact는 보거나 고칠 때만 연다
+- 문서 정합성 검토: "지금"의 작업 위치를 git과 맞춤. 기획서 3장의 깨진 구조 그림을 text 그림으로 바꿈. 기획서 8장, 9장, 4.1(고를 수 있는 색), 4.4(Reformat), 4.10(M4 이후의 키), "만들지 않는 것"을 오늘 정한 것과 맞춤. 단축키 표기를 `Cmd+Enter` 꼴로 통일
+- `4cd0db6`(13:18): 접속 입력란과 파일 경로 입력에서 자동 수정, 자동 대문자, 맞춤법 검사를 끔. 이 세션 밖에서 commit됨
+- M3 Task 13의 15항목은 사용자가 일부를 확인했고 모두 기대대로 동작함. 앞으로 동작 확인은 Claude가 직접 하고, 사용자에게는 해도 되는지만 묻는다
+- 정하지 않은 것은 기획서 9장에 모음(key 이름, 단축키, 파라미터 값 넣는 방식, 내보내기 범위)
+- 보류: 오래 열린 트랜잭션을 시간이 지나면 더 강조하는 것. 대신 모든 탭에 TX와 경과 시간을 항상 표시
 
 ### 2026-11-12
 

@@ -1552,11 +1552,11 @@ git commit -m "feat: workspace 화면과 기본 단축키"
 - 임시로 Modify 후 되돌림: `src-tauri/src/lib.rs`, `src-tauri/src/commands.rs`, `src/features/project/ProjectGate.tsx`
 - Modify: `docs/progress.md`, `docs/plans/M3-project-editor.md`
 
-- [ ] **Step 1: 손으로 확인**
+- [ ] **Step 1: 앱을 띄워 확인**
 
 Run: `scripts/test-db.sh up && pnpm tauri dev`
 
-사용자와 함께 아래를 차례로 확인하고 결과를 기록한다. 하나라도 다르면 원인을 찾아 고치고(`superpowers:systematic-debugging`) 처음부터 다시 한다.
+사용자에게 해도 되는지 물은 뒤 Claude가 앱을 직접 조작해 아래를 차례로 확인하고 결과를 기록한다(2026-11-18 사용자 결정. 그 전에 사용자가 일부를 확인했고 모두 기대대로 동작함). 하나라도 다르면 원인을 찾아 고치고(`superpowers:systematic-debugging`) 처음부터 다시 한다.
 
 | 순서 | 하는 일 | 기대 |
 | --- | --- | --- |
