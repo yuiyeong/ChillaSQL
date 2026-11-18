@@ -12,9 +12,9 @@ ChillaSQL은 DataGrip을 대신해 혼자 쓰는 PostgreSQL 전용 Mac 데스크
 | 사용자 | 본인 1명 |
 | 실행 환경 | macOS |
 | 지원 DB | PostgreSQL |
-| 배포 | 로컬 빌드 후 직접 설치 (스토어 배포 없음) |
+| 배포 | 로컬 빌드 후 직접 설치 (스토어 배포 없음). `.app`은 `scripts/build-app.sh`로 만들고 dev 빌드와 같은 code signing identity로 서명해 키체인이 같은 앱으로 봄 |
 | 화면 | dark 테마 고정. 기본 창 크기 1512×982(14" MacBook Pro 기본 해상도) |
-| 화면 언어 | 기본은 영어. 전역 설정 파일에서 한국어로 바꿀 수 있음. PostgreSQL 오류 메시지, SQL keyword, 설정 파일의 key, 결과 data는 번역하지 않음 |
+| 화면 언어 | 기본은 영어. 전역 설정 파일에서 한국어로 바꿀 수 있음. Rust가 보내는 오류 message도 영어이고, 한국어는 화면이 오류 kind별로 번역함. PostgreSQL 오류 메시지, SQL keyword, 설정 파일의 key, 결과 data는 번역하지 않음 |
 | 글꼴 | 화면은 macOS system font(영문 SF Pro, 한글 Apple SD Gothic Neo). SQL 에디터와 결과 data는 D2Coding |
 
 **만들지 않는 것**
@@ -148,7 +148,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 가상 스크롤 | 화면에 보이는 행만 그림 |
 | 타입별 표시 | JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, vector 같은 긴 값 줄임 표시. 셀을 고르면 옆 panel에 전체 값을 보여 줌(Shift+Enter) |
 | 표 조작 | 컬럼 너비 조절, 화면 내 정렬. 일부만 받은 결과를 정렬하면 받은 행만 정렬됐다고 표시 |
-| 복사와 내보내기 | 셀, 행 복사(복사하면 알림). CSV, JSON 내보내기 |
+| 복사와 내보내기 | 셀, 행 복사(행은 header 없는 TSV, NULL은 빈 칸. 복사하면 알림). CSV, JSON 내보내기 |
 | 셀 편집 | PK가 있는 단일 테이블 결과에서 셀을 고치면 UPDATE로 반영 |
 
 ### 4.7 스키마 트리

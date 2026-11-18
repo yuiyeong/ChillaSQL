@@ -17,6 +17,7 @@ tauri = { version = "2", features = [] }
 chilla-core = { path = "../crates/chilla-core" }
 serde = { version = "1", features = ["derive"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
 
 [dev-dependencies]
 serde_json = "1"

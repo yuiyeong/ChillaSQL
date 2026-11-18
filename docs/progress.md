@@ -4,12 +4,13 @@
 
 ## 지금
 
-- **진행 중**: M4 결과 표(상태 `계획 중`). 계획은 [M4](plans/M4-result-table.md)이고 사용자 검토를 기다린다
-- **작업 위치**: main. origin/main은 `4fb0eb9`이고, 그 뒤의 local commit(`4cd0db6`과 2026-11-18의 문서 commit)은 push하지 않았다
+- **진행 중**: M4 결과 표(상태 `진행 중`). 계획은 [M4](plans/M4-result-table.md)이고 Task 1을 끝냈다
+- **작업 위치**: branch `m4-result-table`(main의 `d2be9bf`에서 나눔). origin/main은 `4fb0eb9`이고, 그 뒤의 local commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 사용자가 계획을 검토하면 M4 Task 1(release 서명, overlay title bar, 복사 경로, 글꼴 확인)부터 한다
-- **앱 동작 확인 방법** (M3 Task 13에서 확인한 것)
-  - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `pnpm tauri build --debug --bundles app`으로 `target/debug/bundle/macos/ChillaSQL.app`을 만들고, `scripts/cargo-runner.sh`와 같은 identity로 `codesign --force --deep --sign <identity> --identifier com.yuiyeong.chillasql`을 한 뒤 `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
+- **다음 할 일**: M4 Task 2(화면 문구를 영어 dictionary로)
+- **앱 동작 확인 방법** (M3 Task 13, M4 Task 1에서 확인한 것)
+  - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
+  - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
   - 단축키를 보내려면 full-screen control이 필요하다. 폴더 picker는 다른 process라 경로를 입력할 수 없고 sidebar에서 눌러 고른다
   - 한글 입력기를 거치는 입력(조합 중의 단축키)은 computer use로 만들 수 없다. 사용자에게 부탁한다
 - **알려진 것, M3에서 고치지 않은 것**은 아래 작업 로그(2026-11-12)에 있다
@@ -32,7 +33,7 @@
 | M1 접속·세션 코어 | 1 | 완료 | [M1](plans/M1-session-core.md) | 2026-11-11 | 2026-11-11 |
 | M2 쿼리 실행 코어 | 1 | 완료 | [M2](plans/M2-query-core.md) | 2026-11-11 | 2026-11-11 |
 | M3 프로젝트·에디터 화면 | 1 | 완료 | [M3](plans/M3-project-editor.md) | 2026-11-12 | 2026-11-18 |
-| M4 결과 표 | 1 | 계획 중 | [M4](plans/M4-result-table.md) | 2026-11-18 | |
+| M4 결과 표 | 1 | 진행 중 | [M4](plans/M4-result-table.md) | 2026-11-18 | |
 | M5 터널 | 2 | 대기 | | | |
 | M6 트랜잭션과 안전장치 | 2 | 대기 | | | |
 | M7 스키마 트리와 자동완성 | 3 | 대기 | | | |
@@ -138,6 +139,28 @@
 | 2026-11-18 | 디자인 | 글꼴 2종: 화면은 macOS system font, SQL 에디터와 결과 data는 D2Coding 1.4.0(표준 build, Regular와 Bold). 공식 GitHub release에서 받아 앱에 넣음 | 사용자 선택. 한글 폭이 영문의 2배라 한글 주석과 data가 열에 맞음. 가나와 KS X 1001 한자는 있지만 일본 신자체와 중국어 간체는 없어 macOS font로 대신 그려짐(CoreText로 확인). ligature build는 `<>`, `->>`를 합쳐 SQL을 잘못 읽게 할 수 있어 쓰지 않음 |
 | 2026-11-18 | 디자인 | 캔버스에 있는 기능은 모두 구현함. 캔버스 디자인 적용(token, 화면 틀)은 M4에서 함. 캔버스에서 생긴 작은 기능(트랜잭션 경과 시간과 문장 수, 실행 범위 강조와 버튼 label, 값 보기 panel, 복사 알림, 트리 항목 menu와 이름 복사, EXPLAIN tree와 원문 보기, DDL을 새 탭에 열기)을 기획서와 milestone M4~M9에 넣음 | 사용자 결정. 화면 모양을 정한 캔버스가 구현 범위의 기준이 되도록 함. M4는 결과 표를 다시 만들고 문구도 옮기므로 화면 틀을 함께 바꿈 |
 | 2026-11-18 | 디자인 | 명령·파일·테이블 찾기(`Cmd+K`), `postgres://` URL 붙여넣기, 결과에서 찾기는 만들지 않음 | 기획서에 없는 기능. `Cmd+K`는 JetBrains macOS keymap의 VCS Commit이라 4.10과도 어긋남 |
+| 2026-11-18 | M4 | TanStack Table(v9)은 column 정의와 너비 조절에만 씀. 몸통은 virtualizer의 index로 `rows[i]`를 바로 그림. 정렬(M10)이 row model을 쓰게 되면 그때 다시 봄 | row model(`getRowModel`)은 10만 행마다 `Row` object를 만들어 batch마다 수십 ms가 듦 |
+| 2026-11-18 | M4 | 이어서 가져오기: 마지막으로 보이는 행이 보관된 행의 끝에서 100행(`FETCH_AHEAD`) 안이고 `fetch === "ready"`이면 `fetch_more`를 한 번 보냄. 다음 `rows`나 `finished`가 올 때까지 다시 보내지 않음. 맨 아래에 있으면 batch가 올 때마다 바로 다음을 요청함 | 스크롤 event가 batch 하나에 수십 번 와도 `fetch_more`는 한 번이어야 함. 맨 아래에서 끝까지 내려가는 동안 멈추지 않게 함 |
+| 2026-11-18 | M4 | 버린 구간: `firstRow > 0`이면 몸통 맨 위에 높이 40px 줄("Rows 1–{n} were dropped · run again to see them"과 "Run again")을 둠. 앞쪽 행이 버려지면 `scrollTop`을 `(줄이 새로 생겼으면 40) − 버린 행 수 × 26`만큼 바꿈. "Run again"은 그 결과의 SQL을 지금 탭의 접속으로 다시 실행함 | 기획서 4.6의 "다시 실행해야 볼 수 있음" 표시. 스크롤 중에 앞쪽 행이 버려지거나 줄이 처음 생겨도 보던 행이 그 자리에 있어야 함 |
+| 2026-11-18 | M4 | 컬럼 너비: 처음 너비는 header와 첫 batch의 값에 맞추고 64~480px로 자름. handle을 두 번 누르면 header와 보관된 행 중 앞 2,000행에 맞춤(같은 범위). 끌어서는 48px까지 줄임. 행 번호 column은 조절하지 않음. 실행마다 새로 정하고 저장하지 않음 | D2Coding의 advance가 반각 500, 전각 1000(unitsPerEm 1000)이라 글자로 계산하고 canvas로 재지 않음. 100 KB 값이나 10만 행에서도 계산이 멈추지 않게 범위를 자름 |
+| 2026-11-18 | M4 | 선택과 복사: 셀을 누르면 그 셀, 행 번호를 누르면 그 행, Shift와 누르면 범위를 고름. 셀 복사는 값 그대로(NULL은 빈 문자열), 행 복사는 header 없는 TSV. tab, 줄바꿈, CR, `"`가 든 값은 `"`로 감싸고 안의 `"`를 `""`로 씀. 복사하면 결과 panel 아래 가운데에 2초 동안 알림. 버린 구간의 행은 고를 수 없음 | Numbers, Google Sheets가 읽는 형식. 붙여 넣은 spreadsheet에서 칸이 밀리거나 NULL이 `NULL` 글자가 되지 않게 함 |
+| 2026-11-18 | M4 | 표시: NULL은 fg-3 기울임의 `NULL`, 빈 문자열은 fg-3의 `''`. 300자를 넘는 값은 앞부분과 `…`만 그림(M3와 같음). 한 줄로 그리고 넘치면 `…`로 자름. column header의 type 표시와 숫자 오른쪽 정렬은 M8 | type 표시와 정렬은 column type이 필요한데 simple query protocol은 type OID를 주지 않음(M2 결정, M8에서 정함) |
+| 2026-11-18 | M4 | 결과 header의 이름은 SQL의 첫 단어(대문자)와 `FROM`, `INTO`, `UPDATE`, `TABLE`, `JOIN` 뒤의 첫 이름. 없으면 첫 단어만(`SELECT users`, `UPDATE users`, `SELECT`). 32자에서 자름 | 캔버스의 결과 header처럼 무엇을 실행한 결과인지 보여 줌. 실행한 SQL text만으로 정함 |
+| 2026-11-18 | M4 | 행을 돌려주지 않는 문장: 첫 단어가 `INSERT`, `UPDATE`, `DELETE`, `MERGE`면 "12 rows inserted/updated/deleted/merged", 그 밖은 "Done". 캔버스의 `UPDATE 12`는 그리지 않음 | 화면이 서버의 command tag를 받지 않음. 영향받은 행 수와 첫 단어로 문장을 만듦 |
+| 2026-11-18 | M4 | 오류 화면은 서버 메시지(mono 15), detail, hint, `SQLSTATE`, 줄과 칸, 소요 시간, "Copy message" 버튼. 빨간 글자가 아니라 icon과 문장으로 구분함. "Go to error"는 M8 | "Go to error"는 에디터의 오류 밑줄(M8)과 한 기능. Tokens의 규칙(danger는 위험 dialog의 실행 버튼과 오류 밑줄에만) |
+| 2026-11-18 | M4 | toolbar: 접속 chip과 접속 menu, 너비를 고정한 split 실행 버튼(왼쪽 200px, 오른쪽 26px). 실행 중에는 같은 자리가 227px의 Cancel 버튼. 오른쪽 menu의 "Run file"은 M8까지 disabled. Auto/Manual(M6), Reformat(M8), Explain(M9)은 넣지 않음. Save 버튼은 뺌(`Cmd+S`는 그대로) | 캔버스에 Save 버튼이 없음. label이 바뀌는 버튼은 너비를 고정해 옆이 밀리지 않게 함. 나머지는 해당 마일스톤의 기능 |
+| 2026-11-18 | M4 | sidebar: Files, Schema, History 탭 중 Schema(M7)와 History(M9)는 disabled. 파일 목록은 디렉토리 tree이고 처음에는 모두 펼침 | 캔버스의 sidebar 틀. Schema와 History는 해당 마일스톤의 기능 |
+| 2026-11-18 | M4 | 접속 색: `chilla.toml`의 `color`가 `green`, `yellow`, `red`, `blue`, `purple`이면 그 token, 아니거나 없으면 line-2(회색). 창 상단 bar, 탭 dot, toolbar chip, sidebar와 접속 menu의 dot에만 씀. 값 검사와 접속 sheet의 `color` 칸은 M6 | 기획서 4.1의 고를 수 있는 색 다섯. 값 검사와 `color` 칸은 M6 범위 |
+| 2026-11-18 | M4 | 결과 panel 높이는 396px로 시작하고 에디터와의 경계(5px)를 끌어 바꿈. 에디터와 결과 panel은 각각 120px 밑으로 줄지 않음. 저장하지 않음 | 어느 쪽도 쓸 수 없을 만큼 줄지 않게 함. 화면 설정을 저장할 곳(전역 설정 파일)은 M8 |
+| 2026-11-18 | M4 | 빈 상태: 결과 panel과 탭이 없는 에디터는 `⌘↵ Run statement at cursor`, `⇧⌘L New tab`을 보여 줌. 캔버스의 `⌥⌘L Reformat`은 M8에 더함 | Reformat은 M8 기능 |
+| 2026-11-18 | M4 | 화면 문구는 영어 dictionary `en`(`src/shared/i18n/en.ts`)과 `t(key, params)`. 복수형은 key 끝의 `.one`/`.other`를 `tc(key, count)`가 고름. 숫자는 `en-US` 묶음(`124,500`). Rust가 보내는 오류 message도 영어로 바꿈(M1~M3의 "사용자에게 보이는 message는 한국어"를 대신함). 한국어는 M8에서 오류 `kind`별로 화면이 번역함. macOS menu는 이미 영어라 M4에서 고치지 않음 | 영어 기본, 한국어 M8(2026-11-18 디자인 결정). Rust message가 한국어로 남으면 영어 화면에 섞임 |
+| 2026-11-18 | M4 | 확인 dialog는 native(`ask`)로 두고 문구만 영어로 옮김. 캔버스의 dialog 모양은 M6에서 Commit/Rollback을 고르는 dialog를 만들 때 함께 바꿈. 이름 없는 탭의 저장 경로 입력은 캔버스의 "Save Query 1" dialog로 바꿈 | Commit/Rollback dialog(M6)와 같은 모양이라 한 번에 만듦. 저장 경로 입력은 이미 화면의 form이라 지금 바꿀 수 있음 |
+| 2026-11-18 | M4 | 접속 sheet와 프로젝트 열기 화면은 token, 버튼, 문구만 바꾸고 배치는 그대로 둠. sheet 배치는 M5, 프로젝트 열기 화면은 M8에서 캔버스대로 바꿈 | 배치를 바꾸는 일을 `tunnel` 칸(M5), 최근 프로젝트 목록(M8)을 더할 때 한 번에 함 |
+| 2026-11-18 | M4 | release 빌드 서명: `scripts/build-app.sh [--debug]`가 `pnpm tauri build --bundles app` 뒤 dev 빌드와 같은 identity, identifier `com.yuiyeong.chillasql`로 `codesign --force --deep`함. identity 고르기는 `scripts/signing-identity.sh` 하나에 두고 `cargo-runner.sh`도 이것을 source함. `bundle.macOS.signingIdentity`는 쓰지 않음 | dev binary(`pnpm tauri dev`)가 만든 키체인 항목을 release `.app`이 확인 창 없이 읽음(`KEYCHAIN_PROBE 16.84 existing`, debug `.app` 15.13과 16.61). `codesign -dvv`는 `Identifier=com.yuiyeong.chillasql`, Authority `Apple Development`, `Signature=adhoc` 없음 |
+| 2026-11-18 | M4 | overlay title bar: 창에 `titleBarStyle` `Overlay`, `hiddenTitle`, `trafficLightPosition` `{ "x": 13, "y": 24 }`. drag 줄은 `data-tauri-drag-region`이고 capability에 `core:window:allow-start-dragging`을 더함 | 계획 값 `{14, 22}`에서 첫 원의 중심이 (21, 20)pt였음. 이 macOS의 신호등 원은 지름 14pt이고, tao는 x를 버튼 왼쪽 끝, y를 버튼 높이에 더한 container 높이로 씀. 고친 값에서 중심 (20.0, 22.0)pt(3px bar + 38px 줄의 가운데). 38px 줄을 끌면 창이 끈 만큼(100, 50) 움직이고, 두 번 누르면 zoom되고 다시 누르면 돌아옴. zoom 뒤에도 신호등 위치 같음 |
+| 2026-11-18 | M4 | 결과 표의 `Cmd+C`는 DOM `copy` event로 처리함(Task 7). 결과 표에 focus가 있을 때만 `clipboardData.setData("text/plain", …)`와 `preventDefault()`. menu의 Copy와 `Cmd+C`가 한 경로 | 글자 선택이 없는 `tabIndex=0` div에서 `Cmd+C`를 누르면 `keydown`(`code` `KeyC`, `metaKey`)과 `copy` event가 둘 다 옴. `copy`의 target은 focus된 그 div이고 setData 값이 pasteboard에 들어감(`pbpaste` `PROBE_COPY_1`). Edit menu의 Copy를 눌러도 같은 `copy` event가 옴. CodeMirror에서 고른 text의 `Cmd+C`는 M3처럼 그 text가 복사됨 |
+| 2026-11-18 | M4 | clipboard는 `tauri-plugin-clipboard-manager` 2(2.5.0)와 permission `clipboard-manager:allow-write-text`. 화면은 `copyText`(`src/shared/api/clipboard.ts`)로 씀 | 결과 header의 복사 버튼과 "Copy message"처럼 `copy` event 밖에서 복사할 때 씀. `copyText("a\tb")` 뒤 `pbpaste`가 `a<TAB>b`이고 CSP violation 없음 |
+| 2026-11-18 | M4 | D2Coding은 `public/fonts/`에 두고 `@font-face`의 `url("/fonts/…")`로 읽음. CSP는 바꾸지 않음 | 빌드된 앱에서 `document.fonts.check("13px D2Coding")`이 `true`, FontFace status `loaded`, `a가` 폭 19.5px(반각 6.5 + 전각 13. monospace는 19.05). `default-src 'self'`에 막히지 않음 |
 
 ## 작업 로그
 
@@ -145,6 +168,7 @@
 
 ### 2026-11-18
 
+- M4 Task 1: release `.app`을 dev 빌드와 같은 identity로 서명하는 `scripts/build-app.sh`를 만들고 identity 고르기를 `scripts/signing-identity.sh`로 모음(release `.app`이 dev가 만든 키체인 항목을 확인 창 없이 16.84ms에 읽음). overlay title bar를 켜고 `trafficLightPosition`을 `{13, 24}`로 맞춤(신호등 원이 지름 14pt라 계획 값 `{14, 22}`에서 1pt, 2pt 어긋났음). clipboard plugin을 더하고 `copyText`를 씀. 결과 표의 `Cmd+C`는 `copy` event로 처리하기로 함. D2Coding은 CSP를 바꾸지 않고 읽힘. 계획에서 정한 것 18개와 확인 결과 4개를 결정 기록에 옮기고 기획서 1장·4.6과 마일스톤 M4, M5, M6, M8을 고침. 임시 probe(`KEYCHAIN_PROBE`, probe 화면, 임시 글꼴)는 확인 뒤 지우고, probe가 만든 키체인 항목(`/private/tmp/chilla-m4-probe::probe`)도 지움
 - M4 계획 작성(`docs/plans/M4-result-table.md`, Task 13개). 계획을 쓰면서 확인한 것(TanStack Table v9.3.1의 API, D2Coding의 advance 500/1000 em, `tauri-utils` 2.10.2의 overlay title bar 옵션, clipboard plugin 2.5.0)은 계획 맨 위 표에 있다. webview가 있어야 하는 확인은 Task 1에 둠
 - M3 완료. Task 13의 완료 기준을 모두 확인함
   - Step 1의 15항목이 모두 기대대로 동작함. 10행(한글 조합 중의 `Cmd+S`, `Cmd+Enter`, 그리고 `Cmd+Z`)은 사용자가, 나머지는 Claude가 computer use로 `.app` debug build에서 확인. 4행 표에 500행과 `500행 표시 · 더 있음`, 5행 `취소됨 · 1.20 s`, 6행 `줄 1:11`, 14행 종료 0.23초 뒤 `ChillaSQL` 세션 0개

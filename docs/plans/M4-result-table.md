@@ -140,23 +140,23 @@ src/
 
 webview가 있어야 하는 확인은 `scripts/build-app.sh --debug`로 만든 `.app`에서 한다(진행상황의 "앱 동작 확인 방법"). 임시 probe는 확인 뒤 지운다.
 
-- [ ] **Step 1: identity 고르기를 `scripts/signing-identity.sh`로 옮긴다**
+- [x] **Step 1: identity 고르기를 `scripts/signing-identity.sh`로 옮긴다**
 
 `cargo-runner.sh`의 규칙 그대로다: `CHILLA_DEV_IDENTITY`가 있으면 그것, 없으면 `security find-identity -v -p codesigning`의 첫 유효 identity, 없으면 빈 문자열. `cargo-runner.sh`는 이 script를 `source`한다. `pnpm tauri dev`가 전처럼 서명된 binary로 뜨는지 확인한다(`codesign -dvv`에 `Identifier=com.yuiyeong.chillasql`, `Signature=adhoc` 없음).
 
-- [ ] **Step 2: `scripts/build-app.sh`를 쓰고 release `.app`이 dev가 만든 키체인 항목을 확인 창 없이 읽는지 본다**
+- [x] **Step 2: `scripts/build-app.sh`를 쓰고 release `.app`이 dev가 만든 키체인 항목을 확인 창 없이 읽는지 본다**
 
 `build-app.sh`는 `pnpm tauri build --bundles app`(인자 `--debug`면 `--debug`도)을 부른 뒤 `codesign --force --deep --sign "<identity>" --identifier com.yuiyeong.chillasql <app>`을 한다. identity가 없으면 서명하지 않고 경고를 낸다.
 
 확인: M3 Task 1처럼 임시 probe(`has_password`를 시작할 때 부르고 걸린 시간을 stderr에 `KEYCHAIN_PROBE <ms> <existing|missing>`로 쓴다)로 dev binary가 항목을 만든 뒤, release `.app`을 `open`해 확인 창 없이 `existing`이 500ms 안에 나오면 이 방법으로 정한다. 확인 창이 뜨면 `bundle.macOS.signingIdentity`(환경 변수 `APPLE_SIGNING_IDENTITY`)로 tauri가 서명하게 바꿔 다시 잰다.
 
-- [ ] **Step 3: overlay title bar를 켜고 신호등 위치와 drag를 확인한다**
+- [x] **Step 3: overlay title bar를 켜고 신호등 위치와 drag를 확인한다**
 
 `tauri.conf.json`의 창에 `"titleBarStyle": "Overlay"`, `"hiddenTitle": true`, `"trafficLightPosition": { "x": 14, "y": 22 }`를 더한다. capability에 `core:window:allow-start-dragging`을 더한다. 임시로 `Workspace` 맨 위에 높이 3px 막대와 그 밑 38px의 `data-tauri-drag-region` 줄을 둔다.
 
 확인: 신호등 세 개의 세로 중심이 창 위에서 약 22px(3px bar + 38px 줄의 가운데)이고 첫 원의 가로 중심이 약 20px인지 screenshot으로 본다. 다르면 `trafficLightPosition`을 고쳐 맞춘다. 38px 줄을 끌면 창이 움직이고 두 번 누르면 창이 커지는지 본다.
 
-- [ ] **Step 4: clipboard plugin을 더하고 `Cmd+C`의 경로와 글꼴을 확인한다**
+- [x] **Step 4: clipboard plugin을 더하고 `Cmd+C`의 경로와 글꼴을 확인한다**
 
 `tauri-plugin-clipboard-manager` 2를 `src-tauri/Cargo.toml`과 `lib.rs`(`.plugin(tauri_plugin_clipboard_manager::init())`)에, `@tauri-apps/plugin-clipboard-manager`를 `package.json`에 더한다. capability에 `clipboard-manager:allow-write-text`를 더한다. `copyText`를 쓴다.
 
@@ -171,7 +171,7 @@ webview가 있어야 하는 확인은 `scripts/build-app.sh --debug`로 만든 `
 
 **결정 규칙**: `copy` event가 오고 setData가 pasteboard에 반영되면 Task 7은 `copy` event를 쓴다(menu의 Copy와 `Cmd+C`가 한 경로). 오지 않으면 `keydown`의 `Cmd+C`에서 `copyText`를 부른다. 어느 쪽이든 focus가 결과 표 안일 때만 처리한다.
 
-- [ ] **Step 5: probe를 지우고 결정을 기록한 뒤 commit한다**
+- [x] **Step 5: probe를 지우고 결정을 기록한 뒤 commit한다**
 
 probe code(`KEYCHAIN_PROBE`, 임시 div와 막대)를 지운다. "이 계획에서 정한 것"의 모든 항목과 Step 2~4의 결과(서명 방법, `trafficLightPosition` 값, `Cmd+C` 경로, plugin)를 진행상황의 결정 기록에 한 줄씩 남긴다. 마일스톤 M4의 "먼저 확인할 것"에 결과를 적고, 다음을 고친다: M5에 "접속 sheet를 캔버스 배치로", M6에 "확인 dialog를 캔버스 모양으로", M8에 "Go to error", "빈 상태의 Reformat 안내", "Run file menu 항목 켜기", "Rust 오류 message의 한국어(kind별 번역)". 진행상황의 마일스톤 현황에서 M4를 `진행 중`으로 바꾼다. "앱 동작 확인 방법"의 `.app` 만들기를 `scripts/build-app.sh --debug`로 바꾼다.
 

@@ -4,9 +4,9 @@
 bin="$1"
 shift
 if [ "$(basename "$bin")" = "chillasql" ]; then
-  identity="${CHILLA_DEV_IDENTITY:-$(security find-identity -v -p codesigning | awk 'NR == 1 && $2 ~ /^[0-9A-F]+$/ { print $2 }')}"
-  if [ -n "$identity" ]; then
-    codesign --force --sign "$identity" --identifier com.yuiyeong.chillasql "$bin" ||
+  . "$(dirname "$0")/signing-identity.sh"
+  if [ -n "$signing_identity" ]; then
+    codesign --force --sign "$signing_identity" --identifier com.yuiyeong.chillasql "$bin" ||
       echo "cargo-runner: 서명하지 못했습니다. 서명 없이 실행합니다" >&2
   fi
 fi

@@ -68,10 +68,12 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 ### M4. 결과 표
 
 - **목표**: 1단계 완료 기준 달성
-- **범위**: TanStack Table + TanStack Virtual 결과 표, 가상 스크롤과 스크롤 시 이어서 가져오기, 보관 상한을 넘어 버려진 구간에 "다시 실행해야 볼 수 있음" 표시, 컬럼 너비 조절, 셀과 행 복사, 화면 문구를 영어 dictionary(`en`)로 옮김(M3의 한국어 문구와 macOS menu 포함), D2Coding을 앱에 넣고 에디터와 결과 표에 적용, 캔버스 디자인 적용(시각 token을 Tailwind theme으로: 색, 글자 크기 17/15/13/12, control 높이 28px. sidebar의 접속 영역과 파일/스키마/기록 탭 틀, title bar를 겸하는 탭 줄과 창 상단 접속 bar, toolbar의 접속 chip과 접속 고르기 menu, 너비를 고정한 split 실행 버튼(Run statement / Run selection, 파일 전체 실행 menu), 결과 panel header, 이어서 가져오는 중과 결과의 끝 표시, 빈 상태의 단축키 안내, 접속이 없는 탭, status bar), 행 복사 뒤 알림
+- **범위**: TanStack Table + TanStack Virtual 결과 표, 가상 스크롤과 스크롤 시 이어서 가져오기, 보관 상한을 넘어 버려진 구간에 "다시 실행해야 볼 수 있음" 표시, 컬럼 너비 조절, 셀과 행 복사, 화면 문구를 영어 dictionary(`en`)로 옮김(M3의 한국어 문구와 Rust가 보내는 오류 message 포함. macOS menu는 이미 영어), D2Coding을 앱에 넣고 에디터와 결과 표에 적용, 캔버스 디자인 적용(시각 token을 Tailwind theme으로: 색, 글자 크기 17/15/13/12, control 높이 28px. sidebar의 접속 영역과 파일/스키마/기록 탭 틀, title bar를 겸하는 탭 줄과 창 상단 접속 bar, toolbar의 접속 chip과 접속 고르기 menu, 너비를 고정한 split 실행 버튼(Run statement / Run selection, 파일 전체 실행 menu), 결과 panel header, 이어서 가져오는 중과 결과의 끝 표시, 빈 상태의 단축키 안내, 접속이 없는 탭, status bar), 행 복사 뒤 알림
 - **완료 기준 (1단계)**: 로컬 DB에서 100만 행 결과를 끊김 없이 스크롤. 못 맞추면 기획서 2장대로 canvas 기반 그리드로 교체를 검토한다
 - **먼저 확인할 것**:
-  - release 빌드(`pnpm tauri build`)를 dev 빌드와 같은 identity로 서명할지(`bundle.macOS.signingIdentity`). 서명이 다르면 키체인이 다른 앱으로 본다
+  - release 빌드(`pnpm tauri build`)를 dev 빌드와 같은 identity로 서명할지(`bundle.macOS.signingIdentity`). 서명이 다르면 키체인이 다른 앱으로 본다 → Task 1에서 확인함. `scripts/build-app.sh`가 `.app`을 만든 뒤 dev와 같은 identity, identifier로 `codesign`한다. release `.app`이 dev가 만든 키체인 항목을 확인 창 없이 읽음(16.84ms). `signingIdentity`는 쓰지 않음
+  - overlay title bar의 신호등 위치와 drag → Task 1에서 확인함. `trafficLightPosition` `{13, 24}`에서 첫 원의 중심이 (20, 22)pt. drag 줄을 끌면 창이 움직이고 두 번 누르면 zoom됨
+  - 결과 표의 `Cmd+C`가 `keydown`으로 오는지 `copy` event로 오는지 → Task 1에서 확인함. 둘 다 오고 `copy`의 setData가 pasteboard에 들어가므로 `copy` event로 처리한다. clipboard plugin(`copyText`)과 D2Coding의 `@font-face`는 CSP에 막히지 않음
   - M3의 임시 결과 표는 첫 batch만 보여 주고 `fetch_more`를 부르지 않는다. 이를 대신할 때 `runReducer`가 이미 `retainedFrom`보다 앞의 행을 버리는 것과 맞춘다
 
 ---
@@ -81,7 +83,7 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 ### M5. 터널
 
 - **목표**: 터미널 없이 터널이 필요한 DB에 접속
-- **범위**: 터널 명령을 자식 프로세스로 실행, host:port가 열릴 때까지 대기(기본 20초, 접속별 변경), 실패 시 명령의 오류 출력 표시, 포트가 이미 열려 있으면 실행하지 않고 "앱이 띄우지 않은 터널" 표시, 같은 접속의 탭끼리 터널 공유(참조 수 관리), 마지막 세션이 끊기면 터널 종료, 프로세스 종료 감지와 재실행(연속 3회 실패 시 중단), 재연결 후 세션 상태 초기화 알림, 앱 종료 시 앱이 띄운 터널 모두 종료(4.2), 접속 테스트에 터널 포함(4.1), 접속 sheet에 `tunnel`과 `tunnel_timeout` 칸, 테스트 실패 시 명령의 오류 출력 표시, 탭과 toolbar의 터널 상태(시작 중, 실패, 재연결 n/3, 앱이 띄우지 않은 터널)
+- **범위**: 터널 명령을 자식 프로세스로 실행, host:port가 열릴 때까지 대기(기본 20초, 접속별 변경), 실패 시 명령의 오류 출력 표시, 포트가 이미 열려 있으면 실행하지 않고 "앱이 띄우지 않은 터널" 표시, 같은 접속의 탭끼리 터널 공유(참조 수 관리), 마지막 세션이 끊기면 터널 종료, 프로세스 종료 감지와 재실행(연속 3회 실패 시 중단), 재연결 후 세션 상태 초기화 알림, 앱 종료 시 앱이 띄운 터널 모두 종료(4.2), 접속 테스트에 터널 포함(4.1), 접속 sheet에 `tunnel`과 `tunnel_timeout` 칸, 접속 sheet를 캔버스 배치로, 테스트 실패 시 명령의 오류 출력 표시, 탭과 toolbar의 터널 상태(시작 중, 실패, 재연결 n/3, 앱이 띄우지 않은 터널)
 - **완료 기준**: 터미널 없이 Railway staging에 접속. 터널 프로세스를 강제로 죽이면 재연결되고 알림이 뜸. 앱을 종료하면 터널 프로세스가 남지 않음
 - **먼저 확인할 것**:
   - 접속 sheet에 둘 key 이름(캔버스는 `tunnel_timeout`으로 제안)
@@ -92,7 +94,7 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 ### M6. 트랜잭션과 안전장치
 
 - **목표**: 2단계 완료 기준 달성. 이후 운영 DB 접속 가능
-- **범위**: Auto/Manual 전환(탭 단위), Commit과 Rollback 버튼, 열린 트랜잭션 표시(직접 BEGIN한 경우 포함), 트랜잭션이 열린 채 탭 닫기/앱 종료/Auto 전환/탭의 접속 바꾸기 시 확인(앱 종료는 모두 Rollback 또는 취소), 실패 상태 표시와 Rollback 안내(4.3), 트랜잭션 중 터널이 끊기면 유실 알림, 접속별 색상(창 상단 bar, 탭, toolbar, 4.1), 위험 쿼리 확인(WHERE 없는 UPDATE/DELETE, DROP, TRUNCATE를 pg_query로 판별, 4.8), 받다 만 결과 10분 후 자동 닫기(4.6), 탭과 toolbar에 트랜잭션 경과 시간과 문장 수 표시, 위험 쿼리 확인 문구를 Manual(되돌릴 수 있음)과 Auto(되돌릴 수 없음)로 나눔, 접속 sheet의 `color` 칸
+- **범위**: Auto/Manual 전환(탭 단위), Commit과 Rollback 버튼, 열린 트랜잭션 표시(직접 BEGIN한 경우 포함), 트랜잭션이 열린 채 탭 닫기/앱 종료/Auto 전환/탭의 접속 바꾸기 시 확인(앱 종료는 모두 Rollback 또는 취소), 실패 상태 표시와 Rollback 안내(4.3), 트랜잭션 중 터널이 끊기면 유실 알림, 접속별 색상(창 상단 bar, 탭, toolbar, 4.1), 위험 쿼리 확인(WHERE 없는 UPDATE/DELETE, DROP, TRUNCATE를 pg_query로 판별, 4.8), 받다 만 결과 10분 후 자동 닫기(4.6), 확인 dialog를 캔버스 모양으로(native `ask`를 대신함), 탭과 toolbar에 트랜잭션 경과 시간과 문장 수 표시, 위험 쿼리 확인 문구를 Manual(되돌릴 수 있음)과 Auto(되돌릴 수 없음)로 나눔, 접속 sheet의 `color` 칸
 - **완료 기준 (2단계)**: 터미널 없이 Railway staging에 접속해 Manual 트랜잭션을 Commit, Rollback
 - **먼저 확인할 것**:
   - M1에서 정한 트랜잭션 상태 감지 방법을 쓴다
@@ -113,7 +115,7 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 ### M8. 에디터·실행 편의
 
 - **목표**: 3단계 완료 기준 달성
-- **범위**: Formatting(sql-formatter, 선택 영역 또는 파일 전체, Opt+Cmd+L), DB가 알려준 오류 위치 밑줄, 파일 전체 실행과 문장별 결과 탭(오류 난 문장에서 멈춤), 타입별 표시(JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, 긴 값 줄임), 읽기 전용 접속(4.8), 접속별 타임아웃(4.5), 저장하지 않은 탭 내용을 SQLite에 보관하고 재시작 후 복원, 최근 프로젝트 목록과 프로젝트 바꾸기 menu(Cmd+O), 읽기 전용 접속에서는 위험 쿼리 확인을 건너뜀(4.8), 결과 column header의 type 표시, 셀을 고르면 옆 panel에 전체 값(Shift+Enter), 에디터에서 실행될 문장 범위 강조(배경과 왼쪽 선), 접속 sheet의 `read_only`와 `statement_timeout` 칸과 Advanced 접기, 전역 설정 파일 `~/.config/chilla/config.toml`(5장), 한국어 dictionary(`ko`)와 `language` 설정, 에디터 글꼴과 크기 설정
+- **범위**: Formatting(sql-formatter, 선택 영역 또는 파일 전체, Opt+Cmd+L), DB가 알려준 오류 위치 밑줄, 파일 전체 실행과 문장별 결과 탭(오류 난 문장에서 멈춤), 타입별 표시(JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, 긴 값 줄임), 읽기 전용 접속(4.8), 접속별 타임아웃(4.5), 저장하지 않은 탭 내용을 SQLite에 보관하고 재시작 후 복원, 최근 프로젝트 목록과 프로젝트 바꾸기 menu(Cmd+O), 읽기 전용 접속에서는 위험 쿼리 확인을 건너뜀(4.8), 결과 column header의 type 표시, 셀을 고르면 옆 panel에 전체 값(Shift+Enter), 에디터에서 실행될 문장 범위 강조(배경과 왼쪽 선), 접속 sheet의 `read_only`와 `statement_timeout` 칸과 Advanced 접기, 전역 설정 파일 `~/.config/chilla/config.toml`(5장), 한국어 dictionary(`ko`)와 `language` 설정, Rust 오류 message의 한국어(오류 `kind`별로 화면이 번역), 결과 오류 화면의 Go to error(에디터 오류 밑줄로 이동), 빈 상태의 Reformat 안내(`⌥⌘L Reformat`), toolbar menu의 Run file 항목 켜기, 에디터 글꼴과 크기 설정
 - **완료 기준 (3단계)**: 하루 업무를 DataGrip 없이 처리
 - **먼저 확인할 것**:
   - simple query protocol은 컬럼의 type OID를 주지 않는다(M2 결정). 타입별 표시에 필요한 type을 `TxTap`이 RowDescription을 읽어 얻을지, `prepare`로 Describe할지 정한다

@@ -16,7 +16,10 @@
         "width": 1512,
         "height": 982,
         "center": true,
-        "theme": "Dark"
+        "theme": "Dark",
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 13, "y": 24 }
       }
     ],
     "security": {
