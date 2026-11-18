@@ -351,6 +351,52 @@ test("접속 form이 열려 있으면 단축키가 동작하지 않는다", asyn
   expect(useTabs.getState().tabs).toEqual([]);
 });
 
+test("저장 경로 dialog가 열려 있으면 단축키가 동작하지 않는다", async () => {
+  openProjectWith([connection("local")]);
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
+  const a = tabWith("SELECT 1", "local");
+  const b = tabWith("SELECT 2", "local");
+  renderWorkspace();
+  const shortcut = (code: string, shiftKey = false) =>
+    new KeyboardEvent("keydown", {
+      code,
+      metaKey: true,
+      shiftKey,
+      bubbles: true,
+      cancelable: true,
+    });
+
+  act(() => useTabs.getState().requestName(b));
+  const dialog = screen.getByRole("dialog", { name: "Save Query 2" });
+  const path = within(dialog).getByLabelText("Path inside the project");
+  const keys = [
+    shortcut("Enter"),
+    shortcut("KeyW"),
+    shortcut("BracketRight", true),
+  ];
+  await act(async () => {
+    for (const key of keys) path.dispatchEvent(key);
+  });
+
+  expect(keys.map((key) => key.defaultPrevented)).toEqual([
+    false,
+    false,
+    false,
+  ]);
+  expect(splitStatements).not.toHaveBeenCalled();
+  expect(useTabs.getState().tabs.map((tab) => tab.id)).toEqual([a, b]);
+  expect(useTabs.getState().activeId).toBe(b);
+
+  // dialog를 닫으면 다시 잡는다.
+  await click(within(dialog).getByRole("button", { name: "Cancel" }));
+  const closeAgain = shortcut("KeyW");
+  await act(async () => {
+    window.dispatchEvent(closeAgain);
+  });
+  expect(closeAgain.defaultPrevented).toBe(true);
+  expect(useTabs.getState().tabs.map((tab) => tab.id)).toEqual([a]);
+});
+
 /** jsdom은 var()를 뜻으로 풀지 못해서 style attribute를 그대로 읽는다. */
 function connectionBarColor(): string {
   return screen.getByTestId("connection-bar").style.background;

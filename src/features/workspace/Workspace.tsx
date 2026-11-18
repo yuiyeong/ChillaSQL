@@ -53,8 +53,10 @@ export function Workspace() {
   const barColor = connectionColor(
     project?.connections.find((c) => c.name === connectionName)?.color ?? null,
   );
-  // 접속 form이 열려 있으면 뒤의 탭을 실행하거나 닫지 않는다.
-  useShortcuts(form === null);
+  // 저장 경로 dialog가 떠 있는지. TabBar와 같이 활성 탭의 이름을 물을 때만 dialog를 그린다.
+  const naming = useTabs((s) => s.naming !== null && s.naming === s.activeId);
+  // 접속 form이나 저장 경로 dialog가 열려 있으면 뒤의 탭을 실행하거나 닫거나 바꾸지 않는다.
+  useShortcuts(form === null && !naming);
 
   function editConnection(name: string) {
     const original = project?.connections.find((c) => c.name === name);
