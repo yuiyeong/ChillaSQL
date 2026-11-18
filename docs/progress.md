@@ -7,7 +7,7 @@
 - **진행 중**: 없음. M4 결과 표를 끝내 1단계(M0~M4)가 끝났다(2026-11-18). 계획은 [M4](plans/M4-result-table.md)
 - **작업 위치**: branch `m4-result-table`(main의 `d2be9bf`에서 나눔). main과 origin/main은 `d2be9bf`이고, branch의 commit은 main에 merge하지 않았고 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. 그 전에 branch를 main에 합칠지 정한다. M4 Task 13에서 찾은 7가지는 고쳤다(아래 작업 로그 2026-11-18의 "M4 Task 13에서 찾은 것 고침")
+- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. 그 전에 branch를 main에 합칠지 정한다. M4 Task 13에서 찾은 7가지는 고쳤다(아래 작업 로그 2026-11-18의 "M4 Task 13에서 찾은 것 고침"). 그 뒤 simplify(품질 정리)도 적용했다(작업 로그 "M4 simplify")
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -176,6 +176,11 @@
 | 2026-11-18 | M4 | column header 이름의 너비는 `OffscreenCanvas`의 `measureText`로 잼. 글꼴은 index.css token(`--font-weight-semibold`, `--text-small`, `--font-sans`)으로 만듦. canvas나 token이 없으면(jsdom) 반각 한 칸 9px로 어림함. 값은 그대로 D2Coding 반각으로 셈 | header는 system font 13px semibold라 D2Coding 반각(6.5px)으로 세면 `amount`가 `amo…`로 잘렸음. system font는 글자마다 폭이 달라 글자 수로 셀 수 없음(13px semibold에서 `amount` 7.96px, `name` 8.65px, `m` 11.7px/글자) |
 | 2026-11-18 | M4 | 결과 표에 focus가 있을 때 `Home`, `End`, `Cmd+Up`, `Cmd+Down`은 표가 처리해 `scrollTop`을 맨 위나 맨 아래로 바로 옮김(애니메이션 없음). `PageUp`, `PageDown`, wheel은 그대로 둠 | WebKit은 `End`를 약 200ms 애니메이션으로 스크롤하는데 frame마다 수천 행을 지나가 화면이 행보다 먼저 움직여 빈 몸통이 약 130ms 보였음(M4 Task 13). 바로 옮기면 scroll event가 한 번이고 그 frame에 행이 그려짐. PageDown은 한 frame에 overscan(10행)보다 덜 움직임 |
 | 2026-11-18 | M4 | 복사 알림은 결과 panel(`relative`)의 아래 가운데, 바닥에서 12px에 띄움(`absolute`). 캔버스(TabsConn 6)의 위치 | 창 기준(`fixed`)이면 결과 panel이 아니라 창 가운데에 뜸. panel 안이라 아래 24px status bar를 가리지 않음 |
+| 2026-11-18 | M4 | `t()`는 param을 주어진 그대로(`String(value)`) 씀. 1000 단위로 묶을 number는 호출하는 쪽이 `formatCount`로 넘기고, `tc()`만 `count`를 묶음 | 줄, 칸, 탭 번호처럼 묶으면 안 되는 number를 쓰는 쪽마다 `String()`으로 감쌌음. 묶는 것을 드러내 쓰는 편이 읽기 쉬움(simplify) |
+| 2026-11-18 | M4 | `connectionColor`는 색을 정하지 않았거나 모르는 이름이면 null이 아니라 `var(--color-line-2)`를 돌려줌. 8px 접속 dot은 `ConnectionDot` 하나로 그리고 접속이 없으면 속이 빈 원 | toolbar, 창 위 bar, sidebar, 탭 줄이 같은 fallback과 dot markup을 따로 가졌음(simplify) |
+| 2026-11-18 | M4 | 끝난(`finished`) 결과는 reducer가 `fetch`를 `none`으로 둠. 표는 `fetch`만 보고 다음 batch를 요청함 | 끝난 결과가 마지막 `fetch` 값을 그대로 가져서 결과 panel, 표, footer가 각각 따로 막았음(simplify) |
+| 2026-11-18 | M4 | `Kbd`는 `aria-hidden`이고 단축키는 그 버튼이나 menu 항목의 `aria-keyshortcuts`(`Meta+Enter`, `Meta+F2`)로 알림. 단축키 표시와 `aria-keyshortcuts`는 `shortcuts.ts`의 keymap에서 만듦 | 버튼 이름에 `⌘↵` 같은 기호가 붙어 읽혔고, 표시가 keymap과 따로 적혀 있었음(simplify) |
+| 2026-11-18 | M4 | 저장 경로 dialog와 접속 form은 dialog 틀과 input class를 공유하지 않음 | 저장 경로 dialog는 캔버스 Dialogs(radius 12px, input 32px `bg-0`)를 따르고, 접속 form은 M3의 모양(radius 10px, input 28px `bg-1`)이라 하나로 모으면 어느 한쪽이 바뀜. 접속 form은 M5에서 캔버스의 sheet로 다시 만들 때 맞춤(simplify에서 뺀 항목) |
 
 ## 작업 로그
 
@@ -183,6 +188,15 @@
 
 ### 2026-11-18
 
+- M4 simplify: 네 reviewer의 품질 지적을 한 목록(25항목)으로 모아 24항목을 적용함(`526e357`..`48f51d1`). 동작은 바꾸지 않았고 기존 test는 그대로 통과함
+  - 결과 표와 reducer: 끝난 결과의 `fetch`는 `none`(결정 기록), `rows` batch마다 행 배열을 한 번만 복사, `ResultGrid`와 header 줄을 `memo`하고 너비 변수를 `useMemo`, header 이름 측정 함수를 한 번만 만듦(`--font-weight-semibold` token을 `@theme static`에 둠), 전각 판별의 ASCII fast path, `rowSpan`, SQL label helper를 `format.ts`로 옮김, 안 쓰는 export를 없앰, 결과 panel의 오류 블록을 `MessageBlock` 하나로
+  - `t()`가 number를 묶지 않음(결정 기록). `ConnectionDot`와 `connectionColor`의 fallback(결정 기록). 단축키 표시와 `aria-keyshortcuts`를 keymap에서 만들고 `Kbd`는 `aria-hidden`(결정 기록). `Button`의 size에 padding을 넣고 `chip`, `kbd`, `icon` size와 `dashed` variant를 더함. 실행 split 버튼을 `RunSplitButton`으로 떼어 menu 상태가 실행 중에 함께 사라짐
+  - 결과 panel 경계를 끄는 동안 `ResultSplit`만 다시 그림, sidebar의 tree와 줄을 `useMemo`, status bar는 값 하나씩 고르고 `editorStatus.update`의 같은 값 검사를 없앰, `homeDir()`을 module에 한 번만 물어 둠(실패하면 다음에 다시 물음), 실행 요청은 `requestFor` 하나로
+  - test helper: `src/test/fixtures.ts`(`connection`, `openProjectWith`), `src/test/layout.ts`(`stubLayout`), `resetStores`가 `useEditorStatus`도 되돌림, `setup.ts`가 `scrollIntoView`를 stub함
+  - 뺀 항목: 25(dialog 틀과 input class 공유, 결정 기록). 목록의 "Skip" 8항목도 하지 않음
+  - test를 더함: reducer(버릴 행이 보관한 행보다 많을 때, 한 batch의 append, 끝나면 `fetch` none), `rowSpan`, 전각 범위 경계, `headerMeasure` cache, 단축키 표시와 `aria-keyshortcuts`, `homeDir` cache, 끄는 동안의 handle 선. vitest 371 → 380
+  - 100만 행 스크롤 probe와 화면 screenshot은 사용자의 요청으로 이번에는 하지 않음
+  - `pnpm check` 통과
 - M4 Task 13에서 찾은 것 고침. 7가지 중 6가지를 고치고(`3d742ed`..`8983e15`), 1가지(7)는 결함이 아니었다. 고친 것마다 실패하는 test를 먼저 쓰고(jsdom으로 나타낼 수 있는 것), `scripts/build-app.sh --debug`의 `.app`에서 확인함
   1. 자동 너비와 행 번호 column: `fitWidth`와 새 `rowNumberWidth`가 칸의 `border-r` 1px(`CELL_BORDER`)을 더함. 앱에서 `2026-07-30 02:00:00+00`, `user_302520`, 행 번호 `1,000,000`이 잘리지 않음
   2. 결과 header의 행 수: `receivedRows(result)`(`firstRow + rows.length`)로 셈. 실행 중 `310,500+ rows`, 끝나면 `1,000,000 rows`. cancel한 결과의 header도 받은 행 수이고, 안내 문장("The {n} rows received stay visible")은 표에 남은 행 수
