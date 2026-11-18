@@ -201,6 +201,19 @@ test("NULL과 빈 문자열을 다르게 그린다", () => {
   expect(cells[1]).toHaveTextContent("''");
 });
 
+test("NULL은 muted italic, 빈 문자열은 muted로 그린다", () => {
+  finished(
+    { outcome: "completed", rows: 1 },
+    { columns: ["a", "b"], rows: [[null, ""]] },
+  );
+
+  const nullSpan = screen.getByText("NULL");
+  expect(nullSpan).toHaveClass("text-zinc-600", "italic");
+  const emptySpan = screen.getByText("''");
+  expect(emptySpan).toHaveClass("text-zinc-600");
+  expect(emptySpan).not.toHaveClass("italic");
+});
+
 test("300자를 넘는 값은 줄여 그린다", () => {
   const long = "x".repeat(1000);
   const exact = "y".repeat(300);

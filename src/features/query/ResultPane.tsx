@@ -188,6 +188,8 @@ function CellText({ value }: { value: Cell }) {
   const { text, muted, italic } = cellDisplay(value);
   if (!muted) return text;
   return (
-    <span className={`text-zinc-600${italic ? "italic" : ""}`}>{text}</span>
+    <span className={italic ? "text-zinc-600 italic" : "text-zinc-600"}>
+      {text}
+    </span>
   );
 }
