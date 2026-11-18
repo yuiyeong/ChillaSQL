@@ -3,6 +3,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
 import { deferred } from "../../test/deferred";
+import { connection } from "../../test/fixtures";
 import { expectNoTextCorrection } from "../../test/textCorrection";
 
 vi.mock("../../shared/api/commands");
@@ -18,17 +19,7 @@ import { ConnectionForm } from "./ConnectionForm";
 
 const saved: Project = { name: "demo", dir: "/p", connections: [] };
 
-const original: Connection = {
-  name: "local",
-  host: "localhost",
-  port: 5432,
-  database: "app",
-  user: "chilla",
-  sslmode: "disable",
-  sslrootcert: null,
-  tunnel: "bastion",
-  color: "#ff0000",
-};
+const original = connection("local", { tunnel: "bastion", color: "#ff0000" });
 
 const warning =
   "Changing the connection target deletes the saved password. Enter the password again";

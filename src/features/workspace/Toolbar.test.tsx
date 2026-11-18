@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { click } from "../../test/click";
+import { connection, openProjectWith } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("./commands", () => ({
@@ -8,41 +9,12 @@ vi.mock("./commands", () => ({
   execute: vi.fn(),
 }));
 
-import type { Connection } from "../../shared/api/types";
 import { useEditorStatus } from "../editor/editorStatus";
 import { useTabs } from "../editor/tabsStore";
-import { useProject } from "../project/projectStore";
 import { emptyResult, type RunState } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
 import { changeConnection, execute } from "./commands";
 import { Toolbar } from "./Toolbar";
-
-function connection(name: string, extra: Partial<Connection> = {}): Connection {
-  return {
-    name,
-    host: "localhost",
-    port: 5432,
-    database: "app",
-    user: "chilla",
-    sslmode: "disable",
-    sslrootcert: null,
-    tunnel: null,
-    color: null,
-    ...extra,
-  };
-}
-
-function openProjectWith(connections: Connection[]) {
-  useProject.setState(
-    {
-      ...useProject.getInitialState(),
-      status: "ready",
-      project: { name: "demo", dir: "/p", connections },
-      files: [],
-    },
-    true,
-  );
-}
 
 function tabWith(connectionName: string | null): string {
   let id = "";
@@ -67,7 +39,6 @@ const progress = () => screen.queryByTestId("progress-bar");
 beforeEach(async () => {
   await resetStores();
   vi.resetAllMocks();
-  useEditorStatus.setState(useEditorStatus.getInitialState(), true);
 });
 
 test("접속 chip은 탭의 접속 이름과 database를 보여 준다", () => {

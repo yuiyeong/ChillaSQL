@@ -1,6 +1,8 @@
 import { act, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { click } from "../../test/click";
+import { connection, openProjectWith } from "../../test/fixtures";
+import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/dialog");
@@ -8,32 +10,15 @@ vi.mock("../../shared/api/path");
 
 import { listSqlFiles } from "../../shared/api/commands";
 import { homeDir } from "../../shared/api/path";
-import type { Connection } from "../../shared/api/types";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "./projectStore";
 import { Sidebar } from "./Sidebar";
 
-function connection(name: string, patch: Partial<Connection> = {}): Connection {
-  return {
-    name,
-    host: "localhost",
-    port: 5432,
-    database: "app",
-    user: "me",
-    sslmode: "disable",
-    sslrootcert: null,
-    tunnel: null,
-    color: null,
-    ...patch,
-  };
-}
-
-beforeEach(() => {
+beforeEach(async () => {
+  await resetStores();
   vi.resetAllMocks();
   vi.mocked(homeDir).mockResolvedValue("/Users/jo");
   localStorage.clear();
-  useTabs.getState().reset();
-  useProject.setState(useProject.getInitialState(), true);
   useProject.setState({
     status: "ready",
     project: {
@@ -112,10 +97,7 @@ test("접속을 나열하고 누르면 수정한다", async () => {
 });
 
 test("접속이 없으면 접속 추가만 보인다", async () => {
-  useProject.setState({
-    project: { name: "demo", dir: "/p", connections: [] },
-    files: [],
-  });
+  openProjectWith([]);
   await renderSidebar();
 
   expect(screen.queryByRole("button", { name: /^Edit connection/ })).toBeNull();

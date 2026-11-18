@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { StrictMode } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { click } from "../../test/click";
+import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/dialog");
@@ -16,10 +17,10 @@ import { CommandError } from "../../shared/api/errors";
 import { LAST_PROJECT_KEY, useProject } from "./projectStore";
 import { ProjectGate } from "./ProjectGate";
 
-beforeEach(() => {
+beforeEach(async () => {
+  await resetStores();
   vi.resetAllMocks();
   localStorage.clear();
-  useProject.setState(useProject.getInitialState(), true);
   vi.mocked(listSqlFiles).mockResolvedValue([]);
 });
 

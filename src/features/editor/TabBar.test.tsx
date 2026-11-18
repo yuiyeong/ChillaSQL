@@ -1,15 +1,15 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, expect, onTestFinished, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
+import { connection, openProjectWith } from "../../test/fixtures";
+import { resetStores } from "../../test/resetStores";
 import { expectNoTextCorrection } from "../../test/textCorrection";
-import { useProject } from "../project/projectStore";
 import { TabBar } from "./TabBar";
 import { useTabs } from "./tabsStore";
 
-beforeEach(() => {
-  useTabs.getState().reset();
-  useProject.setState(useProject.getInitialState(), true);
+beforeEach(async () => {
+  await resetStores();
 });
 
 function renderBar() {
@@ -18,21 +18,7 @@ function renderBar() {
   return handlers;
 }
 
-function connection(name: string, color: string | null) {
-  return {
-    name,
-    host: "localhost",
-    port: 5432,
-    database: "app",
-    user: "me",
-    sslmode: "disable" as const,
-    sslrootcert: null,
-    tunnel: null,
-    color,
-  };
-}
-
-function lastContext(spy: ReturnType<typeof vi.fn>): HTMLElement {
+function lastContext(spy: { mock: { contexts: unknown[] } }): HTMLElement {
   return spy.mock.contexts[spy.mock.contexts.length - 1] as HTMLElement;
 }
 
@@ -63,13 +49,10 @@ test("탭 제목을 그리고 누르면 활성으로 한다", async () => {
 });
 
 test("탭의 dot은 접속 색이다", () => {
-  useProject.setState({
-    project: {
-      name: "demo",
-      dir: "/p",
-      connections: [connection("local", "green"), connection("plain", null)],
-    },
-  });
+  openProjectWith([
+    connection("local", { color: "green" }),
+    connection("plain"),
+  ]);
   const a = useTabs.getState().newTab();
   const b = useTabs.getState().newTab();
   const c = useTabs.getState().newTab();
@@ -146,28 +129,23 @@ test("탭이 많으면 탭 목록이 스크롤되고 새 탭 버튼과 빈 자�
 });
 
 test("활성 탭이 바뀌면 그 탭을 보이는 자리로 스크롤한다", async () => {
-  const scrollIntoView = vi.fn();
-  Element.prototype.scrollIntoView = scrollIntoView;
-  try {
-    const a = useTabs.getState().newTab();
-    useTabs.getState().newTab();
-    renderBar();
-    const last = lastContext(scrollIntoView);
-    expect(last).toContainElement(tab("Query 2"));
-    expect(scrollIntoView).toHaveBeenLastCalledWith({
-      inline: "nearest",
-      block: "nearest",
-    });
+  const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
+  onTestFinished(() => scrollIntoView.mockRestore());
+  const a = useTabs.getState().newTab();
+  useTabs.getState().newTab();
+  renderBar();
+  const last = lastContext(scrollIntoView);
+  expect(last).toContainElement(tab("Query 2"));
+  expect(scrollIntoView).toHaveBeenLastCalledWith({
+    inline: "nearest",
+    block: "nearest",
+  });
 
-    await click(tab("Query 1"));
+  await click(tab("Query 1"));
 
-    const moved = lastContext(scrollIntoView);
-    expect(moved).toContainElement(tab("Query 1"));
-    expect(useTabs.getState().activeId).toBe(a);
-  } finally {
-    // jsdom에는 원래 없다.
-    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
-  }
+  const moved = lastContext(scrollIntoView);
+  expect(moved).toContainElement(tab("Query 1"));
+  expect(useTabs.getState().activeId).toBe(a);
 });
 
 test("탭의 왼쪽 여백도 탭을 누르는 자리다", () => {

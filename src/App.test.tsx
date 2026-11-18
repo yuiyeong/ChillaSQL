@@ -6,15 +6,16 @@ vi.mock("./shared/api/dialog");
 vi.mock("./shared/api/path");
 
 import App from "./App";
-import { LAST_PROJECT_KEY, useProject } from "./features/project/projectStore";
+import { resetStores } from "./test/resetStores";
+import { LAST_PROJECT_KEY } from "./features/project/projectStore";
 import { listSqlFiles, openProject } from "./shared/api/commands";
 import { homeDir } from "./shared/api/path";
 
-beforeEach(() => {
+beforeEach(async () => {
+  await resetStores();
   vi.resetAllMocks();
   vi.mocked(homeDir).mockResolvedValue("/Users/jo");
   localStorage.clear();
-  useProject.setState(useProject.getInitialState(), true);
 });
 
 test("프로젝트가 열리면 작업 화면을 보여 준다", async () => {

@@ -9,4 +9,7 @@ globalThis.ResizeObserver ??= class {
   disconnect() {}
 };
 
+// jsdom에는 scrollIntoView가 없다. 스크롤할 layout도 없으니 아무것도 하지 않는다.
+Element.prototype.scrollIntoView ??= function () {};
+
 afterEach(cleanup);

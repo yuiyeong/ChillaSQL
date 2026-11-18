@@ -6,6 +6,7 @@ vi.mock("../../shared/api/clipboard");
 vi.mock("../workspace/commands", () => ({ runAgain: vi.fn() }));
 
 import { copyText } from "../../shared/api/clipboard";
+import { stubLayout } from "../../test/layout";
 import type { Cell, Outcome } from "../../shared/api/types";
 import { runAgain } from "../workspace/commands";
 import { ResultPane } from "./ResultPane";
@@ -15,9 +16,8 @@ import { useRuns } from "./runsStore";
 const realFetchMore = useRuns.getInitialState().fetchMore;
 
 beforeEach(async () => {
-  // jsdom은 layout이 없어 clientHeight가 0이다. 결과 panel 크기의 viewport로 둔다.
-  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
+  // 결과 panel 크기의 viewport로 둔다.
+  stubLayout({ width: 800, height: 400 });
   vi.mocked(copyText).mockResolvedValue(undefined);
   await useRuns.getState().reset();
 });

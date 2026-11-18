@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { connection } from "../../test/fixtures";
 import type { Connection } from "../../shared/api/types";
 import {
   initialValues,
@@ -17,17 +18,12 @@ const values: FormValues = {
   sslrootcert: "",
 };
 
-const original: Connection = {
-  name: "local",
-  host: "localhost",
-  port: 5432,
-  database: "app",
-  user: "chilla",
+const original = connection("local", {
   sslmode: "verify-full",
   sslrootcert: "/certs/ca.crt",
   tunnel: "bastion",
   color: "#ff0000",
-};
+});
 
 test("새 접속의 초기값은 port 5432와 sslmode disable이다", () => {
   expect(initialValues(null)).toEqual({

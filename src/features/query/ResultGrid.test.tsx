@@ -7,17 +7,15 @@ import {
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Cell } from "../../shared/api/types";
+import { stubLayout } from "../../test/layout";
 import { fitWidth } from "./grid";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { emptyResult, type ResultData } from "./runReducer";
 
 type Props = ComponentProps<typeof ResultGrid>;
 
-// jsdom은 layout이 없어 clientHeight가 0이다. 결과 panel 크기의 viewport로 둔다.
-beforeEach(() => {
-  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(400);
-  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(800);
-});
+// 결과 panel 크기의 viewport로 둔다.
+beforeEach(() => stubLayout({ width: 800, height: 400 }));
 
 function rowsOf(count: number, from = 0): Cell[][] {
   return Array.from({ length: count }, (_, i) => [

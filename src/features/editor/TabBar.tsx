@@ -26,14 +26,11 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
 
   const scroller = useRef<HTMLDivElement>(null);
 
-  // 탭이 많아 줄이 스크롤되면 활성 탭이 보이는 자리로 옮긴다. jsdom에는 scrollIntoView가 없다.
+  // 탭이 많아 줄이 스크롤되면 활성 탭이 보이는 자리로 옮긴다.
   useEffect(() => {
-    const active = scroller.current?.querySelector<HTMLElement>(
-      '[data-selected="true"]',
-    );
-    if (typeof active?.scrollIntoView === "function") {
-      active.scrollIntoView({ inline: "nearest", block: "nearest" });
-    }
+    scroller.current
+      ?.querySelector<HTMLElement>('[data-selected="true"]')
+      ?.scrollIntoView({ inline: "nearest", block: "nearest" });
   }, [activeId, tabs.length]);
 
   const namingTab =

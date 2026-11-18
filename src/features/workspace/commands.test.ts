@@ -15,12 +15,7 @@ import {
 } from "../../shared/api/commands";
 import { confirm, pickDirectory } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
-import type {
-  Connection,
-  Project,
-  QueryEvent,
-  Session,
-} from "../../shared/api/types";
+import type { Project, QueryEvent, Session } from "../../shared/api/types";
 import {
   documentState,
   openDocument,
@@ -38,6 +33,7 @@ import {
   switchProject,
 } from "./commands";
 import { deferred } from "../../test/deferred";
+import { connection } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 
 const project: Project = { name: "demo", dir: "/p", connections: [] };
@@ -435,20 +431,6 @@ test("저장이 끝나기 전에는 다시 저장하지 않는다", async () => 
   });
 });
 
-function connection(name: string, host = "a.internal"): Connection {
-  return {
-    name,
-    host,
-    port: 5432,
-    database: "app",
-    user: "chilla",
-    sslmode: "disable",
-    sslrootcert: null,
-    tunnel: null,
-    color: null,
-  };
-}
-
 /** 그 접속으로 실행한 탭. 세션이 열려 있다. */
 async function ranTab(name: string, sessionId: number): Promise<string> {
   const id = tabWith("SELECT 1", name);
@@ -476,7 +458,10 @@ test("대상이 바뀐 접속을 쓰는 탭의 세션을 놓는다", async () =>
   const staging = await ranTab("staging", 4);
   const saved: Project = {
     ...project,
-    connections: [connection("local", "b.internal"), connection("staging")],
+    connections: [
+      connection("local", { host: "b.internal" }),
+      connection("staging"),
+    ],
   };
 
   await applySavedProject(saved);
@@ -502,7 +487,7 @@ test("대상이 그대로면 세션을 놓지 않는다", async () => {
   const id = await ranTab("local", 3);
   const saved: Project = {
     ...project,
-    connections: [{ ...connection("local"), color: "#ff0000" }],
+    connections: [connection("local", { color: "#ff0000" })],
   };
 
   await applySavedProject(saved);

@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
 import { deferred } from "../../test/deferred";
+import { connection, openProjectWith } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
@@ -21,38 +22,12 @@ import {
   splitStatements,
   writeSqlFile,
 } from "../../shared/api/commands";
-import type { Connection, Project, QueryEvent } from "../../shared/api/types";
+import type { Project, QueryEvent } from "../../shared/api/types";
 import { homeDir } from "../../shared/api/path";
 import { openDocument } from "../editor/documents";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { Workspace } from "./Workspace";
-
-function connection(name: string, host = "localhost"): Connection {
-  return {
-    name,
-    host,
-    port: 5432,
-    database: "app",
-    user: "chilla",
-    sslmode: "disable",
-    sslrootcert: null,
-    tunnel: null,
-    color: null,
-  };
-}
-
-function openProjectWith(
-  connections: Connection[] = [],
-  files: string[] = [],
-): Project {
-  const project: Project = { name: "demo", dir: "/p", connections };
-  useProject.setState(
-    { ...useProject.getInitialState(), status: "ready", project, files },
-    true,
-  );
-  return project;
-}
 
 /** 새 탭을 만들고 text와 접속을 둔다. */
 function tabWith(text: string, connectionName: string | null): string {
@@ -227,7 +202,10 @@ test("접속 추가를 누르면 form이 열리고 저장하면 접속 목록에
 });
 
 test("수정을 누르면 그 접속의 값으로 form을 연다", async () => {
-  openProjectWith([connection("local"), connection("staging", "10.0.0.2")]);
+  openProjectWith([
+    connection("local"),
+    connection("staging", { host: "10.0.0.2" }),
+  ]);
   renderWorkspace();
   const sidebar = screen.getByRole("region", { name: "Connections" });
   const editLocal = within(sidebar).getByRole("button", {
@@ -390,10 +368,7 @@ function drag(dy: number) {
 }
 
 test("창 상단 bar는 활성 탭 접속의 색이다", () => {
-  openProjectWith([
-    { ...connection("prod"), color: "red" },
-    connection("plain"),
-  ]);
+  openProjectWith([connection("prod", { color: "red" }), connection("plain")]);
   tabWith("SELECT 1", "prod");
   tabWith("SELECT 2", "plain");
   renderWorkspace();
