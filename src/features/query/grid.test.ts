@@ -1,10 +1,12 @@
-import { expect, test } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 import {
   anchorShift,
   cellDisplay,
   copyCell,
   displayColumns,
+  estimateHeaderWidth,
   fitWidth,
+  headerMeasure,
   resultLabel,
   rowNumberWidth,
   selectedRows,
@@ -36,8 +38,59 @@ test("fitWidth는 앞 2,000개만 본다", () => {
   expect(fitWidth("c", values)).toBe(64);
 });
 
-test("fitWidth는 header도 센다", () => {
-  expect(fitWidth("h".repeat(30), ["1"])).toBe(Math.ceil(30 * 6.5 + 20 + 1));
+test("fitWidth는 header를 header용 너비로 잰다", () => {
+  // canvas가 없으면 system font semibold의 반각 한 칸을 9px로 어림한다. D2Coding의 6.5px로 세면 amount가 잘린다.
+  expect(fitWidth("amount", ["1"])).toBe(6 * 9 + 20 + 1);
+  expect(fitWidth("h".repeat(30), ["1"])).toBe(30 * 9 + 20 + 1);
+  expect(fitWidth("h", ["1"], () => 100.2)).toBe(Math.ceil(100.2 + 20 + 1));
+  // 값은 그대로 D2Coding 반각으로 센다.
+  expect(fitWidth("h", ["x".repeat(20)], () => 10)).toBe(20 * 6.5 + 20 + 1);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  document.documentElement.removeAttribute("style");
+});
+
+test("headerMeasure는 canvas가 없으면 어림값을 쓴다", () => {
+  expect(headerMeasure()).toBe(estimateHeaderWidth);
+  expect(estimateHeaderWidth("가a")).toBe(3 * 9);
+});
+
+test("headerMeasure는 header의 글꼴 token으로 canvas에서 잰다", () => {
+  const fonts: string[] = [];
+  class FakeCanvas {
+    getContext() {
+      return {
+        font: "10px sans-serif",
+        measureText(this: { font: string }, text: string) {
+          fonts.push(this.font);
+          return { width: text.length * 7.25 };
+        },
+      };
+    }
+  }
+  vi.stubGlobal("OffscreenCanvas", FakeCanvas);
+  const root = document.documentElement.style;
+  root.setProperty("--font-weight-semibold", "600");
+  root.setProperty("--text-small", "13px");
+  root.setProperty("--font-sans", "-apple-system, sans-serif");
+
+  expect(headerMeasure()("amount")).toBe(6 * 7.25);
+  expect(fonts).toEqual(["600 13px -apple-system, sans-serif"]);
+});
+
+test("headerMeasure는 글꼴 token이 없으면 어림값을 쓴다", () => {
+  vi.stubGlobal(
+    "OffscreenCanvas",
+    class {
+      getContext() {
+        return { font: "", measureText: () => ({ width: 1 }) };
+      }
+    },
+  );
+
+  expect(headerMeasure()).toBe(estimateHeaderWidth);
 });
 
 test("fitWidth는 가장 긴 값과 padding에 칸의 border-r 1px까지 더한다", () => {

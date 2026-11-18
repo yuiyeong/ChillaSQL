@@ -32,6 +32,7 @@ import {
   fitWidth,
   GAP_HEIGHT,
   HEADER_HEIGHT,
+  headerMeasure,
   MIN_DRAG,
   ROW_HEIGHT,
   rowNumberWidth,
@@ -221,7 +222,11 @@ function Grid({
   const fitColumn = (index: number) =>
     setColumnSizing((old) => ({
       ...old,
-      [String(index)]: fitWidth(columns[index], columnValues(rows, index)),
+      [String(index)]: fitWidth(
+        columns[index],
+        columnValues(rows, index),
+        headerMeasure(),
+      ),
     }));
 
   const numberWidth = rowNumberWidth(receivedRows(result));
@@ -448,8 +453,13 @@ function fitColumns(
   rows: readonly Cell[][],
 ): ColumnSizingState {
   const sizing: ColumnSizingState = {};
+  const measureHeader = headerMeasure();
   columns.forEach((name, index) => {
-    sizing[String(index)] = fitWidth(name, columnValues(rows, index));
+    sizing[String(index)] = fitWidth(
+      name,
+      columnValues(rows, index),
+      measureHeader,
+    );
   });
   return sizing;
 }

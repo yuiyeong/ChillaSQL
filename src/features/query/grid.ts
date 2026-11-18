@@ -9,8 +9,13 @@ export const GAP_HEIGHT = 40;
 export const FOOTER_HEIGHT = 30;
 /** 마지막으로 보이는 행이 보관한 행의 끝에서 이만큼 안에 들면 다음 batch를 요청한다. */
 export const FETCH_AHEAD = 100;
-/** D2Coding 13px 반각 글자의 advance */
+/** D2Coding 13px 반각 글자의 advance. 값과 행 번호를 이것으로 센다. */
 export const HALF_WIDTH = 6.5;
+/**
+ * canvas로 잴 수 없을 때(jsdom) header 이름의 반각 한 칸 너비. header는 system font 13px semibold라
+ * 글자 평균이 7~8.7px이다(`amount` 7.96, `name` 8.65). 넉넉히 잡는다.
+ */
+export const HEADER_HALF_WIDTH = 9;
 /** 칸 좌우의 padding(`px-2.5`) */
 export const CELL_PADDING = 20;
 /** 칸의 `border-r`. box-sizing이 border-box라 칸 너비 안에 든다. */
@@ -53,15 +58,50 @@ export function displayColumns(text: string): number {
   return columns;
 }
 
-/** header와 앞 `FIT_SAMPLE`개 값 중 가장 넓은 것에 맞춘 열 너비(px) */
-export function fitWidth(header: string, values: Iterable<Cell>): number {
-  let widest = displayColumns(header);
+/** 글자의 그려진 너비(px) */
+export type MeasureText = (text: string) => number;
+
+export function estimateHeaderWidth(text: string): number {
+  return displayColumns(text) * HEADER_HALF_WIDTH;
+}
+
+/**
+ * header 이름(system font, `text-small`, semibold)의 너비를 canvas로 재는 함수. 글꼴은 index.css의 token에서 읽는다.
+ * canvas나 token이 없으면(jsdom) `estimateHeaderWidth`다.
+ */
+export function headerMeasure(): MeasureText {
+  if (typeof OffscreenCanvas === "undefined") return estimateHeaderWidth;
+  const style = getComputedStyle(document.documentElement);
+  const [weight, size, family] = [
+    "--font-weight-semibold",
+    "--text-small",
+    "--font-sans",
+  ].map((name) => style.getPropertyValue(name).trim());
+  const context = new OffscreenCanvas(1, 1).getContext("2d");
+  if (context === null || !weight || !size || !family) {
+    return estimateHeaderWidth;
+  }
+  context.font = `${weight} ${size} ${family}`;
+  return (text) => context.measureText(text).width;
+}
+
+/**
+ * header와 앞 `FIT_SAMPLE`개 값 중 가장 넓은 것에 맞춘 열 너비(px).
+ * 값은 D2Coding 반각으로 세고, header는 `measureHeader`로 잰다.
+ */
+export function fitWidth(
+  header: string,
+  values: Iterable<Cell>,
+  measureHeader: MeasureText = estimateHeaderWidth,
+): number {
+  let widest = 0;
   let seen = 0;
   for (const value of values) {
     if (seen++ === FIT_SAMPLE) break;
     widest = Math.max(widest, displayColumns(value ?? "NULL"));
   }
-  const width = widest * HALF_WIDTH + CELL_PADDING + CELL_BORDER;
+  const content = Math.max(measureHeader(header), widest * HALF_WIDTH);
+  const width = content + CELL_PADDING + CELL_BORDER;
   return Math.ceil(Math.min(MAX_FIT, Math.max(MIN_FIT, width)));
 }
 

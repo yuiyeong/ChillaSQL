@@ -283,6 +283,13 @@ test("처음 너비는 header와 첫 batch에 맞춘다", () => {
   );
 });
 
+test("header 이름은 값과 다른 글꼴(system font semibold)의 너비로 맞춘다", () => {
+  setup({ result: result({ columns: ["amount"], rows: [["1"]] }) });
+
+  // jsdom에는 canvas가 없어 반각 한 칸 9px로 어림한다. D2Coding으로 세면 64px로 잘린다.
+  expect(columnHeader("amount").style.width).toBe(`${6 * 9 + 20 + 1}px`);
+});
+
 test("handle을 두 번 누르면 내용에 맞춘다", () => {
   const rows = rowsOf(3);
   setup({ result: result({ rows }) });
