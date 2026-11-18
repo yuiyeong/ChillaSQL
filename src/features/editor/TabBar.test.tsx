@@ -32,6 +32,10 @@ function connection(name: string, color: string | null) {
   };
 }
 
+function lastContext(spy: ReturnType<typeof vi.fn>): HTMLElement {
+  return spy.mock.contexts[spy.mock.contexts.length - 1] as HTMLElement;
+}
+
 function tab(title: string) {
   return screen.getByRole("tab", { name: title });
 }
@@ -118,6 +122,66 @@ test("빈 자리와 줄 자체는 창을 끄는 자리고 탭은 아니다", () 
     "data-tauri-drag-region",
   );
   expect(tab("Query 1")).not.toHaveAttribute("data-tauri-drag-region");
+});
+
+test("탭이 많으면 탭 목록이 스크롤되고 새 탭 버튼과 빈 자리는 그 밖에 있다", () => {
+  for (let i = 0; i < 20; i += 1) useTabs.getState().newTab();
+  renderBar();
+
+  const scroller = screen.getByTestId("tab-scroller");
+  expect(scroller).toHaveClass("overflow-x-auto");
+  expect(
+    within(scroller).getByRole("tablist", { name: "Open files" }),
+  ).toBeInTheDocument();
+  expect(
+    within(scroller).queryByRole("button", { name: "New tab (Shift+Cmd+L)" }),
+  ).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "New tab (Shift+Cmd+L)" }),
+  ).toBeVisible();
+  // 탭은 줄어들지 않아서 제목이 읽히는 너비를 지킨다.
+  expect(tab("Query 1").parentElement).toHaveClass("shrink-0");
+  expect(screen.getByTestId("tab-row-spacer")).not.toBe(scroller);
+  expect(scroller).not.toContainElement(screen.getByTestId("tab-row-spacer"));
+});
+
+test("활성 탭이 바뀌면 그 탭을 보이는 자리로 스크롤한다", async () => {
+  const scrollIntoView = vi.fn();
+  Element.prototype.scrollIntoView = scrollIntoView;
+  try {
+    const a = useTabs.getState().newTab();
+    useTabs.getState().newTab();
+    renderBar();
+    const last = lastContext(scrollIntoView);
+    expect(last).toContainElement(tab("Query 2"));
+    expect(scrollIntoView).toHaveBeenLastCalledWith({
+      inline: "nearest",
+      block: "nearest",
+    });
+
+    await click(tab("Query 1"));
+
+    const moved = lastContext(scrollIntoView);
+    expect(moved).toContainElement(tab("Query 1"));
+    expect(useTabs.getState().activeId).toBe(a);
+  } finally {
+    // jsdom에는 원래 없다.
+    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+  }
+});
+
+test("탭의 왼쪽 여백도 탭을 누르는 자리다", () => {
+  useTabs.getState().newTab();
+  renderBar();
+
+  // 여백이 탭 button 안에 있어서 눌러도 활성이 된다. 닫기 button은 button 밖이다.
+  const button = tab("Query 1");
+  expect(button).toHaveClass("pl-3");
+  expect(button).toHaveClass("h-full");
+  expect(button.parentElement).not.toHaveClass("pl-3");
+  expect(button).not.toContainElement(
+    screen.getByRole("button", { name: "Close Query 1" }),
+  );
 });
 
 test("이름을 묻는 중이면 Save dialog를 띄운다", async () => {

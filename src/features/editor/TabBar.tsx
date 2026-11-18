@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { connectionColor } from "../connections/colors";
 import { useProject } from "../project/projectStore";
 import { CloseIcon, PlusIcon } from "../../shared/ui/icons";
@@ -23,6 +24,18 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
   const setError = useTabs((state) => state.setError);
   const connections = useProject((state) => state.project?.connections);
 
+  const scroller = useRef<HTMLDivElement>(null);
+
+  // 탭이 많아 줄이 스크롤되면 활성 탭이 보이는 자리로 옮긴다. jsdom에는 scrollIntoView가 없다.
+  useEffect(() => {
+    const active = scroller.current?.querySelector<HTMLElement>(
+      '[data-selected="true"]',
+    );
+    if (typeof active?.scrollIntoView === "function") {
+      active.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
+  }, [activeId, tabs.length]);
+
   const namingTab =
     naming !== null && naming === activeId
       ? tabs.find((tab) => tab.id === naming)
@@ -40,78 +53,86 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
       <div
         data-tauri-drag-region
         data-testid="tab-row"
-        className="border-line-1 bg-bg-0 flex h-[38px] shrink-0 items-end border-b"
+        className="bg-bg-0 flex h-[38px] shrink-0 items-end shadow-[inset_0_-1px_0_var(--color-line-1)]"
       >
+        {/* 탭이 많으면 이 안에서 스크롤한다. 줄의 아래 선은 inset shadow라서 스크롤이 활성 탭을 자르지 않는다. */}
         <div
-          role="tablist"
-          aria-label={t("tabs.list")}
-          className="flex min-w-0 items-end gap-0.5 px-2"
+          ref={scroller}
+          data-testid="tab-scroller"
+          className="flex min-w-0 [scrollbar-width:none] items-end overflow-x-auto pl-2 [&::-webkit-scrollbar]:hidden"
         >
-          {tabs.map((tab) => {
-            const selected = tab.id === activeId;
-            const color = dotColor(tab.connection);
-            return (
-              <div
-                key={tab.id}
-                className={[
-                  "group text-small flex h-[31px] max-w-[220px] min-w-0 items-center gap-1 rounded-t-[8px] border pr-2 pl-3",
-                  selected
-                    ? "bg-bg-1 text-fg border-line-1 border-b-bg-1 -mb-px"
-                    : "text-fg-2 border-transparent",
-                ].join(" ")}
-              >
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={selected}
-                  className="focus-visible:outline-accent flex min-w-0 cursor-pointer items-center gap-2 border-0 bg-transparent p-0 text-inherit focus-visible:outline-2 focus-visible:outline-offset-4"
-                  onClick={() => activate(tab.id)}
+          <div
+            role="tablist"
+            aria-label={t("tabs.list")}
+            className="flex items-end gap-0.5"
+          >
+            {tabs.map((tab) => {
+              const selected = tab.id === activeId;
+              const color = dotColor(tab.connection);
+              return (
+                <div
+                  key={tab.id}
+                  data-selected={selected}
+                  className={[
+                    "group text-small flex h-[31px] max-w-[220px] min-w-24 shrink-0 items-center rounded-t-[8px] border pr-2",
+                    selected
+                      ? "bg-bg-1 text-fg border-line-1 border-b-bg-1"
+                      : "text-fg-2 border-transparent",
+                  ].join(" ")}
                 >
-                  <span
-                    aria-hidden="true"
-                    data-testid="tab-dot"
-                    className={
-                      color === null
-                        ? "border-fg-3 size-2 shrink-0 rounded-full border-[1.5px]"
-                        : "size-2 shrink-0 rounded-full"
-                    }
-                    style={color === null ? undefined : { background: color }}
-                  />
-                  <span className="truncate">{tab.title}</span>
-                </button>
-                <span className="relative ml-1 size-[18px] shrink-0">
-                  {tab.dirty && (
-                    <span
-                      role="img"
-                      aria-label={t("tabs.unsaved")}
-                      className="bg-fg absolute inset-0 m-auto size-[7px] rounded-full group-focus-within:opacity-0 group-hover:opacity-0"
-                    />
-                  )}
                   <button
                     type="button"
-                    aria-label={t("tabs.close", { title: tab.title })}
-                    className={[
-                      "text-fg-2 hover:bg-bg-3 hover:text-fg focus-visible:outline-accent absolute inset-0 flex cursor-pointer items-center justify-center rounded-[4px] border-0 bg-transparent focus-visible:outline-2",
-                      tab.dirty
-                        ? "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
-                        : "",
-                    ].join(" ")}
-                    onClick={() => onClose(tab.id)}
+                    role="tab"
+                    aria-selected={selected}
+                    className="focus-visible:outline-accent flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 border-0 bg-transparent pr-1 pl-3 text-inherit focus-visible:outline-2 focus-visible:-outline-offset-2"
+                    onClick={() => activate(tab.id)}
                   >
-                    <CloseIcon />
+                    <span
+                      aria-hidden="true"
+                      data-testid="tab-dot"
+                      className={
+                        color === null
+                          ? "border-fg-3 size-2 shrink-0 rounded-full border-[1.5px]"
+                          : "size-2 shrink-0 rounded-full"
+                      }
+                      style={color === null ? undefined : { background: color }}
+                    />
+                    <span className="truncate">{tab.title}</span>
                   </button>
-                </span>
-              </div>
-            );
-          })}
-          <IconButton
-            label={t("tabs.new")}
-            className="mb-1 ml-1"
-            onClick={onNew}
-          >
-            <PlusIcon />
-          </IconButton>
+                  <span className="relative size-[18px] shrink-0">
+                    {tab.dirty && (
+                      <span
+                        role="img"
+                        aria-label={t("tabs.unsaved")}
+                        className="bg-fg absolute inset-0 m-auto size-[7px] rounded-full group-focus-within:opacity-0 group-hover:opacity-0"
+                      />
+                    )}
+                    <button
+                      type="button"
+                      aria-label={t("tabs.close", { title: tab.title })}
+                      className={[
+                        "text-fg-2 hover:bg-bg-3 hover:text-fg focus-visible:outline-accent absolute inset-0 flex cursor-pointer items-center justify-center rounded-[4px] border-0 bg-transparent focus-visible:outline-2",
+                        tab.dirty
+                          ? "opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
+                          : "",
+                      ].join(" ")}
+                      onClick={() => onClose(tab.id)}
+                    >
+                      <CloseIcon />
+                    </button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
+        <IconButton
+          label={t("tabs.new")}
+          className="mr-1 mb-1 ml-1"
+          onClick={onNew}
+        >
+          <PlusIcon />
+        </IconButton>
         <div
           aria-hidden="true"
           data-tauri-drag-region

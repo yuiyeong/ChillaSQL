@@ -49,7 +49,7 @@ export const en = {
   "project.create": "Create chilla.toml",
   "project.chooseAnother": "Choose another folder…",
 
-  "sidebar.label": "Project",
+  "sidebar.label": "Sidebar",
   "sidebar.switchProject": "Switch project",
   "sidebar.connections": "Connections",
   "sidebar.edit": "Edit connection {name}",

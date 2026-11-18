@@ -73,6 +73,15 @@ test("프로젝트 버튼은 이니셜, 이름, 줄인 경로를 보여 주고 o
   expect(h.onSwitchProject).toHaveBeenCalledTimes(1);
 });
 
+test("프로젝트 button의 설명에 이름과 경로가 들어 있다", async () => {
+  await renderSidebar();
+
+  expect(
+    screen.getByRole("button", { name: "Switch project" }),
+  ).toHaveAccessibleDescription("chilla-demo ~/work/chilla-demo");
+  expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeVisible();
+});
+
 test("home을 알기 전에는 전체 경로를 보여 준다", () => {
   vi.mocked(homeDir).mockReturnValue(new Promise(() => {}));
   render(<Sidebar {...handlers()} />);

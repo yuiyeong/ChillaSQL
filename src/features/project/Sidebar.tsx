@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { homeDir } from "../../shared/api/path";
 import { connectionColor } from "../connections/colors";
 import { useTabs } from "../editor/tabsStore";
@@ -65,6 +65,8 @@ export function Sidebar({
   const refreshFiles = useProject((s) => s.refreshFiles);
   const tabs = useTabs((s) => s.tabs);
   const activeId = useTabs((s) => s.activeId);
+  const nameId = useId();
+  const dirId = useId();
   const [home, setHome] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
 
@@ -114,6 +116,7 @@ export function Sidebar({
         <button
           type="button"
           aria-label={t("sidebar.switchProject")}
+          aria-describedby={`${nameId} ${dirId}`}
           className="border-line-1 bg-bg-1 focus-visible:outline-accent flex w-full cursor-pointer items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left focus-visible:outline-2"
           onClick={onSwitchProject}
         >
@@ -124,8 +127,10 @@ export function Sidebar({
             {projectInitials(project.name)}
           </span>
           <span className="flex min-w-0 flex-1 flex-col">
-            <span className="truncate font-semibold">{project.name}</span>
-            <span className="text-label text-fg-2 truncate">
+            <span id={nameId} className="truncate font-semibold">
+              {project.name}
+            </span>
+            <span id={dirId} className="text-label text-fg-2 truncate">
               {shortenHome(project.dir, home)}
             </span>
           </span>
