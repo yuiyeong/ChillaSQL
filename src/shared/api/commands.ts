@@ -77,6 +77,11 @@ export function cancelQuery(sessionId: number, queryId: number): Promise<void> {
   return call("cancel_query", { sessionId, queryId });
 }
 
+/** 다음 batch를 보내라고 Rust에 알린다. 결과가 끝났는지는 `finished` event로 안다. */
+export function fetchMore(sessionId: number, queryId: number): Promise<void> {
+  return call("fetch_more", { sessionId, queryId });
+}
+
 export function listSqlFiles(): Promise<string[]> {
   return call("list_sql_files");
 }

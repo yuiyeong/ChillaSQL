@@ -15,7 +15,12 @@ import {
 } from "../../shared/api/commands";
 import { confirm, pickDirectory } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
-import type { Connection, Project, Session } from "../../shared/api/types";
+import type {
+  Connection,
+  Project,
+  QueryEvent,
+  Session,
+} from "../../shared/api/types";
 import {
   documentState,
   openDocument,
@@ -29,6 +34,7 @@ import {
   changeConnection,
   closeTab,
   execute,
+  runAgain,
   switchProject,
 } from "./commands";
 import { deferred } from "../../test/deferred";
@@ -59,6 +65,11 @@ function tabOf(id: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === id);
 }
 
+/** n번째(0부터) executeQuery 호출에 넘긴 onEvent. */
+function onEventOf(call: number): (event: QueryEvent) => void {
+  return vi.mocked(executeQuery).mock.calls[call][2];
+}
+
 function runOf(tabId: string) {
   return useRuns.getState().runs[tabId];
 }
@@ -75,14 +86,14 @@ beforeEach(async () => {
   vi.mocked(listSqlFiles).mockResolvedValue([]);
 });
 
-test("접속이 없는 탭은 실행하지 않고 알린다", async () => {
+test("접속이 없으면 Choose a connection으로 거절한다", async () => {
   const id = tabWith("SELECT 1", null);
 
   await execute("run");
 
   expect(runOf(id)).toEqual({
     status: "rejected",
-    message: "Choose a connection to run queries.",
+    rejection: { title: "Choose a connection to run queries.", detail: null },
   });
   expect(splitStatements).not.toHaveBeenCalled();
   expect(openSession).not.toHaveBeenCalled();
@@ -115,7 +126,7 @@ test("공백뿐인 선택 영역은 실행하지 않는다", async () => {
 
   expect(runOf(id)).toEqual({
     status: "rejected",
-    message: "The selection has no statement to run",
+    rejection: { title: "Nothing to run", detail: null },
   });
   expect(splitStatements).not.toHaveBeenCalled();
   expect(executeQuery).not.toHaveBeenCalled();
@@ -143,7 +154,7 @@ test("선택이 없으면 커서 문장을 실행한다", async () => {
   });
 });
 
-test("나눌 수 없는 text는 보내지 않고 message를 보여 준다", async () => {
+test("split_failed는 Couldn't find a statement로 거절한다", async () => {
   vi.mocked(splitStatements).mockRejectedValue(
     new CommandError("split_failed", "문장을 나눌 수 없습니다"),
   );
@@ -153,7 +164,11 @@ test("나눌 수 없는 text는 보내지 않고 message를 보여 준다", asyn
 
   expect(runOf(id)).toEqual({
     status: "rejected",
-    message: "문장을 나눌 수 없습니다",
+    rejection: {
+      title: "Couldn't find a statement",
+      detail:
+        "An unclosed quote keeps the text from being split into statements. Select what to run and it is sent as is.",
+    },
   });
   expect(openSession).not.toHaveBeenCalled();
   expect(executeQuery).not.toHaveBeenCalled();
@@ -171,7 +186,7 @@ test("커서 위치에 문장이 없으면 실행하지 않는다", async () => 
 
   expect(runOf(id)).toEqual({
     status: "rejected",
-    message: "Couldn't find a statement at the cursor",
+    rejection: { title: "No statement at the cursor", detail: null },
   });
   expect(executeQuery).not.toHaveBeenCalled();
 });
@@ -541,4 +556,78 @@ test("확인 창이 실패하면 탭을 닫지 않고 오류를 보여 준다", 
   expect(tabOf(id)).toBeDefined();
   expect(runOf(id)?.status).toBe("running");
   expect(closeSession).not.toHaveBeenCalled();
+});
+
+test("그 밖의 split 오류는 그 message를 title로 거절한다", async () => {
+  vi.mocked(splitStatements).mockRejectedValue(new Error("boom"));
+  const id = tabWith("SELECT 1");
+
+  await execute("run");
+
+  expect(runOf(id)).toEqual({
+    status: "rejected",
+    rejection: { title: "boom", detail: null },
+  });
+});
+
+test("runAgain은 같은 SQL을 지금 접속으로 다시 실행한다", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 10, end: 18 }]);
+  const id = tabWith("SELECT 1;\nSELECT 2");
+  select(id, 12);
+  await execute("run");
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    3,
+    "SELECT 2",
+    expect.any(Function),
+  );
+
+  // 커서를 옮기고 접속을 바꿔도 결과의 SQL을 그대로 보낸다.
+  select(id, 0);
+  useTabs.getState().setConnection(id, "other");
+  vi.mocked(openSession).mockResolvedValue({
+    ...session(4),
+    connection: "other",
+  });
+  await runAgain(id);
+
+  expect(openSession).toHaveBeenLastCalledWith("other");
+  expect(executeQuery).toHaveBeenCalledTimes(2);
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    4,
+    "SELECT 2",
+    expect.any(Function),
+  );
+  expect(runOf(id)).toMatchObject({
+    status: "running",
+    result: { sql: "SELECT 2", origin: { line: 2, column: 1 } },
+  });
+});
+
+test("runAgain은 결과가 없으면 아무것도 하지 않는다", async () => {
+  const id = tabWith("SELECT 1");
+
+  await runAgain(id);
+
+  expect(openSession).not.toHaveBeenCalled();
+  expect(runOf(id)).toBeUndefined();
+});
+
+test("runAgain은 접속이 없으면 거절한다", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
+  const id = tabWith("SELECT 1");
+  await execute("run");
+  onEventOf(0)({
+    type: "finished",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 0,
+  });
+  useTabs.getState().setConnection(id, null);
+
+  await runAgain(id);
+
+  expect(runOf(id)).toMatchObject({
+    status: "rejected",
+    rejection: { title: "Choose a connection to run queries." },
+  });
 });

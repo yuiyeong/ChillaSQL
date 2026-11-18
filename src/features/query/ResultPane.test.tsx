@@ -14,7 +14,7 @@ beforeEach(async () => {
 
 function result(patch: Partial<ResultData> = {}): ResultData {
   return {
-    ...emptyResult("SELECT id, name FROM t", { line: 1, column: 1 }),
+    ...emptyResult("SELECT id, name FROM t", { line: 1, column: 1 }, 0),
     elapsedMicros: 1234567,
     ...patch,
   };
@@ -180,10 +180,14 @@ test("client_error면 message를 보여 준다", () => {
   expect(screen.getByText("값을 읽지 못했습니다")).toBeInTheDocument();
 });
 
-test("rejected면 message를 보여 준다", () => {
-  show({ status: "rejected", message: "서버에 닿지 못했습니다" });
+test("rejected면 title과 detail을 보여 준다", () => {
+  show({
+    status: "rejected",
+    rejection: { title: "서버에 닿지 못했습니다", detail: "시간 초과" },
+  });
 
   expect(screen.getByText("서버에 닿지 못했습니다")).toBeInTheDocument();
+  expect(screen.getByText("시간 초과")).toBeInTheDocument();
 });
 
 test("NULL과 빈 문자열을 다르게 그린다", () => {

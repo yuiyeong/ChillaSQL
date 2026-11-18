@@ -14,7 +14,7 @@ test("formatElapsed는 반올림한 뒤에 단위를 고른다", () => {
 });
 
 test("errorLocation은 보낸 text의 위치를 문서의 줄과 칸으로 바꾼다", () => {
-  const result = emptyResult("SELECT *\nFROM nope", { line: 3, column: 5 });
+  const result = emptyResult("SELECT *\nFROM nope", { line: 3, column: 5 }, 0);
 
   expect(errorLocation(result, 0)).toEqual({ line: 3, column: 5 });
   expect(errorLocation(result, 7)).toEqual({ line: 3, column: 12 });

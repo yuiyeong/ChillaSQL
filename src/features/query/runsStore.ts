@@ -3,11 +3,19 @@ import {
   cancelQuery,
   closeSession,
   executeQuery,
+  fetchMore,
   openSession,
 } from "../../shared/api/commands";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import type { QueryEvent } from "../../shared/api/types";
-import { emptyResult, reduce, type Origin, type RunState } from "./runReducer";
+import {
+  emptyResult,
+  reduce,
+  requestFetch,
+  type Origin,
+  type Rejection,
+  type RunState,
+} from "./runReducer";
 
 export interface RunRequest {
   connection: string;
@@ -15,18 +23,28 @@ export interface RunRequest {
   origin: Origin;
 }
 
-/** 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 문구를 돌려준다. */
-export type Prepare = () => Promise<RunRequest | string> | RunRequest | string;
+/** 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 Rejection을 돌려준다. */
+export type Prepare = () =>
+  Promise<RunRequest | Rejection> | RunRequest | Rejection;
+
+function rejectionOf(error: unknown): Rejection {
+  return { title: messageOf(error), detail: null };
+}
 
 export interface RunsState {
   /** tab id → 상태. 없으면 idle로 본다. */
   runs: Record<string, RunState>;
   /**
-   * `prepare`가 끝나기 전에 같은 탭의 다음 동작이 오면 실행하지 않는다. `prepare`가 문구를
+   * `prepare`가 끝나기 전에 같은 탭의 다음 동작이 오면 실행하지 않는다. `prepare`가 Rejection을
    * 돌려주면 rejected로 두는데, 그 탭이 연결 중이거나 실행 중이면 아무것도 바꾸지 않는다.
    */
   run(tabId: string, prepare: Prepare): Promise<void>;
   cancel(tabId: string): Promise<void>;
+  /**
+   * 실행 중인 결과의 다음 batch를 요청한다. 앞 요청의 batch가 오기 전이거나 끝난 결과면
+   * 보내지 않는다. 실패는 무시한다. 끝은 `finished`로 온다.
+   */
+  fetchMore(tabId: string): Promise<void>;
   /** 탭을 닫거나 접속을 바꿀 때. 상태는 바로 지우고 세션을 닫는다. */
   release(tabId: string): Promise<void>;
   /** 모든 탭을 release한다. 프로젝트를 바꿀 때 */
@@ -119,22 +137,22 @@ export const useRuns = create<RunsState>()((set, get) => {
     async run(tabId, prepare) {
       const attempt = bump(attempts, tabId);
 
-      let request: RunRequest | string;
+      let request: RunRequest | Rejection;
       try {
         // 바로 정해지면 기다리지 않는다. 같은 tick에 connecting이 보인다.
         const prepared = prepare();
         request = prepared instanceof Promise ? await prepared : prepared;
       } catch (error) {
-        request = messageOf(error);
+        request = rejectionOf(error);
       }
       // 그 사이 같은 탭에서 다시 실행했거나 release했다.
       if (attempts.get(tabId) !== attempt) return;
-      if (typeof request === "string") {
+      if ("title" in request) {
         // 진행 중인 쿼리의 표시와 취소는 그대로 둔다.
         const status = get().runs[tabId]?.status;
         if (status === "connecting" || status === "running") return;
         bump(tokens, tabId);
-        setRun(tabId, { status: "rejected", message: request });
+        setRun(tabId, { status: "rejected", rejection: request });
         return;
       }
       const { connection, sql, origin } = request;
@@ -150,7 +168,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       } catch (error) {
         forget(tabId, slot);
         if (current()) {
-          setRun(tabId, { status: "rejected", message: messageOf(error) });
+          setRun(tabId, { status: "rejected", rejection: rejectionOf(error) });
         }
         return;
       }
@@ -176,7 +194,10 @@ export const useRuns = create<RunsState>()((set, get) => {
         }
       };
 
-      setRun(tabId, { status: "running", result: emptyResult(sql, origin) });
+      setRun(tabId, {
+        status: "running",
+        result: emptyResult(sql, origin, Date.now()),
+      });
       const queryId = executeQuery(sessionId, sql, onEvent);
       executions.set(tabId, { sessionId, queryId });
       try {
@@ -184,8 +205,21 @@ export const useRuns = create<RunsState>()((set, get) => {
       } catch (error) {
         if (isCommandError(error, "unknown_session")) forget(tabId, slot);
         if (current()) {
-          setRun(tabId, { status: "rejected", message: messageOf(error) });
+          setRun(tabId, { status: "rejected", rejection: rejectionOf(error) });
         }
+      }
+    },
+
+    async fetchMore(tabId) {
+      const execution = executions.get(tabId);
+      const before = get().runs[tabId] ?? { status: "idle" };
+      const after = requestFetch(before);
+      if (after === before || execution === undefined) return;
+      setRun(tabId, after);
+      try {
+        await fetchMore(execution.sessionId, await execution.queryId);
+      } catch {
+        // 끝은 finished event로 온다.
       }
     },
 

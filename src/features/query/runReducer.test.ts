@@ -1,11 +1,11 @@
 import { expect, test } from "vitest";
 import type { QueryEvent } from "../../shared/api/types";
-import { emptyResult, reduce, type RunState } from "./runReducer";
+import { emptyResult, reduce, requestFetch, type RunState } from "./runReducer";
 
 const origin = { line: 1, column: 1 };
 
 function running(): RunState {
-  return { status: "running", result: emptyResult("SELECT 1", origin) };
+  return { status: "running", result: emptyResult("SELECT 1", origin, 1000) };
 }
 
 test("columns, rows, finished를 차례로 쌓는다", () => {
@@ -47,6 +47,8 @@ test("columns, rows, finished를 차례로 쌓는다", () => {
         ["2", null],
       ],
       elapsedMicros: 300,
+      fetch: "ready",
+      startedAt: 1000,
     },
     outcome: { outcome: "completed", rows: 2 },
   });
@@ -79,10 +81,13 @@ test("running이 아닌 상태는 event를 무시한다", () => {
   const idle: RunState = { status: "idle" };
   const finished: RunState = {
     status: "finished",
-    result: emptyResult("SELECT 1", origin),
+    result: emptyResult("SELECT 1", origin, 1000),
     outcome: { outcome: "discarded" },
   };
-  const rejected: RunState = { status: "rejected", message: "거절" };
+  const rejected: RunState = {
+    status: "rejected",
+    rejection: { title: "거절", detail: null },
+  };
   const rows: QueryEvent = {
     type: "rows",
     firstRow: 0,
@@ -101,4 +106,53 @@ test("running이 아닌 상태는 event를 무시한다", () => {
       }),
     ).toBe(state);
   }
+});
+
+const rowsEvent: QueryEvent = {
+  type: "rows",
+  firstRow: 0,
+  rows: [["a"]],
+  retainedFrom: 0,
+  elapsedMicros: 1,
+};
+
+test("emptyResult는 fetch none과 startedAt을 갖는다", () => {
+  expect(emptyResult("SELECT 1", origin, 42)).toMatchObject({
+    fetch: "none",
+    startedAt: 42,
+  });
+});
+
+test("rows event는 fetch를 ready로 둔다", () => {
+  const state = reduce(running(), rowsEvent);
+
+  expect(state.status === "running" && state.result.fetch).toBe("ready");
+});
+
+test("requestFetch는 ready일 때만 fetching으로 바꾼다", () => {
+  const ready = reduce(running(), rowsEvent);
+  const fetching = requestFetch(ready);
+  expect(fetching).not.toBe(ready);
+  expect(fetching.status === "running" && fetching.result.fetch).toBe(
+    "fetching",
+  );
+
+  // 이미 fetching이거나 none이거나 끝난 state는 같은 object다.
+  expect(requestFetch(fetching)).toBe(fetching);
+  const none = running();
+  expect(requestFetch(none)).toBe(none);
+  const finished = reduce(ready, {
+    type: "finished",
+    elapsedMicros: 2,
+    outcome: "completed",
+    rows: 1,
+  });
+  expect(requestFetch(finished)).toBe(finished);
+});
+
+test("rows가 오면 fetching에서 ready로 돌아간다", () => {
+  const fetching = requestFetch(reduce(running(), rowsEvent));
+  const state = reduce(fetching, { ...rowsEvent, firstRow: 1 });
+
+  expect(state.status === "running" && state.result.fetch).toBe("ready");
 });

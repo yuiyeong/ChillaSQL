@@ -13,6 +13,7 @@ import {
   closeSession,
   createProject,
   executeQuery,
+  fetchMore,
   hasPassword,
   listSqlFiles,
   openProject,
@@ -86,6 +87,12 @@ test("command 이름과 인자 key를 그대로 보낸다", async () => {
 
   await cancelQuery(3, 7);
   expect(invokeMock).toHaveBeenLastCalledWith("cancel_query", {
+    sessionId: 3,
+    queryId: 7,
+  });
+
+  await fetchMore(3, 7);
+  expect(invokeMock).toHaveBeenLastCalledWith("fetch_more", {
     sessionId: 3,
     queryId: 7,
   });

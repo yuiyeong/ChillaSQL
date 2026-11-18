@@ -6,10 +6,12 @@ import {
   cancelQuery,
   closeSession,
   executeQuery,
+  fetchMore,
   openSession,
 } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
 import type { QueryEvent, Session } from "../../shared/api/types";
+import type { Rejection } from "./runReducer";
 import { useRuns, type Prepare, type RunRequest } from "./runsStore";
 import { deferred } from "../../test/deferred";
 
@@ -49,6 +51,7 @@ beforeEach(async () => {
   vi.mocked(executeQuery).mockResolvedValue(7);
   vi.mocked(closeSession).mockResolvedValue();
   vi.mocked(cancelQuery).mockResolvedValue();
+  vi.mocked(fetchMore).mockResolvedValue();
 });
 
 test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () => {
@@ -70,6 +73,8 @@ test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () =>
       firstRow: 0,
       rows: [],
       elapsedMicros: null,
+      fetch: "none",
+      startedAt: expect.any(Number),
     },
   });
 });
@@ -153,7 +158,7 @@ test("접속 실패는 rejected이고 다음 실행에서 다시 연다", async 
 
   expect(runOf("t")).toEqual({
     status: "rejected",
-    message: "서버에 닿지 못했습니다",
+    rejection: { title: "서버에 닿지 못했습니다", detail: null },
   });
   expect(executeQuery).not.toHaveBeenCalled();
 
@@ -172,7 +177,7 @@ test("execute가 거절되면 rejected다", async () => {
 
   expect(runOf("t")).toEqual({
     status: "rejected",
-    message: "문장을 하나만 보낼 수 있습니다",
+    rejection: { title: "문장을 하나만 보낼 수 있습니다", detail: null },
   });
 
   // 세션은 그대로 쓴다.
@@ -188,7 +193,7 @@ test("unknown_session으로 거절되면 세션을 버린다", async () => {
   await useRuns.getState().run("t", prepared());
   expect(runOf("t")).toEqual({
     status: "rejected",
-    message: "세션이 없습니다",
+    rejection: { title: "세션이 없습니다", detail: null },
   });
 
   await useRuns.getState().run("t", prepared());
@@ -240,7 +245,9 @@ test("여는 중인 세션에 합류한 실행도 connecting이다", async () =>
   const opening = deferred<Session>();
   vi.mocked(openSession).mockReturnValue(opening.promise);
   const first = useRuns.getState().run("t", prepared("SELECT 1"));
-  await useRuns.getState().run("t", () => "커서 위치에 문장이 없습니다");
+  await useRuns
+    .getState()
+    .run("t", () => ({ title: "커서 위치에 문장이 없습니다", detail: null }));
 
   const second = useRuns.getState().run("t", prepared("SELECT 2"));
 
@@ -458,11 +465,13 @@ test("탭마다 세션이 따로다", async () => {
 });
 
 test("prepare가 문구를 돌려주면 rejected다", async () => {
-  await useRuns.getState().run("t", () => "접속을 고르세요");
+  await useRuns
+    .getState()
+    .run("t", () => ({ title: "접속을 고르세요", detail: null }));
 
   expect(runOf("t")).toEqual({
     status: "rejected",
-    message: "접속을 고르세요",
+    rejection: { title: "접속을 고르세요", detail: null },
   });
   expect(openSession).not.toHaveBeenCalled();
 });
@@ -473,7 +482,7 @@ test("prepare가 throw하면 그 message로 rejected다", async () => {
   });
   expect(runOf("t")).toEqual({
     status: "rejected",
-    message: "문서가 없습니다",
+    rejection: { title: "문서가 없습니다", detail: null },
   });
 
   await useRuns
@@ -483,13 +492,13 @@ test("prepare가 throw하면 그 message로 rejected다", async () => {
     );
   expect(runOf("t")).toEqual({
     status: "rejected",
-    message: "나눌 수 없습니다",
+    rejection: { title: "나눌 수 없습니다", detail: null },
   });
   expect(openSession).not.toHaveBeenCalled();
 });
 
 test("prepare가 끝나기 전에 release하면 실행하지 않는다", async () => {
-  const preparing = deferred<string | RunRequest>();
+  const preparing = deferred<Rejection | RunRequest>();
   const running = useRuns.getState().run("t", () => preparing.promise);
 
   await useRuns.getState().release("t");
@@ -502,7 +511,7 @@ test("prepare가 끝나기 전에 release하면 실행하지 않는다", async (
 });
 
 test("prepare가 늦게 끝난 앞 실행은 뒤 실행을 덮지 않는다", async () => {
-  const preparingA = deferred<string | RunRequest>();
+  const preparingA = deferred<Rejection | RunRequest>();
   const runningA = useRuns.getState().run("t", () => preparingA.promise);
 
   await useRuns.getState().run("t", prepared("SELECT B"));
@@ -524,7 +533,9 @@ test("실행 중에 거절된 실행은 진행 중인 쿼리를 건드리지 않
   const running = runOf("t");
   const onEvent = onEventOf(0);
 
-  await useRuns.getState().run("t", () => "커서 위치에 문장이 없습니다");
+  await useRuns
+    .getState()
+    .run("t", () => ({ title: "커서 위치에 문장이 없습니다", detail: null }));
   await useRuns.getState().run("t", () => {
     throw new Error("문서가 없습니다");
   });
@@ -546,7 +557,7 @@ test("실행 중에 거절된 실행은 진행 중인 쿼리를 건드리지 않
 test("prepare를 기다리는 동안에도 앞 쿼리의 event가 반영된다", async () => {
   await useRuns.getState().run("t", prepared("SELECT A"));
   const lateA = onEventOf(0);
-  const preparing = deferred<string | RunRequest>();
+  const preparing = deferred<Rejection | RunRequest>();
   const runningB = useRuns.getState().run("t", () => preparing.promise);
 
   lateA({ type: "columns", columns: [{ name: "id" }] });
@@ -579,15 +590,101 @@ test("쉬는 탭에서 거절되면 rejected다", async () => {
   });
   expect(runOf("t").status).toBe("finished");
 
-  await useRuns.getState().run("t", () => "커서 위치에 문장이 없습니다");
+  await useRuns
+    .getState()
+    .run("t", () => ({ title: "커서 위치에 문장이 없습니다", detail: null }));
   expect(runOf("t")).toEqual({
     status: "rejected",
-    message: "커서 위치에 문장이 없습니다",
+    rejection: { title: "커서 위치에 문장이 없습니다", detail: null },
   });
 
-  await useRuns.getState().run("t", () => "실행할 문장이 없습니다");
+  await useRuns
+    .getState()
+    .run("t", () => ({ title: "실행할 문장이 없습니다", detail: null }));
   expect(runOf("t")).toEqual({
     status: "rejected",
-    message: "실행할 문장이 없습니다",
+    rejection: { title: "실행할 문장이 없습니다", detail: null },
+  });
+});
+
+const lastRows: QueryEvent = { ...rowsEvent, firstRow: 1 };
+
+test("batch 하나에 fetchMore는 한 번만 보낸다", async () => {
+  await useRuns.getState().run("t", prepared());
+  onEventOf(0)(rowsEvent);
+
+  await Promise.all([
+    useRuns.getState().fetchMore("t"),
+    useRuns.getState().fetchMore("t"),
+    useRuns.getState().fetchMore("t"),
+  ]);
+  expect(fetchMore).toHaveBeenCalledTimes(1);
+  expect(fetchMore).toHaveBeenCalledWith(3, 7);
+
+  onEventOf(0)(lastRows);
+  await useRuns.getState().fetchMore("t");
+  expect(fetchMore).toHaveBeenCalledTimes(2);
+});
+
+test("rows가 오기 전과 끝난 결과에는 fetchMore를 보내지 않는다", async () => {
+  await useRuns.getState().run("t", prepared());
+  await useRuns.getState().fetchMore("t");
+  expect(fetchMore).not.toHaveBeenCalled();
+
+  for (const outcome of ["completed", "cancelled"] as const) {
+    await useRuns.getState().run("t", prepared());
+    const onEvent = onEventOf(vi.mocked(executeQuery).mock.calls.length - 1);
+    onEvent(rowsEvent);
+    onEvent(
+      outcome === "completed"
+        ? { type: "finished", elapsedMicros: 5, outcome, rows: 1 }
+        : { type: "finished", elapsedMicros: 5, outcome },
+    );
+    expect(runOf("t").status).toBe("finished");
+
+    await useRuns.getState().fetchMore("t");
+    expect(fetchMore).not.toHaveBeenCalled();
+  }
+});
+
+test("fetchMore는 execute가 query id를 돌려준 뒤 보낸다", async () => {
+  const execution = deferred<number>();
+  vi.mocked(executeQuery).mockReturnValue(execution.promise);
+
+  const running = useRuns.getState().run("t", prepared());
+  await vi.waitFor(() => expect(executeQuery).toHaveBeenCalled());
+  onEventOf(0)(rowsEvent);
+
+  const fetching = useRuns.getState().fetchMore("t");
+  await Promise.resolve();
+  expect(fetchMore).not.toHaveBeenCalled();
+
+  execution.resolve(9);
+  await fetching;
+  expect(fetchMore).toHaveBeenCalledWith(3, 9);
+  await running;
+});
+
+test("fetchMore가 실패해도 state를 바꾸지 않는다", async () => {
+  vi.mocked(fetchMore).mockRejectedValue(
+    new CommandError("unknown_session", "세션이 없습니다"),
+  );
+  await useRuns.getState().run("t", prepared());
+  onEventOf(0)(rowsEvent);
+
+  await expect(useRuns.getState().fetchMore("t")).resolves.toBeUndefined();
+
+  const state = runOf("t");
+  expect(state.status === "running" && state.result.fetch).toBe("fetching");
+});
+
+test("거절은 title과 detail을 갖는다", async () => {
+  await useRuns
+    .getState()
+    .run("t", () => ({ title: "Couldn't find", detail: "이유" }));
+
+  expect(runOf("t")).toEqual({
+    status: "rejected",
+    rejection: { title: "Couldn't find", detail: "이유" },
   });
 });

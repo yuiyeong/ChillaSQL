@@ -6,6 +6,15 @@ export interface Origin {
   column: number;
 }
 
+/** 다음 batch를 요청할 수 있는지. rows가 오면 ready, 요청하면 fetching이다. */
+export type FetchState = "none" | "ready" | "fetching";
+
+/** 실행하지 못한 이유. title은 한 줄, detail은 덧붙일 설명이다. */
+export interface Rejection {
+  title: string;
+  detail: string | null;
+}
+
 export interface ResultData {
   /** 서버에 보낸 text */
   sql: string;
@@ -15,6 +24,9 @@ export interface ResultData {
   firstRow: number;
   rows: Cell[][];
   elapsedMicros: number | null;
+  fetch: FetchState;
+  /** 실행을 시작한 시각(`Date.now()`) */
+  startedAt: number;
 }
 
 export type RunState =
@@ -22,9 +34,13 @@ export type RunState =
   | { status: "connecting" }
   | { status: "running"; result: ResultData }
   | { status: "finished"; result: ResultData; outcome: Outcome }
-  | { status: "rejected"; message: string };
+  | { status: "rejected"; rejection: Rejection };
 
-export function emptyResult(sql: string, origin: Origin): ResultData {
+export function emptyResult(
+  sql: string,
+  origin: Origin,
+  startedAt: number,
+): ResultData {
   return {
     sql,
     origin,
@@ -32,7 +48,17 @@ export function emptyResult(sql: string, origin: Origin): ResultData {
     firstRow: 0,
     rows: [],
     elapsedMicros: null,
+    fetch: "none",
+    startedAt,
   };
+}
+
+/** running이고 ready일 때만 fetching으로 바꾼다. 아니면 같은 object를 돌려준다. */
+export function requestFetch(state: RunState): RunState {
+  if (state.status !== "running" || state.result.fetch !== "ready") {
+    return state;
+  }
+  return { status: "running", result: { ...state.result, fetch: "fetching" } };
 }
 
 /** running이 아닌 state는 그대로 돌려준다. */
@@ -56,6 +82,7 @@ export function reduce(state: RunState, event: QueryEvent): RunState {
           firstRow: base + drop,
           rows: drop === 0 ? rows : rows.slice(drop),
           elapsedMicros: event.elapsedMicros,
+          fetch: "ready",
         },
       };
     }

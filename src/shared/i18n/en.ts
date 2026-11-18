@@ -32,8 +32,11 @@ export const en = {
     "{path} was edited by another program after you opened it. Overwriting discards those changes.",
 
   "run.noConnection": "Choose a connection to run queries.",
-  "run.emptySelection": "The selection has no statement to run",
-  "run.noStatementAtCursor": "Couldn't find a statement at the cursor",
+  "run.emptySelection": "Nothing to run",
+  "run.noStatementAtCursor": "No statement at the cursor",
+  "run.splitFailed.title": "Couldn't find a statement",
+  "run.splitFailed.detail":
+    "An unclosed quote keeps the text from being split into statements. Select what to run and it is sent as is.",
 
   "project.open": "Open Project…",
   "project.missing": "{dir} has no chilla.toml",

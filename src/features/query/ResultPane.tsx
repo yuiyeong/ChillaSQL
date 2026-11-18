@@ -34,7 +34,16 @@ export const ResultPane = memo(function ResultPane({
     case "finished":
       return finishedView(state.result, state.outcome);
     case "rejected":
-      return <Message error>{state.message}</Message>;
+      return (
+        <Message error>
+          {state.rejection.title}
+          {state.rejection.detail !== null && (
+            <span className="block text-zinc-400">
+              {state.rejection.detail}
+            </span>
+          )}
+        </Message>
+      );
   }
 });
 

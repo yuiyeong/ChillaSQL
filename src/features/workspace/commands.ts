@@ -1,6 +1,6 @@
 import { splitStatements } from "../../shared/api/commands";
 import { confirm, pickDirectory } from "../../shared/api/dialog";
-import { messageOf } from "../../shared/api/errors";
+import { isCommandError, messageOf } from "../../shared/api/errors";
 import type { Project } from "../../shared/api/types";
 import { targetChanged } from "../connections/connectionValues";
 import { documentSelection, documentText } from "../editor/documents";
@@ -8,7 +8,7 @@ import { saveTab } from "../editor/saveTab";
 import { lineColumn, statementAt } from "../editor/statementAt";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
-import type { Origin } from "../query/runReducer";
+import type { Origin, Rejection } from "../query/runReducer";
 import { useRuns, type RunRequest } from "../query/runsStore";
 import { t, tc } from "../../shared/i18n/t";
 
@@ -22,12 +22,14 @@ function findTab(tabId: string) {
 /** 선택 영역이 있으면 그것을, 없으면 커서가 가리키는 문장을 고른다. */
 async function statementToRun(
   tabId: string,
-): Promise<{ sql: string; origin: Origin } | string> {
+): Promise<{ sql: string; origin: Origin } | Rejection> {
   const text = documentText(tabId);
   const { from, to, head } = documentSelection(tabId);
   if (from !== to) {
     const sql = text.slice(from, to);
-    if (sql.trim() === "") return t("run.emptySelection");
+    if (sql.trim() === "") {
+      return { title: t("run.emptySelection"), detail: null };
+    }
     return { sql, origin: lineColumn(text, from) };
   }
 
@@ -35,10 +37,18 @@ async function statementToRun(
   try {
     spans = await splitStatements(text);
   } catch (error) {
-    return messageOf(error);
+    if (isCommandError(error, "split_failed")) {
+      return {
+        title: t("run.splitFailed.title"),
+        detail: t("run.splitFailed.detail"),
+      };
+    }
+    return { title: messageOf(error), detail: null };
   }
   const span = statementAt(text, spans, head);
-  if (span === null) return t("run.noStatementAtCursor");
+  if (span === null) {
+    return { title: t("run.noStatementAtCursor"), detail: null };
+  }
   return {
     sql: text.slice(span.start, span.end),
     origin: lineColumn(text, span.start),
@@ -46,13 +56,13 @@ async function statementToRun(
 }
 
 /** 탭에서 실행할 것을 정한다. store를 바꾸지 않는다. */
-async function prepareRun(tabId: string): Promise<RunRequest | string> {
+async function prepareRun(tabId: string): Promise<RunRequest | Rejection> {
   const connection = findTab(tabId)?.connection ?? null;
-  if (connection === null) return t("run.noConnection");
+  if (connection === null) {
+    return { title: t("run.noConnection"), detail: null };
+  }
   const statement = await statementToRun(tabId);
-  return typeof statement === "string"
-    ? statement
-    : { connection, ...statement };
+  return "title" in statement ? statement : { connection, ...statement };
 }
 
 /** 활성 탭에 대해 command를 실행한다. */
@@ -84,6 +94,19 @@ export async function execute(command: CommandId): Promise<void> {
     case "closeTab":
       return closeTab(tabId);
   }
+}
+
+/** 그 탭의 결과에 쓴 SQL을 탭의 지금 접속으로 다시 실행한다. 결과가 없으면 아무것도 하지 않는다. */
+export async function runAgain(tabId: string): Promise<void> {
+  const state = useRuns.getState().runs[tabId];
+  if (state?.status !== "running" && state?.status !== "finished") return;
+  const { sql, origin } = state.result;
+  return useRuns.getState().run(tabId, () => {
+    const connection = findTab(tabId)?.connection ?? null;
+    return connection === null
+      ? { title: t("run.noConnection"), detail: null }
+      : { connection, sql, origin };
+  });
 }
 
 /** 저장하지 않은 변경이 있으면 묻고, 세션을 놓은 뒤 탭을 닫는다. */
