@@ -8,6 +8,7 @@ import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/dialog");
+vi.mock("../../shared/api/path");
 
 import {
   cancelQuery,
@@ -21,6 +22,7 @@ import {
   writeSqlFile,
 } from "../../shared/api/commands";
 import type { Connection, Project, QueryEvent } from "../../shared/api/types";
+import { homeDir } from "../../shared/api/path";
 import { openDocument } from "../editor/documents";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
@@ -85,6 +87,7 @@ function connectionForm() {
 beforeEach(async () => {
   await resetStores();
   vi.resetAllMocks();
+  vi.mocked(homeDir).mockResolvedValue("/Users/jo");
   vi.mocked(listSqlFiles).mockResolvedValue([]);
   vi.mocked(hasPassword).mockResolvedValue(false);
 });
@@ -185,11 +188,11 @@ test("sidebar의 파일을 누르면 탭으로 열린다", async () => {
   vi.mocked(readSqlFile).mockResolvedValue({ text: "SELECT 42", stamp: "s1" });
   const { container } = renderWorkspace();
 
-  await click(screen.getByRole("button", { name: "queries/a.sql" }));
+  await click(screen.getByRole("button", { name: "a.sql" }));
 
   expect(readSqlFile).toHaveBeenCalledWith("queries/a.sql");
-  expect(screen.getByRole("button", { name: "a.sql" })).toHaveAttribute(
-    "aria-current",
+  expect(screen.getByRole("tab", { name: "a.sql" })).toHaveAttribute(
+    "aria-selected",
     "true",
   );
   expect(container.querySelector(".cm-content")?.textContent).toBe("SELECT 42");
@@ -206,7 +209,7 @@ test("접속 추가를 누르면 form이 열리고 저장하면 접속 목록에
   tabWith("", null);
   renderWorkspace();
 
-  await click(screen.getByRole("button", { name: "Add connection…" }));
+  await click(screen.getByRole("button", { name: "Add connection" }));
   const form = connectionForm();
   change(within(form).getByLabelText("name"), "local");
   change(within(form).getByLabelText("host"), "localhost");
@@ -227,8 +230,11 @@ test("수정을 누르면 그 접속의 값으로 form을 연다", async () => {
   openProjectWith([connection("local"), connection("staging", "10.0.0.2")]);
   renderWorkspace();
   const sidebar = screen.getByRole("region", { name: "Connections" });
-  const [editLocal, editStaging] = within(sidebar).getAllByRole("button", {
-    name: "Edit",
+  const editLocal = within(sidebar).getByRole("button", {
+    name: "Edit connection local",
+  });
+  const editStaging = within(sidebar).getByRole("button", {
+    name: "Edit connection staging",
   });
 
   await click(editLocal);
@@ -249,7 +255,7 @@ test("닫은 form의 저장이 늦게 끝나도 접속을 반영하고 새로 �
   vi.mocked(saveConnection).mockReturnValue(saving.promise);
   renderWorkspace();
 
-  await click(screen.getByRole("button", { name: "Add connection…" }));
+  await click(screen.getByRole("button", { name: "Add connection" }));
   const form = connectionForm();
   change(within(form).getByLabelText("name"), "local");
   change(within(form).getByLabelText("host"), "localhost");
@@ -259,7 +265,7 @@ test("닫은 form의 저장이 늦게 끝나도 접속을 반영하고 새로 �
   await click(within(form).getByRole("button", { name: "Cancel" }));
   expect(screen.queryByLabelText("name")).not.toBeInTheDocument();
 
-  await click(screen.getByRole("button", { name: "Add connection…" }));
+  await click(screen.getByRole("button", { name: "Add connection" }));
   await act(async () =>
     saving.resolve({
       name: "demo",
@@ -278,21 +284,19 @@ test("탭 bar, 에디터, 이름 form이 탭을 움직인다", async () => {
   vi.mocked(writeSqlFile).mockResolvedValue("s1");
   const { container } = renderWorkspace();
 
-  await click(screen.getByRole("button", { name: "New tab" }));
-  expect(screen.getByRole("button", { name: "Query 1" })).toBeInTheDocument();
+  await click(screen.getByRole("button", { name: "New tab (Shift+Cmd+L)" }));
+  expect(screen.getByRole("tab", { name: "Query 1" })).toBeInTheDocument();
 
   const dom = container.querySelector<HTMLElement>(".cm-editor");
   const view = dom === null ? null : EditorView.findFromDOM(dom);
   if (view === null) throw new Error("EditorView가 없습니다");
   act(() => view.dispatch({ changes: { from: 0, insert: "SELECT 1" } }));
-  expect(screen.getByLabelText("Unsaved changes")).toBeInTheDocument();
+  expect(screen.getByLabelText("Unsaved")).toBeInTheDocument();
 
   await click(toolbarButton("Save"));
-  const path = screen.getByLabelText("File path");
-  const submit = within(path.closest("form") as HTMLElement).getByRole(
-    "button",
-    { name: "Save" },
-  );
+  const dialog = screen.getByRole("dialog", { name: "Save Query 1" });
+  const path = within(dialog).getByLabelText("Path inside the project");
+  const submit = within(dialog).getByRole("button", { name: "Save" });
 
   // 빈 이름은 무시한다.
   change(path, "  ");
@@ -304,7 +308,7 @@ test("탭 bar, 에디터, 이름 form이 탭을 움직인다", async () => {
   expect(writeSqlFile).toHaveBeenCalledWith("queries/x.sql", "SELECT 1", {
     mode: "create",
   });
-  expect(screen.getByRole("button", { name: "x.sql" })).toBeInTheDocument();
+  expect(screen.getByRole("tab", { name: "x.sql" })).toBeInTheDocument();
 
   await click(screen.getByRole("button", { name: "Close x.sql" }));
   expect(screen.getAllByText("New tab")).toHaveLength(2);
@@ -335,7 +339,7 @@ test("접속 form이 열려 있으면 단축키가 동작하지 않는다", asyn
       cancelable: true,
     });
 
-  await click(screen.getByRole("button", { name: "Add connection…" }));
+  await click(screen.getByRole("button", { name: "Add connection" }));
   const name = screen.getByLabelText("name");
   const run = shortcut("Enter");
   const close = shortcut("KeyW");

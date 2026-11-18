@@ -1,13 +1,15 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
 import { expectNoTextCorrection } from "../../test/textCorrection";
+import { useProject } from "../project/projectStore";
 import { TabBar } from "./TabBar";
 import { useTabs } from "./tabsStore";
 
 beforeEach(() => {
   useTabs.getState().reset();
+  useProject.setState(useProject.getInitialState(), true);
 });
 
 function renderBar() {
@@ -16,25 +18,69 @@ function renderBar() {
   return handlers;
 }
 
-function tabButton(title: string) {
-  return screen.getByRole("button", {
-    name: (name) => name.startsWith(title) && !name.startsWith("Close "),
-  });
+function connection(name: string, color: string | null) {
+  return {
+    name,
+    host: "localhost",
+    port: 5432,
+    database: "app",
+    user: "me",
+    sslmode: "disable" as const,
+    sslrootcert: null,
+    tunnel: null,
+    color,
+  };
 }
 
-test("탭 제목과 dirty 표시를 그리고 누르면 활성으로 한다", async () => {
+function tab(title: string) {
+  return screen.getByRole("tab", { name: title });
+}
+
+/** jsdom은 var()를 뜻으로 풀지 못해서 style attribute를 그대로 읽는다. */
+function dotOf(title: string): HTMLElement {
+  const dot = within(tab(title)).getByTestId("tab-dot");
+  return dot;
+}
+
+test("탭 제목을 그리고 누르면 활성으로 한다", async () => {
   const a = useTabs.getState().newTab();
   const b = useTabs.getState().newTab();
-  useTabs.getState().markDirty(a);
   renderBar();
 
-  expect(tabButton("Query 1")).toHaveTextContent("●");
-  expect(tabButton("Query 2")).not.toHaveTextContent("●");
+  expect(screen.getByRole("tablist", { name: "Open files" })).toBeVisible();
+  expect(tab("Query 1")).toHaveAttribute("aria-selected", "false");
+  expect(tab("Query 2")).toHaveAttribute("aria-selected", "true");
   expect(useTabs.getState().activeId).toBe(b);
 
-  await click(tabButton("Query 1"));
+  await click(tab("Query 1"));
 
   expect(useTabs.getState().activeId).toBe(a);
+  expect(tab("Query 1")).toHaveAttribute("aria-selected", "true");
+});
+
+test("탭의 dot은 접속 색이다", () => {
+  useProject.setState({
+    project: {
+      name: "demo",
+      dir: "/p",
+      connections: [connection("local", "green"), connection("plain", null)],
+    },
+  });
+  const a = useTabs.getState().newTab();
+  const b = useTabs.getState().newTab();
+  const c = useTabs.getState().newTab();
+  useTabs.getState().setConnection(a, "local");
+  useTabs.getState().setConnection(b, "plain");
+  renderBar();
+
+  expect(dotOf("Query 1").style.background).toBe("var(--color-conn-green)");
+  expect(dotOf("Query 2").style.background).toBe("var(--color-line-2)");
+  // 접속이 없는 탭은 속이 빈 원이다.
+  expect(dotOf("Query 3").style.background).toBe("");
+  expect(dotOf("Query 3")).toHaveClass("border-fg-3");
+  expect(
+    useTabs.getState().tabs.find((x) => x.id === c)?.connection,
+  ).toBeNull();
 });
 
 test("닫기와 새 탭 버튼이 handler를 부른다", async () => {
@@ -46,34 +92,63 @@ test("닫기와 새 탭 버튼이 handler를 부른다", async () => {
   expect(onClose).toHaveBeenCalledWith(b);
   expect(onClose).toHaveBeenCalledTimes(1);
 
-  await click(screen.getByRole("button", { name: "New tab" }));
+  await click(screen.getByRole("button", { name: "New tab (Shift+Cmd+L)" }));
   expect(onNew).toHaveBeenCalledTimes(1);
 });
 
-test("naming인 탭은 경로 입력을 그리고 제출하면 onName을 부른다", async () => {
+test("dirty 탭은 Unsaved 표시를 갖고 닫기도 할 수 있다", async () => {
+  const a = useTabs.getState().newTab();
+  useTabs.getState().newTab();
+  useTabs.getState().markDirty(a);
+  const { onClose } = renderBar();
+
+  expect(screen.getAllByLabelText("Unsaved")).toHaveLength(1);
+
+  await click(screen.getByRole("button", { name: "Close Query 1" }));
+  expect(onClose).toHaveBeenCalledWith(a);
+});
+
+test("빈 자리와 줄 자체는 창을 끄는 자리고 탭은 아니다", () => {
+  useTabs.getState().newTab();
+  renderBar();
+
+  const row = screen.getByTestId("tab-row");
+  expect(row).toHaveAttribute("data-tauri-drag-region");
+  expect(screen.getByTestId("tab-row-spacer")).toHaveAttribute(
+    "data-tauri-drag-region",
+  );
+  expect(tab("Query 1")).not.toHaveAttribute("data-tauri-drag-region");
+});
+
+test("이름을 묻는 중이면 Save dialog를 띄운다", async () => {
   const id = useTabs.getState().newTab();
   const { onName } = renderBar();
-  expect(screen.queryByPlaceholderText("queries/name.sql")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
 
   act(() => useTabs.getState().requestName(id));
-  const input = screen.getByPlaceholderText("queries/name.sql");
+  const dialog = screen.getByRole("dialog", { name: "Save Query 1" });
+  const input = within(dialog).getByLabelText("Path inside the project");
+  expect(input).toHaveAttribute("placeholder", "queries/name.sql");
   change(input, "queries/a");
-  await click(screen.getByRole("button", { name: "Save" }));
+  await click(within(dialog).getByRole("button", { name: "Save" }));
 
   expect(onName).toHaveBeenCalledWith("queries/a");
 });
 
-test("naming 입력에서 Escape를 누르면 naming이 null이다", () => {
+test("Cancel과 Escape는 이름 묻기를 그만둔다", async () => {
   const id = useTabs.getState().newTab();
   renderBar();
   act(() => useTabs.getState().requestName(id));
-  const input = screen.getByPlaceholderText("queries/name.sql");
+  const input = screen.getByLabelText("Path inside the project");
 
   // 한글 입력 중에도 key가 아닌 code로 판별한다.
   fireEvent.keyDown(input, { code: "Escape", key: "Process" });
-
   expect(useTabs.getState().naming).toBeNull();
-  expect(screen.queryByPlaceholderText("queries/name.sql")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
+
+  act(() => useTabs.getState().requestName(id));
+  await click(screen.getByRole("button", { name: "Cancel" }));
+  expect(useTabs.getState().naming).toBeNull();
 });
 
 test("경로 입력은 자동 수정, 자동 대문자, 맞춤법 검사를 끈다", () => {
@@ -81,16 +156,16 @@ test("경로 입력은 자동 수정, 자동 대문자, 맞춤법 검사를 끈�
   renderBar();
   act(() => useTabs.getState().requestName(id));
 
-  expectNoTextCorrection(screen.getByPlaceholderText("queries/name.sql"));
+  expectNoTextCorrection(screen.getByLabelText("Path inside the project"));
 });
 
-test("naming이 활성이 아닌 탭이면 입력을 그리지 않는다", () => {
+test("naming이 활성이 아닌 탭이면 dialog를 그리지 않는다", () => {
   const a = useTabs.getState().newTab();
   useTabs.getState().newTab();
   useTabs.getState().requestName(a);
   renderBar();
 
-  expect(screen.queryByPlaceholderText("queries/name.sql")).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
 });
 
 test("error가 있으면 한 줄로 보여 주고 누르면 지운다", async () => {

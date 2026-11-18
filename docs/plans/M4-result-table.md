@@ -704,25 +704,25 @@ git commit -m "feat: 창 상단 접속 bar, 결과 panel 경계, status bar를 �
 
 sidebar(`Main`): 248px, bg-0, 오른쪽 line-1. 위 38px은 신호등 자리(비워 두고 `data-tauri-drag-region`). 그 아래 프로젝트 버튼(`Switch project`, bg-1, line-1 테두리, 26px 이니셜 칸, 이름 semibold, `shortenHome(dir)` 12 fg-2, SwitchIcon) → `onSwitchProject`. 접속 section(`Connections` label, `Add connection` IconButton 22px, 접속마다 `Edit connection {name}` 버튼: dot, 이름 medium, `tunnel`이 있으면 TunnelIcon(`aria-label="Tunnel"`), 아래 mono 12 fg-3의 `host:port/database`). 그 아래 line-1. Files/Schema/History segmented tab(`role="tablist"`, Schema와 History는 `aria-disabled`). Files 아래 `SQL Files` label과 `Refresh file list` IconButton, tree(26px 줄, 깊이마다 16px 들여쓰기, folder는 chevron과 FolderIcon이고 누르면 접고 편다, file은 FileIcon, 활성 탭의 파일은 accent 14% 배경, 열린 탭 중 dirty인 파일은 6px fg 원 `Unsaved`).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `fileTree.test.ts`: `buildTree(["scratch.sql", "queries/b.sql", "queries/a.sql", "reports/x/y.sql"])`이 `[queries[a.sql, b.sql], reports[x[y.sql]], scratch.sql]`, `shortenHome("/Users/jo/work/a", "/Users/jo")` → `"~/work/a"`, `shortenHome("/opt/a", "/Users/jo")` → `"/opt/a"`, `projectInitials("chilla-demo")` → `"CD"`, `projectInitials("app")` → `"AP"`
 - `TabBar.test.tsx`(M3 test를 고침): `탭의 dot은 접속 색이다`, `dirty 탭은 Unsaved 표시를 갖고 닫기도 할 수 있다`(Unsaved가 보이고 `Close first.sql` 버튼을 눌러 `onClose`), `이름을 묻는 중이면 Save dialog를 띄운다`(제목 `Save Query 1`, 입력 후 `Save`가 `onName`), `Escape는 이름 묻기를 그만둔다`
 - `Sidebar.test.tsx`: `프로젝트 버튼은 이니셜, 이름, 줄인 경로를 보여 주고 onSwitchProject를 부른다`(`homeDir` mock), `접속을 누르면 수정한다`, `터널이 있는 접속은 Tunnel icon을 갖는다`, `파일 tree의 folder를 누르면 접는다`, `활성 탭의 파일을 강조하고 dirty 파일에 Unsaved를 붙인다`, `Schema와 History는 disabled다`
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/project src/features/editor/TabBar.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src src-tauri/capabilities
