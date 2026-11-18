@@ -1,6 +1,6 @@
 import { EditorView } from "@codemirror/view";
-import { act, render, screen, within } from "@testing-library/react";
-import { beforeEach, expect, test, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
 import { deferred } from "../../test/deferred";
@@ -89,13 +89,10 @@ beforeEach(async () => {
   vi.mocked(hasPassword).mockResolvedValue(false);
 });
 
-test("탭이 없으면 새 탭 안내를 그리고 toolbar는 disabled다", () => {
+test("탭이 없으면 toolbar는 disabled다", () => {
   openProjectWith([connection("local")]);
   renderWorkspace();
 
-  expect(
-    screen.getByText("Press Shift+Cmd+L for a new tab"),
-  ).toBeInTheDocument();
   expect(connectionSelect()).toBeDisabled();
   expect(toolbarButton("Run statement")).toBeDisabled();
   expect(toolbarButton("Cancel")).toBeDisabled();
@@ -196,9 +193,7 @@ test("sidebar의 파일을 누르면 탭으로 열린다", async () => {
     "true",
   );
   expect(container.querySelector(".cm-content")?.textContent).toBe("SELECT 42");
-  expect(
-    screen.queryByText("Press Shift+Cmd+L for a new tab"),
-  ).not.toBeInTheDocument();
+  expect(screen.queryByText("New tab")).not.toBeInTheDocument();
 });
 
 test("접속 추가를 누르면 form이 열리고 저장하면 접속 목록에 나타난다", async () => {
@@ -312,9 +307,7 @@ test("탭 bar, 에디터, 이름 form이 탭을 움직인다", async () => {
   expect(screen.getByRole("button", { name: "x.sql" })).toBeInTheDocument();
 
   await click(screen.getByRole("button", { name: "Close x.sql" }));
-  expect(
-    screen.getByText("Press Shift+Cmd+L for a new tab"),
-  ).toBeInTheDocument();
+  expect(screen.getAllByText("New tab")).toHaveLength(2);
 });
 
 test("프로젝트 오류를 보여 주고 누르면 지운다", async () => {
@@ -364,4 +357,136 @@ test("접속 form이 열려 있으면 단축키가 동작하지 않는다", asyn
   });
   expect(closeAgain.defaultPrevented).toBe(true);
   expect(useTabs.getState().tabs).toEqual([]);
+});
+
+/** jsdom은 var()를 뜻으로 풀지 못해서 style attribute를 그대로 읽는다. */
+function connectionBarColor(): string {
+  return screen.getByTestId("connection-bar").style.background;
+}
+
+function boundary() {
+  return screen.getByRole("separator");
+}
+
+/** pointer 이벤트로 경계를 dy만큼 움직인다. 위로 끌면 음수다. */
+function drag(dy: number) {
+  fireEvent.pointerDown(boundary(), { pointerId: 1, clientY: 500 });
+  fireEvent.pointerMove(boundary(), { pointerId: 1, clientY: 500 + dy });
+  fireEvent.pointerUp(boundary(), { pointerId: 1, clientY: 500 + dy });
+}
+
+test("창 상단 bar는 활성 탭 접속의 색이다", () => {
+  openProjectWith([
+    { ...connection("prod"), color: "red" },
+    connection("plain"),
+  ]);
+  tabWith("SELECT 1", "prod");
+  tabWith("SELECT 2", "plain");
+  renderWorkspace();
+
+  expect(connectionBarColor()).toBe("var(--color-line-2)");
+
+  act(() => {
+    const [first] = useTabs.getState().tabs;
+    useTabs.getState().activate(first.id);
+  });
+
+  expect(connectionBarColor()).toBe("var(--color-conn-red)");
+});
+
+test("접속 없는 탭과 탭이 없을 때 창 상단 bar는 line-2다", () => {
+  openProjectWith([]);
+  renderWorkspace();
+  expect(connectionBarColor()).toBe("var(--color-line-2)");
+
+  tabWith("SELECT 1", null);
+  expect(connectionBarColor()).toBe("var(--color-line-2)");
+});
+
+describe("결과 panel 경계", () => {
+  beforeEach(() => {
+    // jsdom은 layout이 없어서 에디터 영역의 높이를 정해 준다. 600 + 396 - 120 = 876이 최대다.
+    vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+    Element.prototype.setPointerCapture = vi.fn();
+    Element.prototype.releasePointerCapture = vi.fn();
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  test("처음에는 396px이고 경계는 horizontal separator다", () => {
+    openProjectWith();
+    renderWorkspace();
+
+    expect(boundary()).toHaveAttribute("aria-orientation", "horizontal");
+    expect(boundary()).toHaveAttribute("aria-valuenow", "396");
+    expect(boundary()).toHaveAttribute("aria-valuemin", "120");
+    expect(boundary()).toHaveStyle({ cursor: "row-resize" });
+  });
+
+  test("경계를 끌면 결과 panel 높이가 바뀐다", () => {
+    openProjectWith();
+    renderWorkspace();
+
+    drag(-100);
+
+    expect(boundary()).toHaveAttribute("aria-valuenow", "496");
+  });
+
+  test("끝낸 뒤의 pointermove는 높이를 바꾸지 않는다", () => {
+    openProjectWith();
+    renderWorkspace();
+    drag(-100);
+
+    fireEvent.pointerMove(boundary(), { pointerId: 1, clientY: 100 });
+
+    expect(boundary()).toHaveAttribute("aria-valuenow", "496");
+  });
+
+  test("결과 panel은 120px보다 작아지지 않는다", () => {
+    openProjectWith();
+    renderWorkspace();
+
+    drag(5000);
+
+    expect(boundary()).toHaveAttribute("aria-valuenow", "120");
+  });
+
+  test("에디터도 120px보다 작아지지 않는다", () => {
+    openProjectWith();
+    renderWorkspace();
+
+    drag(-5000);
+
+    expect(boundary()).toHaveAttribute("aria-valuenow", "876");
+  });
+});
+
+test("status bar는 줄과 칸, 줄 끝을 보여 준다", () => {
+  openProjectWith([connection("local")]);
+  let id = "";
+  act(() => {
+    id = useTabs.getState().newTab();
+    openDocument(id, "SELECT 1\r\nFROM t");
+    useTabs.getState().setConnection(id, "local");
+  });
+  renderWorkspace();
+  expect(screen.getByText("Ln 1, Col 1")).toBeInTheDocument();
+  expect(screen.getByText("UTF-8")).toBeInTheDocument();
+  expect(screen.getByText("CRLF")).toBeInTheDocument();
+
+  const dom = document.querySelector<HTMLElement>(".cm-editor");
+  const view = EditorView.findFromDOM(dom!)!;
+  act(() => view.dispatch({ selection: { anchor: 11 } }));
+
+  expect(screen.getByText("Ln 2, Col 3")).toBeInTheDocument();
+});
+
+test("탭이 없으면 status bar가 비고 에디터 자리에 단축키 안내가 온다", () => {
+  openProjectWith([connection("local")]);
+  renderWorkspace();
+
+  expect(screen.queryByText("UTF-8")).toBeNull();
+  expect(screen.queryByText(/^Ln /)).toBeNull();
+  // 결과 panel의 빈 상태와 에디터 자리, 두 곳이다.
+  expect(screen.getAllByText("Run statement at cursor")).toHaveLength(2);
+  expect(screen.getAllByText("New tab")).toHaveLength(2);
 });

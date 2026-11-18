@@ -46,8 +46,13 @@ export function documentFileText(tabId: string): string {
   return doc.sliceString(
     0,
     doc.length,
-    crlfDocuments.has(tabId) ? "\r\n" : "\n",
+    documentLineEnding(tabId) === "CRLF" ? "\r\n" : "\n",
   );
+}
+
+/** status bar에 보일 줄 끝. 읽은 파일의 것이다. */
+export function documentLineEnding(tabId: string): "LF" | "CRLF" {
+  return crlfDocuments.has(tabId) ? "CRLF" : "LF";
 }
 
 export function documentSelection(tabId: string): {

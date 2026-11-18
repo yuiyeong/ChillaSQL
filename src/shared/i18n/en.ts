@@ -12,7 +12,11 @@ export const en = {
   "toolbar.noConnection": "No connection",
   "toolbar.runStatement": "Run statement",
 
-  "workspace.emptyEditor": "Press Shift+Cmd+L for a new tab",
+  "workspace.resizeResults": "Resize results panel",
+  "status.position": "Ln {line}, Col {column}",
+  "status.encoding": "UTF-8",
+  "status.lineEndingLf": "LF",
+  "status.lineEndingCrlf": "CRLF",
 
   "tabs.defaultTitle": "Query {n}",
   "tabs.unsaved": "Unsaved changes",

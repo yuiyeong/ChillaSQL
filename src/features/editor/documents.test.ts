@@ -2,6 +2,7 @@ import { EditorSelection } from "@codemirror/state";
 import { afterEach, expect, test } from "vitest";
 import {
   closeDocument,
+  documentLineEnding,
   documentSelection,
   documentFileText,
   documentState,
@@ -81,4 +82,12 @@ test("CRLF 문서에 \\n으로 넣은 text도 줄로 나뉘고 CRLF로 저장된
 
   expect(pasted.doc.lines).toBe(4);
   expect(documentFileText("t")).toBe("a\r\nx\r\ny\r\nb");
+});
+
+test("CRLF로 연 문서의 줄 끝은 CRLF, 아니면 LF다", () => {
+  openDocument("t", "SELECT 1\r\nFROM t");
+  expect(documentLineEnding("t")).toBe("CRLF");
+
+  openDocument("t", "SELECT 1\nFROM t");
+  expect(documentLineEnding("t")).toBe("LF");
 });

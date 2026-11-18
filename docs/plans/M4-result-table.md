@@ -653,7 +653,7 @@ git commit -m "feat: 결과 panel의 header와 상태 화면을 캔버스대로 
 
 `Workspace` 배치(`Main`): 맨 위 3px bar(활성 탭 접속의 색, 없으면 line-2) → 그 아래 sidebar(248px)와 main column. main column은 탭 줄(Task 10), toolbar(Task 11), 에디터(bg-1, 남은 높이), 5px 경계(bg-0, 위 line-1, 가운데 36×3px line-2 막대, `cursor: row-resize`, `role="separator"`, `aria-orientation="horizontal"`, `aria-valuenow`=결과 panel 높이), 결과 panel(bg-0, 처음 396px), status bar다. 경계를 pointer로 끌면 결과 panel 높이가 바뀌고 에디터와 결과 panel은 각각 120px 밑으로 줄지 않는다. 탭이 없으면 에디터 자리에 결과 panel의 빈 상태와 같은 단축키 안내를 둔다. 오류 줄(project error)은 sidebar 아래에 token 색으로 둔다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `colors.test.ts`: `connectionColor("green")` → `"var(--color-conn-green)"`, `connectionColor("orange")`과 `connectionColor(null)` → `null`
 - `editorStatus.test.ts`: `update`가 두 번째 줄 세 번째 칸의 커서를 `line: 2, column: 3`으로, 선택이 있으면 `hasSelection: true`
@@ -661,21 +661,21 @@ git commit -m "feat: 결과 panel의 header와 상태 화면을 캔버스대로 
 - `SqlEditor.test.tsx`: `커서를 옮기면 editorStatus가 바뀐다`, `탭을 바꾸면 그 탭의 위치를 보여 준다`
 - `Workspace.test.tsx`: `창 상단 bar는 활성 탭 접속의 색이다`(`color = "red"`인 접속의 탭이면 style이 `var(--color-conn-red)`, 접속 없는 탭이면 `var(--color-line-2)`), `경계를 끌면 결과 panel 높이가 바뀐다`(pointerdown/move/up으로 100px 위로 끌면 `aria-valuenow`가 496), `결과 panel은 120px보다 작아지지 않는다`, `status bar는 줄과 칸, 줄 끝을 보여 준다`, `탭이 없으면 단축키 안내를 보여 준다`
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/connections/colors.test.ts src/features/editor src/features/workspace/Workspace.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 경계 끌기는 `pointerdown`에서 `setPointerCapture`를 하고 `pointermove`의 `clientY` 차이로 높이를 바꾼다. 최대값은 main column 높이에서 탭 줄, toolbar, status bar, 에디터 최소 120px을 뺀 값이다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src

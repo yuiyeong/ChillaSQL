@@ -9,9 +9,11 @@ import {
   documentText,
   openDocument,
 } from "./documents";
+import { useEditorStatus } from "./editorStatus";
 import { SqlEditor } from "./SqlEditor";
 
 beforeEach(() => {
+  useEditorStatus.setState(useEditorStatus.getInitialState(), true);
   openDocument("a", "SELECT 1");
   openDocument("b", "SELECT 2");
 });
@@ -91,4 +93,42 @@ test("StrictMode에서도 EditorView는 하나다", () => {
   editorView(container).dispatch({ changes: { from: 0, insert: "-- " } });
   expect(documentText("a")).toBe("-- SELECT 1");
   expect(onDocChange).toHaveBeenCalledTimes(1);
+});
+
+test("커서를 옮기면 editorStatus가 바뀐다", () => {
+  openDocument("c", "SELECT 2\nFROM t");
+  const { container } = render(<SqlEditor tabId="c" onDocChange={vi.fn()} />);
+  expect(useEditorStatus.getState()).toMatchObject({
+    tabId: "c",
+    line: 1,
+    column: 1,
+  });
+
+  editorView(container).dispatch({ selection: { anchor: 11, head: 13 } });
+
+  expect(useEditorStatus.getState()).toMatchObject({
+    tabId: "c",
+    line: 2,
+    column: 5,
+    hasSelection: true,
+  });
+  closeDocument("c");
+});
+
+test("탭을 바꾸면 그 탭의 위치를 보여 준다", () => {
+  const { container, rerender } = render(
+    <SqlEditor tabId="a" onDocChange={vi.fn()} />,
+  );
+  editorView(container).dispatch({ selection: { anchor: 4 } });
+  expect(useEditorStatus.getState()).toMatchObject({ tabId: "a", column: 5 });
+
+  rerender(<SqlEditor tabId="b" onDocChange={vi.fn()} />);
+  expect(useEditorStatus.getState()).toMatchObject({
+    tabId: "b",
+    line: 1,
+    column: 1,
+  });
+
+  rerender(<SqlEditor tabId="a" onDocChange={vi.fn()} />);
+  expect(useEditorStatus.getState()).toMatchObject({ tabId: "a", column: 5 });
 });

@@ -1,6 +1,7 @@
 import { EditorView } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 import { documentState, setDocumentState } from "./documents";
+import { useEditorStatus } from "./editorStatus";
 
 interface SqlEditorProps {
   tabId: string;
@@ -22,13 +23,18 @@ export function SqlEditor({ tabId, onDocChange }: SqlEditorProps) {
   useEffect(() => {
     const parent = parentRef.current;
     if (parent === null) return;
+    const initial = documentState(shownTabRef.current);
+    useEditorStatus.getState().update(shownTabRef.current, initial);
     const view = new EditorView({
-      state: documentState(shownTabRef.current),
+      state: initial,
       parent,
       dispatchTransactions(trs, view) {
         view.update(trs);
         const shownTab = shownTabRef.current;
         setDocumentState(shownTab, view.state);
+        if (trs.some((tr) => tr.docChanged || tr.selection !== undefined)) {
+          useEditorStatus.getState().update(shownTab, view.state);
+        }
         if (trs.some((tr) => tr.docChanged)) onDocChangeRef.current(shownTab);
       },
     });
@@ -46,6 +52,7 @@ export function SqlEditor({ tabId, onDocChange }: SqlEditorProps) {
     const state = documentState(tabId);
     shownTabRef.current = tabId;
     view.setState(state);
+    useEditorStatus.getState().update(tabId, state);
     view.focus();
   }, [tabId]);
 

@@ -25,9 +25,7 @@ test("프로젝트가 열리면 작업 화면을 보여 준다", async () => {
 
   render(<App />);
 
-  expect(
-    await screen.findByText("Press Shift+Cmd+L for a new tab"),
-  ).toBeInTheDocument();
+  expect(await screen.findAllByText("New tab")).not.toHaveLength(0);
   expect(screen.getByRole("heading", { name: "demo" })).toBeInTheDocument();
 });
 
