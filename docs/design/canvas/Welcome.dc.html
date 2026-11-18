@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ChillaSQL Open Project</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.kbd{font-family:inherit;font-size:12px;font-weight:500;padding:1px 5px;border-radius:4px;background:#262830;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#7C9CFF;border-color:#7C9CFF;color:#0F1014;font-weight:600}
+.btn-primary .kbd{background:rgba(15,16,20,.18);color:#0F1014}
+.btn-ghost{background:transparent}
+.win{position:relative;width:660px;height:540px;display:flex;flex-direction:column;background:#0F1014;border:1px solid #23252B;border-radius:10px;overflow:hidden;box-sizing:border-box}
+.tb{height:38px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 14px}
+.tb span{width:12px;height:12px;border-radius:50%}
+.wrap{width:480px;margin:24px auto 0;display:flex;flex-direction:column;gap:20px}
+.item{display:flex;align-items:center;gap:12px;width:100%;padding:8px 10px;border-radius:8px;border:1px solid transparent;background:transparent;cursor:pointer;text-align:left}
+.ini{width:30px;height:30px;border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;flex-shrink:0;background:#262830;color:#E8E9ED}
+</style>
+</helmet>
+<div class="cs" style="width: 1400px; height: 624px; box-sizing: border-box; padding: 28px; display: flex; gap: 24px; background: #0B0C0F">
+
+  <!-- A. 기본 -->
+  <section aria-label="Open project" style="display: flex; flex-direction: column; gap: 8px">
+    <h3 class="label">A · 마지막 프로젝트를 열 수 없을 때만 보인다</h3>
+    <div class="win">
+      <div class="tb" aria-hidden="true"><span style="background: #FF5F57"></span><span style="background: #FEBC2E"></span><span style="background: #28C840"></span></div>
+      <div class="wrap">
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <h1 style="margin: 0; font-size: 17px; font-weight: 600">ChillaSQL</h1>
+          <button type="button" class="btn btn-primary">Open Project… <span class="kbd">⌘O</span></button>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h2 class="label" style="padding: 0 10px">Recent Projects</h2>
+          <sc-for list="{{recents}}" as="p" hint-placeholder-count="4">
+            <button type="button" class="item" style="{{p.style}}">
+              <span aria-hidden="true" class="ini">{{p.initials}}</span>
+              <span style="flex: 1; min-width: 0; display: flex; flex-direction: column">
+                <span style="font-weight: 500">{{p.name}}</span>
+                <span class="mono" style="font-size: 12px; color: #A3A6B0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{p.path}}</span>
+              </span>
+              <span style="font-size: 12px; color: #A3A6B0">{{p.when}}</span>
+            </button>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- B. chilla.toml 없음: 디렉토리를 고른 직후 sheet -->
+  <section aria-label="No chilla.toml" style="display: flex; flex-direction: column; gap: 8px">
+    <h3 class="label">B · chilla.toml이 없는 디렉토리를 고른 직후 — sheet로 묻는다</h3>
+    <div class="win">
+      <div class="tb" aria-hidden="true"><span style="background: #FF5F57"></span><span style="background: #FEBC2E"></span><span style="background: #28C840"></span></div>
+      <div class="wrap" aria-hidden="true">
+        <div style="display: flex; align-items: center; justify-content: space-between">
+          <span style="font-size: 17px; font-weight: 600">ChillaSQL</span>
+          <span class="btn btn-primary">Open Project… <span class="kbd">⌘O</span></span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <sc-for list="{{recents}}" as="p" hint-placeholder-count="4">
+            <span class="item"><span class="ini">{{p.initials}}</span><span style="flex: 1; display: flex; flex-direction: column"><span style="font-weight: 500">{{p.name}}</span><span class="mono" style="font-size: 12px; color: #A3A6B0">{{p.path}}</span></span></span>
+          </sc-for>
+        </div>
+      </div>
+      <div aria-hidden="true" style="position: absolute; inset: 38px 0 0 0; background: rgba(6,7,9,0.62)"></div>
+      <div role="alertdialog" aria-labelledby="nt-t" aria-describedby="nt-d" style="position: absolute; left: 50%; top: 38px; transform: translateX(-50%); width: 460px; box-sizing: border-box; display: flex; flex-direction: column; gap: 16px; padding: 20px; background: #1C1D23; border: 1px solid #33363E; border-top: 0; border-radius: 0 0 12px 12px; box-shadow: 0 24px 60px rgba(0,0,0,0.55)">
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <h2 id="nt-t" style="margin: 0; font-size: 17px; font-weight: 600"><span class="mono" style="font-size: 15px">~/work/new-app</span> has no chilla.toml</h2>
+          <p id="nt-d" style="margin: 0; color: #A3A6B0; line-height: 1.55">Create a chilla.toml with only <span class="mono">[project]</span> and open the folder as a project. Add connections after it opens.</p>
+        </div>
+        <div style="display: flex; gap: 8px">
+          <button type="button" class="btn btn-ghost">Choose another folder…</button>
+          <span style="flex: 1"></span>
+          <button type="button" class="btn">Cancel</button>
+          <button type="button" class="btn btn-primary" autofocus>Create chilla.toml</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":624}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const recents = [
+      { name: 'chilla-demo', path: '~/work/chilla-demo', initials: 'CD', when: 'Just now', focused: true },
+      { name: 'omofictions', path: '~/work/omofictions', initials: 'OM', when: 'Yesterday' },
+      { name: 'billing-migration', path: '~/work/billing-migration', initials: 'BM', when: 'Nov 9' },
+      { name: 'sandbox', path: '~/Desktop/sandbox', initials: 'SB', when: 'Oct 30' }
+    ].map((p) => ({
+      ...p,
+      style: p.focused ? 'background: #1C1D23; border-color: #33363E' : ''
+    }));
+    return { recents };
+  }
+}
+</script>
+</body>
+</html>

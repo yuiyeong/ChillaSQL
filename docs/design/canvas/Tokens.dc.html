@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>시각 system token</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.code{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none;font-size:.92em;padding:1px 5px;border-radius:4px;background:#262830;border:1px solid #33363E;white-space:nowrap}
+.code.kw{color:#C792EA}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.sw{display:flex;flex-direction:column;gap:6px;width:120px}
+.chipx{height:56px;border-radius:8px;border:1px solid #33363E}
+.nm{font-size:13px}
+.hx{font-size:12px;color:#A3A6B0}
+.sec{display:flex;flex-direction:column;gap:10px}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#7C9CFF;border-color:#7C9CFF;color:#0F1014;font-weight:600}
+.btn-danger{background:#EF6461;border-color:#EF6461;color:#0F1014;font-weight:600}
+.rule{display:flex;gap:10px;font-size:15px;line-height:1.5}
+.rule b{flex-shrink:0;width:96px;font-weight:600}
+.fcard{display:flex;flex-direction:column;gap:10px;padding:16px;border:1px solid #23252B;border-radius:10px;background:#0F1014}
+.fmeta{font-size:13px;color:#A3A6B0;line-height:1.5}
+</style>
+</helmet>
+<div class="cs" style="width: 1040px; height: 1200px; box-sizing: border-box; padding: 32px; display: flex; flex-direction: column; gap: 28px; background: #0B0C0F">
+
+  <section class="sec" aria-label="surface">
+    <h3 class="label">surface 4단계 · line 2단계</h3>
+    <div style="display: flex; gap: 14px; flex-wrap: wrap">
+      <sc-for list="{{surfaces}}" as="s" hint-placeholder-count="6">
+        <div class="sw"><span class="chipx" style="{{s.style}}"></span><span class="nm mono">{{s.name}}</span><span class="hx mono">{{s.hex}} · {{s.use}}</span></div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="text와 accent">
+    <h3 class="label">text 3단계 · accent · danger</h3>
+    <div style="display: flex; gap: 14px; flex-wrap: wrap">
+      <sc-for list="{{inks}}" as="s" hint-placeholder-count="5">
+        <div class="sw"><span class="chipx" style="{{s.style}}"></span><span class="nm mono">{{s.name}}</span><span class="hx mono">{{s.hex}} · {{s.use}}</span></div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="접속 색">
+    <h3 class="label">접속 color — chilla.toml의 color 값. 창 상단 bar, 탭 dot, toolbar chip에만 쓴다</h3>
+    <div style="display: flex; gap: 14px">
+      <sc-for list="{{conns}}" as="s" hint-placeholder-count="5">
+        <div class="sw" style="width: 100px"><span class="chipx" style="{{s.style}}"></span><span class="nm mono">{{s.name}}</span><span class="hx mono">{{s.hex}}</span></div>
+      </sc-for>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="글꼴">
+    <h3 class="label">글꼴 2종 — 화면은 system font, SQL과 결과 data는 D2Coding</h3>
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px">
+      <div class="fcard">
+        <span class="label">UI · system font</span>
+        <span style="font-size: 17px; font-weight: 600">Open Project…</span>
+        <span>Run statement · Transaction open · 500+ rows</span>
+        <span>연결됐습니다 · 트랜잭션 열림 (language = "ko")</span>
+        <span class="fmeta"><span class="mono">-apple-system</span> → 영문 SF Pro, 한글 Apple SD Gothic Neo. 앱에 넣지 않음</span>
+      </div>
+      <div class="fcard">
+        <span class="label">SQL · D2Coding 1.4.0 Regular / Bold</span>
+        <pre class="mono" style="margin: 0; padding: 10px 12px; border-radius: 8px; background: #15161B; font-size: 15px; line-height: 24px; white-space: pre"><span style="color: #C792EA">SELECT</span> u.id, u.email   <span style="color: #8A8E99; font-style: italic">-- 가입자</span>
+<span style="color: #C792EA">WHERE</span> u.created_at<span style="color: #A3A6B0">::</span><span style="color: #FFCB6B">date</span> <span style="color: #A3A6B0">&lt;&gt;</span> <span style="color: #A8D49B">'2026-11-18'</span>
+0O 1lI ,.;: -&gt;&gt; != <b>Bold 0O1lI</b>
+|abcd|ab|
+|가나|가|</pre>
+        <span class="fmeta">에디터 15px / 줄 24px, 결과 표 13px. 한글은 영문 2칸 폭이라 열이 맞음. ligature 없는 표준 build</span>
+      </div>
+    </div>
+  </section>
+
+  <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px">
+    <section class="sec" aria-label="글자 크기">
+      <h3 class="label">글자 크기 4단계</h3>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-size: 17px; font-weight: 600">17 · dialog와 sheet 제목</span>
+        <span style="font-size: 15px">15 · 본문, 버튼, 에디터</span>
+        <span style="font-size: 13px">13 · 보조 문장, 탭, 결과 표 <span class="mono">mono 13</span></span>
+        <span style="font-size: 12px; color: #A3A6B0">12 · section label, kbd, status bar</span>
+      </div>
+      <h3 class="label" style="margin-top: 10px">버튼</h3>
+      <div style="display: flex; gap: 8px">
+        <button type="button" class="btn btn-primary">Run · Save</button>
+        <button type="button" class="btn">Commit · Rollback · Cancel</button>
+        <button type="button" class="btn btn-danger">Run</button>
+      </div>
+    </section>
+
+    <section class="sec" aria-label="규칙">
+      <h3 class="label">규칙</h3>
+      <div style="display: flex; flex-direction: column; gap: 10px">
+        <div class="rule"><b>접속 색</b><span>영역 표시에만. 상태를 나타내는 데 쓰지 않는다.</span></div>
+        <div class="rule"><b>상태</b><span>icon과 문장, 그리고 위치로 구분한다. 배경 tint를 깔지 않는다.</span></div>
+        <div class="rule"><b>danger</b><span>위험 dialog의 실행 버튼과 에디터 오류 밑줄, 두 곳에만.</span></div>
+        <div class="rule"><b>primary</b><span>accent 하나. 화면마다 한 개. Commit과 Rollback은 같은 무게의 secondary.</span></div>
+        <div class="rule"><b>dialog</b><span>제목은 fg 17 semibold, 본문은 fg-2 15. 본문 안의 이름만 fg로 굵게.</span></div>
+        <div class="rule"><b>버튼 너비</b><span>label이 바뀌는 버튼(Run statement ↔ Run selection ↔ Cancel)은 너비를 고정한다. toolbar가 흔들리지 않게.</span></div>
+        <div class="rule"><b>SQL 조각</b><span>문장 안의 SQL은 inline code로 쓴다. D2Coding에 bg-3 배경, keyword는 에디터의 keyword 색. 예: Run <code class="code kw">DELETE</code> without <code class="code kw">WHERE</code>? · <code class="code">sessions</code></span></div>
+        <div class="rule"><b>문구</b><span>기본 영어, 설정으로 한국어. 서버 메시지, SQL, toml key, data는 번역하지 않는다.</span></div>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1040,"height":1200}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const mk = (list) => list.map((s) => ({ ...s, style: 'background: ' + s.hex }));
+    const surfaces = mk([
+      { name: 'bg-0', hex: '#0F1014', use: 'chrome, 결과' },
+      { name: 'bg-1', hex: '#15161B', use: '에디터' },
+      { name: 'bg-2', hex: '#1C1D23', use: 'control, dialog' },
+      { name: 'bg-3', hex: '#262830', use: '선택, menu' },
+      { name: 'line-1', hex: '#23252B', use: '구분선' },
+      { name: 'line-2', hex: '#33363E', use: 'control 테두리' }
+    ]);
+    const inks = mk([
+      { name: 'fg', hex: '#E8E9ED', use: '본문' },
+      { name: 'fg-2', hex: '#A3A6B0', use: '보조' },
+      { name: 'fg-3', hex: '#8A8E99', use: 'NULL, gutter' },
+      { name: 'accent', hex: '#7C9CFF', use: 'primary, 선택' },
+      { name: 'danger', hex: '#EF6461', use: '두 곳만' }
+    ]);
+    const conns = mk([
+      { name: 'green', hex: '#3FB68B' },
+      { name: 'yellow', hex: '#E8B04B' },
+      { name: 'red', hex: '#EF6461' },
+      { name: 'blue', hex: '#56A8DC' },
+      { name: 'purple', hex: '#A98BFF' }
+    ]);
+    return { surfaces, inks, conns };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Editor and result tools</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.code{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none;font-size:.92em;padding:1px 5px;border-radius:4px;background:#262830;border:1px solid #33363E;white-space:nowrap}
+.code.kw{color:#C792EA}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.kbd{font-family:inherit;font-size:12px;font-weight:500;padding:1px 5px;border-radius:4px;background:#262830;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#7C9CFF;border-color:#7C9CFF;color:#0F1014;font-weight:600}
+.btn-primary .kbd{background:rgba(15,16,20,.18);color:#0F1014}
+.btn-ghost{background:transparent}
+.ibtn{width:26px;height:26px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:6px;background:transparent;color:#A3A6B0;cursor:pointer;flex-shrink:0}
+.card{border:1px solid #23252B;border-radius:10px;background:#0F1014;overflow:hidden}
+.sec{display:flex;flex-direction:column;gap:8px}
+.meta{font-size:13px;color:#A3A6B0}
+.rhead{height:36px;display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid #23252B}
+.rtab{height:24px;display:inline-flex;align-items:center;padding:0 10px;border:0;border-radius:6px;background:#262830;font-size:13px;font-weight:500}
+.ed{background:#15161B;font-size:15px;line-height:24px;padding:10px 0}
+.ed>div{display:flex;white-space:pre}
+.ed .g{width:44px;text-align:right;padding-right:12px;color:#8A8E99;flex-shrink:0}
+.kw{color:#C792EA}.fn{color:#82C8E5}.str{color:#A8D49B}.num{color:#F0B47D}.op{color:#A3A6B0}
+.pop{position:absolute;width:340px;padding:4px;background:#262830;border:1px solid #33363E;border-radius:8px;box-shadow:0 12px 32px rgba(0,0,0,0.5)}
+.ac{display:flex;align-items:center;gap:10px;height:26px;padding:0 8px;border-radius:5px;font-size:13px}
+.ac .k{width:16px;text-align:center;font-size:11px;color:#8A8E99}
+.ac .d{margin-left:auto;font-size:12px;color:#A3A6B0}
+.gr{display:grid;height:26px;border-bottom:1px solid #1C1D23;font-size:13px}
+.gr>div{display:flex;align-items:center;padding:0 10px;border-right:1px solid #1C1D23;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.gh{height:32px;background:#15161B;border-bottom:1px solid #23252B}
+.gh>div{border-right-color:#23252B}
+.n{justify-content:flex-end;color:#8A8E99}
+.pl{display:grid;grid-template-columns:minmax(0,1fr) 90px 120px 60px;height:28px;border-bottom:1px solid #1C1D23;font-size:13px}
+.pl>div{display:flex;align-items:center;padding:0 10px;white-space:nowrap;overflow:hidden}
+.pl>div+div{justify-content:flex-end}
+.in{height:30px;box-sizing:border-box;padding:0 10px;border:1px solid #33363E;border-radius:7px;background:#0F1014;color:#E8E9ED;outline:none;font-family:'D2Coding',ui-monospace,Menlo,monospace;font-size:13px;width:100%}
+.mi{width:100%;display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border:0;border-radius:5px;background:transparent;cursor:pointer;text-align:left}
+.note{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #33363E;border-radius:8px;font-size:13px;line-height:1.5}
+</style>
+</helmet>
+<div class="cs" style="width: 1400px; height: 1480px; box-sizing: border-box; padding: 28px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 32px 28px; align-content: start; background: #0B0C0F">
+
+  <!-- 1. 자동완성 -->
+  <section class="sec" aria-label="Autocomplete">
+    <h3 class="label">M7 · 자동완성 — 별칭 u를 users로 알아본다</h3>
+    <div class="card" style="position: relative; height: 250px; background: #15161B">
+      <div class="ed mono">
+        <div><span class="g">1</span><span class="kw">SELECT</span> u.id, u.em<span aria-hidden="true" style="display: inline-block; width: 2px; height: 19px; vertical-align: -4px; background: #E8E9ED"></span></div>
+        <div><span class="g">2</span><span class="kw">FROM</span> users u</div>
+        <div><span class="g">3</span><span class="kw">JOIN</span> orders o <span class="kw">ON</span> o.user_id <span class="op">=</span> u.id</div>
+      </div>
+      <div class="pop" role="listbox" aria-label="Autocomplete" style="left: 150px; top: 40px">
+        <div class="ac" role="option" aria-selected="true" style="background: rgba(124,156,255,0.16)"><span class="k mono">c</span><span class="mono"><b>em</b>ail</span><span class="d mono">users · text</span></div>
+        <div class="ac" role="option" aria-selected="false"><span class="k mono">c</span><span class="mono"><b>em</b>ail_verified_at</span><span class="d mono">users · timestamptz</span></div>
+        <div class="ac" role="option" aria-selected="false"><span class="k mono">c</span><span class="mono"><b>em</b>ployee_id</span><span class="d mono">users · int8</span></div>
+        <div style="display: flex; gap: 14px; padding: 6px 8px 2px; border-top: 1px solid #33363E; margin-top: 4px; font-size: 12px; color: #A3A6B0; white-space: nowrap"><span><span class="kbd">↵</span> Insert</span><span><span class="kbd">esc</span> Close</span><span style="margin-left: auto">c column · t table · f function · k keyword</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. 파라미터 -->
+  <section class="sec" aria-label="Parameter values">
+    <h3 class="label">M9 · 파라미터 — :id 같은 변수가 있는 문장을 실행하면</h3>
+    <div class="card" style="position: relative; height: 250px; background: #15161B">
+      <div class="ed mono">
+        <div><span class="g">1</span><span class="kw">SELECT</span> * <span class="kw">FROM</span> orders</div>
+        <div><span class="g">2</span><span class="kw">WHERE</span> user_id <span class="op">=</span> <span style="background: rgba(124,156,255,0.16); border-radius: 3px">:id</span> <span class="kw">AND</span> created_at <span class="op">&gt;</span> <span style="background: rgba(124,156,255,0.16); border-radius: 3px">:since</span><span class="op">::</span><span style="color: #FFCB6B">date</span></div>
+      </div>
+      <div role="dialog" aria-labelledby="pt" style="position: absolute; right: 16px; bottom: 16px; width: 330px; display: flex; flex-direction: column; gap: 10px; padding: 14px; background: #1C1D23; border: 1px solid #33363E; border-radius: 10px; box-shadow: 0 24px 60px rgba(0,0,0,0.55)">
+        <h2 id="pt" style="margin: 0; font-size: 15px; font-weight: 600">Parameter values</h2>
+        <label style="display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 8px"><span class="mono" style="font-size: 13px">:id</span><input class="in" value="10482"></label>
+        <label style="display: grid; grid-template-columns: 64px minmax(0, 1fr); align-items: center; gap: 8px"><span class="mono" style="font-size: 13px">:since</span><input class="in" value="'2026-11-01'"></label>
+        <span class="meta" style="font-size: 12px">Values are inserted as SQL. Quote strings. <code class="code">::date</code> is a cast, not a parameter.</span>
+        <div style="display: flex; justify-content: flex-end; gap: 8px"><button type="button" class="btn btn-ghost">Cancel</button><button type="submit" class="btn btn-primary">Run <span class="kbd">⌘↵</span></button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. cell viewer -->
+  <section class="sec" aria-label="Value viewer" style="grid-column: 1 / -1">
+    <h3 class="label">M8 · 타입별 표시 — 표에서는 줄이고, 셀을 고르면 오른쪽에 전체 값(⇧↵)</h3>
+    <div class="card" style="display: flex; height: 270px">
+      <div role="grid" aria-label="Typed values" class="mono" style="flex: 1; min-width: 0">
+        <div role="row" class="gr gh" style="grid-template-columns: 52px 92px 220px 200px minmax(0, 1fr)">
+          <div></div><div class="cs" style="font-weight: 600; font-size: 13px; gap: 6px">id <span class="mono" style="font-size: 12px; color: #8A8E99; font-weight: 400">int8</span></div>
+          <div class="cs" style="font-weight: 600; font-size: 13px; gap: 6px">profile <span class="mono" style="font-size: 12px; color: #8A8E99; font-weight: 400">jsonb</span></div>
+          <div class="cs" style="font-weight: 600; font-size: 13px; gap: 6px">tags <span class="mono" style="font-size: 12px; color: #8A8E99; font-weight: 400">text[]</span></div>
+          <div class="cs" style="font-weight: 600; font-size: 13px; gap: 6px">embedding <span class="mono" style="font-size: 12px; color: #8A8E99; font-weight: 400">vector(1536)</span></div>
+        </div>
+        <div role="row" class="gr" style="grid-template-columns: 52px 92px 220px 200px minmax(0, 1fr)"><div class="n">1</div><div class="num" style="justify-content: flex-end">10482</div><div style="box-shadow: inset 0 0 0 1.5px #7C9CFF; background: rgba(124,156,255,0.16)">{"plan": "pro", "billing": {…}}</div><div>{beta,vip}</div><div>[0.0213, -0.1140, 0.0871, … <span style="color: #8A8E99">&#160;1536 values</span></div></div>
+        <div role="row" class="gr" style="grid-template-columns: 52px 92px 220px 200px minmax(0, 1fr)"><div class="n">2</div><div class="num" style="justify-content: flex-end">10481</div><div>{"plan": "free"}</div><div>{}</div><div>[-0.0042, 0.0310, 0.2214, … <span style="color: #8A8E99">&#160;1536 values</span></div></div>
+        <div role="row" class="gr" style="grid-template-columns: 52px 92px 220px 200px minmax(0, 1fr)"><div class="n">3</div><div class="num" style="justify-content: flex-end">10480</div><div style="color: #8A8E99; font-style: italic">NULL</div><div style="color: #8A8E99; font-style: italic">NULL</div><div style="color: #8A8E99; font-style: italic">NULL</div></div>
+      </div>
+      <aside aria-label="Value viewer" style="width: 340px; flex-shrink: 0; border-left: 1px solid #23252B; background: #15161B; display: flex; flex-direction: column">
+        <div style="height: 36px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 12px; border-bottom: 1px solid #23252B">
+          <span class="mono" style="font-size: 13px; font-weight: 500">profile</span><span class="mono meta" style="font-size: 12px">jsonb · row 1</span>
+          <span style="flex: 1"></span>
+          <button type="button" class="ibtn" aria-label="Copy value"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"></rect><path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-6A1.5 1.5 0 0 0 2 3.5v6A1.5 1.5 0 0 0 3.5 11H5"></path></svg></button>
+          <button type="button" class="ibtn" aria-label="Close value viewer"><svg aria-hidden="true" width="10" height="10" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 4l8 8M12 4l-8 8"></path></svg></button>
+        </div>
+        <pre class="mono" style="margin: 0; padding: 12px; font-size: 13px; line-height: 1.6; white-space: pre; overflow: hidden">{
+  <span style="color: #82C8E5">"plan"</span>: <span class="str">"pro"</span>,
+  <span style="color: #82C8E5">"seats"</span>: <span class="num">5</span>,
+  <span style="color: #82C8E5">"billing"</span>: {
+    <span style="color: #82C8E5">"cycle"</span>: <span class="str">"yearly"</span>,
+    <span style="color: #82C8E5">"renews_at"</span>: <span class="str">"2027-03-01"</span>
+  },
+  <span style="color: #82C8E5">"tags"</span>: [<span class="str">"beta"</span>]
+}</pre>
+      </aside>
+    </div>
+  </section>
+
+  <!-- 4. EXPLAIN ANALYZE -->
+  <section class="sec" aria-label="Query plan">
+    <h3 class="label">M9 · EXPLAIN ANALYZE — 결과 탭에 tree, 가장 오래 걸린 노드를 굵게</h3>
+    <div class="card">
+      <div class="rhead"><span class="rtab">EXPLAIN</span><span class="meta mono">Execution 41.2 ms · Planning 0.4 ms</span><span style="flex: 1"></span><button type="button" class="btn btn-ghost" style="height: 24px; font-size: 13px">Show raw</button></div>
+      <div class="pl meta" style="height: 28px; border-bottom-color: #23252B"><div>Node</div><div>Actual time</div><div>Rows (est → actual)</div><div>Loops</div></div>
+      <sc-for list="{{plan}}" as="p" hint-placeholder-count="5">
+        <div class="pl mono" style="{{p.style}}"><div style="{{p.pad}}">{{p.node}}</div><div>{{p.ms}}</div><div>{{p.rows}}</div><div>{{p.loops}}</div></div>
+      </sc-for>
+    </div>
+  </section>
+
+  <!-- 5. DDL -->
+  <section class="sec" aria-label="Show DDL">
+    <h3 class="label">M9 · DDL 보기 — 스키마 트리의 menu에서, 결과 panel에 연다</h3>
+    <div class="card">
+      <div class="rhead"><span class="rtab">DDL users</span><span style="flex: 1"></span><button type="button" class="btn btn-ghost" style="height: 24px; font-size: 13px">Copy</button><button type="button" class="btn" style="height: 24px; font-size: 13px">Open in new tab</button></div>
+      <pre class="mono" style="margin: 0; padding: 12px 16px; font-size: 13px; line-height: 1.6; background: #15161B; white-space: pre"><span class="kw">CREATE TABLE</span> public.users (
+  id           <span style="color: #FFCB6B">bigint</span> <span class="kw">GENERATED ALWAYS AS IDENTITY</span>,
+  email        <span style="color: #FFCB6B">text</span> <span class="kw">NOT NULL</span>,
+  display_name <span style="color: #FFCB6B">text</span>,
+  created_at   <span style="color: #FFCB6B">timestamptz</span> <span class="kw">NOT NULL DEFAULT</span> <span class="fn">now</span>(),
+  profile      <span style="color: #FFCB6B">jsonb</span>,
+  <span class="kw">CONSTRAINT</span> users_pkey <span class="kw">PRIMARY KEY</span> (id)
+);
+<span class="kw">CREATE UNIQUE INDEX</span> users_email_key <span class="kw">ON</span> public.users (email);</pre>
+    </div>
+  </section>
+
+  <!-- 6. 셀 편집 -->
+  <section class="sec" aria-label="Cell editing">
+    <h3 class="label">M10 · 셀 편집 — 고친 셀을 모아 반영 전에 SQL을 보여 준다</h3>
+    <div class="card">
+      <div class="rhead"><span class="rtab">SELECT users</span><span class="meta">2 cells changed</span><span style="flex: 1"></span><button type="button" class="btn btn-ghost" style="height: 24px; font-size: 13px">Revert</button><button type="button" class="btn btn-primary" style="height: 24px; font-size: 13px">Apply</button></div>
+      <div role="grid" aria-label="Cell editing" class="mono">
+        <div role="row" class="gr gh" style="grid-template-columns: 52px 92px minmax(0, 1fr) 140px"><div></div><div class="cs" style="font-weight: 600; font-size: 13px">id</div><div class="cs" style="font-weight: 600; font-size: 13px">email</div><div class="cs" style="font-weight: 600; font-size: 13px">display_name</div></div>
+        <div role="row" class="gr" style="grid-template-columns: 52px 92px minmax(0, 1fr) 140px"><div class="n">1</div><div class="num" style="justify-content: flex-end">10482</div><div>haneul.kim@example.com</div><div style="box-shadow: inset 2px 0 0 #7C9CFF; background: rgba(124,156,255,0.08)">김하늘 (PM)</div></div>
+        <div role="row" class="gr" style="grid-template-columns: 52px 92px minmax(0, 1fr) 140px"><div class="n">2</div><div class="num" style="justify-content: flex-end">10481</div><div style="box-shadow: inset 2px 0 0 #7C9CFF; background: rgba(124,156,255,0.08)">jun@example.com</div><div>이준</div></div>
+      </div>
+      <div style="padding: 12px; display: flex; flex-direction: column; gap: 6px; border-top: 1px solid #23252B">
+        <span class="label">SQL to send on Apply</span>
+        <pre class="mono" style="margin: 0; padding: 8px 10px; border-radius: 6px; background: #15161B; font-size: 13px; line-height: 1.6; white-space: pre-wrap"><span class="kw">UPDATE</span> public.users <span class="kw">SET</span> display_name = <span class="str">'김하늘 (PM)'</span> <span class="kw">WHERE</span> id = <span class="num">10482</span>;
+<span class="kw">UPDATE</span> public.users <span class="kw">SET</span> email = <span class="str">'jun@example.com'</span> <span class="kw">WHERE</span> id = <span class="num">10481</span>;</pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- 7. 편집 불가 + 내보내기 -->
+  <section class="sec" aria-label="Not editable and export">
+    <h3 class="label">M10 · 편집할 수 없는 결과, 내보내기 menu</h3>
+    <div class="card" style="position: relative; height: 290px">
+      <div class="rhead"><span class="rtab">SELECT orders</span><span class="meta mono">500+ rows · 12 ms</span><span style="flex: 1"></span>
+        <button type="button" class="btn btn-ghost" aria-expanded="true" style="height: 26px; font-size: 13px">Export</button>
+      </div>
+      <div style="padding: 14px; display: flex; flex-direction: column; gap: 10px; max-width: 360px">
+        <div class="note" role="status">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="flex-shrink: 0; margin-top: 1px"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>
+          <span>Not editable: rows come from two tables (<span class="mono">orders</span>, <span class="mono">users</span>).</span>
+        </div>
+        <span class="meta">다른 이유: PK가 없음 · 계산한 컬럼 · 읽기 전용 접속. 셀을 두 번 누르면 이 문장이 뜬다.</span>
+      </div>
+      <div role="menu" aria-label="Export" style="position: absolute; right: 12px; top: 40px; width: 220px; padding: 4px; background: #262830; border: 1px solid #33363E; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.5)">
+        <button type="button" role="menuitem" class="mi" style="background: rgba(124,156,255,0.16)">Save as CSV…</button>
+        <button type="button" role="menuitem" class="mi">Save as JSON…</button>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1400,"height":1480}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const raw = [
+      { d: 0, node: 'Sort', ms: '41.0 ms', rows: '120 → 118', loops: '1' },
+      { d: 1, node: 'Hash Join', ms: '40.6 ms', rows: '120 → 118', loops: '1' },
+      { d: 2, node: 'Seq Scan on orders', ms: '36.9 ms', rows: '1,200 → 98,410', loops: '1', slow: true },
+      { d: 2, node: 'Hash', ms: '0.3 ms', rows: '80 → 76', loops: '1' },
+      { d: 3, node: 'Index Scan using users_pkey', ms: '0.2 ms', rows: '80 → 76', loops: '1' }
+    ];
+    const plan = raw.map((p) => ({
+      ...p,
+      pad: 'padding-left: ' + (10 + p.d * 16) + 'px',
+      style: p.slow ? 'font-weight: 600; background: #15161B' : ''
+    }));
+    return { plan };
+  }
+}
+</script>
+</body>
+</html>

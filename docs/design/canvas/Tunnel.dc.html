@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tunnel states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-ghost{background:transparent}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.chip{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 10px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;white-space:nowrap}
+.chip .st{display:inline-flex;align-items:center;gap:6px;padding-left:8px;border-left:1px solid #33363E;color:#A3A6B0;font-size:13px}
+.card{border:1px solid #23252B;border-radius:10px;background:#0F1014;overflow:hidden}
+.bar{height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#15161B;border-bottom:1px solid #23252B}
+.body{padding:16px;display:flex;flex-direction:column;gap:10px}
+.meta{font-size:13px;color:#A3A6B0}
+.pre{margin:0;padding:10px 12px;border-radius:8px;background:#15161B;border:1px solid #23252B;font-size:13px;line-height:1.6;white-space:pre-wrap}
+.sec{display:flex;flex-direction:column;gap:8px}
+.banner{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-bottom:1px solid #23252B;background:#15161B}
+</style>
+</helmet>
+<div class="cs" style="width: 1200px; height: 1140px; box-sizing: border-box; padding: 28px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; align-content: start; background: #0B0C0F">
+
+  <!-- 1. 시작 중 -->
+  <section class="sec" aria-label="Starting tunnel">
+    <h3 class="label">1 · 터널 시작 중 — 포트가 열릴 때까지 센다</h3>
+    <div class="card">
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span>
+          <span class="st"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2a6 6 0 1 1-6 6"></path></svg>Starting tunnel <span class="mono">14 / 20 s</span></span>
+        </span>
+      </div>
+      <div class="body">
+        <p style="margin: 0">Ran the tunnel command. Connects once <span class="mono">localhost:25432</span> opens.</p>
+        <pre class="pre mono">railway connect Postgres18 -e staging --tunnel-only -P 25432</pre>
+        <div><button type="button" class="btn">Cancel</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2. 포트가 열리지 않음 -->
+  <section class="sec" aria-label="Tunnel failed">
+    <h3 class="label">2 · 포트가 열리지 않음 — 명령의 오류 출력을 그대로</h3>
+    <div class="card">
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span>
+          <span class="st"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M6 6l4 4M10 6l-4 4"></path></svg>Tunnel failed</span>
+        </span>
+      </div>
+      <div class="body">
+        <p style="margin: 0"><span class="mono">localhost:25432</span> didn't open within 20 seconds, so the connection stopped.</p>
+        <div style="display: flex; flex-direction: column; gap: 6px">
+          <span class="label">Command output (stderr)</span>
+          <pre class="pre mono">Unauthorized. Please login with `railway login`
+Error: failed to open tunnel</pre>
+        </div>
+        <div style="display: flex; gap: 8px"><button type="button" class="btn">Try again</button><button type="button" class="btn btn-ghost">Edit connection</button></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 재연결 중 -->
+  <section class="sec" aria-label="Reconnecting">
+    <h3 class="label">3 · 터널 끊김 — 다시 실행, 연속 3번 실패하면 멈춘다</h3>
+    <div class="card">
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span>
+          <span class="st"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2a6 6 0 1 1-6 6"></path></svg>Reconnecting <span class="mono">2/3</span></span>
+        </span>
+      </div>
+      <div class="body">
+        <p style="margin: 0">The tunnel process exited. Running the command again (<span class="mono">2/3</span>).</p>
+        <div style="display: flex; gap: 12px; padding: 12px; border: 1px solid #23252B; border-radius: 8px">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.6" stroke-linecap="round" style="flex-shrink: 0; margin-top: 1px"><circle cx="8" cy="8" r="6"></circle><path d="M6 6l4 4M10 6l-4 4"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 8px">
+            <span style="font-weight: 500">3번 연속 실패 뒤</span>
+            <span class="meta">Ran the tunnel 3 times but it didn't open, so it stopped. The last command output is shown as in state 2.</span>
+            <div><button type="button" class="btn">Try again</button></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. 앱이 띄우지 않은 터널 -->
+  <section class="sec" aria-label="External tunnel">
+    <h3 class="label">4 · 포트가 이미 열려 있음 — 앱이 띄우지 않은 터널, 앱이 끊지 않는다</h3>
+    <div class="card">
+      <div style="height: 34px; display: flex; align-items: flex-end; padding: 0 8px; background: #0F1014; border-bottom: 1px solid #23252B">
+        <div style="display: flex; align-items: center; gap: 8px; height: 28px; padding: 0 12px; border-radius: 7px 7px 0 0; background: #15161B; border: 1px solid #23252B; border-bottom-color: #15161B; margin-bottom: -1px; font-size: 13px">
+          <span aria-hidden="true" class="dot" style="background: #E8B04B"></span>cleanup.sql
+          <svg role="img" aria-label="External tunnel" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#A3A6B0" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5"></path></svg>
+        </div>
+      </div>
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span>
+          <span class="st"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5"></path></svg>External tunnel</span>
+        </span>
+      </div>
+      <div class="body">
+        <div role="tooltip" style="padding: 10px 12px; background: #262830; border: 1px solid #33363E; border-radius: 7px; font-size: 13px; line-height: 1.55">
+          <span class="mono">localhost:25432</span> was already open, so the tunnel command didn't run. ChillaSQL won't close this tunnel when it quits.
+        </div>
+        <span class="meta">탭의 icon과 접속 chip에 hover하면 위 설명이 보인다.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. 재연결 뒤 -->
+  <section class="sec" aria-label="After reconnecting">
+    <h3 class="label">5 · 재연결 뒤 — 세션 상태가 초기화됐다고 알린다</h3>
+    <div class="card">
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span></span>
+      </div>
+      <div class="banner" role="status">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"></path></svg>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-weight: 500">Reconnected</span>
+          <span class="meta">This is a new session, so session state such as SET values and temporary tables was reset.</span>
+        </div>
+        <button type="button" class="btn btn-ghost" style="height: 24px; font-size: 13px">Close</button>
+      </div>
+      <div style="height: 64px"></div>
+    </div>
+  </section>
+
+  <!-- 6. 트랜잭션 중 끊김 -->
+  <section class="sec" aria-label="Disconnected during a transaction">
+    <h3 class="label">6 · 트랜잭션 중 끊김 — 조용히 재연결하지 않는다</h3>
+    <div class="card">
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span></span>
+      </div>
+      <div class="banner" role="alert">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M8 2.2L14.5 13.5h-13z"></path><path d="M8 6.5v3M8 11.6h.01"></path></svg>
+        <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+          <span style="font-weight: 500">Transaction lost</span>
+          <span class="meta">The connection dropped while a transaction was open. The 2 uncommitted statements were not applied. The next run opens a new session.</span>
+        </div>
+        <button type="button" class="btn" style="height: 24px; font-size: 13px">OK</button>
+      </div>
+      <div style="height: 64px"></div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1140}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

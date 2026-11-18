@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Sidebar schema and history</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.kbd{font-family:inherit;font-size:12px;font-weight:500;padding:1px 5px;border-radius:4px;background:#262830;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.ibtn{width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;border:0;border-radius:5px;background:transparent;color:#A3A6B0;cursor:pointer;flex-shrink:0}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.seg{display:flex;padding:2px;gap:2px;background:#1C1D23;border:1px solid #33363E;border-radius:7px;margin:12px 10px 8px}
+.seg button{flex:1;height:22px;border:0;border-radius:5px;background:transparent;color:#A3A6B0;font-size:13px;font-weight:500;cursor:pointer}
+.seg button[aria-selected="true"]{background:#262830;color:#E8E9ED}
+.side{position:relative;width:248px;height:740px;display:flex;flex-direction:column;background:#0F1014;border:1px solid #23252B;border-radius:10px;overflow:hidden;box-sizing:border-box}
+.ctx{display:flex;align-items:center;gap:8px;padding:0 10px 8px 16px;font-size:13px}
+.tr{display:flex;align-items:center;gap:6px;width:100%;height:24px;border:0;border-radius:5px;background:transparent;cursor:pointer;text-align:left;font-size:13px;padding-right:8px;white-space:nowrap}
+.tr .t{font-size:12px;color:#8A8E99;margin-left:auto}
+.sec{display:flex;flex-direction:column;gap:8px}
+.hi{display:flex;flex-direction:column;gap:4px;width:100%;padding:8px 10px;border:0;border-radius:6px;background:transparent;cursor:pointer;text-align:left}
+.hi .q{font-size:13px;line-height:1.5;white-space:pre;overflow:hidden;text-overflow:ellipsis;max-height:36px}
+.hi .m{display:flex;align-items:center;gap:6px;font-size:12px;color:#A3A6B0}
+.mi{width:100%;display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border:0;border-radius:5px;background:transparent;cursor:pointer;text-align:left}
+</style>
+</helmet>
+<div class="cs" style="width: 1120px; height: 820px; box-sizing: border-box; padding: 28px; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 24px; background: #0B0C0F">
+
+  <!-- A. 스키마 트리 -->
+  <section class="sec" aria-label="Schema tree">
+    <h3 class="label">A · 스키마 — 활성 탭의 접속</h3>
+    <div class="side">
+      <div role="tablist" aria-label="Sidebar view" class="seg"><button type="button" role="tab" aria-selected="false">Files</button><button type="button" role="tab" aria-selected="true">Schema</button><button type="button" role="tab" aria-selected="false">History</button></div>
+      <div class="ctx">
+        <span aria-hidden="true" class="dot" style="background: #3FB68B"></span>
+        <span style="font-weight: 500">local</span><span class="mono" style="color: #A3A6B0; font-size: 12px">chilla_test</span>
+        <span style="flex: 1"></span>
+        <button type="button" class="ibtn" aria-label="Refresh schema"><svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5"></path></svg></button>
+      </div>
+      <div role="tree" aria-label="Schema" style="padding: 0 6px; display: flex; flex-direction: column">
+        <sc-for list="{{tree}}" as="n" hint-placeholder-count="16">
+          <button type="button" role="treeitem" class="tr" style="{{n.style}}">
+            <svg aria-hidden="true" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#A3A6B0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" style="{{n.chevStyle}}"><path d="{{n.chev}}"></path></svg>
+            <span class="mono" style="font-size: 11px; width: 14px; text-align: center; color: #8A8E99">{{n.icon}}</span>
+            <span class="{{n.cls}}" style="overflow: hidden; text-overflow: ellipsis">{{n.name}}</span>
+            <span class="t mono">{{n.type}}</span>
+          </button>
+        </sc-for>
+      </div>
+      <div role="menu" aria-label="users" style="position: absolute; left: 96px; top: 184px; width: 200px; padding: 4px; background: #262830; border: 1px solid #33363E; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.5)">
+        <button type="button" role="menuitem" class="mi" style="background: rgba(124,156,255,0.16)"><span style="flex: 1">Select first rows</span><span style="font-size: 12px; color: #A3A6B0">Double-click</span></button>
+        <button type="button" role="menuitem" class="mi">Show DDL</button>
+        <button type="button" role="menuitem" class="mi">Copy name</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- B. 스키마: 접속 없음 / 불러오는 중 -->
+  <section class="sec" aria-label="Schema empty and loading">
+    <h3 class="label">B · 스키마 — 접속 없음, 불러오는 중</h3>
+    <div class="side">
+      <div role="tablist" aria-label="Sidebar view" class="seg"><button type="button" role="tab" aria-selected="false">Files</button><button type="button" role="tab" aria-selected="true">Schema</button><button type="button" role="tab" aria-selected="false">History</button></div>
+      <div style="height: 200px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 0 20px; text-align: center; border-bottom: 1px solid #23252B">
+        <span style="font-size: 13px; color: #A3A6B0">No connection in this tab</span>
+        <button type="button" class="btn">Choose connection</button>
+      </div>
+      <div class="ctx" style="padding-top: 16px">
+        <span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span><span class="mono" style="color: #A3A6B0; font-size: 12px">railway</span>
+      </div>
+      <div style="padding: 0 6px; display: flex; flex-direction: column">
+        <span class="tr" style="padding-left: 8px"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="#A3A6B0" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg><span class="mono" style="font-size: 11px; width: 14px; text-align: center; color: #8A8E99">S</span>public</span>
+        <span class="tr" style="padding-left: 24px; color: #A3A6B0"><svg aria-hidden="true" width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2a6 6 0 1 1-6 6"></path></svg>Loading</span>
+      </div>
+      <div style="padding: 16px; font-size: 13px; color: #A3A6B0; line-height: 1.5">펼친 항목만 조회합니다. 처음 펼칠 때 한 번 기다립니다.</div>
+    </div>
+  </section>
+
+  <!-- C. 기록 -->
+  <section class="sec" aria-label="Query history">
+    <h3 class="label">C · 기록 — 검색하고 에디터로 불러오기</h3>
+    <div class="side">
+      <div role="tablist" aria-label="Sidebar view" class="seg"><button type="button" role="tab" aria-selected="false">Files</button><button type="button" role="tab" aria-selected="false">Schema</button><button type="button" role="tab" aria-selected="true">History</button></div>
+      <label style="margin: 0 10px 10px; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 8px; border: 1px solid #33363E; border-radius: 7px; background: #15161B; color: #A3A6B0">
+        <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="7" cy="7" r="4.5"></circle><path d="M10.5 10.5L14 14"></path></svg>
+        <input aria-label="Search history" value="users" style="flex: 1; min-width: 0; border: 0; background: transparent; color: #E8E9ED; font-size: 13px; outline: none">
+      </label>
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 0 6px; overflow: hidden">
+        <sc-for list="{{history}}" as="h" hint-placeholder-count="6">
+          <sc-if value="{{h.day}}" hint-placeholder-val="{{false}}"><span class="label" style="padding: 8px 10px 4px">{{h.dayLabel}}</span></sc-if>
+          <sc-if value="{{h.item}}" hint-placeholder-val="{{true}}">
+            <button type="button" class="hi" style="{{h.style}}">
+              <span class="q mono">{{h.sql}}</span>
+              <span class="m"><span aria-hidden="true" class="dot" style="{{h.dot}}"></span>{{h.conn}} · {{h.at}} · <span class="mono">{{h.ms}}</span></span>
+            </button>
+          </sc-if>
+        </sc-for>
+      </div>
+      <div style="margin-top: auto; padding: 10px 12px; border-top: 1px solid #23252B; display: flex; align-items: center; gap: 8px; font-size: 13px; color: #A3A6B0">
+        <span class="kbd">↵</span> Open in editor
+      </div>
+    </div>
+  </section>
+
+  <!-- D. 프로젝트 바꾸기 -->
+  <section class="sec" aria-label="Switch project">
+    <h3 class="label">D · 프로젝트 바꾸기 — 최근 프로젝트</h3>
+    <div class="side">
+      <div style="padding: 40px 10px 12px">
+        <button type="button" aria-expanded="true" style="width: 100%; display: flex; align-items: center; gap: 10px; padding: 8px 10px; background: #15161B; border: 1px solid #33363E; border-radius: 8px; cursor: pointer; text-align: left">
+          <span aria-hidden="true" style="width: 26px; height: 26px; border-radius: 6px; background: #262830; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 12px">CD</span>
+          <span style="flex: 1; font-weight: 600">chilla-demo</span>
+        </button>
+      </div>
+      <div role="menu" aria-label="Projects" style="margin: 0 10px; padding: 4px; background: #262830; border: 1px solid #33363E; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.5)">
+        <span class="label" style="display: block; padding: 6px 10px 4px">Recent</span>
+        <button type="button" role="menuitem" class="mi">omofictions</button>
+        <button type="button" role="menuitem" class="mi" style="background: rgba(124,156,255,0.16)">billing-migration</button>
+        <button type="button" role="menuitem" class="mi">sandbox</button>
+        <div style="height: 1px; background: #33363E; margin: 4px 6px"></div>
+        <button type="button" role="menuitem" class="mi"><span style="flex: 1">Open Project…</span><span class="kbd">⌘O</span></button>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1120,"height":820}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const open = 'M4 6l4 4 4-4';
+    const closed = 'M6 4l4 4-4 4';
+    const raw = [
+      { d: 0, name: 'public', icon: 'S', ex: true },
+      { d: 1, name: 'Tables', icon: '', ex: true, group: true },
+      { d: 2, name: 'events', icon: 'T' },
+      { d: 2, name: 'users', icon: 'T', ex: true, sel: true },
+      { d: 3, name: 'Columns', icon: '', ex: true, group: true },
+      { d: 4, name: 'id', icon: 'PK', type: 'int8', leaf: true },
+      { d: 4, name: 'email', icon: 'c', type: 'text', leaf: true },
+      { d: 4, name: 'display_name', icon: 'c', type: 'text', leaf: true },
+      { d: 4, name: 'created_at', icon: 'c', type: 'timestamptz', leaf: true },
+      { d: 4, name: 'profile', icon: 'c', type: 'jsonb', leaf: true },
+      { d: 3, name: 'Indexes', icon: '', group: true },
+      { d: 3, name: 'Constraints', icon: '', group: true },
+      { d: 1, name: 'Views', icon: '', group: true },
+      { d: 0, name: 'billing', icon: 'S' }
+    ];
+    const tree = raw.map((n) => ({
+      name: n.name,
+      icon: n.icon,
+      type: n.type || '',
+      cls: n.leaf ? 'mono' : (n.group ? '' : 'mono'),
+      chev: n.ex ? open : closed,
+      chevStyle: n.leaf ? 'visibility: hidden' : '',
+      style: 'padding-left: ' + (8 + n.d * 14) + 'px; ' + (n.sel ? 'background: rgba(124,156,255,0.14)' : '') + (n.group ? '; color: #A3A6B0' : '')
+    }));
+    const H = (o) => ({ day: false, item: true, ...o });
+    const history = [
+      { day: true, item: false, dayLabel: 'Today' },
+      H({ sql: 'SELECT u.id, u.email, u.display_name\nFROM users u', conn: 'local', color: '#3FB68B', at: '09:41', ms: '38 ms', sel: true }),
+      H({ sql: 'UPDATE users SET plan = \'pro\'\nWHERE id = 10482', conn: 'staging', color: '#E8B04B', at: '09:12', ms: '9 ms' }),
+      { day: true, item: false, dayLabel: 'Yesterday' },
+      H({ sql: 'SELECT date_trunc(\'day\', created_at)\nFROM users GROUP BY 1', conn: 'prod', color: '#EF6461', at: '17:03', ms: '1.2 s' }),
+      H({ sql: 'SELECT count(*) FROM users\nWHERE deleted_at IS NULL', conn: 'local', color: '#3FB68B', at: '11:30', ms: '4 ms' })
+    ].map((h) => ({
+      ...h,
+      dot: h.color ? 'background: ' + h.color : '',
+      style: h.sel ? 'background: rgba(124,156,255,0.14)' : ''
+    }));
+    return { tree, history };
+  }
+}
+</script>
+</body>
+</html>

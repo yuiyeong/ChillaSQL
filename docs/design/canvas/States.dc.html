@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Result panel states</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.btn svg,.btn .kbd{flex-shrink:0}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.kbd{font-family:inherit;font-size:12px;font-weight:500;padding:1px 5px;border-radius:4px;background:#262830;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#7C9CFF;border-color:#7C9CFF;color:#0F1014;font-weight:600}
+.btn-primary .kbd{background:rgba(15,16,20,.18);color:#0F1014}
+.btn-ghost{background:transparent}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tx{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border:1px solid #33363E;border-radius:4px;font-size:12px;font-weight:500;color:#E8E9ED;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 10px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;white-space:nowrap}
+.card{border:1px solid #23252B;border-radius:10px;background:#0F1014;overflow:hidden}
+.rhead{height:36px;display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid #23252B}
+.rtab{height:24px;display:inline-flex;align-items:center;gap:6px;padding:0 10px;border:0;border-radius:6px;background:transparent;color:#A3A6B0;font-size:13px;font-weight:500;cursor:pointer}
+.rtab[aria-selected="true"]{background:#262830;color:#E8E9ED}
+.meta{font-size:13px;color:#A3A6B0}
+.sec{display:flex;flex-direction:column;gap:8px}
+</style>
+</helmet>
+<div class="cs" style="width: 1200px; height: 1360px; box-sizing: border-box; padding: 28px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; align-items: start; background: #0B0C0F">
+
+  <!-- Left column -->
+  <div style="display: flex; flex-direction: column; gap: 28px">
+
+    <!-- 1. 실행 범위 -->
+    <section class="sec" aria-label="What to run">
+      <h3 class="label">실행 범위 — 버튼 label이 범위를 말한다</h3>
+      <div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 14px; background: #15161B">
+        <div style="display: flex; align-items: center; gap: 16px">
+          <span style="display: flex">
+            <button type="button" class="btn btn-primary" style="width: 200px; box-sizing: border-box; border-radius: 7px 0 0 7px; padding: 0 8px 0 12px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.8v10.4a.8.8 0 0 0 1.2.7l8.4-5.2a.8.8 0 0 0 0-1.4L5.2 2.1a.8.8 0 0 0-1.2.7z"></path></svg><span style="flex: 1; text-align: left">Run statement</span><span class="kbd">⌘↵</span></button>
+            <button type="button" class="btn btn-primary" aria-label="Choose what to run" style="width: 26px; box-sizing: border-box; justify-content: center; border-radius: 0 7px 7px 0; padding: 0; margin-left: 1px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button>
+          </span>
+          <span class="meta">선택 영역 없음 — 커서가 있는 문장</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 16px">
+          <span style="display: flex">
+            <button type="button" class="btn btn-primary" style="width: 200px; box-sizing: border-box; border-radius: 7px 0 0 7px; padding: 0 8px 0 12px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.8v10.4a.8.8 0 0 0 1.2.7l8.4-5.2a.8.8 0 0 0 0-1.4L5.2 2.1a.8.8 0 0 0-1.2.7z"></path></svg><span style="flex: 1; text-align: left">Run selection</span><span class="kbd">⌘↵</span></button>
+            <button type="button" class="btn btn-primary" aria-label="Choose what to run" style="width: 26px; box-sizing: border-box; justify-content: center; border-radius: 0 7px 7px 0; padding: 0; margin-left: 1px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button>
+          </span>
+          <span class="meta">선택 영역이 있음 — 선택한 text 그대로</span>
+        </div>
+        <div style="display: flex; align-items: flex-start; gap: 16px">
+          <div role="menu" aria-label="What to run" style="width: 240px; padding: 4px; background: #262830; border: 1px solid #33363E; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.5)">
+            <button type="button" role="menuitem" style="width: 100%; display: flex; align-items: center; height: 28px; padding: 0 10px; border: 0; border-radius: 5px; background: rgba(124,156,255,0.16); cursor: pointer">
+              <span style="flex: 1; text-align: left">Run statement</span><span class="kbd">⌘↵</span>
+            </button>
+            <button type="button" role="menuitem" style="width: 100%; display: flex; align-items: center; height: 28px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; cursor: pointer">
+              <span style="flex: 1; text-align: left">Run file</span>
+            </button>
+          </div>
+          <span class="meta" style="padding-top: 6px">파일 전체는 menu에서. 문장마다 결과 탭이 생긴다</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 실행 중 -->
+    <section class="sec" aria-label="Running">
+      <h3 class="label">실행 중 — 실행 버튼이 취소로 바뀐다</h3>
+      <div class="card">
+        <div style="height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #15161B; border-bottom: 1px solid #23252B">
+          <span class="chip"><span aria-hidden="true" class="dot" style="background: #3FB68B"></span><span style="font-weight: 500">local</span></span>
+          <span style="flex: 1"></span>
+          <button type="button" class="btn" style="width: 227px; box-sizing: border-box; padding: 0 8px 0 12px">
+            <svg aria-hidden="true" width="11" height="11" viewBox="0 0 16 16" fill="currentColor"><rect x="3" y="3" width="10" height="10" rx="2"></rect></svg>
+            <span style="flex: 1; text-align: left">Cancel</span><span class="kbd">⌘F2</span>
+          </button>
+        </div>
+        <div aria-hidden="true" style="height: 2px; background: #1C1D23; position: relative; overflow: hidden"><span style="position: absolute; left: 22%; width: 28%; top: 0; bottom: 0; background: #7C9CFF"></span></div>
+        <div class="rhead">
+          <button type="button" class="rtab" role="tab" aria-selected="true">SELECT pg_sleep</button>
+          <span class="meta">Running <span class="mono" style="color: #E8E9ED">4.2 s</span></span>
+        </div>
+        <div style="height: 64px; display: flex; align-items: center; justify-content: center" class="meta">Waiting for the first row from the server</div>
+      </div>
+    </section>
+
+    <!-- 3. 오류 -->
+    <section class="sec" aria-label="Error">
+      <h3 class="label">오류 — 에디터에 밑줄, 결과 panel에 서버 메시지 그대로</h3>
+      <div class="card" style="background: #15161B">
+        <div class="mono" style="display: flex; padding: 10px 0; font-size: 15px; line-height: 24px">
+          <div aria-hidden="true" style="width: 56px; flex-shrink: 0; text-align: right; color: #8A8E99">
+            <div style="padding-right: 14px">1</div>
+            <div style="padding-right: 14px">2</div>
+            <div style="padding-right: 14px">3</div>
+          </div>
+          <div style="flex: 1; white-space: pre; padding-left: 12px">
+            <div><span style="color: #C792EA">SELECT</span> <span style="color: #F0B47D">1</span><span style="color: #A3A6B0">;</span></div>
+            <div><span style="text-decoration: underline wavy #EF6461; text-underline-offset: 4px">SELEC</span> <span style="color: #F0B47D">2</span></div>
+            <div> </div>
+          </div>
+        </div>
+        <div style="border-top: 1px solid #23252B; background: #0F1014; padding: 16px; display: flex; gap: 12px">
+          <svg role="img" aria-label="Error" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.6" stroke-linecap="round" style="flex-shrink: 0; margin-top: 1px"><circle cx="8" cy="8" r="6"></circle><path d="M6 6l4 4M10 6l-4 4"></path></svg>
+          <div style="flex: 1; display: flex; flex-direction: column; gap: 10px">
+            <p class="mono" style="margin: 0; font-size: 15px">syntax error at or near "SELEC"</p>
+            <div style="display: flex; gap: 16px" class="meta">
+              <span>SQLSTATE <span class="mono" style="color: #E8E9ED">42601</span></span>
+              <span>Ln 2, Col 1</span>
+              <span class="mono">3 ms</span>
+            </div>
+            <div style="display: flex; gap: 8px">
+              <button type="button" class="btn">Go to error</button>
+              <button type="button" class="btn btn-ghost">Copy message</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 4. 트랜잭션 실패 -->
+    <section class="sec" aria-label="Transaction failed">
+      <h3 class="label">트랜잭션 실패 — Rollback 전까지 모든 문장이 거부된다</h3>
+      <div class="card">
+        <div style="height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px; background: #15161B; border-bottom: 1px solid #23252B">
+          <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span></span>
+          <span class="tx" style="height: 24px; padding: 0 8px; font-size: 13px">
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2L14.5 13.5h-13z"></path><path d="M8 6.5v3M8 11.6h.01"></path></svg>
+            Transaction failed
+          </span>
+          <span style="flex: 1"></span>
+          <button type="button" class="btn">Rollback <span class="kbd">⌥⇧⌘Z</span></button>
+        </div>
+        <div style="padding: 16px; display: flex; gap: 12px">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; margin-top: 1px"><path d="M8 2.2L14.5 13.5h-13z"></path><path d="M8 6.5v3M8 11.6h.01"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <p class="mono" style="margin: 0">current transaction is aborted, commands ignored until end of transaction block</p>
+            <p class="meta" style="margin: 0">SQLSTATE <span class="mono" style="color: #E8E9ED">25P02</span> · An earlier error left the transaction failed. Roll back, then run again.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 10. 실행하지 못한 경우 -->
+    <section class="sec" aria-label="Timeout and unsplittable text">
+      <h3 class="label">timeout, 나눌 수 없는 text</h3>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 6px">
+          <span style="display: flex; align-items: center; gap: 8px; font-weight: 500">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg>Timed out</span>
+          <span class="mono" style="font-size: 13px">canceling statement due to statement timeout</span>
+          <span class="meta">SQLSTATE <span class="mono" style="color: #E8E9ED">57014</span> · This connection's <span class="mono">statement_timeout</span> is 30s.</span>
+        </div>
+        <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 6px">
+          <span style="display: flex; align-items: center; gap: 8px; font-weight: 500">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2L14.5 13.5h-13z"></path><path d="M8 6.5v3M8 11.6h.01"></path></svg>Couldn't find a statement</span>
+          <span class="meta">An unclosed quote keeps the text from being split into statements. Select what to run and it is sent as is.</span>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Right column -->
+  <div style="display: flex; flex-direction: column; gap: 28px">
+
+    <!-- 5. 여러 문장 -->
+    <section class="sec" aria-label="Multiple statement results">
+      <h3 class="label">여러 문장 — 문장마다 결과 탭, 오류에서 멈춘다</h3>
+      <div class="card">
+        <div class="rhead" role="tablist" aria-label="Result tabs" style="gap: 2px">
+          <button type="button" class="rtab" role="tab" aria-selected="false"><span class="mono" style="color: #8A8E99">1</span> SELECT users</button>
+          <button type="button" class="rtab" role="tab" aria-selected="false"><span class="mono" style="color: #8A8E99">2</span> UPDATE 12</button>
+          <button type="button" class="rtab" role="tab" aria-selected="true"><span class="mono" style="color: #8A8E99">3</span>
+            <svg role="img" aria-label="Error" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M6 6l4 4M10 6l-4 4"></path></svg> Error</button>
+          <button type="button" class="rtab" role="tab" aria-selected="false" aria-disabled="true" style="color: #8A8E99; cursor: default"><span class="mono">4</span> Not run</button>
+        </div>
+        <div style="padding: 14px 16px; display: flex; flex-direction: column; gap: 6px">
+          <p class="mono" style="margin: 0">relation "order_items" does not exist</p>
+          <p class="meta" style="margin: 0">Stopped at statement 3. Statement 4 was not run.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 6. 영향받은 행 수 -->
+    <section class="sec" aria-label="Rows affected">
+      <h3 class="label">행을 돌려주지 않는 문장 — 영향받은 행 수</h3>
+      <div class="card">
+        <div class="rhead">
+          <button type="button" class="rtab" role="tab" aria-selected="true">UPDATE users</button>
+          <span class="meta mono">9 ms</span>
+        </div>
+        <div style="height: 72px; display: flex; align-items: center; gap: 12px; padding: 0 16px">
+          <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.2l3 3 6-6.5"></path></svg>
+          <span style="font-size: 17px; font-weight: 600">12 rows updated</span>
+          <span class="mono meta">UPDATE 12</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7. 보관 상한 -->
+    <section class="sec" aria-label="Row limit">
+      <h3 class="label">보관 상한(10만 행) — 버린 구간은 다시 실행해야 본다</h3>
+      <div class="card">
+        <div class="rhead">
+          <button type="button" class="rtab" role="tab" aria-selected="true">SELECT events</button>
+          <span class="meta mono">124,500+ rows · 2.1 s</span>
+        </div>
+        <div role="grid" aria-label="SELECT events results" class="mono" style="font-size: 13px">
+          <div role="row" style="height: 40px; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: repeating-linear-gradient(135deg, #15161B 0 8px, #0F1014 8px 16px); border-bottom: 1px solid #23252B">
+            <span class="cs" style="flex: 1; font-size: 13px">Rows 1–24,500 were dropped · run again to see them</span>
+            <button type="button" class="btn cs" style="height: 24px; font-size: 13px">Run again</button>
+          </div>
+          <sc-for list="{{kept}}" as="r" hint-placeholder-count="5">
+            <div role="row" style="display: grid; grid-template-columns: 76px 92px minmax(0, 1fr) 210px; height: 26px; border-bottom: 1px solid #1C1D23">
+              <div role="gridcell" style="display: flex; align-items: center; justify-content: flex-end; padding: 0 10px; color: #8A8E99">{{r.n}}</div>
+              <div role="gridcell" style="display: flex; align-items: center; justify-content: flex-end; padding: 0 10px; color: #F0B47D">{{r.id}}</div>
+              <div role="gridcell" style="display: flex; align-items: center; padding: 0 10px">{{r.kind}}</div>
+              <div role="gridcell" style="display: flex; align-items: center; padding: 0 10px">{{r.at}}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </section>
+
+    <!-- 8. 끝난 상태 -->
+    <section class="sec" aria-label="Finished states">
+      <h3 class="label">끝난 상태 — icon과 문장으로만 구분, 배경 색 없음</h3>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+        <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 6px">
+          <span style="display: flex; align-items: center; gap: 8px; font-weight: 500">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M5.5 5.5l5 5"></path></svg>Cancelled</span>
+          <span class="meta">Stopped on the server. The 120 rows received stay visible.</span>
+        </div>
+        <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 6px">
+          <span style="display: flex; align-items: center; gap: 8px; font-weight: 500">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M6 10l-1.5 1.5a2.1 2.1 0 0 1-3-3L3 7M10 6l1.5-1.5a2.1 2.1 0 0 1 3 3L13 9M6 6L4.5 4.5M10 10l1.5 1.5"></path></svg>Connection lost</span>
+          <span class="mono" style="font-size: 13px">server closed the connection unexpectedly</span>
+          <span class="meta">The next run opens a new session. SET values and temp tables are gone.</span>
+        </div>
+        <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 6px">
+          <span style="display: flex; align-items: center; gap: 8px; font-weight: 500">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.7 8.5h5.6l.7-8.5"></path></svg>Results discarded</span>
+          <span class="meta">Running the next query discarded the rows not yet fetched. Run again to see them.</span>
+        </div>
+        <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 6px">
+          <span style="display: flex; align-items: center; gap: 8px; font-weight: 500">
+            <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M8 4.5V8l2.5 1.5"></path></svg>Results closed</span>
+          <span class="meta">Nothing was fetched for 10 minutes, so the query was closed on the database. The 1,500 rows received stay visible.</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 9. 빈 상태 -->
+    <section class="sec" aria-label="Empty state">
+      <h3 class="label">빈 상태 — 단축키를 가르친다</h3>
+      <div class="card" style="height: 88px; display: flex; align-items: center; justify-content: center; gap: 28px; color: #A3A6B0; font-size: 13px">
+        <span style="display: flex; align-items: center; gap: 8px"><span class="kbd">⌘↵</span> Run statement at cursor</span>
+        <span style="display: flex; align-items: center; gap: 8px"><span class="kbd">⇧⌘L</span> New tab</span>
+        <span style="display: flex; align-items: center; gap: 8px"><span class="kbd">⌥⌘L</span> Reformat</span>
+      </div>
+    </section>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1360}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const kept = [
+      { n: '24,501', id: '880214', kind: 'session.start', at: '2026-11-18 09:41:07+09' },
+      { n: '24,502', id: '880215', kind: 'page.view', at: '2026-11-18 09:41:08+09' },
+      { n: '24,503', id: '880216', kind: 'page.view', at: '2026-11-18 09:41:12+09' },
+      { n: '24,504', id: '880217', kind: 'checkout.open', at: '2026-11-18 09:41:30+09' },
+      { n: '24,505', id: '880218', kind: 'session.end', at: '2026-11-18 09:42:02+09' }
+    ];
+    return { kept };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Confirmation dialogs</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#7C9CFF;border-color:#7C9CFF;color:#0F1014;font-weight:600}
+.btn-ghost{background:transparent}
+.focus{box-shadow:0 0 0 2px #1C1D23,0 0 0 4px #7C9CFF}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sec{display:flex;flex-direction:column;gap:8px}
+.dlg{display:flex;flex-direction:column;gap:14px;padding:20px;background:#1C1D23;border:1px solid #33363E;border-radius:12px;box-shadow:0 24px 60px rgba(0,0,0,0.55)}
+.dlg h2{margin:0;font-size:17px;font-weight:600}
+.dlg p{margin:0;font-size:15px;line-height:1.55}
+.dlg p b{color:#E8E9ED;font-weight:600}
+.sub{color:#A3A6B0}
+.acts{display:flex;gap:8px;justify-content:flex-end}
+.in{height:32px;box-sizing:border-box;padding:0 10px;border:1px solid #33363E;border-radius:7px;background:#0F1014;color:#E8E9ED;outline:none;font-family:'D2Coding',ui-monospace,Menlo,monospace;font-size:13px;width:100%}
+.list{display:flex;flex-direction:column;border:1px solid #23252B;border-radius:8px;background:#0F1014}
+.list>div{display:flex;align-items:center;gap:10px;height:34px;padding:0 12px;border-bottom:1px solid #23252B;font-size:13px}
+.list>div:last-child{border-bottom:0}
+.pre{margin:0;padding:10px 12px;border-radius:8px;background:#0F1014;border:1px solid #23252B;font-size:13px;line-height:1.6;white-space:pre-wrap}
+</style>
+</helmet>
+<div class="cs" style="width: 1424px; height: 1420px; box-sizing: border-box; padding: 28px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 24px; align-content: start; background: #0B0C0F">
+
+  <!-- M3: 파일 -->
+  <section class="sec" aria-label="Save untitled tab">
+    <h3 class="label">M3 · 파일이 없는 탭 저장(⌘S)</h3>
+    <div class="dlg" role="dialog" aria-labelledby="f1">
+      <h2 id="f1">Save Query 1</h2>
+      <label style="display: flex; flex-direction: column; gap: 6px"><span class="sub" style="font-size: 13px">Path inside the project</span><input class="in" value="queries/weekly_signups.sql" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+      <div class="acts"><button type="button" class="btn btn-ghost">Cancel</button><button type="submit" class="btn btn-primary">Save</button></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="Unsaved changes">
+    <h3 class="label">M3 · 저장하지 않은 탭 닫기(⌘W)</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="f2">
+      <h2 id="f2">Save changes to <span class="mono" style="font-size: 16px">users_by_day.sql</span>?</h2>
+      <p class="sub">Your changes will be lost if you don't save them.</p>
+      <div class="acts"><button type="button" class="btn btn-ghost">Don't save</button><span style="flex: 1"></span><button type="button" class="btn focus" autofocus>Cancel</button><button type="button" class="btn btn-primary">Save</button></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="Switch project">
+    <h3 class="label">M3 · 저장하지 않은 탭이 있을 때 프로젝트 바꾸기</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="f3">
+      <h2 id="f3">2 tabs have unsaved changes</h2>
+      <div class="list mono">
+        <div>users_by_day.sql</div>
+        <div>Query 1</div>
+      </div>
+      <p class="sub">Switching projects discards these changes and closes every tab's session.</p>
+      <div class="acts"><button type="button" class="btn focus" autofocus>Cancel</button><button type="button" class="btn">Switch without saving</button></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="File changed on disk">
+    <h3 class="label">M3 · 연 뒤에 밖에서 바뀐 파일 저장</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="f4">
+      <h2 id="f4"><span class="mono" style="font-size: 16px">first.sql</span> changed on disk</h2>
+      <p class="sub">Another program edited this file after you opened it. Overwriting discards those changes.</p>
+      <div class="acts"><button type="button" class="btn focus" autofocus>Cancel</button><button type="button" class="btn">Overwrite</button></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="File deleted on disk">
+    <h3 class="label">M3 · 밖에서 지워진 파일 저장</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="f5">
+      <h2 id="f5"><span class="mono" style="font-size: 16px">scratch.sql</span> was deleted</h2>
+      <p class="sub">It was deleted from disk after you opened it. Recreate it with this tab's contents?</p>
+      <div class="acts"><button type="button" class="btn focus" autofocus>Cancel</button><button type="button" class="btn">Recreate</button></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="Can't open project">
+    <h3 class="label">M3 · 프로젝트를 열 수 없음 — chilla.toml 검사 실패</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="f6">
+      <h2 id="f6">Can't read chilla.toml</h2>
+      <pre class="pre mono">connections.prod: password is not allowed
+connections.local: unknown field sslmod</pre>
+      <p class="sub">Passwords live only in Keychain. Fix the file, then reload.</p>
+      <div class="acts"><button type="button" class="btn btn-ghost">Choose another folder…</button><span style="flex: 1"></span><button type="button" class="btn">Reload</button></div>
+    </div>
+  </section>
+
+  <!-- M6: 열린 트랜잭션 -->
+  <section class="sec" aria-label="Close tab with an open transaction">
+    <h3 class="label">M6 · 열린 트랜잭션이 있는 탭 닫기</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="t1">
+      <h2 id="t1">This tab has an open transaction</h2>
+      <p class="sub">Closing <b>cleanup.sql</b> closes the <b>staging</b> session. What should happen to the 2 uncommitted statements?</p>
+      <div class="acts"><button type="button" class="btn focus" autofocus>Cancel</button><span style="flex: 1"></span><button type="button" class="btn">Roll back and close</button><button type="button" class="btn">Commit and close</button></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="Switch to Auto">
+    <h3 class="label">M6 · 열린 트랜잭션이 있을 때 Auto로 바꾸기</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="t2">
+      <h2 id="t2">End the transaction before switching to Auto</h2>
+      <p class="sub">What should happen to the 2 uncommitted statements?</p>
+      <div class="acts"><button type="button" class="btn focus" autofocus>Cancel</button><span style="flex: 1"></span><button type="button" class="btn">Roll back and switch</button><button type="button" class="btn">Commit and switch</button></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="Quit app">
+    <h3 class="label">M6 · 열린 트랜잭션이 있을 때 앱 종료(⌘Q)</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="t3">
+      <h2 id="t3">2 tabs have open transactions</h2>
+      <div class="list">
+        <div><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span class="mono">cleanup.sql</span><span style="flex: 1"></span><span class="sub">staging · 2 statements · <span class="mono">3:12</span></span></div>
+        <div><span aria-hidden="true" class="dot" style="background: #3FB68B"></span><span class="mono">first.sql</span><span style="flex: 1"></span><span class="sub">local · 1 statement · <span class="mono">0:42</span></span></div>
+      </div>
+      <p class="sub">To decide tab by tab, cancel and use Commit or Rollback in each tab.</p>
+      <div class="acts"><button type="button" class="btn focus" autofocus>Cancel</button><span style="flex: 1"></span><button type="button" class="btn">Roll back all and quit</button></div>
+    </div>
+  </section>
+
+  <section class="sec" aria-label="Save connection edit">
+    <h3 class="label">M6 · 쓰는 탭에 열린 트랜잭션이 있는 접속의 대상을 바꿔 저장</h3>
+    <div class="dlg" role="alertdialog" aria-labelledby="t4">
+      <h2 id="t4">A tab using this connection has an open transaction</h2>
+      <p class="sub">Saving a new target closes the sessions of tabs using <b>staging</b>. What should happen to the 2 uncommitted statements in <b>cleanup.sql</b>?</p>
+      <p class="sub" style="font-size: 13px">프로젝트를 바꿀 때도 같은 모양으로 묻습니다.</p>
+      <div class="acts"><button type="button" class="btn focus" autofocus>Cancel</button><span style="flex: 1"></span><button type="button" class="btn">Roll back and save</button><button type="button" class="btn">Commit and save</button></div>
+    </div>
+  </section>
+
+  <!-- M3: 접속 form 오류 -->
+  <section class="sec" aria-label="Duplicate connection name">
+    <h3 class="label">M3 · 접속 추가 — 이미 있는 이름</h3>
+    <div class="dlg" style="gap: 10px">
+      <label style="display: flex; flex-direction: column; gap: 6px">
+        <span class="sub" style="font-size: 13px">Name</span>
+        <input class="in" value="staging" aria-invalid="true" aria-describedby="dup" style="border-color: #E8E9ED" autocorrect="off" autocapitalize="off" spellcheck="false">
+        <span id="dup" style="display: flex; align-items: center; gap: 6px; font-size: 13px">
+          <svg aria-hidden="true" width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M8 5v3.5M8 11h.01"></path></svg>
+          This name is already taken. To edit that connection, open it from the sidebar.
+        </span>
+      </label>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1424,"height":1420}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {};
+  }
+}
+</script>
+</body>
+</html>

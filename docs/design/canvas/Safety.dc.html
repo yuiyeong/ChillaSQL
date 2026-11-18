@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dangerous queries and transaction prompts</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.code{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none;font-size:.92em;padding:1px 5px;border-radius:4px;background:#262830;border:1px solid #33363E;white-space:nowrap}
+.code.kw{color:#C792EA}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.kbd{font-family:inherit;font-size:12px;font-weight:500;padding:1px 5px;border-radius:4px;background:#262830;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-danger{background:#EF6461;border-color:#EF6461;color:#0F1014;font-weight:600}
+.focus{box-shadow:0 0 0 2px #1C1D23,0 0 0 4px #7C9CFF}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tx{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border:1px solid #33363E;border-radius:4px;font-size:12px;font-weight:500;color:#E8E9ED;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 10px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;white-space:nowrap}
+.seg{display:inline-flex;padding:2px;gap:2px;background:#1C1D23;border:1px solid #33363E;border-radius:7px}
+.seg button{height:22px;padding:0 10px;border:0;border-radius:5px;background:transparent;color:#A3A6B0;font-size:13px;font-weight:500;cursor:pointer}
+.seg button[aria-checked="true"]{background:#262830;color:#E8E9ED}
+.win{position:relative;width:640px;height:420px;display:flex;flex-direction:column;background:#15161B;border:1px solid #23252B;border-radius:10px;overflow:hidden;box-sizing:border-box}
+.tabs{height:34px;flex-shrink:0;display:flex;align-items:flex-end;gap:2px;padding:0 8px 0 78px;background:#0F1014;border-bottom:1px solid #23252B;position:relative}
+.lights{position:absolute;left:12px;top:11px;display:flex;gap:7px}
+.lights span{width:11px;height:11px;border-radius:50%}
+.tab{display:flex;align-items:center;gap:8px;height:28px;padding:0 12px;border-radius:7px 7px 0 0;background:#15161B;border:1px solid #23252B;border-bottom-color:#15161B;margin-bottom:-1px;font-size:13px}
+.bar{height:40px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 10px;border-bottom:1px solid #23252B}
+.ed{flex:1;min-height:0;padding-top:8px;font-size:13px;line-height:20px}
+.ed .ln{display:flex;height:20px;white-space:pre}
+.ed .g{width:40px;flex-shrink:0;text-align:right;padding-right:12px;color:#8A8E99}
+.scrim{position:absolute;inset:0;background:rgba(6,7,9,0.62)}
+.dlg{position:absolute;left:50%;top:84px;transform:translateX(-50%);width:452px;display:flex;flex-direction:column;gap:14px;padding:20px;background:#1C1D23;border:1px solid #33363E;border-radius:12px;box-shadow:0 30px 80px rgba(0,0,0,0.6);box-sizing:border-box}
+.dlg h2{margin:0;font-size:17px;font-weight:600}
+.dlg p{margin:0;color:#A3A6B0;font-size:15px;line-height:1.55}
+.dlg p b{color:#E8E9ED;font-weight:600}
+.dlg .code:not(.kw){color:#E8E9ED}
+.dlg pre{margin:0;padding:10px 12px;border-radius:8px;background:#0F1014;border:1px solid #23252B;font-size:13px;line-height:1.6;white-space:pre-wrap}
+.acts{display:flex;justify-content:flex-end;gap:8px}
+.ico{width:32px;height:32px;flex-shrink:0;border-radius:8px;background:#262830;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div class="cs" style="width: 1360px; height: 980px; box-sizing: border-box; padding: 28px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; background: #0B0C0F">
+
+  <!-- A. Manual: 되돌릴 수 있음 -->
+  <section aria-label="Dangerous query in Manual mode" style="display: flex; flex-direction: column; gap: 8px">
+    <h3 class="label">A · Manual — Commit 전까지 되돌릴 수 있음</h3>
+    <div class="win">
+      <div aria-hidden="true" style="height: 3px; flex-shrink: 0; background: #E8B04B"></div>
+      <div class="tabs"><span class="lights" aria-hidden="true"><span style="background: #FF5F57"></span><span style="background: #FEBC2E"></span><span style="background: #28C840"></span></span>
+        <div class="tab"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span>cleanup.sql<span class="tx">TX <span class="mono">3:12</span></span></div>
+      </div>
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span></span>
+        <div class="seg" role="radiogroup" aria-label="Transaction mode"><button type="button" role="radio" aria-checked="false">Auto</button><button type="button" role="radio" aria-checked="true">Manual</button></div>
+        <span style="font-size: 13px; color: #A3A6B0">Open · 1 statement · <span class="mono">3:12</span></span>
+        <span style="flex: 1"></span>
+        <button type="button" class="btn">Rollback</button>
+        <button type="button" class="btn">Commit</button>
+      </div>
+      <div class="ed mono"><sc-for list="{{lines}}" as="l" hint-placeholder-count="5"><div class="ln" style="{{l.style}}"><span class="g">{{l.n}}</span><sc-for list="{{l.toks}}" as="tk" hint-placeholder-count="3"><span style="{{tk.s}}">{{tk.t}}</span></sc-for></div></sc-for></div>
+      <div class="scrim" aria-hidden="true"></div>
+      <div class="dlg" role="alertdialog" aria-labelledby="a-t" aria-describedby="a-d">
+        <div style="display: flex; gap: 12px">
+          <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2L14.5 13.5h-13z"></path><path d="M8 6.5v3M8 11.6h.01"></path></svg></span>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h2 id="a-t">Run <code class="code kw">DELETE</code> without <code class="code kw">WHERE</code>?</h2>
+            <p id="a-d">This deletes every row in <code class="code">sessions</code> on <b>staging</b>. You're inside an open transaction, so you can roll it back until you commit.</p>
+          </div>
+        </div>
+        <pre class="mono"><span style="color: #C792EA">DELETE FROM</span> sessions;</pre>
+        <div class="acts">
+          <button type="button" class="btn focus" autofocus>Cancel</button>
+          <button type="button" class="btn btn-danger">Run</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- B. Auto: 되돌릴 수 없음 -->
+  <section aria-label="Dangerous query in Auto mode" style="display: flex; flex-direction: column; gap: 8px">
+    <h3 class="label">B · Auto — 실행하면 바로 Commit, 되돌릴 수 없음</h3>
+    <div class="win">
+      <div aria-hidden="true" style="height: 3px; flex-shrink: 0; background: #E8B04B"></div>
+      <div class="tabs"><span class="lights" aria-hidden="true"><span style="background: #FF5F57"></span><span style="background: #FEBC2E"></span><span style="background: #28C840"></span></span>
+        <div class="tab"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span>cleanup.sql</div>
+      </div>
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span></span>
+        <div class="seg" role="radiogroup" aria-label="Transaction mode"><button type="button" role="radio" aria-checked="true">Auto</button><button type="button" role="radio" aria-checked="false">Manual</button></div>
+      </div>
+      <div class="ed mono"><sc-for list="{{lines}}" as="l" hint-placeholder-count="5"><div class="ln" style="{{l.style}}"><span class="g">{{l.n}}</span><sc-for list="{{l.toks}}" as="tk" hint-placeholder-count="3"><span style="{{tk.s}}">{{tk.t}}</span></sc-for></div></sc-for></div>
+      <div class="scrim" aria-hidden="true"></div>
+      <div class="dlg" role="alertdialog" aria-labelledby="b-t" aria-describedby="b-d">
+        <div style="display: flex; gap: 12px">
+          <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2.2L14.5 13.5h-13z"></path><path d="M8 6.5v3M8 11.6h.01"></path></svg></span>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h2 id="b-t">Run <code class="code kw">DELETE</code> without <code class="code kw">WHERE</code>?</h2>
+            <p id="b-d">This deletes every row in <code class="code">sessions</code> on <b>staging</b>. Auto mode commits it immediately, and <b>it can't be undone</b>.</p>
+          </div>
+        </div>
+        <pre class="mono"><span style="color: #C792EA">DELETE FROM</span> sessions;</pre>
+        <div class="acts">
+          <button type="button" class="btn focus" autofocus>Cancel</button>
+          <button type="button" class="btn btn-danger">Run</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- C. 읽기 전용: dialog 없이 서버가 거부 -->
+  <section aria-label="Read-only connection" style="display: flex; flex-direction: column; gap: 8px">
+    <h3 class="label">C · 읽기 전용 접속 — 확인 없이 실행하고 서버의 거부를 보여 준다</h3>
+    <div class="win">
+      <div aria-hidden="true" style="height: 3px; flex-shrink: 0; background: #EF6461"></div>
+      <div class="tabs"><span class="lights" aria-hidden="true"><span style="background: #FF5F57"></span><span style="background: #FEBC2E"></span><span style="background: #28C840"></span></span>
+        <div class="tab"><span aria-hidden="true" class="dot" style="background: #EF6461"></span>cleanup.sql</div>
+      </div>
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #EF6461"></span><span style="font-weight: 500">prod</span>
+          <svg role="img" aria-label="Read-only" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#A3A6B0" stroke-width="1.5" stroke-linecap="round"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>
+        </span>
+        <div class="seg" role="radiogroup" aria-label="Transaction mode"><button type="button" role="radio" aria-checked="true">Auto</button><button type="button" role="radio" aria-checked="false">Manual</button></div>
+      </div>
+      <div class="ed mono" style="flex: 0 0 auto; height: 116px"><sc-for list="{{lines}}" as="l" hint-placeholder-count="5"><div class="ln" style="{{l.style}}"><span class="g">{{l.n}}</span><sc-for list="{{l.toks}}" as="tk" hint-placeholder-count="3"><span style="{{tk.s}}">{{tk.t}}</span></sc-for></div></sc-for></div>
+      <div style="flex: 1; border-top: 1px solid #23252B; background: #0F1014; display: flex; flex-direction: column">
+        <div style="height: 32px; display: flex; align-items: center; gap: 10px; padding: 0 10px; border-bottom: 1px solid #23252B">
+          <span style="height: 22px; display: flex; align-items: center; padding: 0 8px; border-radius: 5px; background: #262830; font-size: 13px; font-weight: 500">DELETE sessions</span>
+          <span class="mono" style="font-size: 13px; color: #A3A6B0">2 ms</span>
+        </div>
+        <div style="padding: 14px; display: flex; gap: 12px">
+          <svg role="img" aria-label="Rejected" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.5" stroke-linecap="round" style="flex-shrink: 0; margin-top: 1px"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>
+          <div style="display: flex; flex-direction: column; gap: 6px">
+            <p class="mono" style="margin: 0">cannot execute DELETE in a read-only transaction</p>
+            <p style="margin: 0; font-size: 13px; color: #A3A6B0">SQLSTATE <span class="mono" style="color: #E8E9ED">25006</span> · <b style="color: #E8E9ED; font-weight: 500">prod</b> is a read-only connection, so the database rejected the write. Nothing changed.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- D. 열린 TX가 있는 탭에서 접속 바꾸기 -->
+  <section aria-label="Switch connection with an open transaction" style="display: flex; flex-direction: column; gap: 8px">
+    <h3 class="label">D · 열린 트랜잭션이 있는 탭에서 접속 바꾸기 — 탭 닫기와 같은 확인</h3>
+    <div class="win">
+      <div aria-hidden="true" style="height: 3px; flex-shrink: 0; background: #E8B04B"></div>
+      <div class="tabs"><span class="lights" aria-hidden="true"><span style="background: #FF5F57"></span><span style="background: #FEBC2E"></span><span style="background: #28C840"></span></span>
+        <div class="tab"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span>cleanup.sql<span class="tx">TX <span class="mono">3:12</span></span></div>
+      </div>
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #E8B04B"></span><span style="font-weight: 500">staging</span></span>
+        <div class="seg" role="radiogroup" aria-label="Transaction mode"><button type="button" role="radio" aria-checked="false">Auto</button><button type="button" role="radio" aria-checked="true">Manual</button></div>
+        <span style="font-size: 13px; color: #A3A6B0">Open · 2 statements · <span class="mono">3:12</span></span>
+        <span style="flex: 1"></span>
+        <button type="button" class="btn">Rollback</button>
+        <button type="button" class="btn">Commit</button>
+      </div>
+      <div class="ed mono"><sc-for list="{{lines}}" as="l" hint-placeholder-count="5"><div class="ln"><span class="g">{{l.n}}</span><sc-for list="{{l.toks}}" as="tk" hint-placeholder-count="3"><span style="{{tk.s}}">{{tk.t}}</span></sc-for></div></sc-for></div>
+      <div class="scrim" aria-hidden="true"></div>
+      <div class="dlg" role="alertdialog" aria-labelledby="d-t" aria-describedby="d-d">
+        <div style="display: flex; gap: 12px">
+          <span class="ico" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#E8E9ED" stroke-width="1.8" stroke-linecap="round"><path d="M8 2a6 6 0 1 1-6 6"></path><path d="M8 5v3l2 1.5"></path></svg></span>
+          <div style="display: flex; flex-direction: column; gap: 4px">
+            <h2 id="d-t">This tab has an open transaction</h2>
+            <p id="d-d">Switching to <b>local</b> closes the <b>staging</b> session. What should happen to the 2 uncommitted statements?</p>
+          </div>
+        </div>
+        <div class="acts">
+          <button type="button" class="btn focus" autofocus>Cancel</button>
+          <span style="flex: 1"></span>
+          <button type="button" class="btn">Roll back and switch</button>
+          <button type="button" class="btn">Commit and switch</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1360,"height":980}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const C = { kw: 'color: #C792EA', id: 'color: #E8E9ED', op: 'color: #A3A6B0', fn: 'color: #82C8E5', num: 'color: #F0B47D', com: 'color: #8A8E99; font-style: italic' };
+    const k = (t) => ({ t, s: C.kw });
+    const i = (t) => ({ t, s: C.id });
+    const o = (t) => ({ t, s: C.op });
+    const src = [
+      [{ t: '-- 만료된 세션 정리', s: C.com }],
+      [k('UPDATE'), i(' users '), k('SET'), i(' last_seen_at '), o('='), i(' '), { t: 'now', s: C.fn }, o('()'), i(' '), k('WHERE'), i(' id '), o('='), i(' '), { t: '10482', s: C.num }, o(';')],
+      [k('DELETE FROM'), i(' sessions'), o(';')],
+      [],
+      [k('SELECT'), i(' '), { t: 'count', s: C.fn }, o('(*)'), i(' '), k('FROM'), i(' sessions'), o(';')]
+    ];
+    const lines = src.map((toks, idx) => ({
+      n: idx + 1,
+      toks,
+      style: idx === 2 ? 'background: rgba(124,156,255,0.07); box-shadow: inset 2px 0 0 #7C9CFF' : ''
+    }));
+    return { lines };
+  }
+}
+</script>
+</body>
+</html>

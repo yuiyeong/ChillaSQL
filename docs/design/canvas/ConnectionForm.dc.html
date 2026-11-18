@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Add and edit connection sheet</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#7C9CFF;border-color:#7C9CFF;color:#0F1014;font-weight:600}
+.btn-ghost{background:transparent}
+.seg{display:inline-flex;padding:2px;gap:2px;background:#0F1014;border:1px solid #33363E;border-radius:7px}
+.seg button{height:22px;padding:0 10px;border:0;border-radius:5px;background:transparent;color:#A3A6B0;font-size:13px;font-weight:500;cursor:pointer}
+.seg button[aria-checked="true"]{background:#262830;color:#E8E9ED}
+.sheet{width:600px;display:flex;flex-direction:column;background:#1C1D23;border:1px solid #33363E;border-top:0;border-radius:0 0 12px 12px;box-shadow:0 24px 60px rgba(0,0,0,0.55)}
+.fld{display:flex;flex-direction:column;gap:6px}
+.fld>span{display:flex;justify-content:space-between;font-size:13px;color:#A3A6B0}
+.fld>span i{font-style:normal;color:#8A8E99}
+.in{height:32px;box-sizing:border-box;padding:0 10px;border:1px solid #33363E;border-radius:7px;background:#0F1014;color:#E8E9ED;outline:none;font-family:'D2Coding',ui-monospace,Menlo,monospace;font-size:13px;width:100%}
+.ta{box-sizing:border-box;padding:8px 10px;border:1px solid #33363E;border-radius:7px;background:#0F1014;color:#E8E9ED;outline:none;resize:none;font-family:'D2Coding',ui-monospace,Menlo,monospace;font-size:13px;line-height:1.5;width:100%}
+.grp{display:flex;flex-direction:column;gap:10px;padding-top:14px;border-top:1px solid #23252B}
+.row2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.note{display:flex;gap:10px;align-items:flex-start;padding:10px 12px;border:1px solid #33363E;border-radius:8px;font-size:13px;line-height:1.5}
+.sw{width:22px;height:22px;border-radius:50%;padding:0;cursor:pointer;border:2px solid #1C1D23}
+.switch{width:34px;height:20px;border-radius:10px;position:relative;flex-shrink:0}
+.switch span{position:absolute;top:2px;width:16px;height:16px;border-radius:50%;background:#E8E9ED}
+.foot{display:flex;align-items:center;gap:8px;padding:14px 24px;border-top:1px solid #23252B}
+.disc{display:flex;align-items:center;gap:8px;padding:0;border:0;background:transparent;cursor:pointer;font-size:13px;color:#A3A6B0}
+</style>
+</helmet>
+<div class="cs" style="width: 1300px; height: 1040px; box-sizing: border-box; padding: 28px; display: flex; gap: 44px; justify-content: center; background: #0B0C0F">
+
+  <!-- A. 새 접속: 테스트 실패 -->
+  <section aria-label="New connection, test failed" style="display: flex; flex-direction: column; gap: 8px">
+    <h3 class="label">A · 새 접속 — 테스트 실패(터널 stderr), 고급 접힘</h3>
+    <form class="sheet" aria-label="New Connection">
+      <header style="padding: 18px 24px 10px"><h2 style="margin: 0; font-size: 17px; font-weight: 600">New Connection</h2></header>
+      <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 24px 18px">
+        <div style="display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: end">
+          <label class="fld"><span>Name</span><input class="in" value="staging" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+          <fieldset style="border: 0; margin: 0; padding: 0">
+            <legend class="mono" style="font-size: 13px; color: #A3A6B0; padding: 0; margin-bottom: 6px">color</legend>
+            <div role="radiogroup" aria-label="color" style="display: flex; gap: 6px; height: 32px; align-items: center">
+              <sc-for list="{{swA}}" as="s" hint-placeholder-count="5"><button type="button" class="sw" role="radio" aria-checked="{{s.checked}}" aria-label="{{s.label}}" style="{{s.style}}"></button></sc-for>
+            </div>
+          </fieldset>
+        </div>
+        <div class="grp">
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 10px">
+            <label class="fld"><span class="mono">host</span><input class="in" value="localhost" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+            <label class="fld"><span class="mono">port</span><input class="in" value="25432" inputmode="numeric" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+          </div>
+          <div class="row2">
+            <label class="fld"><span class="mono">database</span><input class="in" value="railway" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+            <label class="fld"><span class="mono">user</span><input class="in" value="postgres" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+          </div>
+          <label class="fld"><span><b class="mono" style="font-weight: 400">password</b><i>Saved in Keychain, never in chilla.toml</i></span><input class="in" type="password" value="secretsecret" autocomplete="off"></label>
+        </div>
+        <div class="grp" style="flex-direction: row; align-items: center; gap: 12px">
+          <span id="ssl-a" class="mono" style="font-size: 13px; color: #A3A6B0; width: 64px">sslmode</span>
+          <div class="seg" role="radiogroup" aria-labelledby="ssl-a"><button type="button" role="radio" aria-checked="true">disable</button><button type="button" role="radio" aria-checked="false">require</button><button type="button" role="radio" aria-checked="false">verify-full</button></div>
+        </div>
+        <div class="grp">
+          <label class="fld"><span><b class="mono" style="font-weight: 400">tunnel</b><i>Leave empty to connect directly</i></span><textarea class="ta" rows="2" autocorrect="off" autocapitalize="off" spellcheck="false">railway connect Postgres18 -e staging --tunnel-only -P 25432</textarea></label>
+        </div>
+        <div class="grp" style="flex-direction: row; align-items: center; gap: 12px; padding-top: 10px">
+          <span style="flex: 1; display: flex; flex-direction: column"><span class="mono" style="font-size: 13px">read_only</span><span style="font-size: 13px; color: #8A8E99">Opens sessions read-only so the database rejects writes</span></span>
+          <span class="switch" role="switch" aria-checked="false" aria-label="read_only" style="background: #33363E"><span style="left: 2px"></span></span>
+        </div>
+        <div class="grp" style="padding-top: 10px">
+          <button type="button" class="disc" aria-expanded="false">
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4l4 4-4 4"></path></svg>
+            Advanced <span class="mono" style="color: #8A8E99">statement_timeout · tunnel_timeout · sslrootcert</span>
+          </button>
+        </div>
+      </div>
+      <div role="alert" class="note" style="margin: 0 24px 14px; flex-direction: column; gap: 8px; background: #0F1014">
+        <span style="display: flex; align-items: center; gap: 8px; font-weight: 500; font-size: 15px">
+          <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M6 6l4 4M10 6l-4 4"></path></svg>
+          <span class="mono">localhost:25432</span> didn't open within 20 seconds
+        </span>
+        <pre class="mono" style="margin: 0; padding: 8px 10px; border-radius: 6px; background: #15161B; font-size: 13px; white-space: pre-wrap">Unauthorized. Please login with `railway login`</pre>
+      </div>
+      <footer class="foot">
+        <button type="button" class="btn">Test</button>
+        <span style="flex: 1"></span>
+        <button type="button" class="btn btn-ghost">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </footer>
+    </form>
+  </section>
+
+  <!-- B. 접속 수정: 대상 변경 경고, 고급 펼침 -->
+  <section aria-label="Edit connection" style="display: flex; flex-direction: column; gap: 8px">
+    <h3 class="label">B · 접속 수정 — 연결 대상을 바꾸면 비밀번호를 지운다, 고급 펼침</h3>
+    <form class="sheet" aria-label="Edit local">
+      <header style="padding: 18px 24px 10px; display: flex; align-items: baseline; gap: 10px">
+        <h2 style="margin: 0; font-size: 17px; font-weight: 600">Edit local</h2>
+        <span style="font-size: 13px; color: #8A8E99">Name can't be changed</span>
+      </header>
+      <div style="display: flex; flex-direction: column; gap: 14px; padding: 4px 24px 18px">
+        <fieldset style="border: 0; margin: 0; padding: 0; display: flex; align-items: center; gap: 12px">
+          <legend class="mono" style="font-size: 13px; color: #A3A6B0; padding: 0; float: left; width: 64px">color</legend>
+          <div role="radiogroup" aria-label="color" style="display: flex; gap: 6px; align-items: center">
+            <sc-for list="{{swB}}" as="s" hint-placeholder-count="5"><button type="button" class="sw" role="radio" aria-checked="{{s.checked}}" aria-label="{{s.label}}" style="{{s.style}}"></button></sc-for>
+          </div>
+        </fieldset>
+        <div class="grp">
+          <div style="display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 10px">
+            <label class="fld"><span><b class="mono" style="font-weight: 400">host</b><i>Changed</i></span><input class="in" value="10.0.4.12" autocorrect="off" autocapitalize="off" spellcheck="false" style="border-color: #A3A6B0"></label>
+            <label class="fld"><span class="mono">port</span><input class="in" value="5432" inputmode="numeric" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+          </div>
+          <div class="row2">
+            <label class="fld"><span class="mono">database</span><input class="in" value="chilla_test" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+            <label class="fld"><span class="mono">user</span><input class="in" value="chilla" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+          </div>
+          <div role="status" class="note">
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="flex-shrink: 0; margin-top: 1px"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg>
+            <span>You changed where this connection points. Saving deletes the password stored in Keychain. Enter a new password below to save it instead.</span>
+          </div>
+          <label class="fld"><span class="mono">password</span><input class="in" type="password" placeholder="New password" autocomplete="off"></label>
+        </div>
+        <div class="grp" style="flex-direction: row; align-items: center; gap: 12px">
+          <span id="ssl-b" class="mono" style="font-size: 13px; color: #A3A6B0; width: 64px">sslmode</span>
+          <div class="seg" role="radiogroup" aria-labelledby="ssl-b"><button type="button" role="radio" aria-checked="false">disable</button><button type="button" role="radio" aria-checked="false">require</button><button type="button" role="radio" aria-checked="true">verify-full</button></div>
+        </div>
+        <div class="grp">
+          <label class="fld"><span><b class="mono" style="font-weight: 400">tunnel</b><i>Leave empty to connect directly</i></span><textarea class="ta" rows="1" placeholder="railway connect … or ssh -L …" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></label>
+        </div>
+        <div class="grp" style="padding-top: 10px">
+          <button type="button" class="disc" aria-expanded="true">
+            <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+            Advanced
+          </button>
+          <div class="row2">
+            <label class="fld"><span><b class="mono" style="font-weight: 400">statement_timeout</b><i>Empty means none</i></span><input class="in" value="30s" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+            <label class="fld"><span><b class="mono" style="font-weight: 400">tunnel_timeout</b><i>Only with tunnel</i></span><input class="in" value="20s" disabled style="color: #8A8E99"></label>
+          </div>
+          <label class="fld"><span><b class="mono" style="font-weight: 400">sslrootcert</b><i>Trust only this CA with verify-full</i></span>
+            <span style="display: flex; gap: 8px"><input class="in" value="certs/ca.pem" autocorrect="off" autocapitalize="off" spellcheck="false"><button type="button" class="btn" style="height: 32px">Choose…</button></span>
+          </label>
+        </div>
+      </div>
+      <div role="status" class="note" style="margin: 0 24px 14px; align-items: center; background: #0F1014">
+        <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.2l3 3 6-6.5"></path></svg>
+        <span style="flex: 1">Connected · PostgreSQL 17.2</span>
+        <span class="mono" style="color: #A3A6B0">41 ms</span>
+      </div>
+      <footer class="foot">
+        <button type="button" class="btn">Test</button>
+        <span style="flex: 1"></span>
+        <button type="button" class="btn btn-ghost">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save</button>
+      </footer>
+    </form>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1300,"height":1040}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const palette = [
+      { c: '#3FB68B', label: 'Green' },
+      { c: '#E8B04B', label: 'Yellow' },
+      { c: '#EF6461', label: 'Red' },
+      { c: '#56A8DC', label: 'Blue' },
+      { c: '#A98BFF', label: 'Purple' }
+    ];
+    const sw = (on) => palette.map((s) => ({
+      label: s.label,
+      checked: s.c === on ? 'true' : 'false',
+      style: 'background: ' + s.c + (s.c === on ? '; box-shadow: 0 0 0 2px ' + s.c : '')
+    }));
+    return { swA: sw('#E8B04B'), swB: sw('#3FB68B') };
+  }
+}
+</script>
+</body>
+</html>

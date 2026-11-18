@@ -1,0 +1,198 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tabs, connections and result grid</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0;background:#0B0C0F}
+a{color:#7C9CFF}a:hover{color:#A5BBFF}
+button,input,textarea{font:inherit;color:inherit}
+.cs{font-family:-apple-system,BlinkMacSystemFont,Inter,'Apple SD Gothic Neo',sans-serif;font-size:15px;line-height:1.4;color:#E8E9ED}
+@font-face{font-family:'D2Coding';src:url(/_blob/9dcd768ab87d0e66ac1867bef2148601) format('truetype');font-weight:400;font-style:normal}
+@font-face{font-family:'D2Coding';src:url(/_blob/7f3d51479cd4b88575a6bc2c42556a16) format('truetype');font-weight:600 700;font-style:normal}
+.mono{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none}
+.btn svg,.btn .kbd{flex-shrink:0}
+.code{font-family:'D2Coding',ui-monospace,Menlo,monospace;font-variant-ligatures:none;font-size:.92em;padding:1px 5px;border-radius:4px;background:#262830;border:1px solid #33363E;white-space:nowrap}
+.code.kw{color:#C792EA}
+.label{margin:0;font-size:12px;font-weight:600;letter-spacing:.04em;color:#A3A6B0}
+.kbd{font-family:inherit;font-size:12px;font-weight:500;padding:1px 5px;border-radius:4px;background:#262830;color:#A3A6B0}
+.btn{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 12px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;color:#E8E9ED;font-size:15px;cursor:pointer;white-space:nowrap}
+.btn-primary{background:#7C9CFF;border-color:#7C9CFF;color:#0F1014;font-weight:600}
+.btn-primary .kbd{background:rgba(15,16,20,.18);color:#0F1014}
+.btn[disabled]{opacity:.45;cursor:default}
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.tx{display:inline-flex;align-items:center;gap:4px;height:18px;padding:0 6px;border:1px solid #33363E;border-radius:4px;font-size:12px;font-weight:500;color:#E8E9ED;white-space:nowrap}
+.chip{display:inline-flex;align-items:center;gap:8px;height:28px;padding:0 10px;border:1px solid #33363E;border-radius:7px;background:#1C1D23;cursor:pointer;white-space:nowrap}
+.seg{display:inline-flex;padding:2px;gap:2px;background:#1C1D23;border:1px solid #33363E;border-radius:7px}
+.seg button{height:22px;padding:0 10px;border:0;border-radius:5px;background:transparent;color:#A3A6B0;font-size:13px;font-weight:500;cursor:pointer}
+.seg button[aria-checked="true"]{background:#262830;color:#E8E9ED}
+.card{border:1px solid #23252B;border-radius:10px;background:#0F1014;overflow:hidden}
+.tabs{height:34px;display:flex;align-items:flex-end;padding:0 8px;background:#0F1014;border-bottom:1px solid #23252B}
+.tab{display:flex;align-items:center;gap:8px;height:28px;padding:0 12px;border-radius:7px 7px 0 0;background:#15161B;border:1px solid #23252B;border-bottom-color:#15161B;margin-bottom:-1px;font-size:13px}
+.bar{height:44px;display:flex;align-items:center;gap:10px;padding:0 12px;background:#15161B;border-bottom:1px solid #23252B}
+.rhead{height:36px;display:flex;align-items:center;gap:12px;padding:0 12px;border-bottom:1px solid #23252B}
+.rtab{height:24px;display:inline-flex;align-items:center;padding:0 10px;border:0;border-radius:6px;background:#262830;font-size:13px;font-weight:500}
+.meta{font-size:13px;color:#A3A6B0}
+.sec{display:flex;flex-direction:column;gap:8px}
+.gr{display:grid;grid-template-columns:52px 92px minmax(0,1fr) 200px;height:26px;border-bottom:1px solid #1C1D23;font-size:13px}
+.gr>div{display:flex;align-items:center;padding:0 10px;border-right:1px solid #1C1D23;min-width:0;overflow:hidden;white-space:nowrap}
+.gh{height:32px;background:#15161B;border-bottom:1px solid #23252B}
+.gh>div{border-right:1px solid #23252B;gap:6px}
+.n{justify-content:flex-end;color:#8A8E99}
+.num{justify-content:flex-end;color:#F0B47D}
+.mi{width:100%;display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border:0;border-radius:5px;background:transparent;cursor:pointer;text-align:left}
+</style>
+</helmet>
+<div class="cs" style="width: 1200px; height: 1080px; box-sizing: border-box; padding: 28px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 28px; align-content: start; background: #0B0C0F">
+
+  <!-- 1. 접속 없는 새 탭 -->
+  <section class="sec" aria-label="Tab without a connection">
+    <h3 class="label">1 · 접속이 없는 탭 — 첫 접속을 자동으로 고르지 않는다. 창 상단 bar는 회색</h3>
+    <div class="card">
+      <div aria-hidden="true" style="height: 3px; background: #33363E"></div>
+      <div class="tabs"><div class="tab"><span aria-hidden="true" class="dot" style="border: 1.5px solid #8A8E99; box-sizing: border-box"></span>Query 1</div></div>
+      <div class="bar">
+        <button type="button" class="chip" style="border-style: dashed; background: transparent">
+          <span aria-hidden="true" class="dot" style="border: 1.5px solid #8A8E99; box-sizing: border-box"></span>
+          <span style="color: #A3A6B0">Choose connection</span>
+          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#A3A6B0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg>
+        </button>
+        <span style="flex: 1"></span>
+        <span style="display: flex"><button type="button" class="btn btn-primary" disabled style="width: 200px; box-sizing: border-box; border-radius: 7px 0 0 7px; padding: 0 8px 0 12px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M4 2.8v10.4a.8.8 0 0 0 1.2.7l8.4-5.2a.8.8 0 0 0 0-1.4L5.2 2.1a.8.8 0 0 0-1.2.7z"></path></svg><span style="flex: 1; text-align: left">Run statement</span><span class="kbd">⌘↵</span></button><button type="button" class="btn btn-primary" disabled aria-label="Choose what to run" style="width: 26px; box-sizing: border-box; justify-content: center; border-radius: 0 7px 7px 0; padding: 0; margin-left: 1px"><svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6l4 4 4-4"></path></svg></button></span>
+      </div>
+      <div style="height: 120px; display: flex; align-items: center; justify-content: center" class="meta">Choose a connection to run queries.</div>
+    </div>
+  </section>
+
+  <!-- 2. 접속 고르기 목록 -->
+  <section class="sec" aria-label="Choose connection menu">
+    <h3 class="label">2 · 접속 고르기 — 탭의 접속을 바꾸는 유일한 곳</h3>
+    <div class="card" style="overflow: visible; position: relative; height: 230px">
+      <div class="bar" style="border-radius: 10px 10px 0 0">
+        <button type="button" class="chip" aria-expanded="true">
+          <span aria-hidden="true" class="dot" style="background: #3FB68B"></span><span style="font-weight: 500">local</span><span class="mono" style="color: #A3A6B0; font-size: 13px">chilla_test</span>
+          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#A3A6B0" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10l4-4 4 4"></path></svg>
+        </button>
+      </div>
+      <div role="menu" aria-label="Connections" style="position: absolute; left: 12px; top: 40px; width: 300px; padding: 4px; background: #262830; border: 1px solid #33363E; border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,0.5)">
+        <sc-for list="{{conns}}" as="c" hint-placeholder-count="3">
+          <button type="button" role="menuitemradio" aria-checked="{{c.checked}}" class="mi" style="{{c.rowStyle}}">
+            <span aria-hidden="true" class="dot" style="{{c.dot}}"></span>
+            <span style="font-weight: 500">{{c.name}}</span>
+            <sc-if value="{{c.tunnel}}" hint-placeholder-val="{{false}}"><svg role="img" aria-label="Tunnel" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#A3A6B0" stroke-width="1.5" stroke-linecap="round"><path d="M2 13V8a6 6 0 0 1 12 0v5M5.5 13V8.5a2.5 2.5 0 0 1 5 0V13"></path></svg></sc-if>
+            <sc-if value="{{c.readonly}}" hint-placeholder-val="{{false}}"><svg role="img" aria-label="Read-only" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="#A3A6B0" stroke-width="1.5" stroke-linecap="round"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5"></rect><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"></path></svg></sc-if>
+            <span class="mono" style="flex: 1; text-align: right; font-size: 12px; color: #8A8E99; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{{c.sub}}</span>
+          </button>
+        </sc-for>
+        <div style="height: 1px; background: #33363E; margin: 4px 6px"></div>
+        <button type="button" role="menuitem" class="mi" style="color: #A3A6B0">Add connection…</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. Auto 모드에서 직접 BEGIN -->
+  <section class="sec" aria-label="Manual BEGIN in Auto mode">
+    <h3 class="label">3 · Auto 모드에서 직접 BEGIN — Manual과 같이 표시하고 Commit, Rollback을 보여 준다</h3>
+    <div class="card">
+      <div class="tabs"><div class="tab"><span aria-hidden="true" class="dot" style="background: #3FB68B"></span>first.sql<span class="tx">TX <span class="mono">0:42</span></span></div></div>
+      <div class="bar">
+        <span class="chip"><span aria-hidden="true" class="dot" style="background: #3FB68B"></span><span style="font-weight: 500">local</span></span>
+        <div class="seg" role="radiogroup" aria-label="Transaction mode"><button type="button" role="radio" aria-checked="true">Auto</button><button type="button" role="radio" aria-checked="false">Manual</button></div>
+        <span style="font-size: 13px; color: #A3A6B0">Open · manual <code class="code kw">BEGIN</code> · <span class="mono">0:42</span></span>
+        <span style="flex: 1"></span>
+        <button type="button" class="btn">Rollback</button>
+        <button type="button" class="btn">Commit</button>
+      </div>
+      <div class="mono" style="padding: 10px 16px; font-size: 13px; line-height: 20px; height: 80px; box-sizing: border-box">
+        <div><span style="color: #C792EA">BEGIN</span>;</div>
+        <div><span style="color: #C792EA">UPDATE</span> users <span style="color: #C792EA">SET</span> plan = <span style="color: #A8D49B">'pro'</span> <span style="color: #C792EA">WHERE</span> id = <span style="color: #F0B47D">10482</span>;</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4. 이어서 가져오기와 끝 -->
+  <section class="sec" aria-label="Fetching more rows">
+    <h3 class="label">4 · 스크롤 끝 — 이어서 가져오는 중 / 결과의 끝</h3>
+    <div class="card">
+      <div class="rhead"><span class="rtab">SELECT users</span><span class="meta mono">1,000+ rows · 38 ms</span></div>
+      <div role="grid" aria-label="Fetching more" class="mono">
+        <div role="row" class="gr"><div class="n">999</div><div class="num">9484</div><div>min.seo@example.com</div><div>2026-10-02 11:20:41+09</div></div>
+        <div role="row" class="gr"><div class="n">1000</div><div class="num">9483</div><div>woo@example.com</div><div>2026-10-02 10:58:03+09</div></div>
+        <div role="row" class="cs meta" style="height: 30px; display: flex; align-items: center; justify-content: center; gap: 8px">
+          <svg aria-hidden="true" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M8 2a6 6 0 1 1-6 6"></path></svg>Fetching next 500 rows</div>
+      </div>
+      <div class="rhead" style="border-top: 1px solid #23252B"><span class="rtab">SELECT users</span><span class="meta mono">1,240 rows · 41 ms</span></div>
+      <div role="grid" aria-label="End of results" class="mono">
+        <div role="row" class="gr"><div class="n">1240</div><div class="num">8243</div><div>first@example.com</div><div>2026-01-03 09:00:12+09</div></div>
+        <div role="row" class="cs meta" style="height: 30px; display: flex; align-items: center; justify-content: center">End · 1,240 rows</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. 컬럼 너비 -->
+  <section class="sec" aria-label="Column resize">
+    <h3 class="label">5 · 컬럼 너비 조절 — header 경계에 hover하면 handle</h3>
+    <div class="card">
+      <div role="grid" aria-label="Column resize" class="mono">
+        <div role="row" class="gr gh" style="position: relative">
+          <div class="cs" style="font-weight: 600; font-size: 13px"></div>
+          <div class="cs" style="font-weight: 600; font-size: 13px">id <span class="mono" style="font-size: 12px; color: #8A8E99; font-weight: 400">int8</span></div>
+          <div class="cs" style="font-weight: 600; font-size: 13px; border-right: 0">email <span class="mono" style="font-size: 12px; color: #8A8E99; font-weight: 400">text</span></div>
+          <div class="cs" style="font-weight: 600; font-size: 13px">created_at <span class="mono" style="font-size: 12px; color: #8A8E99; font-weight: 400">timestamptz</span></div>
+          <span aria-hidden="true" style="position: absolute; right: 199px; top: 0; bottom: -80px; width: 2px; background: #7C9CFF; cursor: col-resize"></span>
+        </div>
+        <div role="row" class="gr"><div class="n">1</div><div class="num">10482</div><div>haneul.kim@example.com</div><div>2026-11-18 09:41:07+09</div></div>
+        <div role="row" class="gr"><div class="n">2</div><div class="num">10481</div><div>jun.lee@example.com</div><div>2026-11-18 08:02:55+09</div></div>
+        <div role="row" class="gr"><div class="n">3</div><div class="num">10480</div><div>sora@example.com</div><div>2026-11-17 23:15:40+09</div></div>
+      </div>
+      <div class="meta" style="padding: 10px 12px; border-top: 1px solid #23252B">끌어서 너비를 바꾸고, 두 번 누르면 내용에 맞춘다.</div>
+    </div>
+  </section>
+
+  <!-- 6. 행 선택과 복사 -->
+  <section class="sec" aria-label="Row selection and copy">
+    <h3 class="label">6 · 행 선택과 복사 — 행 번호를 눌러 고르고 ⌘C</h3>
+    <div class="card" style="position: relative">
+      <div role="grid" aria-label="Row selection" class="mono">
+        <div role="row" class="gr" style="background: rgba(124,156,255,0.14)"><div class="n" style="color: #E8E9ED">1</div><div class="num">10482</div><div>haneul.kim@example.com</div><div>2026-11-18 09:41:07+09</div></div>
+        <div role="row" class="gr" style="background: rgba(124,156,255,0.14)"><div class="n" style="color: #E8E9ED">2</div><div class="num">10481</div><div>jun.lee@example.com</div><div>2026-11-18 08:02:55+09</div></div>
+        <div role="row" class="gr"><div class="n">3</div><div class="num">10480</div><div>sora@example.com</div><div>2026-11-17 23:15:40+09</div></div>
+        <div role="row" class="gr"><div class="n">4</div><div class="num">10479</div><div>minji.park@example.com</div><div>2026-11-17 19:48:21+09</div></div>
+      </div>
+      <div style="height: 56px"></div>
+      <div role="status" style="position: absolute; left: 50%; bottom: 12px; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 14px; background: #262830; border: 1px solid #33363E; border-radius: 8px; font-size: 13px; box-shadow: 0 12px 32px rgba(0,0,0,0.5); white-space: nowrap">
+        <svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 8.2l3 3 6-6.5"></path></svg>
+        Copied 2 rows (tab-separated)
+      </div>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1200,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    const conns = [
+      { name: 'local', sub: '127.0.0.1:54318/chilla_test', color: '#3FB68B', on: true },
+      { name: 'staging', sub: 'localhost:25432/railway', color: '#E8B04B', tunnel: true },
+      { name: 'prod', sub: 'db.example.com:5432/app', color: '#EF6461', readonly: true }
+    ].map((c) => ({
+      ...c,
+      tunnel: !!c.tunnel,
+      readonly: !!c.readonly,
+      checked: c.on ? 'true' : 'false',
+      dot: 'background: ' + c.color,
+      rowStyle: c.on ? 'background: rgba(124,156,255,0.16)' : ''
+    }));
+    return { conns };
+  }
+}
+</script>
+</body>
+</html>
