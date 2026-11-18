@@ -46,6 +46,17 @@
 
   --radius-control: 7px;
 
+  /* 접속 중이거나 첫 행을 기다리는 동안 toolbar 아래 막대가 좌우로 움직인다. */
+  --animate-progress: progress 1.4s ease-in-out infinite alternate;
+  @keyframes progress {
+    from {
+      transform: translateX(-79%);
+    }
+    to {
+      transform: translateX(257%);
+    }
+  }
+
   --font-sans:
     -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
   --font-mono: "D2Coding", ui-monospace, Menlo, monospace;

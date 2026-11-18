@@ -8,9 +8,15 @@ export const en = {
   "common.save": "Save",
 
   "toolbar.label": "Query",
-  "toolbar.connection": "Connection",
-  "toolbar.noConnection": "No connection",
+  "toolbar.changeConnection": "Change this tab's connection",
+  "toolbar.chooseConnection": "Choose connection",
+  "toolbar.connections": "Connections",
+  "toolbar.addConnection": "Add connection…",
   "toolbar.runStatement": "Run statement",
+  "toolbar.runSelection": "Run selection",
+  "toolbar.runFile": "Run file",
+  "toolbar.chooseWhatToRun": "Choose what to run",
+  "toolbar.whatToRun": "What to run",
 
   "workspace.resizeResults": "Resize results panel",
   "status.position": "Ln {line}, Col {column}",

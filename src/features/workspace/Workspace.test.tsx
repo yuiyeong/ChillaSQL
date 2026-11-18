@@ -70,12 +70,15 @@ function renderWorkspace() {
   return render(<Workspace />);
 }
 
+/** 실행 버튼의 이름은 label 뒤에 단축키가 붙는다. */
 function toolbarButton(name: string) {
-  return within(screen.getByRole("toolbar")).getByRole("button", { name });
+  return within(screen.getByRole("toolbar")).getByRole("button", {
+    name: new RegExp(`^${name}`),
+  });
 }
 
-function connectionSelect() {
-  return screen.getByRole("combobox", { name: "Connection" });
+function connectionChip() {
+  return screen.getByRole("button", { name: "Change this tab's connection" });
 }
 
 function connectionForm() {
@@ -96,10 +99,9 @@ test("탭이 없으면 toolbar는 disabled다", () => {
   openProjectWith([connection("local")]);
   renderWorkspace();
 
-  expect(connectionSelect()).toBeDisabled();
+  expect(connectionChip()).toBeDisabled();
   expect(toolbarButton("Run statement")).toBeDisabled();
-  expect(toolbarButton("Cancel")).toBeDisabled();
-  expect(toolbarButton("Save")).toBeDisabled();
+  expect(toolbarButton("Choose what to run")).toBeDisabled();
 });
 
 test("접속이 없는 탭의 결과 panel은 접속을 고르라고 한다", () => {
@@ -117,7 +119,7 @@ test("접속이 없는 탭의 결과 panel은 접속을 고르라고 한다", ()
   expect(screen.getByText("Run statement at cursor")).toBeInTheDocument();
 });
 
-test("실행 중일 때만 취소 버튼이 enabled다", async () => {
+test("실행 중에는 실행 버튼이 취소 버튼으로 바뀐다", async () => {
   openProjectWith([connection("local")]);
   vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
   vi.mocked(openSession).mockResolvedValue({
@@ -131,7 +133,7 @@ test("실행 중일 때만 취소 버튼이 enabled다", async () => {
   renderWorkspace();
 
   expect(toolbarButton("Run statement")).toBeEnabled();
-  expect(toolbarButton("Cancel")).toBeDisabled();
+  expect(screen.queryByRole("button", { name: /^Cancel/ })).toBeNull();
 
   await click(toolbarButton("Run statement"));
 
@@ -153,34 +155,30 @@ test("실행 중일 때만 취소 버튼이 enabled다", async () => {
   };
   act(() => onEvent(finished));
 
-  expect(toolbarButton("Cancel")).toBeDisabled();
+  expect(toolbarButton("Run statement")).toBeEnabled();
 });
 
-test("접속 select는 프로젝트의 접속을 나열하고 바꾸면 탭의 접속이 바뀐다", async () => {
+test("접속 chip의 menu는 프로젝트의 접속을 나열하고 고르면 탭의 접속이 바뀐다", async () => {
   openProjectWith([connection("local"), connection("staging")]);
   const id = tabWith("SELECT 1", null);
   renderWorkspace();
+  const connectionOf = () =>
+    useTabs.getState().tabs.find((t) => t.id === id)?.connection;
 
-  const select = connectionSelect();
+  expect(connectionChip()).toHaveTextContent("Choose connection");
+  await click(connectionChip());
+  const menu = screen.getByRole("menu", { name: "Connections" });
   expect(
-    within(select)
-      .getAllByRole("option")
-      .map((option) => option.textContent),
-  ).toEqual(["No connection", "local", "staging"]);
-  expect(select).toHaveValue("");
+    within(menu)
+      .getAllByRole("menuitemradio")
+      .map((item) => item.textContent),
+  ).toEqual(["locallocalhost:5432/app", "staginglocalhost:5432/app"]);
 
-  await act(async () => change(select, "staging"));
+  await click(within(menu).getByRole("menuitemradio", { name: /^staging/ }));
 
-  expect(useTabs.getState().tabs.find((t) => t.id === id)?.connection).toBe(
-    "staging",
-  );
-  expect(select).toHaveValue("staging");
-
-  await act(async () => change(select, ""));
-
-  expect(
-    useTabs.getState().tabs.find((t) => t.id === id)?.connection,
-  ).toBeNull();
+  expect(connectionOf()).toBe("staging");
+  expect(connectionChip()).toHaveTextContent("staging");
+  expect(screen.queryByRole("menu")).toBeNull();
 });
 
 test("sidebar의 파일을 누르면 탭으로 열린다", async () => {
@@ -221,8 +219,12 @@ test("접속 추가를 누르면 form이 열리고 저장하면 접속 목록에
   expect(screen.queryByLabelText("name")).not.toBeInTheDocument();
   const sidebar = screen.getByRole("region", { name: "Connections" });
   expect(within(sidebar).getByText("local")).toBeInTheDocument();
+  await click(connectionChip());
   expect(
-    within(connectionSelect()).getByRole("option", { name: "local" }),
+    within(screen.getByRole("menu", { name: "Connections" })).getByRole(
+      "menuitemradio",
+      { name: /^local/ },
+    ),
   ).toBeInTheDocument();
 });
 
@@ -293,7 +295,17 @@ test("탭 bar, 에디터, 이름 form이 탭을 움직인다", async () => {
   act(() => view.dispatch({ changes: { from: 0, insert: "SELECT 1" } }));
   expect(screen.getByLabelText("Unsaved")).toBeInTheDocument();
 
-  await click(toolbarButton("Save"));
+  // toolbar에는 Save 버튼이 없다. Cmd+S로 저장한다.
+  await act(async () => {
+    window.dispatchEvent(
+      new KeyboardEvent("keydown", {
+        code: "KeyS",
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      }),
+    );
+  });
   const dialog = screen.getByRole("dialog", { name: "Save Query 1" });
   const path = within(dialog).getByLabelText("Path inside the project");
   const submit = within(dialog).getByRole("button", { name: "Save" });

@@ -748,7 +748,7 @@ git commit -m "feat: title bar를 겸하는 탭 줄과 sidebar를 캔버스대�
 - toolbar 바로 아래 2px 진행 막대(bg-2 바탕에 accent 28% 폭이 좌우로 움직임, `aria-hidden`): 상태가 `connecting`이거나, `running`이고 행이 아직 없을 때만.
 - Save 버튼은 없다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `접속 chip은 탭의 접속 이름과 database를 보여 준다`
 - `접속이 없는 탭은 Choose connection이고 실행 버튼이 disabled다`
@@ -760,21 +760,21 @@ git commit -m "feat: title bar를 겸하는 탭 줄과 sidebar를 캔버스대�
 - `연결 중과 첫 행을 기다리는 동안 진행 막대가 있다`
 - `실행 버튼 너비는 label이 바뀌어도 같다`(왼쪽 버튼의 style width가 `200px`, Cancel은 `227px`)
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/workspace/Toolbar.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `Workspace`는 `Toolbar`에 `onAddConnection={() => setForm({ original: null })}`을 넘긴다. M3의 `<select>`와 Save 버튼에 기대던 `Workspace.test.tsx`의 test를 chip과 menu로 고친다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src

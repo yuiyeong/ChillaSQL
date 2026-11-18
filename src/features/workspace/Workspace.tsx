@@ -154,7 +154,7 @@ export function Workspace() {
             onNew={() => void execute("newTab")}
             onName={nameTab}
           />
-          <Toolbar />
+          <Toolbar onAddConnection={() => setForm({ original: null })} />
           <div
             ref={editorRef}
             data-testid="editor-area"
