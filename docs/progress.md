@@ -12,7 +12,7 @@
   - 확인용 프로젝트는 사용자가 picker로 고른 디렉토리에 있다(경로는 기록하지 않음). `localStorage`의 마지막 프로젝트로 남아 있으면 다음에 앱을 띄울 때 바로 열린다(15행)
 - **다음 할 일**: 계획의 Task 13을 이어서 한다
   - Step 1: 사용자에게 해도 되는지 묻고, Claude가 `scripts/test-db.sh up && pnpm tauri dev`로 앱을 띄워 15항목을 직접 확인한다(사용자에게 결과를 받아 오지 않는다). 하나라도 다르면 원인을 찾아 고치고 처음부터 다시 한다. 14행은 `pg_sleep(600)` 실행 중에 `Cmd+Q`를 누른 뒤 `docker compose exec -T db psql -U chilla chilla_test -Atc "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'ChillaSQL'"`이 0인지 본다
-  - Step 2: 시작 시간 측정(1초 이내). 임시 probe가 필요하다(계획의 Step 2)
+  - Step 2: 끝남(2026-11-18). `pnpm tauri dev`로 3번 띄워 `STARTUP_PROBE` 765, 423, 363ms(기준 1초 이내). 3번 모두 고르지 않아도 프로젝트 화면이 바로 열려 Step 1의 15행도 확인됨. probe는 지웠다
   - Step 3: 빌드된 앱에서 CSP 재확인
   - Step 5: 완료 기록(M3 상태를 `완료`로, "지금"을 M4로, "M4에서 챙길 것"을 적음)
   - 그 뒤 local main을 push할지 사용자에게 묻는다
@@ -165,6 +165,7 @@
 - M3 Task 13의 15항목은 사용자가 일부를 확인했고 모두 기대대로 동작함. 앞으로 동작 확인은 Claude가 직접 하고, 사용자에게는 해도 되는지만 묻는다
 - 정하지 않은 것은 기획서 9장에 모음(key 이름, 단축키, 파라미터 값 넣는 방식, 내보내기 범위)
 - 보류: 오래 열린 트랜잭션을 시간이 지나면 더 강조하는 것. 대신 모든 탭에 TX와 경과 시간을 항상 표시
+- M3 Task 13 Step 2(시작 시간): 765, 423, 363ms로 기준 안. 15행 확인. Step 1의 나머지는 화면을 클릭하고 입력해야 하는데, 이 세션(Claude Code CLI)에는 computer use 도구가 없어 하지 못함
 
 ### 2026-11-12
 

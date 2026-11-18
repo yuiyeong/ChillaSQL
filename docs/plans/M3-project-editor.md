@@ -1576,7 +1576,7 @@ Run: `scripts/test-db.sh up && pnpm tauri dev`
 | 14 | `SELECT pg_sleep(600)` 실행 중에 `Cmd+Q` | 2초 안에 `docker compose exec db psql -U chilla chilla_test -c "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'ChillaSQL'"`이 0 |
 | 15 | 앱을 다시 띄운다 | 프로젝트 화면이 바로 뜬다(고르지 않아도) |
 
-- [ ] **Step 2: 시작 시간 측정**
+- [x] **Step 2: 시작 시간 측정** (2026-11-18: `pnpm tauri dev` 3번 765, 423, 363ms. 3번 모두 마지막 프로젝트가 바로 열림(`ready`). 결과 표의 15행도 이것으로 확인)
 
 임시 probe를 둔다. `lib.rs`의 `run()` 첫 줄에서 `Instant::now()`를 재 managed state에 두고, command `probe_startup`이 `STARTUP_PROBE <ms>`를 stdout에 찍는다. `ProjectGate`가 `"ready"`로 처음 그린 뒤(`useEffect`) 한 번 부른다.
 
