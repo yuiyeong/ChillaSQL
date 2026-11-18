@@ -22,7 +22,7 @@ test("새 탭은 번호가 오르는 제목과 빈 문서로 활성이 된다", 
   const second = useTabs.getState().newTab();
 
   const { tabs, activeId } = useTabs.getState();
-  expect(tabs.map((tab) => tab.title)).toEqual(["쿼리 1", "쿼리 2"]);
+  expect(tabs.map((tab) => tab.title)).toEqual(["Query 1", "Query 2"]);
   expect(activeId).toBe(second);
   expect(first).not.toBe(second);
   expect(documentText(first)).toBe("");
@@ -196,7 +196,7 @@ test("reset은 탭과 문서를 모두 지우고 번호를 처음으로 돌린�
   expect(() => documentText(b)).toThrow();
 
   useTabs.getState().newTab();
-  expect(useTabs.getState().tabs[0].title).toBe("쿼리 1");
+  expect(useTabs.getState().tabs[0].title).toBe("Query 1");
 });
 
 test("파일을 열면 앞선 오류를 지운다", async () => {

@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { pickDirectory } from "../../shared/api/dialog";
 import { messageOf } from "../../shared/api/errors";
 import { useProject } from "./projectStore";
+import { t } from "../../shared/i18n/t";
 
 const buttonClass =
   "rounded bg-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-600 focus-visible:outline-2 focus-visible:outline-zinc-400";
@@ -43,21 +44,21 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
       <h1 className="text-3xl font-semibold">ChillaSQL</h1>
       {status === "missing" && missingDir !== null ? (
         <>
-          <p>{missingDir}에 chilla.toml이 없습니다</p>
+          <p>{t("project.missing", { dir: missingDir })}</p>
           <div className="flex gap-2">
             <button
               type="button"
               className={buttonClass}
               onClick={() => void create(missingDir)}
             >
-              chilla.toml 만들기
+              {t("project.create")}
             </button>
             <button
               type="button"
               className={buttonClass}
               onClick={() => void pickAndOpen()}
             >
-              다른 디렉토리 열기
+              {t("project.chooseAnother")}
             </button>
           </div>
         </>
@@ -67,7 +68,7 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
           className={buttonClass}
           onClick={() => void pickAndOpen()}
         >
-          프로젝트 열기
+          {t("project.open")}
         </button>
       )}
       {error !== null && (

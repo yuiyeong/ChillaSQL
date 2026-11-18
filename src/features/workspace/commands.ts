@@ -10,6 +10,7 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import type { Origin } from "../query/runReducer";
 import { useRuns, type RunRequest } from "../query/runsStore";
+import { t, tc } from "../../shared/i18n/t";
 
 export type CommandId =
   "run" | "cancel" | "save" | "newTab" | "closeTab" | "nextTab" | "prevTab";
@@ -26,7 +27,7 @@ async function statementToRun(
   const { from, to, head } = documentSelection(tabId);
   if (from !== to) {
     const sql = text.slice(from, to);
-    if (sql.trim() === "") return "실행할 문장이 없습니다";
+    if (sql.trim() === "") return t("run.emptySelection");
     return { sql, origin: lineColumn(text, from) };
   }
 
@@ -37,7 +38,7 @@ async function statementToRun(
     return messageOf(error);
   }
   const span = statementAt(text, spans, head);
-  if (span === null) return "커서 위치에 문장이 없습니다";
+  if (span === null) return t("run.noStatementAtCursor");
   return {
     sql: text.slice(span.start, span.end),
     origin: lineColumn(text, span.start),
@@ -47,7 +48,7 @@ async function statementToRun(
 /** 탭에서 실행할 것을 정한다. store를 바꾸지 않는다. */
 async function prepareRun(tabId: string): Promise<RunRequest | string> {
   const connection = findTab(tabId)?.connection ?? null;
-  if (connection === null) return "접속을 먼저 고르세요";
+  if (connection === null) return t("run.noConnection");
   const statement = await statementToRun(tabId);
   return typeof statement === "string"
     ? statement
@@ -92,9 +93,7 @@ export async function closeTab(tabId: string): Promise<void> {
   if (tab.dirty) {
     let discard: boolean;
     try {
-      discard = await confirm(
-        `'${tab.title}'의 저장하지 않은 변경을 버릴까요?`,
-      );
+      discard = await confirm(t("dialog.discardTab", { title: tab.title }));
     } catch (error) {
       // 묻지 못했으면 닫지 않는다.
       useTabs.getState().setError(messageOf(error));
@@ -164,12 +163,7 @@ export async function switchProject(): Promise<void> {
 /** dirty 탭이 있으면 버릴지 묻고 디렉토리를 고르게 한다. 그만두면 null이다. */
 async function askProjectDir(): Promise<string | null> {
   const dirty = useTabs.getState().tabs.filter((tab) => tab.dirty).length;
-  if (
-    dirty > 0 &&
-    !(await confirm(
-      `저장하지 않은 변경이 있는 탭이 ${dirty}개 있습니다. 버리고 다른 프로젝트를 열까요?`,
-    ))
-  ) {
+  if (dirty > 0 && !(await confirm(tc("dialog.discardForProject", dirty)))) {
     return null;
   }
   return pickDirectory();

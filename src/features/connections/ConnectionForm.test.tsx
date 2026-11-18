@@ -31,7 +31,7 @@ const original: Connection = {
 };
 
 const warning =
-  "연결 대상을 바꾸면 저장된 비밀번호를 지웁니다. 비밀번호를 다시 입력하세요";
+  "Changing the connection target deletes the saved password. Enter the password again";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -64,8 +64,8 @@ function fillNew() {
   change(screen.getByLabelText("user"), "chilla");
 }
 
-const saveButton = () => screen.getByRole("button", { name: "저장" });
-const testButton = () => screen.getByRole("button", { name: "테스트" });
+const saveButton = () => screen.getByRole("button", { name: "Save" });
+const testButton = () => screen.getByRole("button", { name: "Test" });
 
 test("새 접속을 저장하면 saveConnection에 입력한 비밀번호를 넘기고 onSaved를 부른다", async () => {
   const { onSaved } = renderForm();
@@ -109,7 +109,7 @@ test("수정은 이름을 고칠 수 없고 저장된 비밀번호가 있으면 
 
   expect(screen.getByLabelText("name")).toBeDisabled();
   expect(screen.getByLabelText("name")).toHaveValue("local");
-  expect(await screen.findByPlaceholderText("저장된 비밀번호 유지")).toBe(
+  expect(await screen.findByPlaceholderText("Keep saved password")).toBe(
     screen.getByLabelText("password"),
   );
   expect(hasPassword).toHaveBeenCalledTimes(1);
@@ -158,7 +158,7 @@ test("테스트는 성공과 실패를 문구로 보여 준다", async () => {
     expect.objectContaining({ name: "local", host: "localhost" }),
     "secret",
   );
-  expect(await screen.findByText("연결됐습니다")).toBeInTheDocument();
+  expect(await screen.findByText("Connected")).toBeInTheDocument();
   expect(saveConnection).not.toHaveBeenCalled();
 
   vi.mocked(testConnection).mockRejectedValue(
@@ -166,7 +166,7 @@ test("테스트는 성공과 실패를 문구로 보여 준다", async () => {
   );
   await click(testButton());
   expect(screen.getByText("비밀번호가 맞지 않습니다")).toBeInTheDocument();
-  expect(screen.queryByText("연결됐습니다")).not.toBeInTheDocument();
+  expect(screen.queryByText("Connected")).not.toBeInTheDocument();
 });
 
 test("저장이 실패하면 message를 보여 주고 닫지 않는다", async () => {
@@ -192,16 +192,16 @@ test("잘못된 값이면 command를 부르지 않는다", async () => {
   change(screen.getByLabelText("host"), "  ");
 
   await click(saveButton());
-  expect(screen.getByText("host를 입력하세요")).toBeInTheDocument();
+  expect(screen.getByText("Enter host")).toBeInTheDocument();
 
   await click(testButton());
-  expect(screen.getByText("host를 입력하세요")).toBeInTheDocument();
+  expect(screen.getByText("Enter host")).toBeInTheDocument();
 
   change(screen.getByLabelText("host"), "localhost");
   change(screen.getByLabelText("port"), "70000");
   await click(saveButton());
   expect(
-    screen.getByText("port는 1~65535의 숫자여야 합니다"),
+    screen.getByText("port must be a number from 1 to 65535"),
   ).toBeInTheDocument();
 
   expect(saveConnection).not.toHaveBeenCalled();
@@ -212,7 +212,7 @@ test("잘못된 값이면 command를 부르지 않는다", async () => {
 test("취소는 onClose를 부른다", async () => {
   const { onClose } = renderForm();
 
-  await click(screen.getByRole("button", { name: "취소" }));
+  await click(screen.getByRole("button", { name: "Cancel" }));
 
   expect(onClose).toHaveBeenCalledTimes(1);
 });
@@ -220,7 +220,7 @@ test("취소는 onClose를 부른다", async () => {
 test("연결 대상을 바꾸고 비밀번호를 비우면 지워진다고 알린다", async () => {
   vi.mocked(hasPassword).mockResolvedValue(true);
   renderForm(original);
-  await screen.findByPlaceholderText("저장된 비밀번호 유지");
+  await screen.findByPlaceholderText("Keep saved password");
   expect(screen.queryByText(warning)).not.toBeInTheDocument();
 
   change(screen.getByLabelText("host"), "db.example");
@@ -316,7 +316,7 @@ test("이미 있는 이름이면 저장하지 않는다", async () => {
   expect(saveConnection).not.toHaveBeenCalled();
   expect(onSaved).not.toHaveBeenCalled();
   expect(screen.getByRole("alert")).toHaveTextContent(
-    "'local'은 이미 있는 접속 이름입니다",
+    "This name is already taken. To edit that connection, open it from the sidebar.",
   );
 });
 

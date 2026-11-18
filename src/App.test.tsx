@@ -25,7 +25,9 @@ test("프로젝트가 열리면 작업 화면을 보여 준다", async () => {
 
   render(<App />);
 
-  expect(await screen.findByText("Shift+Cmd+L로 새 탭")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Press Shift+Cmd+L for a new tab"),
+  ).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: "demo" })).toBeInTheDocument();
 });
 
@@ -33,6 +35,6 @@ test("프로젝트가 없으면 프로젝트 열기 버튼을 보여 준다", as
   render(<App />);
 
   expect(
-    await screen.findByRole("button", { name: "프로젝트 열기" }),
+    await screen.findByRole("button", { name: "Open Project…" }),
   ).toBeInTheDocument();
 });

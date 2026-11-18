@@ -141,7 +141,7 @@ test("밖에서 바뀐 파일은 물어본 뒤에만 덮어쓴다", async () => 
   vi.mocked(confirm).mockResolvedValueOnce(false);
   expect(await saveTab(id)).toBe("cancelled");
   expect(confirm).toHaveBeenCalledWith(
-    "queries/a.sql 파일이 밖에서 바뀌었습니다. 덮어쓸까요?",
+    "queries/a.sql was edited by another program after you opened it. Overwriting discards those changes.",
   );
   expect(writeSqlFile).toHaveBeenCalledTimes(1);
   expect(tabOf(id)).toMatchObject({ dirty: true, stamp: "s1" });
@@ -176,7 +176,7 @@ test("밖에서 지워진 파일은 물어본 뒤 다시 만든다", async () =>
   vi.mocked(confirm).mockResolvedValueOnce(false);
   expect(await saveTab(id)).toBe("cancelled");
   expect(confirm).toHaveBeenCalledWith(
-    "queries/a.sql 파일이 밖에서 지워졌습니다. 다시 만들까요?",
+    "queries/a.sql was deleted from disk after you opened it. Recreate it with this tab's contents?",
   );
   expect(writeSqlFile).toHaveBeenCalledTimes(1);
   expect(tabOf(id)).toMatchObject({ dirty: true, stamp: "s1" });

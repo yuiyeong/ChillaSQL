@@ -1,4 +1,5 @@
 import type { Connection, SslMode } from "../../shared/api/types";
+import { t } from "../../shared/i18n/t";
 
 /** form의 입력값. 숫자도 입력 중에는 문자열이다. */
 export interface FormValues {
@@ -34,14 +35,7 @@ export function initialValues(original: Connection | null): FormValues {
   };
 }
 
-const required = [
-  ["name", "name을"],
-  ["host", "host를"],
-  ["database", "database를"],
-  ["user", "user를"],
-] as const;
-
-const portError = "port는 1~65535의 숫자여야 합니다";
+const required = ["name", "host", "database", "user"] as const;
 
 /** `taken`은 프로젝트에 이미 있는 접속 이름이다. 새 접속이 그 이름이면 덮어쓰지 않게 거절한다. */
 export function toConnection(
@@ -56,18 +50,19 @@ export function toConnection(
     user: values.user.trim(),
   };
   // 수정에서는 name을 original에서 가져오므로 form의 name은 검사하지 않는다.
-  for (const [key, label] of required) {
+  for (const key of required) {
     if (key === "name" && original !== null) continue;
-    if (trimmed[key] === "") return { error: `${label} 입력하세요` };
+    if (trimmed[key] === "")
+      return { error: t("connectionForm.required", { field: key }) };
   }
   if (original === null && taken.includes(trimmed.name)) {
-    return { error: `'${trimmed.name}'은 이미 있는 접속 이름입니다` };
+    return { error: t("connectionForm.nameTaken") };
   }
 
   const portText = values.port.trim();
   const port = /^\d+$/.test(portText) ? Number(portText) : NaN;
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    return { error: portError };
+    return { error: t("connectionForm.portRange") };
   }
 
   const sslrootcert = values.sslrootcert.trim();

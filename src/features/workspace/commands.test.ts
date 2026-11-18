@@ -82,7 +82,7 @@ test("접속이 없는 탭은 실행하지 않고 알린다", async () => {
 
   expect(runOf(id)).toEqual({
     status: "rejected",
-    message: "접속을 먼저 고르세요",
+    message: "Choose a connection to run queries.",
   });
   expect(splitStatements).not.toHaveBeenCalled();
   expect(openSession).not.toHaveBeenCalled();
@@ -115,7 +115,7 @@ test("공백뿐인 선택 영역은 실행하지 않는다", async () => {
 
   expect(runOf(id)).toEqual({
     status: "rejected",
-    message: "실행할 문장이 없습니다",
+    message: "The selection has no statement to run",
   });
   expect(splitStatements).not.toHaveBeenCalled();
   expect(executeQuery).not.toHaveBeenCalled();
@@ -171,7 +171,7 @@ test("커서 위치에 문장이 없으면 실행하지 않는다", async () => 
 
   expect(runOf(id)).toEqual({
     status: "rejected",
-    message: "커서 위치에 문장이 없습니다",
+    message: "Couldn't find a statement at the cursor",
   });
   expect(executeQuery).not.toHaveBeenCalled();
 });
@@ -231,9 +231,7 @@ test("dirty 탭은 물어본 뒤에 닫는다", async () => {
 
   await closeTab(id);
 
-  expect(confirm).toHaveBeenCalledWith(
-    "'쿼리 1'의 저장하지 않은 변경을 버릴까요?",
-  );
+  expect(confirm).toHaveBeenCalledWith("Discard unsaved changes to Query 1?");
   expect(tabOf(id)).toBeDefined();
   expect(release).not.toHaveBeenCalled();
 
@@ -356,7 +354,7 @@ test("dirty 탭이 있으면 프로젝트를 바꾸기 전에 묻는다", async 
   await switchProject();
 
   expect(confirm).toHaveBeenCalledWith(
-    "저장하지 않은 변경이 있는 탭이 2개 있습니다. 버리고 다른 프로젝트를 열까요?",
+    "2 tabs have unsaved changes. Discard them and open another project?",
   );
   expect(pickDirectory).not.toHaveBeenCalled();
   expect(useTabs.getState().tabs).toHaveLength(3);

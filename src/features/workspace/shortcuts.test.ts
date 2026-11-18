@@ -77,7 +77,7 @@ test("잡은 key는 기본 동작과 전파를 막고 command를 실행한다", 
   await vi.waitFor(() =>
     expect(useRuns.getState().runs[tabId]).toEqual({
       status: "rejected",
-      message: "접속을 먼저 고르세요",
+      message: "Choose a connection to run queries.",
     }),
   );
 

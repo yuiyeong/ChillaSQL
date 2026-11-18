@@ -37,18 +37,18 @@ function finished(outcome: Outcome, patch: Partial<ResultData> = {}) {
 
 test("tabId가 null이거나 idle이면 실행 방법을 보여 준다", () => {
   const { unmount } = render(<ResultPane tabId={null} />);
-  expect(screen.getByText("Cmd+Enter로 실행")).toBeInTheDocument();
+  expect(screen.getByText("Press Cmd+Enter to run")).toBeInTheDocument();
   unmount();
 
   // runs에 없는 탭은 idle이다.
   render(<ResultPane tabId="t" />);
-  expect(screen.getByText("Cmd+Enter로 실행")).toBeInTheDocument();
+  expect(screen.getByText("Press Cmd+Enter to run")).toBeInTheDocument();
 });
 
 test("connecting이면 연결 중이다", () => {
   show({ status: "connecting" });
 
-  expect(screen.getByText("연결 중…")).toBeInTheDocument();
+  expect(screen.getByText("Connecting…")).toBeInTheDocument();
   expect(screen.queryByRole("table")).toBeNull();
 });
 
@@ -58,7 +58,7 @@ test("running이고 행이 없으면 실행 중이다", () => {
     result: result({ columns: ["id", "name"], elapsedMicros: null }),
   });
 
-  expect(screen.getByText("실행 중…")).toBeInTheDocument();
+  expect(screen.getByText("Running…")).toBeInTheDocument();
   expect(screen.queryByRole("table")).toBeNull();
 });
 
@@ -70,8 +70,8 @@ test("running이고 행이 있으면 표와 더 있음을 보여 준다", () => 
 
   expect(screen.getByRole("table")).toBeInTheDocument();
   expect(screen.getAllByRole("row")).toHaveLength(4);
-  expect(screen.getByText("3행 표시 · 더 있음")).toBeInTheDocument();
-  expect(screen.queryByText("실행 중…")).toBeNull();
+  expect(screen.getByText("3 rows shown · more available")).toBeInTheDocument();
+  expect(screen.queryByText("Running…")).toBeNull();
 });
 
 test("completed이고 columns가 있으면 표와 행 수, 시간을 보여 준다", () => {
@@ -85,13 +85,13 @@ test("completed이고 columns가 있으면 표와 행 수, 시간을 보여 준�
     screen.getByRole("columnheader", { name: "name" }),
   ).toBeInTheDocument();
   expect(screen.getByRole("cell", { name: "b" })).toBeInTheDocument();
-  expect(screen.getByText("3행 · 1.23 s")).toBeInTheDocument();
+  expect(screen.getByText("3 rows · 1.23 s")).toBeInTheDocument();
 });
 
 test("completed이고 columns가 없으면 영향받은 행 수를 보여 준다", () => {
   finished({ outcome: "completed", rows: 12 }, { elapsedMicros: 420 });
 
-  expect(screen.getByText("12행 영향 · 0.42 ms")).toBeInTheDocument();
+  expect(screen.getByText("12 rows affected · 0.42 ms")).toBeInTheDocument();
   expect(screen.queryByRole("table")).toBeNull();
 });
 
@@ -109,7 +109,7 @@ test("failed면 server error를 보여 준다", () => {
 
   expect(screen.getByText("syntax error at end of input")).toBeInTheDocument();
   expect(screen.getByText("42601")).toBeInTheDocument();
-  expect(screen.queryByText(/^줄 /)).toBeNull();
+  expect(screen.queryByText(/^Ln /)).toBeNull();
 });
 
 test("실패는 message, detail, hint, 위치를 보여 준다", () => {
@@ -132,7 +132,7 @@ test("실패는 message, detail, hint, 위치를 보여 준다", () => {
   ).toBeInTheDocument();
   expect(screen.getByText("자세한 설명")).toBeInTheDocument();
   expect(screen.getByText("테이블 이름을 확인하세요")).toBeInTheDocument();
-  expect(screen.getByText("줄 4:6")).toBeInTheDocument();
+  expect(screen.getByText("Ln 4, Col 6")).toBeInTheDocument();
   expect(screen.getByText("42P01")).toBeInTheDocument();
 });
 
@@ -142,14 +142,14 @@ test("cancelled면 취소됨과 시간을, 받은 행이 있으면 표도 보여
     { columns: ["id", "name"], rows: someRows },
   );
 
-  expect(screen.getByText("취소됨 · 1.23 s")).toBeInTheDocument();
+  expect(screen.getByText("Cancelled · 1.23 s")).toBeInTheDocument();
   expect(screen.getByRole("table")).toBeInTheDocument();
 });
 
 test("cancelled이고 받은 행이 없으면 표를 그리지 않는다", () => {
   finished({ outcome: "cancelled" }, { columns: ["id", "name"] });
 
-  expect(screen.getByText("취소됨 · 1.23 s")).toBeInTheDocument();
+  expect(screen.getByText("Cancelled · 1.23 s")).toBeInTheDocument();
   expect(screen.queryByRole("table")).toBeNull();
 });
 
@@ -159,7 +159,7 @@ test("discarded면 버렸다고 보여 준다", () => {
     { columns: ["id", "name"], rows: someRows },
   );
 
-  expect(screen.getByText("결과를 버렸습니다")).toBeInTheDocument();
+  expect(screen.getByText("Results discarded")).toBeInTheDocument();
   expect(screen.queryByRole("table")).toBeNull();
 });
 
@@ -167,10 +167,10 @@ test("connection_lost면 끊긴 이유와 다음 실행의 안내를 보여 준�
   finished({ outcome: "connection_lost", message: "server closed" });
 
   expect(
-    screen.getByText("연결이 끊겼습니다: server closed"),
+    screen.getByText("Connection lost: server closed"),
   ).toBeInTheDocument();
   expect(
-    screen.getByText("다음 실행에서 새 세션을 엽니다"),
+    screen.getByText("The next run opens a new session"),
   ).toBeInTheDocument();
 });
 
@@ -238,6 +238,6 @@ test("끝나도 표를 다시 만들지 않는다", () => {
     }),
   );
 
-  expect(screen.getByText("3행 · 1.23 s")).toBeInTheDocument();
+  expect(screen.getByText("3 rows · 1.23 s")).toBeInTheDocument();
   expect(screen.getByRole("table")).toBe(table);
 });

@@ -1,4 +1,5 @@
 import { useProject } from "./projectStore";
+import { t } from "../../shared/i18n/t";
 
 const smallButton =
   "rounded bg-zinc-800 px-2 py-0.5 text-xs hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-zinc-400";
@@ -25,12 +26,17 @@ export function Sidebar({
       <header className="flex items-center justify-between gap-2">
         <h2 className="truncate font-semibold">{project.name}</h2>
         <button type="button" className={smallButton} onClick={onSwitchProject}>
-          다른 프로젝트
+          {t("sidebar.switchProject")}
         </button>
       </header>
 
-      <section aria-label="접속" className="flex flex-col gap-2">
-        <h3 className="text-xs font-semibold text-zinc-400">접속</h3>
+      <section
+        aria-label={t("sidebar.connections")}
+        className="flex flex-col gap-2"
+      >
+        <h3 className="text-xs font-semibold text-zinc-400">
+          {t("sidebar.connections")}
+        </h3>
         <ul className="flex flex-col gap-2">
           {project.connections.map((connection) => (
             <li
@@ -48,25 +54,27 @@ export function Sidebar({
                 className={smallButton}
                 onClick={() => onEditConnection(connection.name)}
               >
-                수정
+                {t("sidebar.edit")}
               </button>
             </li>
           ))}
         </ul>
         <button type="button" className={smallButton} onClick={onAddConnection}>
-          접속 추가
+          {t("sidebar.addConnection")}
         </button>
       </section>
 
-      <section aria-label="SQL 파일" className="flex flex-col gap-2">
+      <section aria-label={t("sidebar.files")} className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <h3 className="text-xs font-semibold text-zinc-400">SQL 파일</h3>
+          <h3 className="text-xs font-semibold text-zinc-400">
+            {t("sidebar.files")}
+          </h3>
           <button
             type="button"
             className={smallButton}
             onClick={() => void refreshFiles()}
           >
-            새로고침
+            {t("sidebar.refresh")}
           </button>
         </div>
         <ul className="flex flex-col">

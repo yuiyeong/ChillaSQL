@@ -13,6 +13,7 @@ import {
   toConnection,
   type FormValues,
 } from "./connectionValues";
+import { t } from "../../shared/i18n/t";
 
 const buttonClass =
   "rounded bg-zinc-700 px-3 py-1.5 text-sm hover:bg-zinc-600 focus-visible:outline-2 focus-visible:outline-zinc-400 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-zinc-700";
@@ -102,7 +103,7 @@ export function ConnectionForm({
   const test = () =>
     run(async (connection, secret) => {
       await testConnection(connection, secret);
-      setNotice({ kind: "ok", text: "연결됐습니다" });
+      setNotice({ kind: "ok", text: t("connectionForm.connected") });
     });
 
   const save = () =>
@@ -169,7 +170,7 @@ export function ConnectionForm({
           type="password"
           autoComplete="off"
           value={password}
-          placeholder={stored ? "저장된 비밀번호 유지" : undefined}
+          placeholder={stored ? t("connectionForm.keepPassword") : undefined}
           onChange={(e) => setPassword(e.target.value)}
         />
       </Field>
@@ -198,8 +199,7 @@ export function ConnectionForm({
 
       {passwordWillBeCleared && (
         <p className="text-sm text-amber-400">
-          연결 대상을 바꾸면 저장된 비밀번호를 지웁니다. 비밀번호를 다시
-          입력하세요
+          {t("connectionForm.passwordWillClear")}
         </p>
       )}
       {notice !== null && (
@@ -217,7 +217,7 @@ export function ConnectionForm({
 
       <div className="flex justify-end gap-2">
         <button type="button" className={buttonClass} onClick={onClose}>
-          취소
+          {t("common.cancel")}
         </button>
         <button
           type="button"
@@ -225,10 +225,10 @@ export function ConnectionForm({
           disabled={busy}
           onClick={() => void test()}
         >
-          테스트
+          {t("connectionForm.test")}
         </button>
         <button type="submit" className={buttonClass} disabled={busy}>
-          저장
+          {t("common.save")}
         </button>
       </div>
     </form>

@@ -1,6 +1,7 @@
 import { useState, type FormEvent, type KeyboardEvent } from "react";
 import { noTextCorrection } from "../../shared/ui/noTextCorrection";
 import { useTabs } from "./tabsStore";
+import { t } from "../../shared/i18n/t";
 
 interface TabBarProps {
   onClose(id: string): void;
@@ -37,14 +38,14 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
             >
               <span>{tab.title}</span>
               {tab.dirty && (
-                <span aria-label="저장하지 않음" className="text-zinc-400">
+                <span aria-label={t("tabs.unsaved")} className="text-zinc-400">
                   ●
                 </span>
               )}
             </button>
             <button
               type="button"
-              aria-label={`${tab.title} 닫기`}
+              aria-label={t("tabs.close", { title: tab.title })}
               className="px-2 py-1.5 text-zinc-500 hover:text-zinc-100"
               onClick={() => onClose(tab.id)}
             >
@@ -54,7 +55,7 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
         ))}
         <button
           type="button"
-          aria-label="새 탭"
+          aria-label={t("tabs.new")}
           className="shrink-0 px-3 py-1.5 text-zinc-400 hover:text-zinc-100"
           onClick={onNew}
         >
@@ -103,8 +104,8 @@ function NameForm({
       <input
         autoFocus
         {...noTextCorrection}
-        aria-label="파일 경로"
-        placeholder="queries/이름.sql"
+        aria-label={t("tabs.filePath")}
+        placeholder={t("tabs.filePathPlaceholder")}
         className="min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-zinc-100 outline-none focus:border-zinc-500"
         value={value}
         onChange={(event) => setValue(event.target.value)}
@@ -114,7 +115,7 @@ function NameForm({
         type="submit"
         className="rounded bg-zinc-700 px-3 py-1 text-zinc-100 hover:bg-zinc-600"
       >
-        저장
+        {t("common.save")}
       </button>
     </form>
   );

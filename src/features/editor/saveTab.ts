@@ -4,6 +4,7 @@ import { isCommandError, messageOf } from "../../shared/api/errors";
 import { useProject } from "../project/projectStore";
 import { documentFileText, documentState, findDocument } from "./documents";
 import { useTabs } from "./tabsStore";
+import { t } from "../../shared/i18n/t";
 
 export type SaveResult = "saved" | "needs_name" | "cancelled" | "failed";
 
@@ -73,9 +74,12 @@ async function save(tabId: string, newPath?: string): Promise<SaveResult> {
     } catch (error) {
       const deleted = isCommandError(error, "file_not_found");
       if (!deleted && !isCommandError(error, "file_changed")) throw error;
-      const question = deleted
-        ? `${path} 파일이 밖에서 지워졌습니다. 다시 만들까요?`
-        : `${path} 파일이 밖에서 바뀌었습니다. 덮어쓸까요?`;
+      const question = t(
+        deleted ? "dialog.fileDeleted" : "dialog.fileChanged",
+        {
+          path,
+        },
+      );
       if (!(await confirm(question))) return "cancelled";
       // overwrite는 파일이 없으면 부모 디렉토리까지 만든다.
       stamp = await writeSqlFile(path, text, { mode: "overwrite" });

@@ -87,23 +87,23 @@ test("값의 앞뒤 공백을 빼고 port를 숫자로 바꾼다", () => {
 
 test("빈 필수 항목은 error다", () => {
   expect(toConnection({ ...values, name: "  " }, null, [])).toEqual({
-    error: "name을 입력하세요",
+    error: "Enter name",
   });
   expect(toConnection({ ...values, host: "" }, null, [])).toEqual({
-    error: "host를 입력하세요",
+    error: "Enter host",
   });
   expect(toConnection({ ...values, database: "" }, null, [])).toEqual({
-    error: "database를 입력하세요",
+    error: "Enter database",
   });
   expect(toConnection({ ...values, user: "" }, null, [])).toEqual({
-    error: "user를 입력하세요",
+    error: "Enter user",
   });
 });
 
 test("잘못된 port는 error다", () => {
   for (const port of ["", "abc", "0", "65536", "54.3", "-1", "1e3"]) {
     expect(toConnection({ ...values, port }, null, [])).toEqual({
-      error: "port는 1~65535의 숫자여야 합니다",
+      error: "port must be a number from 1 to 65535",
     });
   }
   expect(toConnection({ ...values, port: "1" }, null, [])).toHaveProperty(
@@ -171,7 +171,10 @@ test("수정은 이름, tunnel, color를 original에서 가져온다", () => {
 
 test("새 접속은 이미 있는 이름을 쓸 수 없다", () => {
   expect(toConnection({ ...values, name: " local " }, null, ["local"])).toEqual(
-    { error: "'local'은 이미 있는 접속 이름입니다" },
+    {
+      error:
+        "This name is already taken. To edit that connection, open it from the sidebar.",
+    },
   );
   expect(
     toConnection({ ...values, name: "staging" }, null, ["local"]),

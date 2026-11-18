@@ -58,6 +58,8 @@ src/
 | `src/features/<기능>/` | 그 기능의 component, store, hook | - |
 | `src/shared/` | 기능에 속하지 않는 공용 코드 | - |
 | `src/shared/api/` | Tauri command 호출과 event 구독 | 모든 `@tauri-apps/*` package는 여기서만 import한다 |
+| `src/shared/i18n/` | 화면 문구 dictionary(`en.ts`)와 `t` | 화면 문구는 여기서만 정한다. component와 store에 문구를 직접 쓰지 않는다. `src/test/sourceRules.test.ts`가 한글 문구를 막는다 |
+| `src/shared/ui/` | 공용 component | Task 4에서 만든다 |
 
 모든 `@tauri-apps/*` package는 static import든 dynamic import든 `src/shared/api/`에서만 import한다. ESLint의 `no-restricted-imports`(static import)와 `no-restricted-syntax`(dynamic import)가 강제하며, `src/shared/api/` 밖에서 import하면 lint가 error를 낸다.
 

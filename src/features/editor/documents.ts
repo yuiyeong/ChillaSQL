@@ -26,7 +26,7 @@ export function findDocument(tabId: string): EditorState | undefined {
 
 export function documentState(tabId: string): EditorState {
   const state = findDocument(tabId);
-  if (state === undefined) throw new Error(`열린 문서가 없습니다: ${tabId}`);
+  if (state === undefined) throw new Error(`No open document: ${tabId}`);
   return state;
 }
 

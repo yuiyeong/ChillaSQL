@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { readSqlFile } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
 import { closeDocument, openDocument } from "./documents";
+import { t } from "../../shared/i18n/t";
 
 export interface Tab {
   id: string;
@@ -85,7 +86,7 @@ export const useTabs = create<TabsState>()((set, get) => {
       add(
         {
           id,
-          title: `쿼리 ${counter}`,
+          title: t("tabs.defaultTitle", { n: String(counter) }),
           path: null,
           stamp: null,
           dirty: false,

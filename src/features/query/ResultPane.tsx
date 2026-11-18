@@ -3,6 +3,7 @@ import type { Cell, Outcome } from "../../shared/api/types";
 import { errorLocation, formatElapsed } from "./format";
 import type { ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
+import { t, tc } from "../../shared/i18n/t";
 
 /** 이보다 긴 값은 앞부분만 그린다. */
 const CELL_LIMIT = 300;
@@ -18,15 +19,16 @@ export const ResultPane = memo(function ResultPane({
   switch (state?.status) {
     case undefined:
     case "idle":
-      return <Message>Cmd+Enter로 실행</Message>;
+      return <Message>{t("result.idle")}</Message>;
     case "connecting":
-      return <Message>연결 중…</Message>;
+      return <Message>{t("result.connecting")}</Message>;
     case "running":
-      if (state.result.rows.length === 0) return <Message>실행 중…</Message>;
+      if (state.result.rows.length === 0)
+        return <Message>{t("result.running")}</Message>;
       return (
         <Pane>
           <ResultTable result={state.result} />
-          <Status>{state.result.rows.length}행 표시 · 더 있음</Status>
+          <Status>{tc("result.shown", state.result.rows.length)}</Status>
         </Pane>
       );
     case "finished":
@@ -43,17 +45,13 @@ function finishedView(result: ResultData, outcome: Outcome): ReactNode {
     case "completed":
       if (result.columns === null) {
         return (
-          <Message>
-            {outcome.rows}행 영향 · {elapsed}
-          </Message>
+          <Message>{tc("result.affected", outcome.rows, { elapsed })}</Message>
         );
       }
       return (
         <Pane>
           <ResultTable result={result} />
-          <Status>
-            {outcome.rows}행 · {elapsed}
-          </Status>
+          <Status>{tc("result.rows", outcome.rows, { elapsed })}</Status>
         </Pane>
       );
     case "failed": {
@@ -73,7 +71,10 @@ function finishedView(result: ResultData, outcome: Outcome): ReactNode {
             <p className="flex gap-3 text-xs text-zinc-500">
               {location !== null && (
                 <span>
-                  줄 {location.line}:{location.column}
+                  {t("result.errorLocation", {
+                    line: String(location.line),
+                    column: String(location.column),
+                  })}
                 </span>
               )}
               <span>{error.code}</span>
@@ -86,17 +87,19 @@ function finishedView(result: ResultData, outcome: Outcome): ReactNode {
       return (
         <Pane>
           {result.rows.length > 0 && <ResultTable result={result} />}
-          <Status>취소됨 · {elapsed}</Status>
+          <Status>{t("result.cancelled", { elapsed })}</Status>
         </Pane>
       );
     case "discarded":
-      return <Message>결과를 버렸습니다</Message>;
+      return <Message>{t("result.discarded")}</Message>;
     case "connection_lost":
       return (
         <Pane>
           <div className="space-y-1 p-3 text-sm">
-            <p className="text-red-400">연결이 끊겼습니다: {outcome.message}</p>
-            <p className="text-zinc-400">다음 실행에서 새 세션을 엽니다</p>
+            <p className="text-red-400">
+              {t("result.connectionLost", { message: outcome.message })}
+            </p>
+            <p className="text-zinc-400">{t("result.nextRunNewSession")}</p>
           </div>
         </Pane>
       );

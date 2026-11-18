@@ -39,7 +39,7 @@ test("프로젝트가 없으면 여는 버튼을 보여 주고 고른 디렉토�
   });
   renderGate();
 
-  const button = await screen.findByRole("button", { name: "프로젝트 열기" });
+  const button = await screen.findByRole("button", { name: "Open Project…" });
   expect(screen.queryByText("작업 화면")).not.toBeInTheDocument();
 
   vi.mocked(pickDirectory).mockResolvedValueOnce(null);
@@ -61,7 +61,7 @@ test("열지 못하면 error를 보여 준다", async () => {
   vi.mocked(pickDirectory).mockResolvedValue("/bad");
   renderGate();
 
-  await click(await screen.findByRole("button", { name: "프로젝트 열기" }));
+  await click(await screen.findByRole("button", { name: "Open Project…" }));
 
   expect(
     await screen.findByText("chilla.toml이 올바르지 않습니다"),
@@ -81,16 +81,16 @@ test("chilla.toml이 없는 디렉토리는 만들 수 있다", async () => {
   vi.mocked(pickDirectory).mockResolvedValue("/new");
   renderGate();
 
-  await click(await screen.findByRole("button", { name: "프로젝트 열기" }));
+  await click(await screen.findByRole("button", { name: "Open Project…" }));
 
   expect(
-    await screen.findByText("/new에 chilla.toml이 없습니다"),
+    await screen.findByText("/new has no chilla.toml"),
   ).toBeInTheDocument();
   expect(
-    screen.getByRole("button", { name: "다른 디렉토리 열기" }),
+    screen.getByRole("button", { name: "Choose another folder…" }),
   ).toBeInTheDocument();
 
-  await click(screen.getByRole("button", { name: "chilla.toml 만들기" }));
+  await click(screen.getByRole("button", { name: "Create chilla.toml" }));
 
   expect(await screen.findByText("작업 화면")).toBeInTheDocument();
   expect(createProject).toHaveBeenCalledWith("/new");
@@ -104,10 +104,10 @@ test("다른 디렉토리 열기는 고른 디렉토리를 연다", async () => 
     .mockResolvedValueOnce("/new")
     .mockResolvedValueOnce("/other");
   renderGate();
-  await click(await screen.findByRole("button", { name: "프로젝트 열기" }));
+  await click(await screen.findByRole("button", { name: "Open Project…" }));
 
   await click(
-    await screen.findByRole("button", { name: "다른 디렉토리 열기" }),
+    await screen.findByRole("button", { name: "Choose another folder…" }),
   );
 
   expect(await screen.findByText("작업 화면")).toBeInTheDocument();
@@ -123,7 +123,7 @@ test("booting 동안에는 children을 그리지 않는다", async () => {
   expect(useProject.getState().status).toBe("booting");
   expect(screen.queryByText("작업 화면")).not.toBeInTheDocument();
   expect(
-    screen.queryByRole("button", { name: "프로젝트 열기" }),
+    screen.queryByRole("button", { name: "Open Project…" }),
   ).not.toBeInTheDocument();
 });
 
@@ -159,7 +159,7 @@ test("디렉토리 고르기가 실패하면 오류를 보여 준다", async () 
   vi.mocked(pickDirectory).mockRejectedValue(new Error("창을 열 수 없습니다"));
   renderGate();
 
-  await click(await screen.findByRole("button", { name: "프로젝트 열기" }));
+  await click(await screen.findByRole("button", { name: "Open Project…" }));
 
   expect(await screen.findByRole("alert")).toHaveTextContent(
     "창을 열 수 없습니다",

@@ -16,6 +16,7 @@ import {
 } from "./commands";
 import { useShortcuts } from "./shortcuts";
 import { Toolbar } from "./Toolbar";
+import { t } from "../../shared/i18n/t";
 
 /** 연 접속 form. 열 때마다 새 object라서 닫은 form의 늦은 onSaved를 가려낸다. */
 interface OpenForm {
@@ -91,7 +92,7 @@ export function Workspace() {
               <SqlEditor tabId={activeId} onDocChange={markDirty} />
             ) : (
               <p className="flex h-full items-center justify-center text-sm text-zinc-500">
-                Shift+Cmd+L로 새 탭
+                {t("workspace.emptyEditor")}
               </p>
             )}
           </div>

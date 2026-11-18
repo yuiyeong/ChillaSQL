@@ -62,16 +62,16 @@ test("파일, 수정, 접속 추가, 다른 프로젝트, 새로고침이 각 ha
   await click(screen.getByRole("button", { name: "queries/users.sql" }));
   expect(h.onOpenFile).toHaveBeenCalledWith("queries/users.sql");
 
-  await click(screen.getByRole("button", { name: "수정" }));
+  await click(screen.getByRole("button", { name: "Edit" }));
   expect(h.onEditConnection).toHaveBeenCalledWith("local");
 
-  await click(screen.getByRole("button", { name: "접속 추가" }));
+  await click(screen.getByRole("button", { name: "Add connection…" }));
   expect(h.onAddConnection).toHaveBeenCalledTimes(1);
 
-  await click(screen.getByRole("button", { name: "다른 프로젝트" }));
+  await click(screen.getByRole("button", { name: "Switch project" }));
   expect(h.onSwitchProject).toHaveBeenCalledTimes(1);
 
-  await click(screen.getByRole("button", { name: "새로고침" }));
+  await click(screen.getByRole("button", { name: "Refresh" }));
   expect(listSqlFiles).toHaveBeenCalledTimes(1);
   expect(await screen.findByText("new.sql")).toBeInTheDocument();
 });
@@ -84,7 +84,9 @@ test("접속이 없으면 접속 추가만 보인다", () => {
   render(<Sidebar {...handlers()} />);
 
   expect(
-    screen.queryByRole("button", { name: "수정" }),
+    screen.queryByRole("button", { name: "Edit" }),
   ).not.toBeInTheDocument();
-  expect(screen.getByRole("button", { name: "접속 추가" })).toBeInTheDocument();
+  expect(
+    screen.getByRole("button", { name: "Add connection…" }),
+  ).toBeInTheDocument();
 });
