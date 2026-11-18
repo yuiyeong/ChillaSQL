@@ -9,7 +9,7 @@ import {
 } from "react";
 import { copyText } from "../../shared/api/clipboard";
 import type { Outcome } from "../../shared/api/types";
-import { t, tc } from "../../shared/i18n/t";
+import { formatCount, t, tc } from "../../shared/i18n/t";
 import { Button } from "../../shared/ui/Button";
 import { IconButton } from "../../shared/ui/IconButton";
 import {
@@ -258,7 +258,7 @@ export const ResultPane = memo(function ResultPane({
 
 function rowsMeta(result: ResultData): string {
   return t("result.rowsMore", {
-    count: receivedRows(result),
+    count: formatCount(receivedRows(result)),
     elapsed: formatElapsed(result.elapsedMicros ?? 0),
   });
 }
@@ -398,8 +398,8 @@ function ServerError({
           {location !== null && (
             <span>
               {t("result.errorLocation", {
-                line: String(location.line),
-                column: String(location.column),
+                line: location.line,
+                column: location.column,
               })}
             </span>
           )}

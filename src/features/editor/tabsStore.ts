@@ -86,7 +86,7 @@ export const useTabs = create<TabsState>()((set, get) => {
       add(
         {
           id,
-          title: t("tabs.defaultTitle", { n: String(counter) }),
+          title: t("tabs.defaultTitle", { n: counter }),
           path: null,
           stamp: null,
           dirty: false,

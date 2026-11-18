@@ -14,8 +14,8 @@ export function StatusBar({ tabId }: { tabId: string | null }) {
           {showPosition && (
             <span>
               {t("status.position", {
-                line: String(status.line),
-                column: String(status.column),
+                line: status.line,
+                column: status.column,
               })}
             </span>
           )}

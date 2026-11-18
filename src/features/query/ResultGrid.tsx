@@ -309,7 +309,7 @@ function Grid({
           >
             <div className="sticky left-0 flex h-full w-[100cqw] items-center gap-3 px-3 font-sans">
               <span className="min-w-0 flex-1 truncate">
-                {t("result.dropped", { end: firstRow })}
+                {t("result.dropped", { end: formatCount(firstRow) })}
               </span>
               <Button size="small" onClick={onRunAgain}>
                 {t("result.runAgain")}

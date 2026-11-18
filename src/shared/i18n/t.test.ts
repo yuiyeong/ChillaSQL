@@ -7,8 +7,11 @@ describe("t", () => {
     expect(t("tabs.close", { title: "first.sql" })).toBe("Close first.sql");
   });
 
-  test("number param은 묶어 쓴다", () => {
+  test("number param은 주어진 그대로 쓴다", () => {
     expect(t("result.dropped", { end: 24500 })).toBe(
+      "Rows 1–24500 were dropped · run again to see them",
+    );
+    expect(t("result.dropped", { end: formatCount(24500) })).toBe(
       "Rows 1–24,500 were dropped · run again to see them",
     );
   });
