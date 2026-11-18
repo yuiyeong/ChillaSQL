@@ -1,12 +1,10 @@
 import { memo, type ReactNode } from "react";
 import type { Cell, Outcome } from "../../shared/api/types";
 import { errorLocation, formatElapsed } from "./format";
+import { cellDisplay } from "./grid";
 import type { ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
 import { t, tc } from "../../shared/i18n/t";
-
-/** 이보다 긴 값은 앞부분만 그린다. */
-const CELL_LIMIT = 300;
 
 // running과 finished가 같은 자리에 같은 component로 표를 그린다. 끝나도 표가 다시 mount되지 않는다.
 export const ResultPane = memo(function ResultPane({
@@ -186,16 +184,10 @@ function ResultTable({ result }: { result: ResultData }) {
   );
 }
 
-function isHighSurrogate(code: number): boolean {
-  return code >= 0xd800 && code <= 0xdbff;
-}
-
 function CellText({ value }: { value: Cell }) {
-  if (value === null) return <span className="text-zinc-600">NULL</span>;
-  if (value.length <= CELL_LIMIT) return value;
-  // surrogate pair를 가르지 않는다.
-  const end = isHighSurrogate(value.charCodeAt(CELL_LIMIT - 1))
-    ? CELL_LIMIT - 1
-    : CELL_LIMIT;
-  return `${value.slice(0, end)}…`;
+  const { text, muted, italic } = cellDisplay(value);
+  if (!muted) return text;
+  return (
+    <span className={`text-zinc-600${italic ? "italic" : ""}`}>{text}</span>
+  );
 }

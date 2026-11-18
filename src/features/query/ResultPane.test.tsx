@@ -198,7 +198,7 @@ test("NULL과 빈 문자열을 다르게 그린다", () => {
 
   const cells = screen.getAllByRole("cell");
   expect(cells[0]).toHaveTextContent("NULL");
-  expect(cells[1]).toBeEmptyDOMElement();
+  expect(cells[1]).toHaveTextContent("''");
 });
 
 test("300자를 넘는 값은 줄여 그린다", () => {
