@@ -4,10 +4,10 @@
 
 ## 지금
 
-- **진행 중**: 없음. M3는 2026-11-18에 끝났다. 다음은 M4 결과 표(상태 `대기`, 계획 없음)
+- **진행 중**: M4 결과 표(상태 `계획 중`). 계획은 [M4](plans/M4-result-table.md)이고 사용자 검토를 기다린다
 - **작업 위치**: main. origin/main은 `4fb0eb9`이고, 그 뒤의 local commit(`4cd0db6`과 2026-11-18의 문서 commit)은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M4 계획을 `superpowers:writing-plans`로 `docs/plans/M4-result-table.md`에 쓰고, 아래 마일스톤 현황의 M4를 `계획 중`으로 바꾼다
+- **다음 할 일**: 사용자가 계획을 검토하면 M4 Task 1(release 서명, overlay title bar, 복사 경로, 글꼴 확인)부터 한다
 - **앱 동작 확인 방법** (M3 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `pnpm tauri build --debug --bundles app`으로 `target/debug/bundle/macos/ChillaSQL.app`을 만들고, `scripts/cargo-runner.sh`와 같은 identity로 `codesign --force --deep --sign <identity> --identifier com.yuiyeong.chillasql`을 한 뒤 `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - 단축키를 보내려면 full-screen control이 필요하다. 폴더 picker는 다른 process라 경로를 입력할 수 없고 sidebar에서 눌러 고른다
@@ -32,7 +32,7 @@
 | M1 접속·세션 코어 | 1 | 완료 | [M1](plans/M1-session-core.md) | 2026-11-11 | 2026-11-11 |
 | M2 쿼리 실행 코어 | 1 | 완료 | [M2](plans/M2-query-core.md) | 2026-11-11 | 2026-11-11 |
 | M3 프로젝트·에디터 화면 | 1 | 완료 | [M3](plans/M3-project-editor.md) | 2026-11-12 | 2026-11-18 |
-| M4 결과 표 | 1 | 대기 | | | |
+| M4 결과 표 | 1 | 계획 중 | [M4](plans/M4-result-table.md) | 2026-11-18 | |
 | M5 터널 | 2 | 대기 | | | |
 | M6 트랜잭션과 안전장치 | 2 | 대기 | | | |
 | M7 스키마 트리와 자동완성 | 3 | 대기 | | | |
@@ -145,6 +145,7 @@
 
 ### 2026-11-18
 
+- M4 계획 작성(`docs/plans/M4-result-table.md`, Task 13개). 계획을 쓰면서 확인한 것(TanStack Table v9.3.1의 API, D2Coding의 advance 500/1000 em, `tauri-utils` 2.10.2의 overlay title bar 옵션, clipboard plugin 2.5.0)은 계획 맨 위 표에 있다. webview가 있어야 하는 확인은 Task 1에 둠
 - M3 완료. Task 13의 완료 기준을 모두 확인함
   - Step 1의 15항목이 모두 기대대로 동작함. 10행(한글 조합 중의 `Cmd+S`, `Cmd+Enter`, 그리고 `Cmd+Z`)은 사용자가, 나머지는 Claude가 computer use로 `.app` debug build에서 확인. 4행 표에 500행과 `500행 표시 · 더 있음`, 5행 `취소됨 · 1.20 s`, 6행 `줄 1:11`, 14행 종료 0.23초 뒤 `ChillaSQL` 세션 0개
   - Step 2: 시작 시간 765, 423, 363ms(기준 1초)
