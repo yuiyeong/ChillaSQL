@@ -29,6 +29,11 @@ export interface ResultData {
   startedAt: number;
 }
 
+/** 지금까지 받은 행 수. 버린 앞 행(`firstRow`개)도 센다. */
+export function receivedRows(result: ResultData): number {
+  return result.firstRow + result.rows.length;
+}
+
 export type RunState =
   | { status: "idle" }
   | { status: "connecting" }

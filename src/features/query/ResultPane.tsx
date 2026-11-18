@@ -31,7 +31,7 @@ import {
 } from "./format";
 import { resultLabel } from "./grid";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
-import type { ResultData } from "./runReducer";
+import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
 
 const LIVE_MS = 100;
@@ -160,20 +160,23 @@ export const ResultPane = memo(function ResultPane({
           break;
         }
         case "cancelled": {
-          const received = result.rows.length;
+          // header는 받은 행 수, 안내는 표에 남은 행 수다. 버린 앞 행은 표의 버린 구간 줄이 알린다.
+          const retained = result.rows.length;
           header = (
             <Header sql={result.sql}>
-              <Meta>{tc("result.rows", received, { elapsed })}</Meta>
+              <Meta>
+                {tc("result.rows", receivedRows(result), { elapsed })}
+              </Meta>
             </Header>
           );
           notice = (
             <Notice icon={<CancelledIcon />} title={t("result.cancelled")}>
-              {received > 0
-                ? tc("result.stoppedRows", received)
+              {retained > 0
+                ? tc("result.stoppedRows", retained)
                 : t("result.stopped")}
             </Notice>
           );
-          if (received > 0) {
+          if (retained > 0) {
             // 끝난 결과라 더 가져오지 않는다. 마지막 fetch 값(fetching)이 spinner로 남지 않게 한다.
             grid = gridOf({ ...result, fetch: "none" }, null);
             showCopy = true;
@@ -263,7 +266,7 @@ export const ResultPane = memo(function ResultPane({
 
 function rowsMeta(result: ResultData): string {
   return t("result.rowsMore", {
-    count: result.rows.length,
+    count: receivedRows(result),
     elapsed: formatElapsed(result.elapsedMicros ?? 0),
   });
 }

@@ -40,7 +40,7 @@ import {
   tsv,
   type Selection,
 } from "./grid";
-import type { ResultData } from "./runReducer";
+import { receivedRows, type ResultData } from "./runReducer";
 
 /** 지금 선택을 복사할 text와 알림 문구. 선택이 없으면 null */
 export type CopyTarget = { text: string; message: string } | null;
@@ -224,7 +224,7 @@ function Grid({
       [String(index)]: fitWidth(columns[index], columnValues(rows, index)),
     }));
 
-  const numberWidth = rowNumberWidth(firstRow + rows.length);
+  const numberWidth = rowNumberWidth(receivedRows(result));
   const gridColumns = useMemo(
     () =>
       ["var(--col-rn)", ...columns.map((_, i) => `var(--col-${i})`)].join(" "),
@@ -252,7 +252,7 @@ function Grid({
       ref={scrollRef}
       role="grid"
       tabIndex={0}
-      aria-rowcount={firstRow + rows.length + 1}
+      aria-rowcount={receivedRows(result) + 1}
       className="bg-bg-0 text-small text-fg @container relative min-h-0 flex-1 overflow-auto font-mono outline-none"
       style={sizeVars as CSSProperties}
     >

@@ -119,6 +119,34 @@ test("행이 오면 rows 뒤에 +를 붙인다", () => {
   expect(screen.queryByText(/^End/)).toBeNull();
 });
 
+test("앞 행을 버린 뒤에도 rows는 지금까지 받은 행 수다", () => {
+  show({
+    status: "running",
+    result: result({
+      columns: ["id", "name"],
+      rows: someRows,
+      firstRow: 124_497,
+      elapsedMicros: 2_100_000,
+    }),
+  });
+
+  expect(screen.getByText("124,500+ rows · 2.10 s")).toBeInTheDocument();
+});
+
+test("앞 행을 버린 결과를 cancel하면 header는 받은 행 수, 안내는 남은 행 수다", () => {
+  finished(
+    { outcome: "cancelled" },
+    { columns: ["id", "name"], rows: someRows, firstRow: 124_497 },
+  );
+
+  expect(screen.getByText("124,500 rows · 1.23 s")).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Stopped on the server. The 3 rows received stay visible.",
+    ),
+  ).toBeInTheDocument();
+});
+
 test("500행이 오면 500+ rows라고 쓴다", () => {
   const rows = Array.from({ length: 500 }, (_, i) => [String(i), "x"]);
   show({
