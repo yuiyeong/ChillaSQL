@@ -84,7 +84,13 @@ export const en = {
   "result.connectionLost": "Connection lost: {message}",
   "result.nextRunNewSession": "The next run opens a new session",
   "result.dropped": "Rows 1–{end} were dropped · run again to see them",
+  "result.runAgain": "Run again",
+  "result.fetchingMore": "Fetching next 500 rows",
+  "result.end.one": "End · 1 row",
+  "result.end.other": "End · {count} rows",
+  "result.resizeColumn": "Resize {name}",
 
+  "toast.copiedCell": "Copied cell",
   "toast.copiedRows.one": "Copied 1 row (tab-separated)",
   "toast.copiedRows.other": "Copied {count} rows (tab-separated)",
 } as const satisfies { [key: string]: string };

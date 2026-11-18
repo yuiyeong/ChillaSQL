@@ -9,13 +9,18 @@ const VARIANT: Record<Variant, string> = {
   ghost: "border-transparent bg-transparent text-fg-2",
 };
 
+/** small은 표 안의 줄처럼 좁은 자리에 쓴다(캔버스 States 7의 "Run again"). */
+const SIZE = { regular: "h-7 text-body", small: "h-6 text-small" } as const;
+
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant;
+  size?: keyof typeof SIZE;
 }
 
-/** 높이 28px의 control. primary는 화면에 하나(실행)만 쓴다. */
+/** 높이 28px(small은 24px)의 control. primary는 화면에 하나(실행)만 쓴다. */
 export function Button({
   variant = "secondary",
+  size = "regular",
   type = "button",
   className = "",
   ...rest
@@ -23,7 +28,7 @@ export function Button({
   return (
     <button
       type={type}
-      className={`rounded-control text-body focus-visible:outline-accent inline-flex h-7 shrink-0 cursor-pointer items-center gap-2 border px-3 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-1 disabled:cursor-default disabled:opacity-50 ${VARIANT[variant]} ${className}`}
+      className={`rounded-control focus-visible:outline-accent inline-flex shrink-0 cursor-pointer items-center gap-2 border px-3 whitespace-nowrap focus-visible:outline-2 focus-visible:outline-offset-1 disabled:cursor-default disabled:opacity-50 ${SIZE[size]} ${VARIANT[variant]} ${className}`}
       {...rest}
     />
   );
