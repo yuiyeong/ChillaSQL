@@ -4,25 +4,17 @@
 
 ## 지금
 
-- **진행 중**: M3 ([계획](plans/M3-project-editor.md)). Task 1~12 구현, simplify, code review(high)와 그 수정까지 끝남. `pnpm check` 통과는 `bc5c420`에서 기록함(vitest 211, cargo test 219 passed / 1 ignored). 그 뒤 `4cd0db6`이 더해졌고 그때의 `pnpm check` 결과는 기록이 없다
-- **작업 위치**: main. M3 commit은 main에 있다. origin/main은 `4fb0eb9`이고, 그 뒤의 local commit(`4cd0db6`과 2026-11-18의 문서 commit)은 push하지 않았다. branch `m3-project-editor`는 없다
+- **진행 중**: 없음. M3는 2026-11-18에 끝났다. 다음은 M4 결과 표(상태 `대기`, 계획 없음)
+- **작업 위치**: main. origin/main은 `4fb0eb9`이고, 그 뒤의 local commit(`4cd0db6`과 2026-11-18의 문서 commit)은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **멈춘 곳**: 계획의 Task 13 Step 1. 사용자가 15항목 중 일부를 눌러 봤고, 확인한 것은 모두 기대대로 동작했다(2026-11-18에 받음). 어느 번호를 확인했는지는 기록이 없다
-  - 2026-11-12에 받은 것: 사용자가 `Cmd+Q`로 끝낸 직후 `pg_stat_activity`의 `ChillaSQL` 세션이 0개였고 dev log에 panic이 없었음. 그때 `pg_sleep(600)`이 돌고 있었는지는 확인하지 못해 14행은 아직 미확정
-  - 확인용 프로젝트는 사용자가 picker로 고른 디렉토리에 있다(경로는 기록하지 않음). `localStorage`의 마지막 프로젝트로 남아 있으면 다음에 앱을 띄울 때 바로 열린다(15행)
-- **다음 할 일**: 계획의 Task 13을 이어서 한다
-  - Step 1: 사용자에게 해도 되는지 묻고, Claude가 `scripts/test-db.sh up && pnpm tauri dev`로 앱을 띄워 15항목을 직접 확인한다(사용자에게 결과를 받아 오지 않는다). 하나라도 다르면 원인을 찾아 고치고 처음부터 다시 한다. 14행은 `pg_sleep(600)` 실행 중에 `Cmd+Q`를 누른 뒤 `docker compose exec -T db psql -U chilla chilla_test -Atc "SELECT count(*) FROM pg_stat_activity WHERE application_name = 'ChillaSQL'"`이 0인지 본다
-  - Step 2: 끝남(2026-11-18). `pnpm tauri dev`로 3번 띄워 `STARTUP_PROBE` 765, 423, 363ms(기준 1초 이내). 3번 모두 고르지 않아도 프로젝트 화면이 바로 열려 Step 1의 15행도 확인됨. probe는 지웠다
-  - Step 3: 빌드된 앱에서 CSP 재확인
-  - Step 5: 완료 기록(M3 상태를 `완료`로, "지금"을 M4로, "M4에서 챙길 것"을 적음)
-  - 그 뒤 local main을 push할지 사용자에게 묻는다
-- **실행 기록**: 이 Mac의 `.superpowers/sdd/M3-project-editor/progress.md`(git에 올리지 않는 local 파일)에 task별 review 결과와 controller가 내린 Ruling 1~15가 있다. 결정은 아래 결정 기록에도 옮겨 두었다. M3를 닫을 때 Ruling 목록을 사용자에게 보여 준다
-- **앱을 띄워야 확인할 수 있는 것**: 구현 중 diff와 test로 확인할 수 없어 Step 1에 남긴 것
-  - 기본 menu의 `Cmd+W`가 webview의 `keydown`에 닿고 창이 닫히지 않는 것(12행), 에디터의 `Cmd+Z`/`Cmd+C`/`Cmd+V`(11행)
-  - 실제 webview에서 Channel의 `onmessage`로 batch가 오는 것(4행)
-  - 앱을 끝낼 때 `close_all_sessions`가 불리는 것(14행)
-- **알려진 것, 아직 M3에서 고치지 않은 것**은 아래 작업 로그(2026-11-12)에 있다
-- **M4에서 챙길 것** (M2가 화면에 주는 계약. M3의 임시 표는 첫 batch만 보여 주고 `fetch_more`를 부르지 않으며, `runReducer`는 이미 `retainedFrom`보다 앞의 행을 버림)
+- **다음 할 일**: M4 계획을 `superpowers:writing-plans`로 `docs/plans/M4-result-table.md`에 쓰고, 아래 마일스톤 현황의 M4를 `계획 중`으로 바꾼다
+- **앱 동작 확인 방법** (M3 Task 13에서 확인한 것)
+  - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `pnpm tauri build --debug --bundles app`으로 `target/debug/bundle/macos/ChillaSQL.app`을 만들고, `scripts/cargo-runner.sh`와 같은 identity로 `codesign --force --deep --sign <identity> --identifier com.yuiyeong.chillasql`을 한 뒤 `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
+  - 단축키를 보내려면 full-screen control이 필요하다. 폴더 picker는 다른 process라 경로를 입력할 수 없고 sidebar에서 눌러 고른다
+  - 한글 입력기를 거치는 입력(조합 중의 단축키)은 computer use로 만들 수 없다. 사용자에게 부탁한다
+- **알려진 것, M3에서 고치지 않은 것**은 아래 작업 로그(2026-11-12)에 있다
+- **M4에서 챙길 것** (M2가 화면에 주는 계약과 M3의 임시 표를 대신할 때 지킬 것)
+  - M3의 임시 표(`ResultPane`)는 첫 batch만 보여 주고 `fetch_more`를 부르지 않는다. `runReducer`는 이미 `retainedFrom`보다 앞의 행을 버리고, 남은 첫 행의 번호를 `firstRow`에 둔다(표의 row key가 `firstRow + index`). 새 표는 이 둘을 그대로 이어받는다
   - 화면은 `rows` event의 `retainedFrom`보다 앞의 행을 버리고 그 구간을 "다시 실행해야 볼 수 있음"으로 그린다
   - `split_statements`의 span과 server 오류의 `position`은 모두 보낸 text 기준 0-based UTF-16 code unit offset이다
   - `finished`의 outcome은 `completed`, `failed`, `cancelled`, `discarded`, `connection_lost`, `client_error` 여섯이다. cancel한 쿼리도 서버에서 이미 끝났고 버린 행이 없으면 `completed`로 온다
@@ -39,7 +31,7 @@
 | M0 셋업 | 1 | 완료 | [M0](plans/M0-setup.md) | 2026-11-11 | 2026-11-11 |
 | M1 접속·세션 코어 | 1 | 완료 | [M1](plans/M1-session-core.md) | 2026-11-11 | 2026-11-11 |
 | M2 쿼리 실행 코어 | 1 | 완료 | [M2](plans/M2-query-core.md) | 2026-11-11 | 2026-11-11 |
-| M3 프로젝트·에디터 화면 | 1 | 진행 중 | [M3](plans/M3-project-editor.md) | 2026-11-12 | |
+| M3 프로젝트·에디터 화면 | 1 | 완료 | [M3](plans/M3-project-editor.md) | 2026-11-12 | 2026-11-18 |
 | M4 결과 표 | 1 | 대기 | | | |
 | M5 터널 | 2 | 대기 | | | |
 | M6 트랜잭션과 안전장치 | 2 | 대기 | | | |
@@ -153,6 +145,14 @@
 
 ### 2026-11-18
 
+- M3 완료. Task 13의 완료 기준을 모두 확인함
+  - Step 1의 15항목이 모두 기대대로 동작함. 10행(한글 조합 중의 `Cmd+S`, `Cmd+Enter`, 그리고 `Cmd+Z`)은 사용자가, 나머지는 Claude가 computer use로 `.app` debug build에서 확인. 4행 표에 500행과 `500행 표시 · 더 있음`, 5행 `취소됨 · 1.20 s`, 6행 `줄 1:11`, 14행 종료 0.23초 뒤 `ChillaSQL` 세션 0개
+  - Step 2: 시작 시간 765, 423, 363ms(기준 1초)
+  - Step 3: 빌드된 앱에서 CSP 때문에 막힌 것 없음(에디터 색, 표)
+  - `pnpm check` 통과(vitest 213, cargo test 219 passed / 1 ignored). `4cd0db6` 이후 처음 기록
+  - 계획과 달라진 것은 계획의 "Task 13 실행에서 달라진 것"에 적음. 앱을 고친 것은 없음
+  - 고치지 않은 review 지적은 2026-11-12 항목 그대로다. Task 13에서 새로 나온 문제는 없음
+  - Ruling 1~15(`.superpowers/sdd/M3-project-editor/progress.md`, local)를 사용자에게 보여 줌
 - UI 디자인 캔버스(claude.ai artifact "ChillaSQL UI 리디자인", 비공개)에 디자인 리뷰를 반영함. Main을 고치고 결과 panel 상태, 위험 쿼리와 트랜잭션 확인, 접속 sheet, 프로젝트 열기 화면을 다시 그림. 터널 상태와 시각 system token artboard를 새로 만듦. 결정 5개를 결정 기록에 남기고 기획서 4.1, 4.3, 4.7, 4.8을 고침
 - milestone 범위와 캔버스를 맞춰 보고 빠진 화면을 채움. 새 artboard: 탭과 접속(M3·M4·M6), 확인 dialog 모음(M3·M6), sidebar 스키마와 기록(M7·M8·M9), 에디터와 결과 도구(M7~M10). 결과 panel 상태에 timeout과 나눌 수 없는 text를 더함
 - 앱 종료 dialog는 "모두 Rollback"과 취소만 두기로 하고 기획서 4.3을 고침

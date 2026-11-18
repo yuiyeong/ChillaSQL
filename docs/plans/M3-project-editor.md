@@ -82,6 +82,16 @@
   - `switchProject`의 `pickDirectory()`와 `confirm()`, `closeTab`의 `confirm()`이 실패하면 오류를 보여 준다(`showError`, `setError`). `closeTab`은 탭을 닫지 않는다. `projectStore`에 `clearError()`와 `showError(message)`가 더해졌다.
 - `src/test/deferred.ts`(`deferred<T>()`)와 `src/test/resetStores.ts`가 더해졌다. `domain`의 `has_sql_extension`은 pub이 아니다(Task 2).
 
+## Task 13 실행에서 달라진 것 (2026-11-18)
+
+- Step 1은 `pnpm tauri dev`가 아니라 `pnpm tauri build --debug --bundles app`으로 만든 `target/debug/bundle/macos/ChillaSQL.app`에서 했다. computer use는 `.app` bundle이 아닌 dev binary를 조작할 앱으로 고르지 못한다. bundle은 `scripts/cargo-runner.sh`와 같은 identity, 같은 identifier(`com.yuiyeong.chillasql`)로 다시 서명해 키체인 확인 창이 뜨지 않았다(2행). 이 build로 Step 3도 함께 확인했다.
+- 1행의 빈 디렉토리는 `~/projects/chillasql-m3check`(확인 뒤 지움). picker의 `Go to Folder`에 경로를 입력할 수 없어(picker는 다른 process) sidebar에서 눌러 골랐다.
+- 5행: 1행 끝에 `;`가 없으면 두 줄이 한 문장이라 syntax error다. `;`를 붙여 확인했다(`취소됨 · 1.20 s`, `Cmd+Enter` 뒤 약 1초에 `Cmd+F2`).
+- 9행의 "다른 editor"는 shell에서 파일 끝에 한 줄을 더하는 것으로 했다.
+- 10행은 사용자가 확인했다. computer use의 key event는 한글 입력기를 거치지 않는다(한글 입력 상태에서 `r`, `k`가 `rk`로 들어감). 그 상태에서 보낸 `Cmd+Z`가 전체 선택이 된 것도 같은 이유로 보고 앱의 동작으로 치지 않았다. 사용자는 조합 중의 `Cmd+S`, `Cmd+Enter`, `Cmd+Z`가 모두 정상이라고 했다.
+- 14행: `Cmd+Q`로 끝낸 뒤 확인했을 때 세션 0개였다(`Cmd+Q` 전 2개, `pg_sleep(600)` active). 2초 안인지는 같은 종료 경로인 AppleScript `quit`으로 시간을 쟀다. 0.23초에 세션 0개, process도 끝남.
+- 15행은 Step 2(dev)와 `.app` 둘 다에서 확인했다.
+
 ## Global Constraints
 
 - M1, M2의 Global Constraints를 그대로 따른다(macOS 전용, `chilla-core`는 `tauri`에 의존하지 않음, 탭 = 세션, 비밀번호는 `Password`로만, 사용자에게 보이는 message는 한국어, JSON의 키는 camelCase이고 구분 값은 snake_case).
@@ -1552,7 +1562,7 @@ git commit -m "feat: workspace 화면과 기본 단축키"
 - 임시로 Modify 후 되돌림: `src-tauri/src/lib.rs`, `src-tauri/src/commands.rs`, `src/features/project/ProjectGate.tsx`
 - Modify: `docs/progress.md`, `docs/plans/M3-project-editor.md`
 
-- [ ] **Step 1: 앱을 띄워 확인**
+- [x] **Step 1: 앱을 띄워 확인** (2026-11-18: 15항목 모두 기대대로. 10행은 사용자가, 나머지는 Claude가 확인. 아래 "Task 13 실행에서 달라진 것")
 
 Run: `scripts/test-db.sh up && pnpm tauri dev`
 
@@ -1589,21 +1599,21 @@ Run: `pnpm tauri dev`를 3번 띄운다(Step 1의 프로젝트가 마지막 프�
 
 probe를 지우고 `git status --short`로 `docs/` 밖에 바뀐 파일이 없는지 확인한다.
 
-- [ ] **Step 3: CSP 재확인**
+- [x] **Step 3: CSP 재확인** (2026-11-18: `pnpm tauri build --debug --bundles app`의 `.app`에서 에디터에 색이 입혀지고 `big_table`의 표가 나옴)
 
 Run: `pnpm tauri build --debug --no-bundle && ./target/debug/chillasql`
 Expected: 프로젝트 화면이 뜨고 에디터에 색이 입혀진다. 쿼리를 실행해 표가 나온다. 사용자가 확인한다.
 
-- [ ] **Step 4: 정리와 review**
+- [x] **Step 4: 정리와 review** (2026-11-12에 Task 13 Step 1 전에 끝냄. 진행상황의 작업 로그 2026-11-12. Task 13에서는 code를 고치지 않음)
 
 `CLAUDE.md`의 개발 순서대로 `simplify`, `code-review`(high), `superpowers:receiving-code-review`를 한다. 고친 뒤 `pnpm check`를 통과시키고 Step 1의 표에서 고친 곳과 닿는 행을 다시 확인한다.
 
-- [ ] **Step 5: 기록**
+- [x] **Step 5: 기록**
 
 - `docs/progress.md`: M3 상태를 `완료`로, "지금"을 M4로 바꾼다. 작업 로그에 완료 기준 확인 결과(Step 1의 5행, Step 2의 수치), 계획과 달라진 것, 고치지 않은 review 지적을 남긴다. "M4에서 챙길 것"에 임시 표를 대신할 때 지켜야 할 것(`runReducer`의 `firstRow`와 `retainedFrom`, `fetch_more`를 아직 부르지 않음, 받다 만 결과가 탭을 닫을 때까지 열려 있음)을 적는다.
 - 이 파일의 체크박스를 체크하고, 실행 중에 바뀐 것이 있으면 "구현 뒤 정리에서 바뀐 것" 절을 "이 계획에서 정한 것" 아래에 더한다.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A
