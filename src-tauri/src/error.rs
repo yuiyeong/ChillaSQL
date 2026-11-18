@@ -71,173 +71,226 @@ mod tests {
         CommandError::from(error.into()).kind
     }
 
-    #[test]
-    fn command_error_kinds() {
-        assert_eq!(kind(AppError::NoProject), "no_project");
-        assert_eq!(kind(AppError::ProjectChanged), "project_changed");
-        assert_eq!(
-            kind(AppError::UnknownConnection { name: "x".into() }),
-            "unknown_connection"
-        );
-        assert_eq!(
-            kind(AppError::UnknownSession { id: SessionId(1) }),
-            "unknown_session"
-        );
-
-        assert_eq!(
-            kind(SplitError {
-                message: "m".into()
-            }),
-            "split_failed"
-        );
-        assert_eq!(kind(AppError::EmptyStatement), "empty_statement");
-        assert_eq!(
-            kind(AppError::MultipleStatements { count: 2 }),
-            "multiple_statements"
-        );
-        assert_eq!(
-            kind(AppError::QueryNotActive { query: QueryId(1) }),
-            "query_not_active"
-        );
-        assert_eq!(
-            kind(CancelError {
-                message: "m".into()
-            }),
-            "cancel_failed"
-        );
-
+    /// 모든 `AppError` variant와 안쪽 error의 모든 variant를 기대하는 `kind`와 함께 만든다.
+    /// 안에 든 server message나 io message는 test 값이다.
+    fn all_errors() -> Vec<(AppError, &'static str)> {
         let path = PathBuf::from("/p/chilla.toml");
-        assert_eq!(
-            kind(ProjectError::NotFound { path: path.clone() }),
-            "project_not_found"
-        );
-        assert_eq!(
-            kind(ProjectError::PasswordInConfig {
-                connection: "local".into()
-            }),
-            "password_in_config"
-        );
-        assert_eq!(
-            kind(ProjectError::AlreadyExists { path: path.clone() }),
-            "project_exists"
-        );
         let message = String::from("m");
-        assert_eq!(
-            kind(ProjectError::Write {
-                path: path.clone(),
-                message: message.clone()
-            }),
-            "project_write_failed"
-        );
-        let invalid_projects = [
-            ProjectError::Read {
-                path,
-                message: message.clone(),
-            },
-            ProjectError::Parse {
-                message: message.clone(),
-            },
-            ProjectError::InvalidConnection {
-                connection: "local".into(),
-                source: ProfileError::ZeroPort,
-            },
-        ];
-        for error in invalid_projects {
-            assert_eq!(kind(error), "project_invalid");
-        }
-
-        let file_errors = [
+        let mut errors: Vec<(AppError, &'static str)> = vec![
+            (AppError::NoProject, "no_project"),
+            (AppError::ProjectChanged, "project_changed"),
+            (
+                AppError::UnknownConnection { name: "x".into() },
+                "unknown_connection",
+            ),
+            (
+                AppError::UnknownSession { id: SessionId(1) },
+                "unknown_session",
+            ),
+            (
+                SplitError {
+                    message: message.clone(),
+                }
+                .into(),
+                "split_failed",
+            ),
+            (AppError::EmptyStatement, "empty_statement"),
+            (
+                AppError::MultipleStatements { count: 2 },
+                "multiple_statements",
+            ),
+            (
+                AppError::QueryNotActive { query: QueryId(1) },
+                "query_not_active",
+            ),
+            (
+                CancelError {
+                    message: message.clone(),
+                }
+                .into(),
+                "cancel_failed",
+            ),
+            (
+                ProjectError::NotFound { path: path.clone() }.into(),
+                "project_not_found",
+            ),
+            (
+                ProjectError::PasswordInConfig {
+                    connection: "local".into(),
+                }
+                .into(),
+                "password_in_config",
+            ),
+            (
+                ProjectError::AlreadyExists { path: path.clone() }.into(),
+                "project_exists",
+            ),
+            (
+                ProjectError::Write {
+                    path: path.clone(),
+                    message: message.clone(),
+                }
+                .into(),
+                "project_write_failed",
+            ),
+            (
+                ProjectError::Read {
+                    path,
+                    message: message.clone(),
+                }
+                .into(),
+                "project_invalid",
+            ),
+            (
+                ProjectError::Parse {
+                    message: message.clone(),
+                }
+                .into(),
+                "project_invalid",
+            ),
+            (
+                ProjectError::InvalidConnection {
+                    connection: "local".into(),
+                    source: ProfileError::ZeroPort,
+                }
+                .into(),
+                "project_invalid",
+            ),
             (
                 FileError::NotFound {
                     path: "a.sql".into(),
-                },
+                }
+                .into(),
                 "file_not_found",
             ),
             (
                 FileError::Exists {
                     path: "a.sql".into(),
-                },
+                }
+                .into(),
                 "file_exists",
             ),
             (
                 FileError::Changed {
                     path: "a.sql".into(),
-                },
+                }
+                .into(),
                 "file_changed",
             ),
             (
                 FileError::TooLarge {
                     path: "a.sql".into(),
                     bytes: 1,
-                },
+                }
+                .into(),
                 "file_too_large",
             ),
             (
                 FileError::NotUtf8 {
                     path: "a.sql".into(),
-                },
+                }
+                .into(),
                 "file_not_utf8",
             ),
             (
                 FileError::OutsideProject {
                     path: "a.sql".into(),
-                },
+                }
+                .into(),
                 "invalid_path",
             ),
             (
                 FileError::Io {
                     path: "a.sql".into(),
                     message: message.clone(),
-                },
+                }
+                .into(),
                 "file_io",
             ),
-        ];
-        for (error, expected) in file_errors {
-            assert_eq!(kind(error), expected);
-        }
-        assert_eq!(kind(SqlPathError::Empty), "invalid_path");
-
-        assert_eq!(kind(ProfileError::ZeroPort), "invalid_connection");
-        assert_eq!(
-            kind(PasswordStoreError {
-                message: message.clone()
-            }),
-            "password_store"
-        );
-
-        let connect_errors = [
+            (SqlPathError::Empty.into(), "invalid_path"),
+            (ProfileError::ZeroPort.into(), "invalid_connection"),
+            (
+                PasswordStoreError {
+                    message: message.clone(),
+                }
+                .into(),
+                "password_store",
+            ),
             (
                 ConnectError::Unreachable {
                     message: message.clone(),
-                },
+                }
+                .into(),
                 "unreachable",
             ),
-            (ConnectError::Timeout, "timeout"),
-            (ConnectError::TlsNotSupported, "tls_not_supported"),
+            (ConnectError::Timeout.into(), "timeout"),
+            (ConnectError::TlsNotSupported.into(), "tls_not_supported"),
             (
                 ConnectError::Certificate {
                     message: message.clone(),
-                },
+                }
+                .into(),
                 "certificate",
             ),
-            (ConnectError::PasswordRequired, "password_required"),
+            (ConnectError::PasswordRequired.into(), "password_required"),
             (
                 ConnectError::AuthFailed {
                     message: message.clone(),
-                },
+                }
+                .into(),
                 "auth_failed",
             ),
             (
                 ConnectError::Database {
                     code: "3D000".into(),
                     message: message.clone(),
-                },
+                }
+                .into(),
                 "database",
             ),
-            (ConnectError::Other { message }, "other"),
+            (ConnectError::Other { message }.into(), "other"),
         ];
-        for (error, expected) in connect_errors {
-            assert_eq!(kind(error), expected);
+        // 위에서 하나씩만 든 ProfileError와 SqlPathError의 나머지 variant.
+        errors.extend(
+            [
+                ProfileError::EmptyField { field: "host" },
+                ProfileError::RootCertWithoutVerifyFull,
+                ProfileError::UnknownSslMode { value: "x".into() },
+            ]
+            .map(|e| (AppError::from(e), "invalid_connection")),
+        );
+        errors.extend(
+            [
+                SqlPathError::Absolute,
+                SqlPathError::Component {
+                    component: "..".into(),
+                },
+                SqlPathError::NotSql,
+            ]
+            .map(|e| (AppError::from(e), "invalid_path")),
+        );
+        errors
+    }
+
+    #[test]
+    fn command_error_kinds() {
+        for (error, expected) in all_errors() {
+            let shown = format!("{error:?}");
+            assert_eq!(kind(error), expected, "{shown}");
+        }
+    }
+
+    #[test]
+    fn command_error_messages_are_english() {
+        for (error, _) in all_errors() {
+            let shown = format!("{error:?}");
+            let message = CommandError::from(error).message;
+            assert!(
+                !message
+                    .chars()
+                    .any(|c| ('\u{AC00}'..='\u{D7A3}').contains(&c)),
+                "{shown}: {message}"
+            );
         }
     }
 

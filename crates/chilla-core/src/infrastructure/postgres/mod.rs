@@ -178,7 +178,7 @@ async fn backend_pid(client: &Client) -> Result<i32, ConnectError> {
             _ => None,
         })
         .ok_or_else(|| ConnectError::Other {
-            message: "서버가 backend pid를 돌려주지 않았습니다".into(),
+            message: "The server did not return a backend pid".into(),
         })
 }
 

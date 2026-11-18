@@ -302,7 +302,7 @@ fn connection(
         value
             .try_into()
             .map_err(|e: toml::de::Error| ProjectError::Parse {
-                message: format!("접속 '{name}': {}", e.message()),
+                message: format!("Connection '{name}': {}", e.message()),
             })?;
     let invalid = |source| ProjectError::InvalidConnection {
         connection: name.clone(),

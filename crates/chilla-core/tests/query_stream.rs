@@ -149,7 +149,8 @@ async fn non_utf8_cell_is_a_client_error_and_the_rows_go_on() {
         vec![
             columns(&["column1", "column2"]),
             Err(QueryError::Client {
-                message: "결과에 UTF-8이 아닌 값이 있습니다. client_encoding을 확인하세요".into()
+                message: "The result contains a value that is not UTF-8. Check client_encoding"
+                    .into()
             }),
             row(&[Some("y"), Some("z")]),
             complete(2),

@@ -19,17 +19,17 @@ use crate::domain::{
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum AppError {
-    #[error("프로젝트를 먼저 열어야 합니다")]
+    #[error("Open a project first")]
     NoProject,
-    #[error("그동안 프로젝트가 다시 열렸습니다. 다시 시도하세요")]
+    #[error("The project was reopened in the meantime. Try again")]
     ProjectChanged,
-    #[error("접속 '{name}'이 프로젝트에 없습니다")]
+    #[error("Connection '{name}' is not in the project")]
     UnknownConnection { name: String },
-    #[error("세션 {}이 없습니다", id.0)]
+    #[error("Session {} does not exist", id.0)]
     UnknownSession { id: SessionId },
     #[error(transparent)]
     Project(#[from] ProjectError),
-    #[error("접속 정보가 잘못됐습니다: {0}")]
+    #[error("Connection settings are invalid: {0}")]
     InvalidProfile(#[from] ProfileError),
     #[error(transparent)]
     PasswordStore(#[from] PasswordStoreError),
@@ -37,17 +37,17 @@ pub enum AppError {
     Connect(#[from] ConnectError),
     #[error(transparent)]
     Split(#[from] SplitError),
-    #[error("실행할 문장이 없습니다")]
+    #[error("There is no statement to run")]
     EmptyStatement,
-    #[error("문장이 {count}개입니다. 한 번에 문장 하나만 실행할 수 있습니다")]
+    #[error("Only one statement can run at a time. This text has {count}")]
     MultipleStatements { count: usize },
-    #[error("쿼리 {}은 더 가져올 결과가 없습니다", query.0)]
+    #[error("Query {} has no more results to fetch", query.0)]
     QueryNotActive { query: QueryId },
     #[error(transparent)]
     Cancel(#[from] CancelError),
     #[error(transparent)]
     File(#[from] FileError),
-    #[error("파일 경로가 잘못됐습니다: {0}")]
+    #[error("File path is invalid: {0}")]
     InvalidPath(#[from] SqlPathError),
 }
 
@@ -1100,7 +1100,7 @@ mod tests {
         // 연결이 아니라 저장 중에도 나는 오류다.
         assert_eq!(
             error.to_string(),
-            "그동안 프로젝트가 다시 열렸습니다. 다시 시도하세요"
+            "The project was reopened in the meantime. Try again"
         );
         let opened_dir = f
             .app

@@ -41,13 +41,13 @@ fn has_sql_extension(name: &str) -> bool {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SqlPathError {
-    #[error("파일 경로가 비어 있습니다")]
+    #[error("File path is empty")]
     Empty,
-    #[error("프로젝트 디렉토리 안의 상대 경로여야 합니다")]
+    #[error("Path must be relative to the project directory")]
     Absolute,
-    #[error("경로에 '{component}'는 쓸 수 없습니다")]
+    #[error("Path cannot contain '{component}'")]
     Component { component: String },
-    #[error("파일 이름은 .sql로 끝나야 합니다")]
+    #[error("File name must end with .sql")]
     NotSql,
 }
 

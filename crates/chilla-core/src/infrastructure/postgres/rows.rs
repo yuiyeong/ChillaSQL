@@ -11,7 +11,7 @@ use super::error_message;
 use crate::application::{QueryError, RowItem, RowSource};
 use crate::domain::{Column, Row, ServerError};
 
-const NOT_UTF8: &str = "결과에 UTF-8이 아닌 값이 있습니다. client_encoding을 확인하세요";
+const NOT_UTF8: &str = "The result contains a value that is not UTF-8. Check client_encoding";
 
 /// 쿼리 하나의 결과. 읽는 만큼만 driver가 socket에서 가져온다.
 pub struct PgRows {

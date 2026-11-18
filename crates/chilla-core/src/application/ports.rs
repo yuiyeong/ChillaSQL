@@ -23,21 +23,21 @@ pub trait ProjectStore: Send + Sync {
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ProjectError {
-    #[error("{} 파일이 없습니다", path.display())]
+    #[error("{} was not found", path.display())]
     NotFound { path: PathBuf },
-    #[error("{} 파일이 이미 있습니다", path.display())]
+    #[error("{} already exists", path.display())]
     AlreadyExists { path: PathBuf },
-    #[error("{} 파일을 읽지 못했습니다: {message}", path.display())]
+    #[error("Could not read {}: {message}", path.display())]
     Read { path: PathBuf, message: String },
-    #[error("{} 파일을 쓰지 못했습니다: {message}", path.display())]
+    #[error("Could not write {}: {message}", path.display())]
     Write { path: PathBuf, message: String },
-    #[error("chilla.toml의 형식이 잘못됐습니다: {message}")]
+    #[error("chilla.toml is malformed: {message}")]
     Parse { message: String },
     #[error(
-        "접속 '{connection}'에 password 항목이 있습니다. 비밀번호는 설정 파일에 쓰지 않고 키체인에 저장합니다"
+        "Connection '{connection}' has a password entry. Passwords are stored in the keychain, not in the config file"
     )]
     PasswordInConfig { connection: String },
-    #[error("접속 '{connection}'의 설정이 잘못됐습니다: {source}")]
+    #[error("Connection '{connection}' is invalid: {source}")]
     InvalidConnection {
         connection: String,
         source: ProfileError,
@@ -61,19 +61,19 @@ pub trait SqlFileStore: Send + Sync {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum FileError {
-    #[error("{path} 파일이 없습니다")]
+    #[error("{path} was not found")]
     NotFound { path: String },
-    #[error("{path} 파일이 이미 있습니다")]
+    #[error("{path} already exists")]
     Exists { path: String },
-    #[error("{path} 파일이 연 뒤에 밖에서 바뀌었습니다")]
+    #[error("{path} was changed on disk after it was opened")]
     Changed { path: String },
-    #[error("{path} 파일이 너무 큽니다 ({bytes} byte). 16 MiB까지 엽니다")]
+    #[error("{path} is too large ({bytes} bytes). Files up to 16 MiB can be opened")]
     TooLarge { path: String, bytes: u64 },
-    #[error("{path} 파일이 UTF-8이 아닙니다")]
+    #[error("{path} is not UTF-8")]
     NotUtf8 { path: String },
-    #[error("{path}는 프로젝트 디렉토리 밖을 가리킵니다")]
+    #[error("{path} points outside the project directory")]
     OutsideProject { path: String },
-    #[error("{path} 파일을 다루지 못했습니다: {message}")]
+    #[error("Could not access {path}: {message}")]
     Io { path: String, message: String },
 }
 
@@ -93,7 +93,7 @@ pub trait PasswordStore: Send + Sync {
 }
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
-#[error("키체인에 접근하지 못했습니다: {message}")]
+#[error("Could not access the keychain: {message}")]
 pub struct PasswordStoreError {
     pub message: String,
 }
@@ -152,11 +152,11 @@ pub enum RowItem {
 pub enum QueryError {
     #[error("{}", .0.message)]
     Server(ServerError),
-    #[error("연결이 끊겼습니다: {message}")]
+    #[error("Connection lost: {message}")]
     ConnectionLost { message: String },
     /// 서버의 오류도 아니고 연결이 끊긴 것도 아니다(UTF-8이 아닌 값, 보낼 수 없는 text 등).
     /// 연결은 계속 쓸 수 있다.
-    #[error("쿼리를 처리하지 못했습니다: {message}")]
+    #[error("Could not process the query: {message}")]
     Client { message: String },
 }
 
@@ -169,7 +169,7 @@ pub trait QueryCancel: Send + 'static {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
-#[error("취소 요청을 보내지 못했습니다: {message}")]
+#[error("Could not send the cancel request: {message}")]
 pub struct CancelError {
     pub message: String,
 }
@@ -177,21 +177,21 @@ pub struct CancelError {
 /// 연결 실패. 화면이 다음 행동을 고를 수 있게 나눈다. 어느 variant에도 비밀번호는 들어가지 않는다.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum ConnectError {
-    #[error("서버에 연결하지 못했습니다: {message}")]
+    #[error("Could not reach the server: {message}")]
     Unreachable { message: String },
-    #[error("서버가 제한 시간 안에 응답하지 않았습니다")]
+    #[error("The server did not respond in time")]
     Timeout,
-    #[error("서버가 SSL을 지원하지 않습니다")]
+    #[error("The server does not support SSL")]
     TlsNotSupported,
-    #[error("서버 인증서를 확인하지 못했습니다: {message}")]
+    #[error("Could not verify the server certificate: {message}")]
     Certificate { message: String },
-    #[error("비밀번호가 필요합니다")]
+    #[error("A password is required")]
     PasswordRequired,
-    #[error("인증에 실패했습니다: {message}")]
+    #[error("Authentication failed: {message}")]
     AuthFailed { message: String },
-    #[error("서버가 연결을 거부했습니다 ({code}): {message}")]
+    #[error("The server refused the connection ({code}): {message}")]
     Database { code: String, message: String },
-    #[error("연결에 실패했습니다: {message}")]
+    #[error("Connection failed: {message}")]
     Other { message: String },
 }
 
@@ -203,7 +203,7 @@ pub trait StatementSplitter: Send + Sync {
 
 /// 따옴표, `$$`, 주석이 닫히지 않아 문장 경계를 알 수 없다.
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
-#[error("문장을 나누지 못했습니다: {message}")]
+#[error("Could not split the statements: {message}")]
 pub struct SplitError {
     pub message: String,
 }

@@ -111,13 +111,13 @@ impl ConnectionProfile {
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum ProfileError {
-    #[error("{field}가 비어 있습니다")]
+    #[error("{field} is empty")]
     EmptyField { field: &'static str },
-    #[error("port는 1 이상이어야 합니다")]
+    #[error("port must be 1 or greater")]
     ZeroPort,
-    #[error("sslrootcert는 sslmode가 verify-full일 때만 쓸 수 있습니다")]
+    #[error("sslrootcert can only be used with sslmode verify-full")]
     RootCertWithoutVerifyFull,
-    #[error("sslmode '{value}'는 쓸 수 없습니다. disable, require, verify-full 중 하나여야 합니다")]
+    #[error("sslmode '{value}' is not supported. Use disable, require or verify-full")]
     UnknownSslMode { value: String },
 }
 

@@ -41,7 +41,7 @@ pub(crate) async fn negotiate(
     // 설정의 잘못(읽을 수 없는 sslrootcert 등)은 서버와 말하기 전에 알린다.
     let config = client_config(verification)?;
     let server_name = ServerName::try_from(host.to_string()).map_err(|_| ConnectError::Other {
-        message: format!("host '{host}'는 SSL 연결에 쓸 수 없는 이름입니다"),
+        message: format!("host '{host}' cannot be used for an SSL connection"),
     })?;
 
     tcp.write_all(&SSL_REQUEST).await.map_err(io_error)?;
@@ -53,7 +53,9 @@ pub(crate) async fn negotiate(
         b'N' => return Err(ConnectError::TlsNotSupported),
         other => {
             return Err(ConnectError::Other {
-                message: format!("SSL 요청에 서버가 알 수 없는 답({other:#04x})을 보냈습니다"),
+                message: format!(
+                    "The server sent an unknown reply ({other:#04x}) to the SSL request"
+                ),
             });
         }
     }
@@ -90,7 +92,7 @@ fn load_roots(path: &Path) -> Result<RootCertStore, ConnectError> {
         roots.add(cert).map_err(|e| unreadable(e.to_string()))?;
     }
     if roots.is_empty() {
-        return Err(unreadable("PEM 인증서가 없습니다".into()));
+        return Err(unreadable("No PEM certificate found".into()));
     }
     Ok(roots)
 }
@@ -160,7 +162,7 @@ fn handshake_error(error: io::Error) -> ConnectError {
 
 fn tls_setup_error(error: rustls::Error) -> ConnectError {
     ConnectError::Other {
-        message: format!("SSL 설정에 실패했습니다: {error}"),
+        message: format!("SSL setup failed: {error}"),
     }
 }
 

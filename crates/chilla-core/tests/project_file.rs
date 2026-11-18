@@ -114,7 +114,7 @@ fn rejects_a_password_entry() {
 fn password_error_tells_where_passwords_go() {
     let message = load_local("password = \"x\"").unwrap_err().to_string();
     assert!(message.contains("local"), "{message}");
-    assert!(message.contains("키체인"), "{message}");
+    assert!(message.contains("keychain"), "{message}");
 }
 
 #[test]
