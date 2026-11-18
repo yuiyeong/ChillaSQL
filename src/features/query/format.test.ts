@@ -57,3 +57,59 @@ test("resultLabel은 주석을 건너뛰고 긴 label을 자른다", () => {
   expect(label).toBe(`SELECT ${"a".repeat(24)}…`);
   expect([...label]).toHaveLength(32);
 });
+
+test("resultLabel은 앞의 괄호를 건너뛰고, 첫 단어가 없으면 Result다", () => {
+  expect(resultLabel("(SELECT 1) UNION (SELECT 2)")).toBe("SELECT");
+  expect(resultLabel("((select * from t)) union (select * from u)")).toBe(
+    "SELECT t",
+  );
+  expect(resultLabel("")).toBe("Result");
+  expect(resultLabel("-- 주석만\n")).toBe("Result");
+  expect(resultLabel("'x'")).toBe("Result");
+});
+
+test("resultLabel은 문자열과 주석 안의 FROM을 보지 않는다", () => {
+  expect(resultLabel("SELECT 'from x' AS a")).toBe("SELECT");
+  expect(resultLabel("SELECT 'it''s from x' AS a FROM t")).toBe("SELECT t");
+  expect(resultLabel(String.raw`SELECT E'\' from x' AS a`)).toBe("SELECT");
+  expect(resultLabel("SELECT $$ from x $$ AS a")).toBe("SELECT");
+  expect(resultLabel("SELECT $q$ from 'x' $$ $q$ AS a FROM t")).toBe(
+    "SELECT t",
+  );
+  expect(resultLabel("SELECT 1 /* from x /* from y */ */ -- from z\n")).toBe(
+    "SELECT",
+  );
+  // 함수 안의 FROM은 가려내지 않는다.
+  expect(resultLabel("SELECT extract(year FROM ts)")).toBe("SELECT ts");
+});
+
+test("resultLabel은 IF NOT EXISTS, IF EXISTS, ONLY 뒤의 이름을 쓴다", () => {
+  expect(resultLabel("CREATE TABLE IF NOT EXISTS foo (id int)")).toBe(
+    "CREATE foo",
+  );
+  expect(resultLabel("drop table if exists public.foo")).toBe(
+    "DROP public.foo",
+  );
+  expect(resultLabel("DELETE FROM ONLY t")).toBe("DELETE t");
+  expect(resultLabel("UPDATE ONLY t SET a = 1")).toBe("UPDATE t");
+});
+
+test("WITH 문장은 CTE 목록 뒤의 본 문장으로 label과 문구를 정한다", () => {
+  const update =
+    "WITH x AS (SELECT 1 FROM a) UPDATE t SET a = 1 WHERE id IN (SELECT * FROM x)";
+  expect(affectedText(update, 42)).toBe("42 rows updated");
+  expect(resultLabel(update)).toBe("UPDATE t");
+
+  const select =
+    "with d as (delete from a returning *), e(x) as materialized (select 1) select * from d";
+  expect(affectedText(select, 3)).toBe("Done");
+  expect(resultLabel(select)).toBe("SELECT d");
+
+  expect(
+    affectedText(
+      "WITH RECURSIVE r AS (SELECT ')' UNION ALL SELECT 1) /* ( */ INSERT INTO t SELECT * FROM r",
+      2,
+    ),
+  ).toBe("2 rows inserted");
+  expect(resultLabel("WITH x AS (SELECT 1)")).toBe("WITH");
+});

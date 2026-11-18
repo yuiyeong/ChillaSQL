@@ -86,6 +86,7 @@ export const en = {
   "result.running": "Running {elapsed}",
   "result.waiting": "Waiting for the first row from the server",
   "result.tabs": "Result tabs",
+  "result.label": "Result",
   "result.copySelected": "Copy selected cells",
   "result.rows.one": "1 row · {elapsed}",
   "result.rows.other": "{count} rows · {elapsed}",
