@@ -13,7 +13,8 @@ interface EditorStatus {
 }
 
 /** status bar가 보여 주는 에디터의 cursor 위치. 문서 text는 담지 않는다. */
-export const useEditorStatus = create<EditorStatus>()((set, get) => ({
+/** 화면은 값 하나씩(primitive) 고르므로 같은 값을 다시 넣어도 다시 그리지 않는다. */
+export const useEditorStatus = create<EditorStatus>()((set) => ({
   tabId: null,
   hasSelection: false,
   line: 1,
@@ -21,21 +22,11 @@ export const useEditorStatus = create<EditorStatus>()((set, get) => ({
   update(tabId, state) {
     const { head, empty } = state.selection.main;
     const line = state.doc.lineAt(head);
-    const next = {
+    set({
       tabId,
       hasSelection: !empty,
       line: line.number,
       column: head - line.from + 1,
-    };
-    const current = get();
-    // 같은 값이면 구독한 화면을 다시 그리지 않는다.
-    if (
-      current.tabId === next.tabId &&
-      current.hasSelection === next.hasSelection &&
-      current.line === next.line &&
-      current.column === next.column
-    )
-      return;
-    set(next);
+    });
   },
 }));

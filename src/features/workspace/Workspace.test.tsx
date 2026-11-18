@@ -441,7 +441,7 @@ describe("결과 panel 경계", () => {
     expect(boundary()).toHaveAttribute("aria-orientation", "horizontal");
     expect(boundary()).toHaveAttribute("aria-valuenow", "396");
     expect(boundary()).toHaveAttribute("aria-valuemin", "120");
-    expect(boundary()).toHaveStyle({ cursor: "row-resize" });
+    expect(boundary()).toHaveClass("cursor-row-resize");
   });
 
   test("경계를 끌면 결과 panel 높이가 바뀐다", () => {

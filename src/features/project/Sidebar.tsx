@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import { homeDir } from "../../shared/api/path";
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { useTabs } from "../editor/tabsStore";
@@ -85,13 +85,21 @@ export function Sidebar({
     };
   }, []);
 
+  const tree = useMemo(() => buildTree(files), [files]);
+  const rows = useMemo(() => visibleRows(tree, collapsed), [tree, collapsed]);
+  const dirtyPaths = useMemo(
+    () =>
+      new Set(
+        tabs.flatMap((tab) =>
+          tab.dirty && tab.path !== null ? [tab.path] : [],
+        ),
+      ),
+    [tabs],
+  );
+
   if (project === null) return null;
 
   const activePath = tabs.find((tab) => tab.id === activeId)?.path ?? null;
-  const dirtyPaths = new Set(
-    tabs.flatMap((tab) => (tab.dirty && tab.path !== null ? [tab.path] : [])),
-  );
-  const rows = visibleRows(buildTree(files), collapsed);
 
   function toggle(path: string) {
     setCollapsed((current) => {

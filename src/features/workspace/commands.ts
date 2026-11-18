@@ -55,14 +55,28 @@ async function statementToRun(
   };
 }
 
+function noConnection(): Rejection {
+  return { title: t("run.noConnection"), detail: null };
+}
+
+/** 탭의 지금 접속으로 `sql`을 실행할 요청. 접속이 없으면 Rejection이다. */
+function requestFor(
+  tabId: string,
+  sql: string,
+  origin: Origin,
+): RunRequest | Rejection {
+  const connection = findTab(tabId)?.connection ?? null;
+  return connection === null ? noConnection() : { connection, sql, origin };
+}
+
 /** 탭에서 실행할 것을 정한다. store를 바꾸지 않는다. */
 async function prepareRun(tabId: string): Promise<RunRequest | Rejection> {
-  const connection = findTab(tabId)?.connection ?? null;
-  if (connection === null) {
-    return { title: t("run.noConnection"), detail: null };
-  }
+  // 접속이 없으면 문장을 나누지 않는다.
+  if (findTab(tabId)?.connection == null) return noConnection();
   const statement = await statementToRun(tabId);
-  return "title" in statement ? statement : { connection, ...statement };
+  return "title" in statement
+    ? statement
+    : requestFor(tabId, statement.sql, statement.origin);
 }
 
 /** 활성 탭에 대해 command를 실행한다. */
@@ -101,12 +115,7 @@ export async function runAgain(tabId: string): Promise<void> {
   const state = useRuns.getState().runs[tabId];
   if (state?.status !== "running" && state?.status !== "finished") return;
   const { sql, origin } = state.result;
-  return useRuns.getState().run(tabId, () => {
-    const connection = findTab(tabId)?.connection ?? null;
-    return connection === null
-      ? { title: t("run.noConnection"), detail: null }
-      : { connection, sql, origin };
-  });
+  return useRuns.getState().run(tabId, () => requestFor(tabId, sql, origin));
 }
 
 /** 저장하지 않은 변경이 있으면 묻고, 세션을 놓은 뒤 탭을 닫는다. */
