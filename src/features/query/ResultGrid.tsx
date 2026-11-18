@@ -26,16 +26,15 @@ import { Button } from "../../shared/ui/Button";
 import { SpinnerIcon } from "../../shared/ui/icons";
 import {
   anchorShift,
-  CELL_PADDING,
   cellDisplay,
   copyCell,
   FOOTER_HEIGHT,
   fitWidth,
   GAP_HEIGHT,
-  HALF_WIDTH,
   HEADER_HEIGHT,
   MIN_DRAG,
   ROW_HEIGHT,
+  rowNumberWidth,
   selectedRows,
   shouldFetch,
   tsv,
@@ -69,7 +68,6 @@ const NO_COLUMNS: string[] = [];
 /** 첫 render가 쓰는 viewport 크기. 실제 크기는 ResizeObserver가 알려 준다. */
 const INITIAL_RECT = { width: 800, height: 400 };
 const OVERSCAN = 10;
-const MIN_ROW_NUMBER_WIDTH = 52;
 const estimateSize = () => ROW_HEIGHT;
 
 /**
@@ -226,21 +224,16 @@ function Grid({
       [String(index)]: fitWidth(columns[index], columnValues(rows, index)),
     }));
 
-  const rowNumberWidth = Math.max(
-    MIN_ROW_NUMBER_WIDTH,
-    Math.ceil(
-      formatCount(firstRow + rows.length).length * HALF_WIDTH + CELL_PADDING,
-    ),
-  );
+  const numberWidth = rowNumberWidth(firstRow + rows.length);
   const gridColumns = useMemo(
     () =>
       ["var(--col-rn)", ...columns.map((_, i) => `var(--col-${i})`)].join(" "),
     [columns],
   );
   const sizeVars: Record<string, string> = {
-    "--col-rn": `${rowNumberWidth}px`,
+    "--col-rn": `${numberWidth}px`,
     "--grid-cols": gridColumns,
-    "--row-width": `${rowNumberWidth + table.getTotalSize()}px`,
+    "--row-width": `${numberWidth + table.getTotalSize()}px`,
   };
   for (const header of headers) {
     sizeVars[`--col-${header.id}`] = `${header.getSize()}px`;

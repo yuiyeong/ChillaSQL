@@ -1,4 +1,5 @@
 import type { Cell } from "../../shared/api/types";
+import { formatCount } from "../../shared/i18n/t";
 import type { FetchState } from "./runReducer";
 
 export const ROW_HEIGHT = 26;
@@ -10,10 +11,14 @@ export const FOOTER_HEIGHT = 30;
 export const FETCH_AHEAD = 100;
 /** D2Coding 13px 반각 글자의 advance */
 export const HALF_WIDTH = 6.5;
+/** 칸 좌우의 padding(`px-2.5`) */
 export const CELL_PADDING = 20;
+/** 칸의 `border-r`. box-sizing이 border-box라 칸 너비 안에 든다. */
+export const CELL_BORDER = 1;
 export const MIN_FIT = 64;
 export const MAX_FIT = 480;
 export const MIN_DRAG = 48;
+export const MIN_ROW_NUMBER_WIDTH = 52;
 /** 자동 너비는 앞 이만큼의 값만 보고 정한다. */
 export const FIT_SAMPLE = 2000;
 /** 이보다 긴 값은 앞부분만 그리고 센다. */
@@ -56,8 +61,15 @@ export function fitWidth(header: string, values: Iterable<Cell>): number {
     if (seen++ === FIT_SAMPLE) break;
     widest = Math.max(widest, displayColumns(value ?? "NULL"));
   }
-  const width = widest * HALF_WIDTH + CELL_PADDING;
+  const width = widest * HALF_WIDTH + CELL_PADDING + CELL_BORDER;
   return Math.ceil(Math.min(MAX_FIT, Math.max(MIN_FIT, width)));
+}
+
+/** 행 번호 column의 너비(px). 가장 큰 행 번호(`lastRow`, 1부터 셈)가 잘리지 않는다. */
+export function rowNumberWidth(lastRow: number): number {
+  const width =
+    formatCount(lastRow).length * HALF_WIDTH + CELL_PADDING + CELL_BORDER;
+  return Math.max(MIN_ROW_NUMBER_WIDTH, Math.ceil(width));
 }
 
 function isHighSurrogate(code: number): boolean {

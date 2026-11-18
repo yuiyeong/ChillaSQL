@@ -6,6 +6,7 @@ import {
   displayColumns,
   fitWidth,
   resultLabel,
+  rowNumberWidth,
   selectedRows,
   shouldFetch,
   tsv,
@@ -24,7 +25,7 @@ test("displayColumns는 CELL_LIMIT자까지만 센다", () => {
 test("fitWidth는 64~480px로 자른다", () => {
   expect(fitWidth("id", ["1"])).toBe(64);
   expect(fitWidth("email", ["haneul.kim@example.com"])).toBe(
-    Math.ceil(22 * 6.5 + 20),
+    Math.ceil(22 * 6.5 + 20 + 1),
   );
   expect(fitWidth("profile", ["x".repeat(100_000)])).toBe(480);
   expect(fitWidth("v", [null])).toBe(64);
@@ -36,7 +37,21 @@ test("fitWidth는 앞 2,000개만 본다", () => {
 });
 
 test("fitWidth는 header도 센다", () => {
-  expect(fitWidth("h".repeat(30), ["1"])).toBe(Math.ceil(30 * 6.5 + 20));
+  expect(fitWidth("h".repeat(30), ["1"])).toBe(Math.ceil(30 * 6.5 + 20 + 1));
+});
+
+test("fitWidth는 가장 긴 값과 padding에 칸의 border-r 1px까지 더한다", () => {
+  // 2026-09-24 04:07:00+00은 22자. 1px이 모자라면 마지막 글자가 …로 잘린다.
+  expect(fitWidth("t", ["2026-09-24 04:07:00+00"])).toBe(22 * 6.5 + 20 + 1);
+  expect(fitWidth("n", ["user_569553"])).toBe(Math.ceil(11 * 6.5 + 20 + 1));
+});
+
+test("rowNumberWidth는 마지막 행 번호와 padding, border-r 1px에 맞추고 52px보다 좁지 않다", () => {
+  expect(rowNumberWidth(9)).toBe(52);
+  // "1,000,000"은 9자
+  expect(rowNumberWidth(1_000_000)).toBe(Math.ceil(9 * 6.5 + 20 + 1));
+  // "1,800"은 5자
+  expect(rowNumberWidth(1_800)).toBe(Math.max(52, Math.ceil(5 * 6.5 + 20 + 1)));
 });
 
 test("tsv는 NULL을 빈 칸으로, 특수 문자가 든 값을 따옴표로 쓴다", () => {
