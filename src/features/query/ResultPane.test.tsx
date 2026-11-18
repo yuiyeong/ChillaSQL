@@ -1,5 +1,5 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/clipboard");
@@ -10,6 +10,7 @@ import { stubLayout } from "../../test/layout";
 import type { Cell, Outcome } from "../../shared/api/types";
 import { runAgain } from "../workspace/commands";
 import { ResultPane } from "./ResultPane";
+import { fitWidth } from "./grid";
 import { emptyResult, type ResultData, type RunState } from "./runReducer";
 import { useRuns } from "./runsStore";
 
@@ -419,4 +420,146 @@ test("끝나도 표를 다시 만들지 않는다", () => {
 
   expect(screen.getByText("3 rows · 1.23 s")).toBeInTheDocument();
   expect(screen.getByRole("grid")).toBe(grid);
+});
+
+describe("탭을 바꿨다 돌아올 때의 결과 표", () => {
+  const manyRows: Cell[][] = Array.from({ length: 1000 }, (_, i) => [
+    String(i + 1),
+    `name${i + 1}`,
+  ]);
+  const fit = fitWidth(
+    "name",
+    manyRows.map((row) => row[1]),
+  );
+
+  function finishedRun(startedAt: number, sql = "SELECT id, name FROM t") {
+    return {
+      status: "finished",
+      result: result({
+        sql,
+        startedAt,
+        columns: ["id", "name"],
+        rows: manyRows,
+      }),
+      outcome: { outcome: "completed", rows: 1000 },
+    } satisfies RunState;
+  }
+
+  const grid = () => screen.getByRole("grid");
+  const nameHeader = () =>
+    screen.getByText("name").closest<HTMLElement>("[role=columnheader]")!;
+  const selectedCells = () =>
+    grid().querySelectorAll("[role=gridcell][aria-selected=true]");
+  const copyButton = () =>
+    screen.getByRole("button", { name: "Copy selected cells" });
+
+  /** 탭 a의 표에서 name 열을 20px 줄이고, 두 번째 행의 name을 고르고, 10행 내린다(고른 행은 overscan 안이라 그려진다). */
+  function touchGrid() {
+    const handle = within(nameHeader()).getByRole("separator");
+    fireEvent.mouseDown(handle, { clientX: 500 });
+    fireEvent.mouseMove(document, { clientX: 480 });
+    fireEvent.mouseUp(document, { clientX: 480 });
+    fireEvent.click(screen.getByText("name2"));
+    grid().scrollTop = 260;
+    fireEvent.scroll(grid());
+  }
+
+  function expectFresh() {
+    expect(nameHeader().style.width).toBe(`${fit}px`);
+    expect(selectedCells()).toHaveLength(0);
+    expect(grid().scrollTop).toBe(0);
+    expect(copyButton()).toBeDisabled();
+  }
+
+  test("같은 실행이면 너비, 선택, 스크롤이 그대로다", () => {
+    useRuns.setState({ runs: { a: finishedRun(1), b: finishedRun(2) } });
+    const view = render(<ResultPane tabId="a" hasConnection />);
+    touchGrid();
+
+    view.rerender(<ResultPane tabId="b" hasConnection />);
+    expectFresh();
+
+    view.rerender(<ResultPane tabId="a" hasConnection />);
+    expect(nameHeader().style.width).toBe(`${fit - 20}px`);
+    expect(selectedCells()).toHaveLength(1);
+    expect(
+      screen.getByText("name2").closest("[role=gridcell]"),
+    ).toHaveAttribute("aria-selected", "true");
+    expect(grid().scrollTop).toBe(260);
+    expect(copyButton()).toBeEnabled();
+  });
+
+  test("떠난 사이 앞 행이 버려졌으면 보던 행이 그 자리에 있다", () => {
+    useRuns.setState({ runs: { a: finishedRun(1), b: finishedRun(2) } });
+    const view = render(<ResultPane tabId="a" hasConnection />);
+    grid().scrollTop = 13_000;
+    fireEvent.scroll(grid());
+
+    view.rerender(<ResultPane tabId="b" hasConnection />);
+    const run = finishedRun(1);
+    act(() =>
+      useRuns.setState((s) => ({
+        runs: {
+          ...s.runs,
+          a: {
+            ...run,
+            result: { ...run.result, firstRow: 100, rows: manyRows.slice(100) },
+          },
+        },
+      })),
+    );
+    view.rerender(<ResultPane tabId="a" hasConnection />);
+
+    expect(grid().scrollTop).toBe(13_000 + 40 - 100 * 26);
+  });
+
+  test("그 탭에서 다시 실행했으면 처음부터 그린다", () => {
+    useRuns.setState({ runs: { a: finishedRun(1), b: finishedRun(2) } });
+    const view = render(<ResultPane tabId="a" hasConnection />);
+    touchGrid();
+
+    view.rerender(<ResultPane tabId="b" hasConnection />);
+    act(() =>
+      useRuns.setState((s) => ({ runs: { ...s.runs, a: finishedRun(3) } })),
+    );
+    view.rerender(<ResultPane tabId="a" hasConnection />);
+
+    expectFresh();
+  });
+
+  test("release한 탭의 view는 버린다", async () => {
+    useRuns.setState({ runs: { a: finishedRun(1), b: finishedRun(2) } });
+    const view = render(<ResultPane tabId="a" hasConnection />);
+    touchGrid();
+    view.rerender(<ResultPane tabId="b" hasConnection />);
+
+    // 보이지 않는 탭을 닫았다. 같은 실행이 다시 와도 이어 가지 않는다.
+    await act(() => useRuns.getState().release("a"));
+    act(() =>
+      useRuns.setState((s) => ({ runs: { ...s.runs, a: finishedRun(1) } })),
+    );
+    view.rerender(<ResultPane tabId="a" hasConnection />);
+    expectFresh();
+
+    // 보고 있는 탭을 닫으면 표가 사라질 때 저장하지 않는다.
+    touchGrid();
+    await act(() => useRuns.getState().release("a"));
+    act(() =>
+      useRuns.setState((s) => ({ runs: { ...s.runs, a: finishedRun(1) } })),
+    );
+    expectFresh();
+  });
+
+  test("프로젝트를 바꾸면(reset) 모든 view를 버린다", async () => {
+    useRuns.setState({ runs: { a: finishedRun(1), b: finishedRun(2) } });
+    const view = render(<ResultPane tabId="a" hasConnection />);
+    touchGrid();
+    view.rerender(<ResultPane tabId="b" hasConnection />);
+
+    await act(() => useRuns.getState().reset());
+    act(() => useRuns.setState({ runs: { a: finishedRun(1) } }));
+    view.rerender(<ResultPane tabId="a" hasConnection />);
+
+    expectFresh();
+  });
 });

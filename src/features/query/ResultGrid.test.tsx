@@ -37,6 +37,7 @@ function result(patch: Partial<ResultData> = {}): ResultData {
 
 function props(patch: Partial<Props> = {}): Props {
   return {
+    tabId: "t",
     result: result(),
     endRows: null,
     onFetchMore: vi.fn(),

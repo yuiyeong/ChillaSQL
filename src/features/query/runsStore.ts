@@ -8,6 +8,7 @@ import {
 } from "../../shared/api/commands";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import type { QueryEvent } from "../../shared/api/types";
+import { clearGridViews, dropGridView } from "./gridViews";
 import {
   emptyResult,
   reduce,
@@ -45,7 +46,7 @@ interface RunsState {
    * 보내지 않는다. 실패는 무시한다. 끝은 `finished`로 온다.
    */
   fetchMore(tabId: string): Promise<void>;
-  /** 탭을 닫거나 접속을 바꿀 때. 상태는 바로 지우고 세션을 닫는다. */
+  /** 탭을 닫거나 접속을 바꿀 때. 상태와 결과 표의 view는 바로 지우고 세션을 닫는다. */
   release(tabId: string): Promise<void>;
   /** 모든 탭을 release한다. 프로젝트를 바꿀 때 */
   reset(): Promise<void>;
@@ -237,6 +238,7 @@ export const useRuns = create<RunsState>()((set, get) => {
 
     async release(tabId) {
       const slot = drop(tabId);
+      dropGridView(tabId);
       set((s) => {
         const runs = { ...s.runs };
         delete runs[tabId];
@@ -251,6 +253,7 @@ export const useRuns = create<RunsState>()((set, get) => {
         .map(drop)
         .filter((slot) => slot !== undefined);
       set({ runs: {} });
+      clearGridViews();
       await Promise.all(slots.map(closeSlot));
     },
   };

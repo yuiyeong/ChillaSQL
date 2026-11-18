@@ -45,12 +45,22 @@ import {
   tsv,
   type Selection,
 } from "./grid";
+import {
+  dropGridView,
+  runKeyOf,
+  savedGridView,
+  saveGridView,
+  type GridView,
+} from "./gridViews";
 import { receivedRows, type ResultData } from "./runReducer";
+import { useRuns } from "./runsStore";
 
 /** 지금 선택을 복사할 text와 알림 문구. 선택이 없으면 null */
 export type CopyTarget = { text: string; message: string } | null;
 
 interface ResultGridProps {
+  /** 결과를 낸 탭. 탭을 바꿨다 돌아오면 그 탭의 view(너비, 선택, 스크롤)를 이어 간다. */
+  tabId: string;
   /** columns가 null이 아니다 */
   result: ResultData;
   /** 결과가 끝났으면 서버가 알려 준 전체 행 수 */
@@ -78,14 +88,26 @@ const estimateSize = () => ROW_HEIGHT;
 /**
  * 가상 스크롤 결과 표. 같은 실행 동안에는 batch마다 `result` object가 바뀌어도 상태를 이어 가고,
  * 다른 실행(`startedAt`이나 `sql`이 다름)이 오면 처음부터 다시 그린다(선택, 스크롤, 너비).
+ * 다른 탭을 보다 돌아오면 그 탭이 같은 실행일 때 떠날 때의 view를 이어 간다.
  * props가 그대로면(알림, header 복사 버튼) 다시 그리지 않는다.
  */
 export const ResultGrid = memo(function ResultGrid(props: ResultGridProps) {
-  const { startedAt, sql } = props.result;
-  return <Grid key={`${startedAt}:${sql}`} {...props} />;
+  const runKey = runKeyOf(props.result);
+  return <Grid key={`${props.tabId}\n${runKey}`} runKey={runKey} {...props} />;
 });
 
+/** 그 탭이 아직 이 실행을 보여 주는지. release했거나 다시 실행했으면 false다. */
+function isShownRun(tabId: string, runKey: string): boolean {
+  const run = useRuns.getState().runs[tabId];
+  return (
+    (run?.status === "running" || run?.status === "finished") &&
+    runKeyOf(run.result) === runKey
+  );
+}
+
 function Grid({
+  tabId,
+  runKey,
   result,
   endRows,
   onFetchMore,
@@ -93,13 +115,27 @@ function Grid({
   onCopied,
   copyTargetRef,
   onSelectionChange,
-}: ResultGridProps) {
+}: ResultGridProps & { runKey: string }) {
   const { firstRow, rows, fetch } = result;
   const columns = result.columns ?? NO_COLUMNS;
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(() =>
-    fitColumns(columns, rows),
+  // 떠날 때 저장한 view. 그 사이 앞 행이 버려졌으면 보던 행이 그 자리에 오게 스크롤을 당긴다.
+  const [restored] = useState((): GridView | undefined => {
+    const saved = savedGridView(tabId, runKey);
+    if (saved === undefined) return undefined;
+    const shift = anchorShift(saved.firstRow, firstRow);
+    return { ...saved, scrollTop: Math.max(0, saved.scrollTop + shift) };
+  });
+  // virtualizer가 처음 scroll 위치를 읽기 전에 둔다. 그래서 useVirtualizer보다 앞에 있다.
+  useLayoutEffect(() => {
+    if (restored !== undefined && scrollRef.current !== null) {
+      scrollRef.current.scrollTop = restored.scrollTop;
+    }
+  }, [restored]);
+
+  const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(
+    () => restored?.columnSizing ?? fitColumns(columns, rows),
   );
   const columnDefs = useMemo(
     (): ColumnDef<Features, Cell[]>[] =>
@@ -136,24 +172,57 @@ function Grid({
     paddingEnd: FOOTER_HEIGHT,
     scrollMargin: HEADER_HEIGHT,
     initialRect: INITIAL_RECT,
+    initialOffset: restored?.scrollTop ?? 0,
   });
   const items = virtualizer.getVirtualItems();
   const totalSize = virtualizer.getTotalSize();
   // range는 getVirtualItems가 정한다. overscan을 뺀 보이는 범위다.
   const lastVisible = virtualizer.range?.endIndex ?? -1;
 
-  const [selection, setSelection] = useState<Selection>(null);
+  const [selection, setSelection] = useState<Selection>(
+    restored?.selection ?? null,
+  );
 
   // 아래 effect와 handler가 읽는 최신 값. render 중에는 쓰지 않는다.
-  const latest = useRef({ selection, firstRow, rows, onCopied, onFetchMore });
+  const latest = useRef({
+    selection,
+    columnSizing,
+    firstRow,
+    rows,
+    onCopied,
+    onFetchMore,
+  });
   useLayoutEffect(() => {
     const current = latest.current;
     current.selection = selection;
+    current.columnSizing = columnSizing;
     current.firstRow = firstRow;
     current.rows = rows;
     current.onCopied = onCopied;
     current.onFetchMore = onFetchMore;
   });
+
+  // 표가 사라질 때(다른 탭으로 감) view를 저장한다. 스크롤마다 쓰지 않고 여기서 한 번 읽는다.
+  // layout effect의 cleanup은 element를 DOM에서 떼기 전에 돌아 scrollTop이 남아 있다.
+  // 그 탭을 release했거나 다시 실행했으면 저장하지 않고 남은 것도 버린다.
+  useLayoutEffect(() => {
+    const element = scrollRef.current;
+    // object는 그대로이고 값만 바뀐다. cleanup은 떠날 때의 값을 읽는다.
+    const current = latest.current;
+    return () => {
+      if (!isShownRun(tabId, runKey)) {
+        dropGridView(tabId);
+        return;
+      }
+      const { columnSizing, selection, firstRow } = current;
+      saveGridView(tabId, runKey, {
+        columnSizing,
+        selection,
+        firstRow,
+        scrollTop: element?.scrollTop ?? 0,
+      });
+    };
+  }, [tabId, runKey]);
 
   // 앞 행이 버려지면 버린 만큼 당겨 보던 행을 그 자리에 둔다.
   const shownFirstRow = useRef(firstRow);

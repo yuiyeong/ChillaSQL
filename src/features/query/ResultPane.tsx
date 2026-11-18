@@ -82,6 +82,8 @@ export const ResultPane = memo(function ResultPane({
 
   const gridOf = (result: ResultData, endRows: number | null) => (
     <ResultGrid
+      // 실행 상태가 있으면 tabId는 null이 아니다.
+      tabId={tabId!}
       result={result}
       endRows={endRows}
       onFetchMore={onFetchMore}
