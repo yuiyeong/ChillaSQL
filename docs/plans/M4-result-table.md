@@ -46,6 +46,32 @@ package의 문서와 type, `tauri-utils` 2.10.2 source, font file로 확인했�
 - **접속 sheet와 프로젝트 열기 화면**은 token, 버튼, 문구만 바꾸고 배치는 그대로 둔다. sheet 배치는 `tunnel` 칸을 더하는 M5에서, 프로젝트 열기 화면은 최근 프로젝트 목록을 더하는 M8에서 캔버스대로 바꾼다.
 - **release 빌드 서명**은 Task 1에서 정한다. 계획의 기본안은 `scripts/build-app.sh`가 `pnpm tauri build --bundles app`으로 `.app`을 만든 뒤 `cargo-runner.sh`와 같은 identity, 같은 identifier(`com.yuiyeong.chillasql`)로 `codesign`하는 것이다(M3 Task 13에서 쓴 방법). identity를 고르는 code는 `scripts/signing-identity.sh` 하나로 모은다.
 
+## 구현 뒤 정리에서 바뀐 것 (2026-11-18)
+
+아래 task 본문은 계획 당시의 것이다. 구현, simplify, code review에서 다음이 정해졌고 진행상황의 결정 기록에도 남겼다. task 본문은 고치지 않았다.
+
+- 행 번호 column의 폭은 쉼표가 든 행 번호(`formatCount`)의 글자 수로 센다(Task 7).
+- `ResultGrid`는 key `${startedAt}:${sql}`로 안쪽 표를 감싸 새 실행마다 다시 mount한다. 같은 실행이 `running`에서 `finished`로 바뀔 때는 mount를 유지한다(Task 7, 8).
+- 앞쪽 행이 버려진 commit에서는 이어서 가져오기 검사를 건너뛴다. 그 commit의 보이는 범위는 당기기 전 위치로 센 것이라 맨 아래로 보고 결과 전체를 가져오게 된다(Task 7).
+- `Button`에 `size="small"`(24px)이 생겼고 표 안의 "Run again"이 쓴다(Task 7).
+- 에디터와 결과 panel의 경계는 mouse로만 움직인다(Task 9).
+- 연결 중에는 Cancel이 보이되 disabled다(Task 11).
+- toolbar의 진행 막대는 toolbar 아래에 absolute로 겹친다. 캔버스는 흐름 안에 둔다(Task 11).
+- overlay 배경은 `--color-scrim`(50%), popover와 dialog 그림자는 token이다. Tailwind 기본 palette는 `--color-*: initial`로 끄고 source 규칙 test가 지킨다(Task 12).
+- 접속 form의 테스트와 저장 결과는 icon과 문장이고 캔버스의 테두리 상자는 쓰지 않는다(Task 12).
+
+## Task 13 실행에서 달라진 것 (2026-11-18)
+
+- 이 세션에는 computer use 도구가 없어 Bash로 `.app`을 조작했다. key는 `CGEvent.postToPid`로 앱 process에 직접 보내고, 클릭 전에는 앱을 앞으로 가져와 확인했다(사용자가 같은 Mac을 쓰는 중이었다). 폴더 picker는 경로를 clipboard에 넣고 `Shift+Cmd+G`, `Cmd+V`로 열었다. 확인용 프로젝트는 scratchpad의 `m4check`(확인 뒤 지움)다.
+- Step 1의 probe는 debug `.app`(Rust 최적화 없음)에서 쟀다. 60Hz display라 frame 간격의 바닥이 16~17ms다.
+- 3행의 `Running …`은 `big_table`에서는 첫 screenshot 전에 지나가 9행의 `pg_sleep`에서 봤다(`Running 1.1 s`).
+- 4행: 빈 frame과 멈춤은 60fps 녹화를 OCR해 봤다. `Fetching next 500 rows`는 로컬 DB의 batch가 한 frame보다 빨리 와서 보지 못했다.
+- 5행: 앞 행이 버려지는 순간은 `End` key로 10만 행을 넘긴 뒤 wheel과 합성 momentum 스크롤로 만들었다. 보던 행의 `id`가 녹화에서 끊기지 않았다.
+- 6행: 끌기와 두 번 누르기는 동작하지만 맞춘 너비가 1px 좁아 가장 긴 값이 `…`로 잘린다(`border-r`이 너비 안에 들어감). Task 13은 성능 문제만 고칠 수 있어 고치지 않았다. 진행상황 작업 로그(2026-11-18 "M4 완료")에 이것을 포함해 찾은 것 7개를 남겼다.
+- 7행: TextEdit 대신 `pbpaste`로 붙여 넣을 내용을 확인했다.
+- 15행: CSP는 listener로 재지 않았다. D2Coding의 글자 폭(7.5px, 6.5px)과 clipboard 두 경로(`copy` event, `copyText`)가 동작하는 것으로 확인했다. 한국어 문구는 screenshot을 한국어로 OCR해 찾았다.
+- Step 3의 release `.app`은 debug `.app`이 키체인에 넣은 비밀번호를 읽었다(같은 identity, identifier).
+
 ## Global Constraints
 
 - M1~M3의 Global Constraints를 따른다(macOS 전용, `chilla-core`는 `tauri`에 의존하지 않음, 탭 = 세션, 비밀번호는 `Password`로만, JSON의 키는 camelCase이고 구분 값은 snake_case, DB 값과 server message는 React의 text node로만 그림, 단축키는 `KeyboardEvent.code`로 판별, 문서 text는 `EditorState`에만). 바뀌는 것은 아래 둘이다.
@@ -200,7 +226,7 @@ git commit -m "chore: M4 Task 1 release 서명 script, overlay title bar, clipbo
   - `tc(key: PluralKey, count: number, params?: Record<string, string | number>): string`. `count === 1`이면 `.one`, 아니면 `.other`이고 `{count}`도 채운다
   - `formatCount(n: number): string` → `Intl.NumberFormat("en-US")`(`124500` → `"124,500"`)
 
-- [ ] **Step 1: `t`, `tc`, `formatCount`의 test를 쓴다**
+- [x] **Step 1: `t`, `tc`, `formatCount`의 test를 쓴다**
 
 ```ts
 test("param을 채운다", () => {
@@ -220,27 +246,27 @@ test("formatCount", () => {
 });
 ```
 
-- [ ] **Step 2: 화면에 한글 문구가 없다는 규칙 test를 쓴다**
+- [x] **Step 2: 화면에 한글 문구가 없다는 규칙 test를 쓴다**
 
 `src/test/sourceRules.test.ts`의 `화면 code에 한글 문구가 없다`: `src/**/*.{ts,tsx}` 중 `*.test.*`와 `src/test/**`를 뺀 파일을 `typescript`의 `createSourceFile`로 읽고, `StringLiteral`, `NoSubstitutionTemplateLiteral`, template의 text 조각, `JsxText`, JSX attribute의 string에 한글(`/[ㄱ-ㆎ가-힣]/`)이 있으면 `파일:줄`과 함께 실패한다. 주석은 보지 않는다.
 
-- [ ] **Step 3: 두 test가 실패하는지 확인한다**
+- [x] **Step 3: 두 test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/shared/i18n src/test/sourceRules.test.ts`
 Expected: FAIL(`t`가 없음, 한글 문구가 있는 파일 목록)
 
-- [ ] **Step 4: `en.ts`, `t.ts`를 쓰고 모든 문구를 옮긴다**
+- [x] **Step 4: `en.ts`, `t.ts`를 쓰고 모든 문구를 옮긴다**
 
 옮기는 규칙: 캔버스에 같은 상황의 영어 문구가 있으면 그것을 쓴다(예: 새 탭 제목 `Query {n}`, 탭 닫기 `Close {title}`, 접속 이름 중복 `This name is already taken. To edit that connection, open it from the sidebar.`, 접속 수정 제목 `Edit {name}`, 새 접속 `New Connection`, 비밀번호 설명 `Saved in Keychain, never in chilla.toml`). 없으면 뜻을 그대로 옮긴 sentence case 영어로 쓴다. 한 마디짜리 label에는 마침표를 붙이지 않는다. native `ask`의 문구도 옮긴다(`Discard unsaved changes to {title}?`, `{count} tabs have unsaved changes. Discard them and open another project?`). test는 화면에 보이는 영어를 literal로 단언한다(`t()`를 부르지 않는다). 새 탭 제목이 바뀌므로 `tabsStore` test도 고친다.
 
 `docs/architecture.md` 3장 표에 `src/shared/i18n/`(화면 문구 dictionary와 `t`. 화면 문구는 여기서만 정한다)과 `src/shared/ui/`(공용 component, Task 4) 줄을 더한다.
 
-- [ ] **Step 5: test가 통과하는지 확인한다**
+- [x] **Step 5: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 6: commit한다**
+- [x] **Step 6: commit한다**
 
 ```bash
 git add src docs/architecture.md
@@ -258,25 +284,25 @@ git commit -m "feat: 화면 문구를 영어 dictionary와 t(key)로 옮김"
 - Consumes: 없음
 - Produces: `CommandError.message`와 `QueryEvent`의 `message`(`connection_lost`, `client_error`)가 영어다. `kind`는 바뀌지 않는다.
 
-- [ ] **Step 1: `command_error_kinds` test에 message 단언을 더한다**
+- [x] **Step 1: `command_error_kinds` test에 message 단언을 더한다**
 
 `src-tauri/src/error.rs`의 test가 만드는 모든 `AppError`에 대해 `CommandError::from(error).message`에 한글이 없음을 단언하는 `command_error_messages_are_english`를 더한다(같은 error 목록을 쓰도록 목록을 helper로 뺀다). 안에 든 server message나 io message는 test 값(`"m"`)이다.
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `cargo test -p chillasql command_error_messages_are_english`
 Expected: FAIL
 
-- [ ] **Step 3: message를 영어로 바꾼다**
+- [x] **Step 3: message를 영어로 바꾼다**
 
 `#[error(...)]`와 사용자에게 가는 `format!`을 영어로 바꾼다. 자리 표시(`{path}`, `{message}` 등)는 그대로 둔다. sentence case이고 끝에 마침표를 붙이지 않는다(예: `{path} was changed on disk after it was opened`, `Only one statement can run at a time. This text has {count}`, `Connection lost: {message}`). 찾기: `rg -nP '"[^"]*[가-힣][^"]*"' crates/*/src src-tauri/src`에서 주석과 `expect`/`panic` 문구(사용자에게 가지 않음)를 뺀 것. 이 message를 단언하던 Rust test와 화면 test를 같이 고친다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `cargo test && pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add crates src-tauri src
@@ -350,7 +376,7 @@ git commit -m "feat: 디자인 token, D2Coding, 공용 UI component, 에디터 t
   - `RunsState.fetchMore(tabId: string): Promise<void>`: `requestFetch`가 state를 바꿨을 때만 `fetchMore(sessionId, await queryId)`를 부른다. 실패는 무시한다(끝은 `finished`로 온다)
   - `workspace/commands.ts`: `runAgain(tabId: string): Promise<void>` — 그 탭의 결과(`running`/`finished`의 `result.sql`, `result.origin`)를 탭의 지금 접속으로 `run`한다. 결과가 없으면 아무것도 하지 않는다. `prepareRun`의 거절은 `Rejection`이다: 접속 없음 `{ title: "Choose a connection to run queries.", detail: null }`, 커서에 문장 없음 `No statement at the cursor`, 빈 선택 `Nothing to run`, `split_failed` → `{ title: "Couldn't find a statement", detail: "An unclosed quote keeps the text from being split into statements. Select what to run and it is sent as is." }`, 그 밖의 오류는 `{ title: messageOf(error), detail: null }`
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `runReducer.test.ts`:
 - `rows event는 fetch를 ready로 둔다`
@@ -369,21 +395,21 @@ git commit -m "feat: 디자인 token, D2Coding, 공용 UI component, 에디터 t
 - `split_failed는 Couldn't find a statement로 거절한다`
 - `접속이 없으면 Choose a connection으로 거절한다`
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/query src/features/workspace src/shared/api`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `runsStore.fetchMore`는 `set`으로 `requestFetch`를 적용하고 바뀌었을 때만 `executions.get(tabId)`로 command를 부른다. `runAgain`은 `execute("run")`과 같은 run token 경로(`useRuns.getState().run(tabId, prepare)`)를 쓴다. `ResultPane`의 `rejected` 처리를 새 shape에 맞춘다(모양은 Task 8에서 바꾼다).
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src
@@ -415,7 +441,7 @@ git commit -m "feat: 결과를 이어서 가져오는 fetchMore와 다시 실행
   - `formatLive(millis: number): string` → 소수 한 자리 초(`4.2 s`)
   - `affectedText(sql: string, rows: number): string` — 첫 단어가 `INSERT`/`UPDATE`/`DELETE`/`MERGE`면 `tc("result.inserted" 등, rows)`, 아니면 `t("result.done")`
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 ```ts
 test("displayColumns는 한글과 emoji를 2칸으로 센다", () => {
@@ -476,21 +502,21 @@ test("cellDisplay", () => {
 
 `format.test.ts`: `formatLive(4230)` → `"4.2 s"`, `affectedText("update users set a=1", 12)` → `"12 rows updated"`, `affectedText("delete from t", 1)` → `"1 row deleted"`, `affectedText("create table t()", 0)` → `"Done"`.
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/query/grid.test.ts src/features/query/format.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: `grid.ts`와 `format.ts`를 구현한다**
+- [x] **Step 3: `grid.ts`와 `format.ts`를 구현한다**
 
 `ResultPane.tsx`의 `CELL_LIMIT`, `isHighSurrogate`, `CellText`의 자르기는 `cellDisplay`로 옮긴다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src/features/query
@@ -529,7 +555,7 @@ git commit -m "feat: 결과 표의 너비, 복사, 이어서 가져오기, 위�
 
 배치(`Main`, `States`, `TabsConn`): scroll container 하나가 가로와 세로를 함께 스크롤한다. 맨 위는 `position: sticky`인 header 줄(32px, bg-1, 아래 line-1)이고, 칸은 이름(system font 13 semibold)과 너비 handle(경계에 hover하면 accent 2px)이다. 맨 왼쪽은 행 번호 column(오른쪽 정렬, fg-3, 폭은 `max(52, 자릿수 × 6.5 + 20)`)이다. 몸통은 virtualizer의 `getTotalSize()` 높이이고 `paddingStart`는 버린 구간 줄(`firstRow > 0`이면 `GAP_HEIGHT`), `paddingEnd`는 끝 줄(`FOOTER_HEIGHT`), `scrollMargin`은 `HEADER_HEIGHT`다. 행은 26px, 아래 1px bg-2 선, 칸은 좌우 10px, `text-small font-mono`, 넘치면 `…`. 버린 구간 줄은 사선 무늬 배경(bg-1과 bg-0의 `repeating-linear-gradient(135deg, …)`)에 문구와 작은 "Run again" 버튼이다. 끝 줄은 `fetch === "fetching"`이면 spinner와 `Fetching next 500 rows`, `endRows`가 있으면 `End · {n} rows`, 그 밖은 비운다. 선택된 셀은 accent 1.5px inset 테두리와 accent 16% 배경, 선택된 행은 accent 14% 배경에 행 번호가 fg다. 표는 `role="grid"`, 행은 `role="row"`, 칸은 `role="gridcell"`, header 칸은 `role="columnheader"`이고 `aria-rowcount`는 `firstRow + rows.length + 1`이다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 test는 `useVirtualizer`에 `initialRect: { width: 800, height: 400 }`이 들어가 jsdom에서도 행이 그려지는 것에 기댄다(component가 이 값을 기본으로 준다). 결과는 `ResultData`를 직접 만들어 넘긴다.
 
@@ -545,12 +571,12 @@ test는 `useVirtualizer`에 `initialRect: { width: 800, height: 400 }`이 들어
 - `처음 너비는 header와 첫 batch에 맞춘다`: `email` column의 너비가 `fitWidth("email", 그 column의 값)`이다(header 칸의 style width로 확인)
 - `handle을 두 번 누르면 내용에 맞춘다`: 너비를 끌어 줄인 상태에서 handle을 `dblClick`하면 `fitWidth` 값으로 돌아간다
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/query/ResultGrid.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: package를 더하고 `ResultGrid`를 구현한다**
+- [x] **Step 3: package를 더하고 `ResultGrid`를 구현한다**
 
 `pnpm add @tanstack/react-table@^9.3.1 @tanstack/react-virtual@^3.14.26`. API는 설치된 `node_modules/@tanstack/react-table/dist/index.d.ts`와 `node_modules/@tanstack/table-core/skills/table-features/references/column-sizing.md`, `column-resizing.md`에서 확인한다.
 
@@ -560,12 +586,12 @@ Expected: FAIL
 - 선택: `useState<Selection>`. 결과가 바뀌면 `null`. 셀을 누르면 grid에 focus를 준다
 - 복사: Task 1의 결정대로. 처리하는 조건은 `document.activeElement`가 grid 안이고 선택이 있을 때다
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm test`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src package.json pnpm-lock.yaml
@@ -828,13 +854,13 @@ git commit -m "feat: 접속 form과 프로젝트 열기 화면에 token을 적�
 
 앱 동작은 `scripts/build-app.sh --debug`로 만든 `.app`에서 Claude가 확인한다(진행상황의 "앱 동작 확인 방법").
 
-- [ ] **Step 1: 100만 행 스크롤을 잰다**
+- [x] **Step 1: 100만 행 스크롤을 잰다** (2026-11-18: 1,000,000행, `firstRow` 900,000, p95 18ms, max 29ms, 66.7초. 기준 안)
 
 임시 probe(확인 뒤 지움): `ResultGrid`에 `import.meta.env.VITE_CHILLA_SCROLL_PROBE`가 있을 때만 켜지는 code를 둔다. 켜지면 결과가 오는 동안 매 frame `scrollTop`을 끝으로 옮기고(맨 아래에 있는 사용자처럼 계속 이어서 가져온다), `requestAnimationFrame` 간격을 모아 결과가 끝나면 표 위에 `SCROLL_PROBE {"frames":…,"p95":…,"max":…,"rows":…,"firstRow":…,"seconds":…}`를 글자로 그린다. 로컬 test DB에서 `SELECT * FROM big_table`을 실행하고 screenshot으로 읽는다.
 
 기준: `rows`가 1,000,000이고 `firstRow`가 900,000(맨 위 줄이 `Rows 1–900,000 were dropped · run again to see them`), frame 간격 p95 ≤ 20ms, max ≤ 100ms. 못 맞추면 원인(batch마다 행 배열 복사, React render, virtualizer)을 재고, 고쳐도 안 되면 기획서 2장대로 canvas 기반 grid로 바꿀지 사용자에게 묻는다. 결과(수치와 걸린 시간)를 작업 로그에 남기고 probe를 지운다.
 
-- [ ] **Step 2: 화면을 손으로 확인한다**
+- [x] **Step 2: 화면을 손으로 확인한다** (2026-11-18: 13항목 기대대로, 4행과 6행은 일부만. 아래 "Task 13 실행에서 달라진 것")
 
 | # | 확인 | 기대 |
 | --- | --- | --- |
@@ -856,11 +882,11 @@ git commit -m "feat: 접속 form과 프로젝트 열기 화면에 token을 적�
 
 다 되면 `pnpm check`를 다시 통과시킨다.
 
-- [ ] **Step 3: release 빌드를 확인한다**
+- [x] **Step 3: release 빌드를 확인한다** (2026-11-18: 확인 창 없이 저장된 접속으로 실행)
 
 `scripts/build-app.sh`로 release `.app`을 만들어 띄우고 키체인 확인 창 없이 저장된 접속으로 실행되는지 본다(Task 1의 결정).
 
-- [ ] **Step 4: 완료를 기록하고 commit한다**
+- [x] **Step 4: 완료를 기록하고 commit한다**
 
 계획의 체크박스를 체크하고, 실행에서 달라진 것을 "구현 뒤 정리에서 바뀐 것"/"Task 13 실행에서 달라진 것"으로 계획에 남긴다. 진행상황의 "지금", 마일스톤 현황(M4 `완료`, 완료 날짜), 작업 로그(Step 1의 수치, Step 2의 결과)를 갱신한다. M4가 1단계의 마지막 마일스톤이므로 "지금"에 기획서 8장대로 며칠 실제로 써 본 뒤 M5로 넘어간다고 적는다.
 
