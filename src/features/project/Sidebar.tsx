@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useState } from "react";
 import { homeDir } from "../../shared/api/path";
 import { ConnectionDot } from "../connections/ConnectionDot";
+import { connectionTarget } from "../connections/connectionTarget";
 import { useTabs } from "../editor/tabsStore";
 import {
   ChevronDownIcon,
@@ -183,7 +184,7 @@ export function Sidebar({
                 )}
               </span>
               <span className="text-label text-fg-3 truncate font-mono">
-                {`${connection.host}:${connection.port}/${connection.database}`}
+                {connectionTarget(connection)}
               </span>
             </span>
           </button>

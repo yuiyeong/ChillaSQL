@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
 import { ConnectionDot } from "../connections/ConnectionDot";
+import { connectionTarget } from "../connections/connectionTarget";
 import { useEditorStatus } from "../editor/editorStatus";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
@@ -16,6 +17,7 @@ import { Menu, MenuItem, MenuSeparator } from "../../shared/ui/Menu";
 import { changeConnection, execute } from "./commands";
 import { shortcutKeys, shortcutLabel } from "./shortcuts";
 import { t } from "../../shared/i18n/t";
+import type { Connection } from "../../shared/api/types";
 
 /** 실행 버튼의 너비. label이 바뀌어도 toolbar가 움직이지 않도록 고정한다. */
 const RUN_WIDTH = 200;
@@ -24,12 +26,16 @@ const CANCEL_WIDTH = 227;
 /** menu 너비에서 border 2px과 padding 8px을 뺀 안쪽 너비 */
 const CONNECTION_MENU_WIDTH = 290;
 const RUN_MENU_WIDTH = 230;
+/** 프로젝트가 없을 때의 접속 목록. selector가 매번 새 배열을 돌려주면 다시 그리기를 멈추지 않는다. */
+const NO_CONNECTIONS: Connection[] = [];
 
 /** 활성 탭의 접속 chip과 menu, 실행 버튼. 활성 탭이 없으면 모두 disabled다. */
 export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
   const tab = useTabs((s) => s.tabs.find((tab) => tab.id === s.activeId));
   const tabId = tab?.id ?? null;
-  const connections = useProject((s) => s.project?.connections ?? []);
+  const connections = useProject(
+    (s) => s.project?.connections ?? NO_CONNECTIONS,
+  );
   const status = useRuns((s) =>
     tabId === null ? undefined : s.runs[tabId]?.status,
   );
@@ -108,7 +114,7 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
                   <TunnelIcon className="text-fg-2 shrink-0" />
                 )}
                 <span className="text-label text-fg-3 min-w-0 flex-1 truncate text-right font-mono">
-                  {`${c.host}:${c.port}/${c.database}`}
+                  {connectionTarget(c)}
                 </span>
               </MenuItem>
             ))}

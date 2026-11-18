@@ -306,3 +306,12 @@ test("실행 버튼 너비는 label이 바뀌어도 같다", () => {
   setRun(id, { status: "connecting" });
   expect(runButton("Cancel")).toHaveStyle({ width: "227px" });
 });
+
+test("프로젝트가 없어도 그린다", () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  render(<Toolbar onAddConnection={vi.fn()} />);
+
+  expect(chip()).toBeDisabled();
+  expect(errors).not.toHaveBeenCalled();
+  errors.mockRestore();
+});
