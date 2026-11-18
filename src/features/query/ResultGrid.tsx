@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
   type CSSProperties,
+  type KeyboardEvent,
   type MouseEvent,
   type RefObject,
 } from "react";
@@ -219,6 +220,20 @@ function Grid({
     });
   };
 
+  // WebKit은 Home, End(Cmd+위아래 화살표)를 애니메이션으로 스크롤한다. 한 frame에 수천 행씩 지나가
+  // 그 frame의 행을 그리기 전에 화면이 먼저 움직여 빈 몸통이 보인다. 끝으로 바로 가면 scroll event가 한 번이다.
+  const onGridKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.target !== event.currentTarget) return;
+    const toEnd =
+      event.key === "End" || (event.metaKey && event.key === "ArrowDown");
+    const toStart =
+      event.key === "Home" || (event.metaKey && event.key === "ArrowUp");
+    if (!toEnd && !toStart) return;
+    event.preventDefault();
+    const element = event.currentTarget;
+    element.scrollTop = toEnd ? element.scrollHeight : 0;
+  };
+
   const fitColumn = (index: number) =>
     setColumnSizing((old) => ({
       ...old,
@@ -260,6 +275,7 @@ function Grid({
       aria-rowcount={receivedRows(result) + 1}
       className="bg-bg-0 text-small text-fg @container relative min-h-0 flex-1 overflow-auto font-mono outline-none"
       style={sizeVars as CSSProperties}
+      onKeyDown={onGridKeyDown}
     >
       <div
         role="row"

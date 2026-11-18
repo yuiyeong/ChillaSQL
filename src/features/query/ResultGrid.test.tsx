@@ -308,3 +308,37 @@ test("handle을 두 번 누르면 내용에 맞춘다", () => {
   fireEvent.doubleClick(handle);
   expect(header.style.width).toBe(`${fit}px`);
 });
+
+// WebKit은 Home, End를 애니메이션으로 스크롤한다. 한 frame에 수천 행씩 지나가 행을 그리기 전의 빈 몸통이 보인다.
+test.each([
+  ["End", {}, 26_000],
+  ["ArrowDown", { metaKey: true }, 26_000],
+  ["Home", {}, 0],
+  ["ArrowUp", { metaKey: true }, 0],
+])("%s(%o)는 애니메이션 없이 끝으로 바로 간다", (key, modifiers, expected) => {
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(
+    26_000,
+  );
+  const { grid } = setup({ result: result({ rows: rowsOf(1000) }) });
+  grid().scrollTop = 13_000;
+
+  const notPrevented = fireEvent.keyDown(grid(), { key, ...modifiers });
+
+  expect(notPrevented).toBe(false);
+  expect(grid().scrollTop).toBe(expected);
+});
+
+test("다른 key와 grid 안의 버튼에서 온 key는 그대로 둔다", () => {
+  const { grid } = setup({
+    result: result({ rows: rowsOf(1000), firstRow: 500 }),
+  });
+  grid().scrollTop = 13_000;
+
+  expect(fireEvent.keyDown(grid(), { key: "PageDown" })).toBe(true);
+  expect(
+    fireEvent.keyDown(screen.getByRole("button", { name: "Run again" }), {
+      key: "End",
+    }),
+  ).toBe(true);
+  expect(grid().scrollTop).toBe(13_000);
+});
