@@ -15,6 +15,7 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { Sidebar } from "../project/Sidebar";
 import { Hints, ResultPane } from "../query/ResultPane";
+import { useSchemaLifecycle } from "../schema/useSchemaLifecycle";
 import { colorOf, connectionColor } from "../connections/colors";
 import {
   applySavedProject,
@@ -62,6 +63,7 @@ export function Workspace() {
   // 접속 form이나 저장 경로 dialog가 열려 있으면 뒤의 탭을 실행하거나 닫거나 바꾸지 않는다.
   // 확인 dialog는 useShortcuts가 스스로 본다.
   useShortcuts(form === null && !naming);
+  useSchemaLifecycle();
 
   // 터널 상태 event를 받는다. 구독이 끝나기 전에 unmount되면 끝난 뒤 바로 그만 받는다.
   useEffect(() => {

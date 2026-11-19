@@ -4,7 +4,11 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
 import { deferred } from "../../test/deferred";
-import { connection, openProjectWith } from "../../test/fixtures";
+import {
+  catalogFixture,
+  connection,
+  openProjectWith,
+} from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
@@ -19,6 +23,7 @@ import {
   executeQuery,
   hasPassword,
   listSqlFiles,
+  loadCatalog,
   openSession,
   readSqlFile,
   saveConnection,
@@ -71,6 +76,7 @@ beforeEach(async () => {
   vi.mocked(homeDir).mockResolvedValue("/Users/jo");
   vi.mocked(listSqlFiles).mockResolvedValue([]);
   vi.mocked(hasPassword).mockResolvedValue(false);
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
 });
 
 test("탭이 없으면 toolbar는 disabled다", () => {

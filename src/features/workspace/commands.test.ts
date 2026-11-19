@@ -6,11 +6,13 @@ vi.mock("../../shared/api/dialog");
 import {
   cancelQuery,
   cancelTunnel,
+  closeCatalog,
   closeSession,
   endTransaction,
   executeQuery,
   inspectStatement,
   listSqlFiles,
+  loadCatalog,
   openProject,
   openSession,
   splitStatements,
@@ -48,7 +50,8 @@ import { useTunnels } from "../connections/tunnelsStore";
 import { useDialogs } from "../../shared/ui/dialogs";
 import { answerDialog, textOf } from "../../test/dialogs";
 import { deferred } from "../../test/deferred";
-import { connection } from "../../test/fixtures";
+import { catalogFixture, connection } from "../../test/fixtures";
+import { useSchema } from "../schema/schemaStore";
 import { resetStores } from "../../test/resetStores";
 
 const project: Project = { name: "demo", dir: "/p", connections: [] };
@@ -95,6 +98,7 @@ beforeEach(async () => {
   vi.mocked(closeSession).mockResolvedValue();
   vi.mocked(cancelQuery).mockResolvedValue();
   vi.mocked(listSqlFiles).mockResolvedValue([]);
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
   vi.mocked(inspectStatement).mockResolvedValue(null);
 });
 
@@ -1179,4 +1183,45 @@ test("run_again_asks_too", async () => {
 
   expect(executeQuery).toHaveBeenCalledTimes(1);
   expect(runOf(id)).toMatchObject({ status: "finished" });
+});
+
+test("saving_a_changed_target_reloads_its_catalog", async () => {
+  useProject.setState({
+    project: {
+      ...project,
+      connections: [connection("local"), connection("staging")],
+    },
+  });
+  tabWith("SELECT 1", "local");
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  await useSchema.getState().ensure("local");
+  await useSchema.getState().ensure("other");
+  vi.mocked(loadCatalog).mockClear();
+
+  await applySavedProject({
+    ...project,
+    connections: [
+      connection("local", { host: "b.internal" }),
+      connection("staging", { host: "c.internal" }),
+    ],
+  });
+
+  // staging은 entry도 쓰는 탭도 없다.
+  expect(closeCatalog).toHaveBeenCalledTimes(2);
+  expect(closeCatalog).toHaveBeenCalledWith("local");
+  expect(closeCatalog).toHaveBeenCalledWith("staging");
+  expect(loadCatalog).toHaveBeenCalledTimes(1);
+  expect(loadCatalog).toHaveBeenCalledWith("local");
+  expect(useSchema.getState().entries.other?.status).toBe("ready");
+});
+
+test("switching_projects_resets_schemas", async () => {
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  await useSchema.getState().ensure("local");
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+
+  await switchProject();
+
+  expect(useSchema.getState().entries).toEqual({});
 });

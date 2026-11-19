@@ -15,6 +15,7 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import type { Origin, Rejection, RunRequest } from "../query/runReducer";
 import { endable, useRuns } from "../query/runsStore";
+import { useSchema } from "../schema/schemaStore";
 import { mono, rt } from "../../shared/i18n/rich";
 import { t, tc } from "../../shared/i18n/t";
 import { ask } from "../../shared/ui/dialogs";
@@ -289,7 +290,15 @@ export async function applySavedProject(
     Object.entries(unapplied).filter(([name]) => name !== saved),
   );
   useProject.getState().applyProject(project, rest);
-  await Promise.all(released);
+  // catalog도 새 대상으로 다시 읽는다. 쓰는 탭이 없는 접속은 닫기만 한다.
+  const schema = useSchema.getState();
+  const reloads = [...changed].map(async (name) => {
+    await schema.forget(name);
+    if (useTabs.getState().tabs.some((tab) => tab.connection === name)) {
+      await useSchema.getState().ensure(name);
+    }
+  });
+  await Promise.all([...released, ...reloads]);
 }
 
 /**
@@ -342,6 +351,8 @@ export async function switchProject(): Promise<void> {
   const closing = useRuns.getState().reset();
   useTabs.getState().reset();
   useTunnels.getState().reset();
+  // 옛 프로젝트의 catalog 연결도 Rust가 이미 닫았다.
+  useSchema.getState().reset();
   await closing;
 }
 

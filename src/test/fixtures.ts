@@ -1,4 +1,11 @@
-import type { Connection, Project, TxMode } from "../shared/api/types";
+import type {
+  Catalog,
+  Connection,
+  Project,
+  Relation,
+  RelationKind,
+  TxMode,
+} from "../shared/api/types";
 import { useTabs, type Tab } from "../features/editor/tabsStore";
 import { useProject } from "../features/project/projectStore";
 
@@ -55,4 +62,54 @@ export function openProjectWith(
     true,
   );
   return project;
+}
+
+/** test용 relation. 컬럼은 `[이름, type, pk]`다. */
+export function relation(
+  oid: number,
+  schema: string,
+  name: string,
+  columns: [string, string, boolean?][] = [],
+  kind: RelationKind = "table",
+): Relation {
+  return {
+    oid,
+    schema,
+    name,
+    kind,
+    columns: columns.map(([column, type, primaryKey = false]) => ({
+      name: column,
+      type,
+      primaryKey,
+    })),
+  };
+}
+
+/** test용 catalog: `public.users`(1), `public.orders`(2), `billing.invoices`(3). 바꿀 값만 `patch`로 준다. */
+export function catalogFixture(patch: Partial<Catalog> = {}): Catalog {
+  return {
+    searchPath: ["public"],
+    schemas: ["billing", "public"],
+    relations: [
+      relation(3, "billing", "invoices", [
+        ["id", "bigint", true],
+        ["amount", "numeric"],
+      ]),
+      relation(2, "public", "orders", [
+        ["id", "bigint", true],
+        ["user_id", "bigint"],
+      ]),
+      relation(1, "public", "users", [
+        ["id", "bigint", true],
+        ["email", "text"],
+        ["email_verified_at", "timestamp with time zone"],
+      ]),
+    ],
+    functions: [
+      { schema: "pg_catalog", name: "date_trunc" },
+      { schema: "public", name: "add_one" },
+    ],
+    reservedWords: ["select", "user"],
+    ...patch,
+  };
 }
