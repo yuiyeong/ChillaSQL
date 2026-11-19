@@ -179,3 +179,30 @@ test("completes_within_50ms_on_a_large_catalog", async () => {
     expect(elapsed, doc).toBeLessThan(50);
   }
 });
+
+test("function_names_that_are_keywords_are_not_quoted", async () => {
+  const withExtract = catalogFixture({
+    functions: [{ schema: "pg_catalog", name: "extract" }],
+    reservedWords: ["extract", "select"],
+  });
+  const fn = find(
+    await complete("SELECT extr|", { withCatalog: withExtract }),
+    "extract",
+  );
+  expect(fn?.type).toBe("function");
+  expect(fn?.apply).toBeUndefined();
+});
+
+test("unquoted_table_names_fold_to_lowercase", async () => {
+  expect(labels(await complete("SELECT em| FROM Users"))).toContain("email");
+  expect(labels(await complete("SELECT em| FROM PUBLIC.USERS"))).toContain(
+    "email",
+  );
+});
+
+test("tables_after_an_as_alias_in_a_from_list", async () => {
+  const options = labels(
+    await complete("SELECT | FROM users AS u, orders AS o", { explicit: true }),
+  );
+  expect(options).toEqual(expect.arrayContaining(["email", "user_id"]));
+});

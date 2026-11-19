@@ -186,3 +186,41 @@ test("popup_has_kind_letters_and_footer", async () => {
   );
   closeDocument("c");
 });
+
+test("footer_stays_below_the_list_when_options_change", async () => {
+  openDocument("d", "SELECT u.e FROM users u");
+  const { container } = render(
+    <SqlEditor tabId="d" catalog={catalogFixture()} onDocChange={vi.fn()} />,
+  );
+  const view = editorView(container);
+  const at = "SELECT u.e".length;
+  act(() => {
+    view.dispatch({ selection: { anchor: at } });
+    startCompletion(view);
+  });
+  const popup = () =>
+    container.querySelector<HTMLElement>(".cm-tooltip-autocomplete");
+  await vi.waitFor(() =>
+    expect(
+      popup()?.querySelector(".cm-completionFooter") ?? null,
+    ).not.toBeNull(),
+  );
+  const firstList = popup()!.querySelector("ul");
+
+  // 글자를 더 치면 option이 바뀌어 목록이 다시 그려진다.
+  act(() => {
+    view.dispatch({
+      changes: { from: at, insert: "mail_" },
+      selection: { anchor: at + 5 },
+      userEvent: "input.type",
+    });
+  });
+  await vi.waitFor(() =>
+    expect(popup()!.querySelector("ul")).not.toBe(firstList),
+  );
+  await vi.waitFor(() =>
+    expect(popup()!.lastElementChild?.className).toBe("cm-completionFooter"),
+  );
+  expect(popup()!.querySelectorAll(".cm-completionFooter")).toHaveLength(1);
+  closeDocument("d");
+});

@@ -128,11 +128,12 @@ function plainWord(context: CompletionContext): { from: number } | null {
 const INTRODUCERS = new Set(["from", "join", "update", "into"]);
 const IDENTIFIER = /^(Identifier|QuotedIdentifier|CompositeIdentifier)$/;
 
+/** SQL에 쓴 이름이 가리키는 catalog의 이름. PostgreSQL처럼 따옴표 없는 이름은 소문자로 접는다. */
 function identifierName(state: EditorState, node: SyntaxNode): string {
   const text = state.sliceDoc(node.from, node.to);
   return node.name === "QuotedIdentifier"
     ? text.slice(1, -1).replace(/""/g, '"')
-    : text;
+    : text.toLowerCase();
 }
 
 function pathOf(state: EditorState, node: SyntaxNode): string[] {
@@ -154,18 +155,20 @@ function statementTables(state: EditorState, pos: number): string[][] {
   }
   if (statement === null) return [];
   const tables: string[][] = [];
-  let keyword: string | null = null;
+  // 테이블 목록 안인가(FROM 등을 본 뒤 다른 절의 keyword를 아직 보지 않았다). 별칭의 AS는 목록을 끝내지 않는다.
+  let inList = false;
   let expectTable = false;
   for (let child = statement.firstChild; child; child = child.nextSibling) {
     if (child.name === "Keyword") {
-      keyword = state.sliceDoc(child.from, child.to).toLowerCase();
-      expectTable = INTRODUCERS.has(keyword);
+      const keyword = state.sliceDoc(child.from, child.to).toLowerCase();
+      if (keyword === "as") continue;
+      inList = INTRODUCERS.has(keyword);
+      expectTable = inList;
     } else if (IDENTIFIER.test(child.name)) {
       if (expectTable) tables.push(pathOf(state, child));
       expectTable = false;
     } else {
-      const comma = state.sliceDoc(child.from, child.to) === ",";
-      expectTable = comma && keyword !== null && INTRODUCERS.has(keyword);
+      expectTable = inList && state.sliceDoc(child.from, child.to) === ",";
     }
   }
   return tables;
@@ -205,8 +208,13 @@ function columnSource(
 }
 
 /** 함수 이름. 같은 이름이 여러 schema에 있으면 search_path, 그다음 `pg_catalog`의 것을 detail로 쓴다. */
+/**
+ * 함수 이름은 keyword여도 따옴표로 감싸지 않는다. `extract`, `substring`처럼 keyword인 함수는
+ * 감싸면 일반 함수 호출이 되어 특별한 문법(`extract(year from ts)`)을 쓸 수 없다.
+ */
+const NO_RESERVED: ReadonlySet<string> = new Set();
+
 function functionSource(catalog: Catalog): CompletionSource {
-  const reserved = reservedSet(catalog);
   const rank = (schema: string) => {
     const index = catalog.searchPath.indexOf(schema);
     if (index >= 0) return index;
@@ -219,7 +227,7 @@ function functionSource(catalog: Catalog): CompletionSource {
       best.set(name, schema);
   }
   const options = [...best].map(([name, schema]) =>
-    named(name, reserved, { type: "function", detail: schema }),
+    named(name, NO_RESERVED, { type: "function", detail: schema }),
   );
   return (context) => {
     const at = plainWord(context);

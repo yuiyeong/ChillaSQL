@@ -172,3 +172,33 @@ test("opens_at_a_point", () => {
   const menu = screen.getByRole("menu", { name: "Row" });
   expect(menu).toHaveStyle({ left: "40px", top: "60px" });
 });
+
+test("a_menu_at_a_point_stays_inside_the_window", () => {
+  const anchor = createRef<HTMLButtonElement>();
+  const rect = vi
+    .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+    .mockReturnValue({ width: 200, height: 100 } as DOMRect);
+  render(
+    <>
+      <button ref={anchor} type="button">
+        row
+      </button>
+      <Menu
+        open
+        onClose={vi.fn()}
+        anchor={anchor}
+        at={{ x: window.innerWidth - 50, y: window.innerHeight - 20 }}
+        label="Row"
+      >
+        <MenuItem onSelect={vi.fn()}>Copy name</MenuItem>
+      </Menu>
+    </>,
+  );
+  const menu = screen.getByRole("menu", { name: "Row" });
+  // 오른쪽 끝을 넘으면 창 안으로 당기고, 아래를 넘으면 위로 연다.
+  expect(menu).toHaveStyle({
+    left: `${window.innerWidth - 200 - 4}px`,
+    top: `${window.innerHeight - 20 - 100}px`,
+  });
+  rect.mockRestore();
+});

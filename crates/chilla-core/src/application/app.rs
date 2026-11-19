@@ -442,14 +442,18 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         &self,
         connection: &str,
     ) -> Result<OwnedMutexGuard<Option<CatalogConnection<C::Connection>>>, AppError> {
-        let slot = self
-            .catalogs
-            .lock()
-            .await
-            .entry(connection.to_string())
-            .or_default()
-            .clone();
-        let mut guard = slot.lock_owned().await;
+        let mut guard = loop {
+            let slot = self
+                .catalogs
+                .lock()
+                .await
+                .entry(connection.to_string())
+                .or_default()
+                .clone();
+            if let Some(guard) = self.lock_current_slot(connection, slot).await {
+                break guard;
+            }
+        };
         if guard.is_some() {
             return Ok(guard);
         }
@@ -463,6 +467,21 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         }
         *guard = Some(CatalogConnection { db, tunnel });
         Ok(guard)
+    }
+
+    /// 자리를 잡는다. 기다리는 사이 `close_catalog`가 그 자리를 map에서 뺐으면 None이다. 그 자리에
+    /// 연결하면 map에도 닫는 쪽에도 없어 닫히지 않으므로, 부르는 쪽이 map의 새 자리로 다시 잡는다.
+    async fn lock_current_slot(
+        &self,
+        connection: &str,
+        slot: CatalogSlot<C::Connection>,
+    ) -> Option<OwnedMutexGuard<Option<CatalogConnection<C::Connection>>>> {
+        let guard = slot.clone().lock_owned().await;
+        let catalogs = self.catalogs.lock().await;
+        let current = catalogs
+            .get(connection)
+            .is_some_and(|current| Arc::ptr_eq(current, &slot));
+        current.then_some(guard)
     }
 
     async fn close_all_catalogs(&self) {
@@ -1951,6 +1970,21 @@ mod tests {
 
         assert_eq!(loading.await.unwrap(), Err(AppError::ProjectChanged));
         assert!(f.connector.links()[0].closed());
+    }
+
+    /// `close_catalog`가 map에서 뺀 자리를 잡았으면 그 자리에 연결하지 않는다. 연결하면 map에도 닫는
+    /// 쪽에도 없는 연결과 터널 lease가 남는다.
+    #[tokio::test]
+    async fn a_slot_removed_by_close_is_not_reused() {
+        let f = opened().await;
+        f.app.load_catalog("local").await.unwrap();
+        let removed = f.app.catalogs.lock().await.get("local").unwrap().clone();
+        f.app.close_catalog("local").await.unwrap();
+
+        let guard = f.app.lock_current_slot("local", removed).await;
+
+        assert!(guard.is_none());
+        assert_eq!(f.connector.requests().len(), 1);
     }
 
     #[tokio::test]

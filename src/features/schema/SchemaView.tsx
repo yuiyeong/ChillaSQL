@@ -107,6 +107,7 @@ export function SchemaView({
   onChooseConnection(): void;
 }) {
   const connection = useTabs(selectActiveConnection);
+  const hasTab = useTabs((s) => s.activeId !== null);
   const profile = useConnection(connection);
   const entry = useSchema((s) =>
     connection === null ? undefined : s.entries[connection],
@@ -127,9 +128,12 @@ export function SchemaView({
     return (
       <div className="border-line-1 flex h-[200px] shrink-0 flex-col items-center justify-center gap-3 border-b px-5 text-center">
         <span className="text-small text-fg-2">{t("schema.noConnection")}</span>
-        <Button onClick={onChooseConnection}>
-          {t("schema.chooseConnection")}
-        </Button>
+        {/* 탭이 없으면 접속을 정할 곳이 없다. */}
+        {hasTab && (
+          <Button onClick={onChooseConnection}>
+            {t("schema.chooseConnection")}
+          </Button>
+        )}
       </div>
     );
   }
@@ -317,7 +321,7 @@ function TreeRow({
       />
       <span
         aria-hidden="true"
-        className="text-fg-3 w-3.5 shrink-0 text-center font-mono text-[11px]"
+        className="text-fg-3 text-tiny w-3.5 shrink-0 text-center font-mono"
       >
         {iconOf(row)}
       </span>

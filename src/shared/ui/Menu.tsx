@@ -11,6 +11,9 @@ import {
 
 const ITEMS = '[role^="menuitem"]:not(:disabled)';
 
+/** 창 끝과 menu 사이의 최소 여백(px) */
+const EDGE = 4;
+
 const CloseContext = createContext<() => void>(() => {});
 
 interface MenuProps {
@@ -46,8 +49,13 @@ export function Menu({
     if (!open) return;
     const menu = ref.current;
     if (at !== undefined && menu) {
-      menu.style.left = `${at.x}px`;
-      menu.style.top = `${at.y}px`;
+      // 창 오른쪽을 넘으면 안으로 당기고, 아래를 넘으면 커서 위로 연다.
+      const { width, height } = menu.getBoundingClientRect();
+      const left = Math.min(at.x, window.innerWidth - width - EDGE);
+      const top =
+        at.y + height > window.innerHeight - EDGE ? at.y - height : at.y;
+      menu.style.left = `${Math.max(EDGE, left)}px`;
+      menu.style.top = `${Math.max(EDGE, top)}px`;
       return;
     }
     const rect = anchor.current?.getBoundingClientRect();

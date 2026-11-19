@@ -102,7 +102,7 @@ const editorTheme = EditorView.theme(
       flexShrink: "0",
       textAlign: "center",
       fontFamily: "var(--font-mono)",
-      fontSize: "11px",
+      fontSize: "var(--text-tiny)",
       color: color("fg-3"),
     },
     ".cm-completionLabel": {
@@ -212,25 +212,25 @@ function completionFooter(): HTMLElement {
   return footer;
 }
 
-/** popup이 열릴 때 끝에 안내 줄을 붙인다. popup은 tooltip이 그린 뒤에 있으므로 measure의 write에서 본다. */
+/**
+ * popup이 열려 있는 동안 끝에 안내 줄을 둔다. autocomplete는 option이 바뀔 때마다 목록을 떼었다가
+ * popup 끝에 다시 붙이므로, 그때마다 안내 줄을 목록 뒤로 옮긴다. popup은 tooltip이 그린 뒤에
+ * 있으므로 measure의 write에서 본다.
+ */
 const footerPlugin = ViewPlugin.fromClass(
   class {
     update(update: ViewUpdate) {
-      if (
-        completionStatus(update.state) !== "active" ||
-        completionStatus(update.startState) === "active"
-      ) {
-        return;
-      }
+      if (completionStatus(update.state) !== "active") return;
       update.view.requestMeasure({
         key: footerPlugin,
         read: () => null,
         write: (_, view) => {
           const popup = view.dom.querySelector(".cm-tooltip-autocomplete");
-          if (popup === null || popup.querySelector(".cm-completionFooter")) {
-            return;
-          }
-          popup.append(completionFooter());
+          if (popup === null) return;
+          const footer =
+            popup.querySelector(":scope > .cm-completionFooter") ??
+            completionFooter();
+          if (popup.lastElementChild !== footer) popup.append(footer);
         },
       });
     }

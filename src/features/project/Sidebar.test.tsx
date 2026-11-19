@@ -235,7 +235,8 @@ test("schema_segment_switches_the_view", async () => {
   await click(schema);
   expect(schema).toHaveAttribute("aria-selected", "true");
   expect(screen.queryByRole("region", { name: "SQL Files" })).toBeNull();
-  // 활성 탭이 없으니 접속이 없다.
+  // 접속이 없는 탭이다.
+  act(() => void useTabs.getState().newTab());
   await click(screen.getByRole("button", { name: "Choose connection" }));
   expect(h.onChooseConnection).toHaveBeenCalledTimes(1);
 

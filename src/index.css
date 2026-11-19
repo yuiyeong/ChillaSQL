@@ -47,6 +47,9 @@
   --text-small--line-height: 1.4;
   --text-label: 12px;
   --text-label--line-height: 1.4;
+  /* 스키마 트리와 자동완성 popup의 kind 글자(캔버스 Sidebar, Tools의 11px) */
+  --text-tiny: 11px;
+  --text-tiny--line-height: 1.4;
 
   --radius-control: 7px;
 

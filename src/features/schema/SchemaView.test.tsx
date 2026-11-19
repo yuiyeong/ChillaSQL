@@ -74,6 +74,14 @@ test("shows_no_connection_and_choose_button", async () => {
   expect(onChoose).toHaveBeenCalledTimes(1);
 });
 
+test("no_tab_has_no_choose_button", () => {
+  renderView();
+  expect(screen.getByText("No connection in this tab")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Choose connection" }),
+  ).toBeNull();
+});
+
 test("header_shows_the_connection", async () => {
   activeTab("local");
   setEntry({});
