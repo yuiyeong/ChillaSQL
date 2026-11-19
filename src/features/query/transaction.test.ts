@@ -58,6 +58,20 @@ describe("nextTx", () => {
     });
   });
 
+  it("follows the status without counting when counts is false", () => {
+    expect(
+      nextTx(openTx, "in_transaction", "completed", "manual", 300, false),
+    ).toBe(openTx);
+    expect(
+      nextTx(null, "in_transaction", "completed", "manual", 100, false),
+    ).toEqual({
+      status: "open",
+      statements: 0,
+      openedAt: 100,
+      openedBy: "app",
+    });
+  });
+
   it("does not count a cancelled or expired statement", () => {
     expect(nextTx(openTx, "in_transaction", "expired", "manual", 300)).toBe(
       openTx,

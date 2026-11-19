@@ -149,12 +149,19 @@ function ColorField({
 /** 접속을 추가하거나(`original`이 null) 고친다. 비밀번호는 이 component의 state에만 둔다. */
 export function ConnectionForm({
   original,
+  inUse = original,
   existingNames,
   beforeSave,
   onSaved,
+  onSavedNotApplied,
   onClose,
 }: {
   original: Connection | null;
+  /**
+   * 탭의 세션이 쓰는 이 접속. 저장하기 전에 물을지는 이것과 비교한다. Commit이 실패해 반영하지
+   * 못한 저장이 있으면 original(파일의 값)과 다르다. 없으면 original이다.
+   */
+  inUse?: Connection | null;
   /** 프로젝트에 이미 있는 접속 이름. 새 접속이 이 이름을 쓰지 못하게 한다. */
   existingNames: string[];
   /**
@@ -163,6 +170,8 @@ export function ConnectionForm({
    */
   beforeSave?(connection: Connection): Promise<(() => Promise<boolean>) | null>;
   onSaved(project: Project): void;
+  /** 저장했지만 Commit이 실패했다. form은 연 채로 둔다. */
+  onSavedNotApplied?(project: Project): void;
   onClose(): void;
 }) {
   const [values, setValues] = useState<FormValues>(() =>
@@ -237,14 +246,14 @@ export function ConnectionForm({
 
   const save = () =>
     run(async (connection, secret) => {
-      const retargeted =
-        original !== null && targetChanged(connection, original);
+      const retargeted = inUse !== null && targetChanged(connection, inUse);
       const settle =
         retargeted && beforeSave ? await beforeSave(connection) : undefined;
       if (settle === null) return;
       const project = await saveConnection(connection, secret);
       if (settle !== undefined && !(await settle())) {
         // 파일은 이미 저장했다. 다시 Save하면 다시 묻고 끝낸 뒤 반영한다.
+        onSavedNotApplied?.(project);
         setNotice({
           kind: "error",
           text: t("connectionForm.savedButNotApplied"),

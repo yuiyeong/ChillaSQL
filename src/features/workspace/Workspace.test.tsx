@@ -482,6 +482,58 @@ test("대상을 바꿔 저장할 때 고른 끝내기는 저장한 뒤에 하고
   );
 });
 
+test("Commit이 실패해도 다시 연 form은 저장한 접속을 보이고 다시 저장하면 묻고 세션을 놓는다", async () => {
+  openProjectWith([connection("local")]);
+  const a = tabWith("UPDATE a SET b = 1", "local");
+  const end = vi.fn(async (_tabId: string, how: string) => how === "rollback");
+  const release = vi.fn(async () => {});
+  act(() =>
+    useRuns.setState({
+      transactions: {
+        [a]: {
+          status: "open",
+          statements: 2,
+          openedAt: Date.now(),
+          openedBy: "app",
+        },
+      },
+      endTransaction: end,
+      release,
+    }),
+  );
+  const moved: Project = {
+    name: "demo",
+    dir: "/p",
+    connections: [connection("local", { host: "db.example" })],
+  };
+  vi.mocked(saveConnection).mockResolvedValue(moved);
+  renderWorkspace();
+
+  await click(screen.getByRole("button", { name: "Edit connection local" }));
+  change(screen.getByLabelText("host"), "db.example");
+  await click(within(connectionForm()).getByRole("button", { name: "Save" }));
+  await act(() => answerDialog("commit"));
+  await vi.waitFor(() =>
+    expect(within(connectionForm()).getByRole("alert")).toHaveTextContent(
+      "the commit failed",
+    ),
+  );
+
+  expect(end).toHaveBeenCalledWith(a, "commit");
+  expect(useProject.getState().project).toEqual(moved);
+  expect(release).not.toHaveBeenCalled();
+
+  await click(within(connectionForm()).getByRole("button", { name: "Cancel" }));
+  await click(screen.getByRole("button", { name: "Edit connection local" }));
+  expect(screen.getByLabelText("host")).toHaveValue("db.example");
+
+  await click(within(connectionForm()).getByRole("button", { name: "Save" }));
+  await act(() => answerDialog("rollback"));
+  await vi.waitFor(() => expect(release).toHaveBeenCalledWith(a));
+  expect(saveConnection).toHaveBeenCalledTimes(2);
+  expect(screen.queryByRole("form")).toBeNull();
+});
+
 test("확인 dialog가 열려 있으면 단축키가 동작하지 않는다", async () => {
   openProjectWith([connection("local")]);
   const a = tabWith("SELECT 1", "local");

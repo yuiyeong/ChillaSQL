@@ -34,6 +34,8 @@ import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import {
   applySavedProject,
+  applySavedProjectKeepingSessions,
+  connectionInUse,
   changeConnection,
   closeTab,
   execute,
@@ -623,6 +625,44 @@ test("대상이 그대로면 세션을 놓지 않는다", async () => {
   expect(useProject.getState().project).toEqual(saved);
   expect(closeSession).not.toHaveBeenCalled();
   expect(runOf(id)?.status).toBe("running");
+});
+
+test("Commit이 실패한 저장은 project만 반영하고 그 접속을 다시 저장할 때 세션을 놓는다", async () => {
+  const local = connection("local");
+  useProject.setState({
+    project: { ...project, connections: [local, connection("staging")] },
+  });
+  await ranTab("local", 3);
+  await ranTab("staging", 4);
+  const moved: Project = {
+    ...project,
+    connections: [
+      connection("local", { host: "b.internal" }),
+      connection("staging"),
+    ],
+  };
+
+  applySavedProjectKeepingSessions(moved);
+
+  expect(useProject.getState().project).toEqual(moved);
+  expect(connectionInUse("local")).toEqual(local);
+  expect(closeSession).not.toHaveBeenCalled();
+
+  // 다른 접속을 저장해도 그 탭의 세션은 놓지 않는다. 묻지 않았기 때문이다.
+  const recolored: Project = {
+    ...moved,
+    connections: [
+      moved.connections[0],
+      connection("staging", { color: "red" }),
+    ],
+  };
+  await applySavedProject(recolored, "staging");
+  expect(closeSession).not.toHaveBeenCalled();
+  expect(connectionInUse("local")).toEqual(local);
+
+  await applySavedProject(recolored, "local");
+  expect(closeSession).toHaveBeenCalledExactlyOnceWith(3);
+  expect(connectionInUse("local")).toEqual(moved.connections[0]);
 });
 
 test("디렉토리 고르기가 실패하면 프로젝트 오류로 보여 준다", async () => {

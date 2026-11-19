@@ -19,25 +19,49 @@ pub(super) const UNDO: &str = "ROLLBACK TO SAVEPOINT chilla_statement";
 /// 트랜잭션과 savepoint를 다루는 문장(`SAVEPOINT`, `RELEASE`, `ROLLBACK [TO]`, `COMMIT AND CHAIN` 등)은
 /// 세션의 savepoint를 풀거나 그 위에 사용자의 savepoint를 둘 수 있다. 그 뒤에 세션이 savepoint를
 /// 풀거나 되돌리면 사용자의 savepoint까지 사라지거나, 풀 savepoint가 없어 트랜잭션이 failed가 된다.
-/// `SET TRANSACTION`은 subtransaction 안에서 실행할 수 없다.
+/// 트랜잭션의 성질을 정하는 `SET`(`SET [LOCAL | SESSION] TRANSACTION`, `transaction_isolation`,
+/// `transaction_deferrable`, `transaction_read_only`)은 subtransaction 안에서 실패한다.
+/// `transaction_read_only`는 read only 트랜잭션을 read write로 바꿀 때만 실패한다.
 pub(super) fn runs_without_savepoint(sql: &str) -> bool {
-    let (first, rest) = word(skip_ignored(sql));
-    let second = || word(skip_ignored(rest)).0;
     let is = |word: &str, keyword: &str| word.eq_ignore_ascii_case(keyword);
-    [
-        "BEGIN",
-        "START",
-        "COMMIT",
-        "END",
-        "ROLLBACK",
-        "ABORT",
-        "SAVEPOINT",
-        "RELEASE",
-    ]
-    .iter()
-    .any(|keyword| is(first, keyword))
-        || ((is(first, "SET") || is(first, "PREPARE")) && is(second(), "TRANSACTION"))
+    let (first, rest) = word(skip_ignored(sql));
+    let (second, rest) = word(skip_ignored(rest));
+    if CONTROL.iter().any(|keyword| is(first, keyword)) {
+        return true;
+    }
+    if is(first, "PREPARE") {
+        return is(second, "TRANSACTION");
+    }
+    if !is(first, "SET") {
+        return false;
+    }
+    let name = if is(second, "LOCAL") || is(second, "SESSION") {
+        word(skip_ignored(rest)).0
+    } else {
+        second
+    };
+    TRANSACTION_SETTINGS.iter().any(|keyword| is(name, keyword))
 }
+
+/// 트랜잭션과 savepoint를 다루는 문장의 첫 keyword.
+const CONTROL: [&str; 8] = [
+    "BEGIN",
+    "START",
+    "COMMIT",
+    "END",
+    "ROLLBACK",
+    "ABORT",
+    "SAVEPOINT",
+    "RELEASE",
+];
+
+/// `SET [LOCAL | SESSION]` 뒤에 오면 트랜잭션의 성질을 정하는 이름.
+const TRANSACTION_SETTINGS: [&str; 4] = [
+    "TRANSACTION",
+    "transaction_isolation",
+    "transaction_deferrable",
+    "transaction_read_only",
+];
 
 /// 앞의 공백, `;`, 주석(`--`, 중첩된 `/* */`)을 건너뛴다.
 fn skip_ignored(mut sql: &str) -> &str {
@@ -101,6 +125,14 @@ mod tests {
             "PREPARE TRANSACTION 'x'",
             "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
             "  ;\n-- c\n/* a /* nested */ b */ Set\tTransaction read only",
+            "SET LOCAL TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+            "set session transaction read write",
+            "SET transaction_isolation = 'serializable'",
+            "SET LOCAL transaction_isolation TO serializable",
+            "set session TRANSACTION_DEFERRABLE = on",
+            "SET transaction_deferrable TO off",
+            "SET transaction_read_only = off",
+            "SET LOCAL transaction_read_only = on",
         ] {
             assert!(runs_without_savepoint(sql), "{sql}");
         }
@@ -111,6 +143,12 @@ mod tests {
         for sql in [
             "SELECT 'COMMIT'",
             "SET search_path = a",
+            "SET LOCAL search_path = a",
+            "SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+            "SET SESSION AUTHORIZATION DEFAULT",
+            "SET default_transaction_isolation = 'serializable'",
+            "SET transaction_isolation_x = 1",
+            "SET LOCAL",
             "SET",
             "SETTINGS",
             "savepoints",

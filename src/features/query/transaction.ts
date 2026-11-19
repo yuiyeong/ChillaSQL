@@ -28,7 +28,7 @@ export type StatementsKey =
  * 실행이 끝난 뒤의 트랜잭션. `tx`가 열린 채로 `completed`된 실행만 센다. 트랜잭션을 연 실행은
  * Manual이면 앱이 `BEGIN`을 붙인 사용자 문장이라 세고, Auto면 사용자가 쓴 `BEGIN`이라 세지 않는다.
  * `tx`가 null이면 서버에 보내지 않은 쿼리라 앞의 트랜잭션을 그대로 두고, `connection_lost`일 때만
- * 트랜잭션이 없어진 것으로 본다.
+ * 트랜잭션이 없어진 것으로 본다. `counts`가 false면 상태만 바꾸고 세지 않는다.
  */
 export function nextTx(
   previous: TxInfo | null,
@@ -36,11 +36,12 @@ export function nextTx(
   outcome: Outcome["outcome"],
   mode: TxMode,
   startedAt: number,
+  counts = true,
 ): TxInfo | null {
   if (tx === null) return outcome === "connection_lost" ? null : previous;
   if (tx === "idle") return null;
   const status = tx === "failed" ? "failed" : "open";
-  const counted = tx === "in_transaction" && outcome === "completed";
+  const counted = counts && tx === "in_transaction" && outcome === "completed";
   if (previous === null) {
     return {
       status,

@@ -222,6 +222,8 @@ export const useRuns = create<RunsState>()((set, get) => {
   const tokens = new Map<string, number>();
   const sessions = new Map<string, SessionSlot>();
   const executions = new Map<string, Execution>();
+  // 탭의 트랜잭션에 null이 아닌 tx를 마지막으로 반영한 실행의 token.
+  const txReads = new Map<string, number>();
   // 세션이 끊겨(connection_lost, unknown_session) 잊은 탭. 다음 세션이 열리면 Reconnected를 알린다.
   const lost = new Set<string>();
 
@@ -323,6 +325,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     tokens.delete(tabId);
     sessions.delete(tabId);
     executions.delete(tabId);
+    txReads.delete(tabId);
     lost.delete(tabId);
     return slot;
   }
@@ -406,6 +409,28 @@ export const useRuns = create<RunsState>()((set, get) => {
       // 문장 수는 보낸 모드로 센다. 실행 중에 탭의 모드가 바뀌어도 이 실행은 이 모드다.
       const mode = modeOf(useTabs.getState(), tabId);
       const startedAt = Date.now();
+      /**
+       * 끝난 실행의 tx를 탭의 트랜잭션에 반영할지. actor는 tx를 문장이 끝나고(버린 문장은 되돌린 뒤)
+       * 다음 문장 전에 읽으므로, 이 탭의 세션에서 온 null이 아닌 tx는 그때의 상태다. 다만
+       * - stale 세션은 이미 트랜잭션을 잃은 것으로 알렸으므로 늦은 finished가 그 트랜잭션을 되살리지 않는다.
+       * - 밀려난 실행은 그 세션이 아직 이 탭의 것일 때만 반영한다.
+       * - 뒤에 시작한 실행이 이미 tx를 알렸으면 늦게 온 앞 실행의 tx는 지난 값이다.
+       * - Commit이나 Rollback이 버린 쿼리의 tx는 끝내기 앞의 값이므로 끝내기의 결과가 정한다.
+       */
+      const appliesTx = (
+        s: RunsState,
+        event: Extract<QueryEvent, { type: "finished" }>,
+        fresh: boolean,
+      ): boolean => {
+        if (slot.stale) return false;
+        if (!fresh && sessions.get(tabId) !== slot) return false;
+        if (token < (txReads.get(tabId) ?? 0)) return false;
+        return !(
+          event.outcome === "discarded" &&
+          (s.ending[tabId] !== undefined || s.discardedByEnd[tabId])
+        );
+      };
+
       const onEvent = (event: QueryEvent) => {
         // 세션이 죽었다. 늦은 event여도 그 세션이 아직 이 탭의 것이면 버린다.
         if (
@@ -415,28 +440,26 @@ export const useRuns = create<RunsState>()((set, get) => {
         ) {
           void closeSlot(slot);
         }
-        if (!current()) return;
+        const fresh = current();
+        if (!fresh && event.type !== "finished") return;
         set((s) => {
           const before = s.runs[tabId] ?? { status: "idle" };
-          const after = reduce(before, event);
+          const after = fresh ? reduce(before, event) : before;
           const runs =
             after === before ? s.runs : { ...s.runs, [tabId]: after };
-          // 버려진 쿼리의 tx는 actor가 앞서 읽은 값이라 지금 상태가 아닐 수 있다. stale 세션은
-          // 이미 트랜잭션을 잃은 것으로 알렸으므로 늦은 finished가 그 트랜잭션을 되살리지 않는다.
-          if (
-            event.type !== "finished" ||
-            event.outcome === "discarded" ||
-            slot.stale
-          ) {
+          if (event.type !== "finished" || !appliesTx(s, event, fresh)) {
             return runs === s.runs ? s : { runs };
           }
+          // 밀려난 실행은 화면에 결과가 남지 않으므로 세지 않고 상태만 따른다.
           const tx = nextTx(
             s.transactions[tabId] ?? null,
             event.tx,
             event.outcome,
             mode,
             startedAt,
+            fresh,
           );
+          if (event.tx !== null) txReads.set(tabId, token);
           const transactions = withEntry(
             s.transactions,
             tabId,

@@ -207,6 +207,58 @@ async fn a_failed_statement_leaves_the_transaction_failed() {
     app.close_session(session.id).await.unwrap();
 }
 
+/// 트랜잭션의 성질을 정하는 `SET`은 subtransaction 안에서 실패하므로 savepoint 없이 보낸다.
+#[tokio::test]
+async fn manual_set_of_transaction_characteristics_runs_without_a_savepoint() {
+    let (app, _dir) = app_with_project().await;
+    let session = open_session(&app).await;
+
+    for sql in [
+        "SET LOCAL TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+        "SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+        "SET transaction_isolation = 'serializable'",
+        "SET LOCAL transaction_isolation = 'serializable'",
+        "SET transaction_deferrable = on",
+        "SET SESSION transaction_deferrable = on",
+    ] {
+        assert_eq!(
+            run(&app, session.id, sql, TxMode::Manual).await,
+            (
+                QueryOutcome::Completed { rows: 0 },
+                Some(TxStatus::InTransaction)
+            ),
+            "{sql}"
+        );
+        assert_eq!(
+            app.end_transaction(session.id, TxEnd::Rollback).await,
+            Ok(ended())
+        );
+    }
+
+    // read only 트랜잭션을 read write로 바꾸는 것은 subtransaction 안에서 실패한다.
+    let (outcome, _) = run(&app, session.id, "BEGIN READ ONLY", TxMode::Auto).await;
+    assert_eq!(outcome, QueryOutcome::Completed { rows: 0 });
+    assert_eq!(
+        run(
+            &app,
+            session.id,
+            "SET transaction_read_only = off",
+            TxMode::Manual
+        )
+        .await,
+        (
+            QueryOutcome::Completed { rows: 0 },
+            Some(TxStatus::InTransaction)
+        )
+    );
+    assert_eq!(
+        app.end_transaction(session.id, TxEnd::Rollback).await,
+        Ok(ended())
+    );
+
+    app.close_session(session.id).await.unwrap();
+}
+
 /// 받다 만 결과를 cancel로 버리면 문장이 `57014`로 실패해 트랜잭션이 failed가 된다. 세션은 그 문장
 /// 앞에 둔 savepoint로 되돌려 트랜잭션을 열린 채로 둔다. 남은 행을 다 읽지 않으므로 시간에 기대지 않는다.
 #[tokio::test]

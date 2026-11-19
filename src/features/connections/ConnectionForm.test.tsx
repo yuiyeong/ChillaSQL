@@ -607,12 +607,14 @@ test("a_save_that_fails_does_not_end_the_transaction", async () => {
 
 test("a_commit_that_fails_after_saving_keeps_the_form_and_says_so", async () => {
   const onSaved = vi.fn();
+  const onSavedNotApplied = vi.fn();
   render(
     <ConnectionForm
       original={original}
       existingNames={["local"]}
       beforeSave={async () => async () => false}
       onSaved={onSaved}
+      onSavedNotApplied={onSavedNotApplied}
       onClose={vi.fn()}
     />,
   );
@@ -622,10 +624,32 @@ test("a_commit_that_fails_after_saving_keeps_the_form_and_says_so", async () => 
 
   expect(saveConnection).toHaveBeenCalledOnce();
   expect(onSaved).not.toHaveBeenCalled();
+  expect(onSavedNotApplied).toHaveBeenCalledExactlyOnceWith(saved);
   expect(screen.getByRole("alert")).toHaveTextContent(
     "Saved to chilla.toml, but the commit failed. Tabs using this connection stay on the previous target until you save again.",
   );
   expect(saveButton()).toBeEnabled();
+});
+
+test("before_save_compares_the_target_with_the_connection_in_use", async () => {
+  const beforeSave = vi.fn(async () => async () => true);
+  render(
+    <ConnectionForm
+      original={original}
+      inUse={{ ...original, host: "old.example" }}
+      existingNames={["local"]}
+      beforeSave={beforeSave}
+      onSaved={vi.fn()}
+      onClose={vi.fn()}
+    />,
+  );
+
+  await click(saveButton());
+
+  expect(beforeSave).toHaveBeenCalledExactlyOnceWith(original);
+  expect(saveConnection).toHaveBeenCalledOnce();
+  // 지울지는 파일의 값(original)과 비교한다.
+  expect(screen.queryByText(warning)).toBeNull();
 });
 
 test("before_save_is_asked_only_when_the_target_changes", async () => {

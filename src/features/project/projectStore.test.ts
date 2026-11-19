@@ -12,6 +12,7 @@ import { CommandError } from "../../shared/api/errors";
 import type { Project } from "../../shared/api/types";
 import { LAST_PROJECT_KEY, useProject } from "./projectStore";
 import { deferred } from "../../test/deferred";
+import { connection } from "../../test/fixtures";
 
 function project(dir: string, name = "demo"): Project {
   return { name, dir, connections: [] };
@@ -264,4 +265,13 @@ test("applyProject는 project만 바꾸고 파일 목록 요청을 버리지 않
     expect(useProject.getState().files).toEqual(["a.sql"]),
   );
   expect(useProject.getState().project).toBe(updated);
+});
+
+test("프로젝트를 열면 반영하지 못한 접속을 잊는다", async () => {
+  useProject.setState({ unapplied: { local: connection("local") } });
+  vi.mocked(openProject).mockResolvedValue(project("/q"));
+
+  await useProject.getState().open("/q");
+
+  expect(useProject.getState().unapplied).toEqual({});
 });

@@ -18,13 +18,18 @@ export interface ProjectState {
   error: string | null;
   /** status가 "missing"일 때 chilla.toml이 없던 디렉토리 */
   missingDir: string | null;
+  /**
+   * 대상을 바꿔 저장했지만 Commit이 실패해 탭의 세션이 아직 쓰는 앞 접속. 접속 이름별이다.
+   * 프로젝트를 열면 비운다.
+   */
+  unapplied: Record<string, Connection>;
   /** 마지막 디렉토리를 연다 */
   boot(): Promise<void>;
   /** 열렸으면 true */
   open(dir: string): Promise<boolean>;
   create(dir: string): Promise<boolean>;
-  /** 접속을 저장한 뒤 */
-  applyProject(project: Project): void;
+  /** 접속을 저장한 뒤. `unapplied`를 함께 바꾼다(없으면 비운다). */
+  applyProject(project: Project, unapplied?: Record<string, Connection>): void;
   refreshFiles(): Promise<void>;
   /** 프로젝트를 열기 전에 실패한 일(디렉토리 고르기)을 알린다. */
   showError(message: string): void;
@@ -79,6 +84,7 @@ export const useProject = create<ProjectState>()((set, get) => {
       files: [],
       error: null,
       missingDir: null,
+      unapplied: {},
     });
     writeLastDir(project.dir);
     void get().refreshFiles();
@@ -91,6 +97,7 @@ export const useProject = create<ProjectState>()((set, get) => {
     files: [],
     error: null,
     missingDir: null,
+    unapplied: {},
 
     async boot() {
       const dir = readLastDir();
@@ -105,8 +112,8 @@ export const useProject = create<ProjectState>()((set, get) => {
 
     create: (dir) => enter(() => createProject(dir)),
 
-    applyProject(project) {
-      set({ project });
+    applyProject(project, unapplied = {}) {
+      set({ project, unapplied });
     },
 
     async refreshFiles() {

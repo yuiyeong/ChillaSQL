@@ -5,7 +5,7 @@ import {
 } from "../../shared/api/commands";
 import { pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
-import type { Project, TxEnd } from "../../shared/api/types";
+import type { Connection, Project, TxEnd } from "../../shared/api/types";
 import { targetChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { documentSelection, documentText } from "../editor/documents";
@@ -251,16 +251,30 @@ export async function changeConnection(
   await released;
 }
 
+/** 탭의 세션이 쓰는 그 이름의 접속. Commit이 실패해 반영하지 못한 저장이 있으면 그 앞의 값이다. */
+export function connectionInUse(name: string): Connection | undefined {
+  const { project, unapplied } = useProject.getState();
+  return unapplied[name] ?? project?.connections.find((c) => c.name === name);
+}
+
 /**
  * 접속을 저장한 뒤의 project를 반영한다. 연결 대상이 바뀐 접속을 쓰는 탭은 세션을 놓아서
  * 다음 실행이 새 대상으로 연다. 세션은 접속 이름이 같으면 다시 쓰이기 때문이다.
+ * `saved`는 form에서 저장한 접속이다. 반영하지 못한 앞 접속은 그 접속만 비교한다. 다른 접속의
+ * 탭은 저장하기 전에 묻지 않았으므로 놓지 않는다.
  */
-export async function applySavedProject(project: Project): Promise<void> {
-  const before = useProject.getState().project?.connections ?? [];
+export async function applySavedProject(
+  project: Project,
+  saved?: string,
+): Promise<void> {
+  const { project: before, unapplied } = useProject.getState();
   const changed = new Set(
     project.connections
       .filter((connection) => {
-        const previous = before.find((c) => c.name === connection.name);
+        const previous =
+          connection.name === saved
+            ? connectionInUse(connection.name)
+            : before?.connections.find((c) => c.name === connection.name);
         return previous !== undefined && targetChanged(connection, previous);
       })
       .map((connection) => connection.name),
@@ -271,8 +285,28 @@ export async function applySavedProject(project: Project): Promise<void> {
       (tab) => tab.connection !== null && changed.has(tab.connection),
     )
     .map((tab) => useRuns.getState().release(tab.id));
-  useProject.getState().applyProject(project);
+  const rest = Object.fromEntries(
+    Object.entries(unapplied).filter(([name]) => name !== saved),
+  );
+  useProject.getState().applyProject(project, rest);
   await Promise.all(released);
+}
+
+/**
+ * 대상을 바꿔 저장했지만 Commit이 실패했다. form이 파일의 값을 보이게 project는 반영하고, 탭의
+ * 세션은 놓지 않는다. 탭의 세션이 쓰는 앞 접속을 남겨 두어 다음 저장이 그것과 비교해 묻고 놓는다.
+ */
+export function applySavedProjectKeepingSessions(project: Project): void {
+  const unapplied = { ...useProject.getState().unapplied };
+  for (const connection of project.connections) {
+    const inUse = connectionInUse(connection.name);
+    if (inUse !== undefined && targetChanged(connection, inUse)) {
+      unapplied[connection.name] = inUse;
+    } else {
+      delete unapplied[connection.name];
+    }
+  }
+  useProject.getState().applyProject(project, unapplied);
 }
 
 /**

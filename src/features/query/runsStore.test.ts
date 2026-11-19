@@ -909,17 +909,96 @@ test("a run counts statements by the mode it started with", async () => {
   expect(txOf("t1")?.statements).toBe(1);
 });
 
-test("a discarded finished event keeps the transaction", async () => {
+/** n번째(0부터) 실행을 `outcome`으로 끝낸다. 끝난 뒤의 트랜잭션 상태는 `tx`다. */
+function finish(
+  call: number,
+  outcome: "discarded" | "cancelled",
+  tx: TxStatus | null,
+): void {
+  onEventOf(call)({ type: "finished", tx, elapsedMicros: 1, outcome });
+}
+
+test("a discarded run reports the transaction it left open", async () => {
+  setTabMode("t1", "manual");
+  await useRuns.getState().run("t1", prepared("SELECT pg_sleep(5)"));
+  const run = runOf("t1");
+  const startedAt = run.status === "running" ? run.result.startedAt : -1;
+  await useRuns.getState().run("t1", prepared("SELECT 1"));
+  // 다음 실행은 서버에 보내기 전에 cancel되어 트랜잭션 상태를 싣지 않는다.
+  finish(1, "cancelled", null);
+  expect(txOf("t1")).toBeUndefined();
+
+  finish(0, "discarded", "in_transaction");
+
+  expect(txOf("t1")).toEqual({
+    status: "open",
+    statements: 0,
+    openedAt: startedAt,
+    openedBy: "app",
+  });
+});
+
+test("a discarded run that ended the transaction clears it", async () => {
   await openTwoStatements();
-  await useRuns.getState().run("t1", prepared("SELECT * FROM big"));
+  await useRuns.getState().run("t1", prepared("COMMIT"));
+  await useRuns.getState().run("t1", prepared("SELECT 1"));
+  finish(3, "cancelled", null);
+  expect(txOf("t1")).toEqual(expect.objectContaining({ status: "open" }));
+
+  finish(2, "discarded", "idle");
+
+  expect(txOf("t1")).toBeUndefined();
+});
+
+test("a late finished event of an earlier run sets the status without counting", async () => {
+  await openTwoStatements();
+  await useRuns.getState().run("t1", prepared("UPDATE a SET b = 3"));
+  await useRuns.getState().run("t1", prepared("SELECT 1"));
+
+  complete(2, "in_transaction");
+  expect(txOf("t1")).toEqual(
+    expect.objectContaining({ status: "open", statements: 2 }),
+  );
   onEventOf(2)({
     type: "finished",
-    tx: "idle",
+    tx: "failed",
     elapsedMicros: 1,
-    outcome: "discarded",
+    outcome: "failed",
+    error: {
+      code: "23505",
+      message: "duplicate key value",
+      detail: null,
+      hint: null,
+      position: null,
+    },
   });
+  expect(txOf("t1")).toEqual(
+    expect.objectContaining({ status: "failed", statements: 2 }),
+  );
+});
 
-  expect(txOf("t1")).toEqual(expect.objectContaining({ statements: 2 }));
+test("a run discarded by an end does not reopen the ended transaction", async () => {
+  await pausedSelect();
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+  await useRuns.getState().endTransaction("t1", "rollback");
+  expect(txOf("t1")).toBeUndefined();
+
+  finish(2, "discarded", "in_transaction");
+
+  expect(txOf("t1")).toBeUndefined();
+});
+
+test("a finished event of another session does not change the transaction", async () => {
+  setTabMode("t1", "manual");
+  vi.mocked(openSession)
+    .mockResolvedValueOnce(session(3, "local"))
+    .mockResolvedValueOnce(session(4, "staging"));
+  await useRuns.getState().run("t1", prepared("SELECT pg_sleep(5)", "local"));
+  await useRuns.getState().run("t1", prepared("SELECT 1", "staging"));
+
+  finish(0, "discarded", "in_transaction");
+
+  expect(txOf("t1")).toBeUndefined();
 });
 
 test("a late event of an earlier run does not change the transaction", async () => {

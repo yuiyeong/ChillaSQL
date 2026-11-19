@@ -18,6 +18,8 @@ import { Hints, ResultPane } from "../query/ResultPane";
 import { colorOf, connectionColor } from "../connections/colors";
 import {
   applySavedProject,
+  applySavedProjectKeepingSessions,
+  connectionInUse,
   closeTab,
   execute,
   switchProject,
@@ -76,7 +78,7 @@ export function Workspace() {
 
   /** form을 닫은 뒤에 저장이 끝나도 접속은 반영한다. 그 사이 새로 연 form은 닫지 않는다. */
   function connectionSaved(saved: Project, from: OpenForm) {
-    void applySavedProject(saved);
+    void applySavedProject(saved, from.original?.name);
     setForm((current) => (current === from ? null : current));
   }
 
@@ -172,9 +174,11 @@ export function Workspace() {
           <ConnectionForm
             key={form.original?.name ?? "new"}
             original={form.original}
+            inUse={form.original && connectionInUse(form.original.name)}
             existingNames={project?.connections.map((c) => c.name) ?? []}
             beforeSave={settleBeforeSave}
             onSaved={(saved) => connectionSaved(saved, form)}
+            onSavedNotApplied={applySavedProjectKeepingSessions}
             onClose={() => setForm(null)}
           />
         </div>
