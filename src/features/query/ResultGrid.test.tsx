@@ -39,7 +39,7 @@ function props(patch: Partial<Props> = {}): Props {
   return {
     tabId: "t",
     result: result(),
-    end: null,
+    endRows: null,
     onFetchMore: vi.fn(),
     onRunAgain: vi.fn(),
     onCopied: vi.fn(),
@@ -153,7 +153,7 @@ test("끝난 결과는 onFetchMore를 부르지 않고 끝을 알린다", () => 
   // 끝난 결과는 reducer가 fetch를 none으로 둔다.
   const done = setup({
     result: result({ rows: rowsOf(500), fetch: "none" }),
-    end: "End · 500 rows",
+    endRows: 500,
   });
   done.grid().scrollTop = 500 * 26;
   fireEvent.scroll(done.grid());

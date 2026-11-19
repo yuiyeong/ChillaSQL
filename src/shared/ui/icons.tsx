@@ -197,6 +197,15 @@ export function CancelledIcon({ size = 14, ...rest }: IconProps) {
   );
 }
 
+export function ClockIcon({ size = 14, ...rest }: IconProps) {
+  return (
+    <Stroke size={size} width={1.6} {...rest}>
+      <circle cx="8" cy="8" r="6" />
+      <path d="M8 4.5V8l2.5 1.5" />
+    </Stroke>
+  );
+}
+
 export function LinkBrokenIcon({ size = 14, ...rest }: IconProps) {
   return (
     <Stroke size={size} width={1.6} {...rest}>

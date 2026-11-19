@@ -294,20 +294,40 @@ test("discarded면 버렸다고 보여 준다", () => {
   expect(screen.queryByRole("grid")).toBeNull();
 });
 
-test("expired면 받은 행을 남기고 끝 줄에 닫았다고 알린다", () => {
+test("expired면 닫았다고 알리고 받은 행은 표에 남긴다", () => {
   finished(
     { outcome: "expired" },
     { columns: ["id", "name"], rows: someRows, elapsedMicros: 41_000 },
   );
 
-  expect(screen.getByText("3 rows · 41 ms")).toBeInTheDocument();
-  expect(screen.getByRole("columnheader", { name: /id/ })).toBeInTheDocument();
+  expect(screen.getByText("Results closed")).toBeInTheDocument();
   expect(
     screen.getByText(
-      "Closed after 10 minutes without fetching more. Run again to see the rest.",
+      "Nothing was fetched for 10 minutes, so the query was closed on the database. The 3 rows received stay visible.",
     ),
   ).toBeInTheDocument();
+  expect(screen.getByText("3 rows · 41 ms")).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: /id/ })).toBeInTheDocument();
   expect(screen.queryByText(/^End/)).toBeNull();
+});
+
+test("expired의 받은 행이 하나면 단수로 쓴다", () => {
+  finished({ outcome: "expired" }, { columns: ["id"], rows: [["1"]] });
+  expect(
+    screen.getByText(
+      "Nothing was fetched for 10 minutes, so the query was closed on the database. The 1 row received stays visible.",
+    ),
+  ).toBeInTheDocument();
+});
+
+test("expired의 받은 행 수는 1000 단위로 묶는다", () => {
+  const rows: Cell[][] = Array.from({ length: 1500 }, (_, i) => [String(i)]);
+  finished({ outcome: "expired" }, { columns: ["id"], rows });
+  expect(
+    screen.getByText(
+      "Nothing was fetched for 10 minutes, so the query was closed on the database. The 1,500 rows received stay visible.",
+    ),
+  ).toBeInTheDocument();
 });
 
 test("connection_lost면 끊긴 이유와 다음 실행의 안내를 보여 준다", () => {

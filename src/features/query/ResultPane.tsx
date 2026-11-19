@@ -14,6 +14,7 @@ import { IconButton } from "../../shared/ui/IconButton";
 import {
   CancelledIcon,
   CheckIcon,
+  ClockIcon,
   CopyIcon,
   ErrorIcon,
   LinkBrokenIcon,
@@ -46,6 +47,9 @@ import {
 } from "./TunnelPanels";
 
 const LIVE_MS = 100;
+
+/** 받다 만 결과를 닫는 시간(분). core의 `QueryLimits.idle_result_timeout`(600초)과 같다. 설정은 M8이다. */
+const IDLE_RESULT_MINUTES = 10;
 
 /**
  * 결과 panel. header 아래에 표나 상태 화면이 온다.
@@ -98,12 +102,12 @@ export const ResultPane = memo(function ResultPane({
   let grid: ReactNode = null;
   let body: ReactNode = null;
 
-  const gridOf = (result: ResultData, end: string | null) => (
+  const gridOf = (result: ResultData, endRows: number | null) => (
     <ResultGrid
       // 실행 상태가 있으면 tabId는 null이 아니다.
       tabId={tabId!}
       result={result}
-      end={end}
+      endRows={endRows}
       onFetchMore={onFetchMore}
       onRunAgain={onRunAgain}
       onCopied={show}
@@ -182,7 +186,7 @@ export const ResultPane = memo(function ResultPane({
                 <Meta>{tc("result.rows", outcome.rows, { elapsed })}</Meta>
               </Header>
             );
-            grid = gridOf(result, tc("result.end", outcome.rows));
+            grid = gridOf(result, outcome.rows);
           }
           break;
         case "failed": {
@@ -190,7 +194,8 @@ export const ResultPane = memo(function ResultPane({
           body = <ServerError result={result} outcome={outcome} copy={copy} />;
           break;
         }
-        case "cancelled": {
+        case "cancelled":
+        case "expired": {
           // header는 받은 행 수, 안내는 표에 남은 행 수다. 버린 앞 행은 표의 버린 구간 줄이 알린다.
           const retained = result.rows.length;
           header = (
@@ -200,27 +205,23 @@ export const ResultPane = memo(function ResultPane({
               </Meta>
             </Header>
           );
-          notice = (
-            <Notice icon={<CancelledIcon />} title={t("result.cancelled")}>
-              {retained > 0
-                ? tc("result.stoppedRows", retained)
-                : t("result.stopped")}
-            </Notice>
-          );
+          notice =
+            outcome.outcome === "cancelled" ? (
+              <Notice icon={<CancelledIcon />} title={t("result.cancelled")}>
+                {retained > 0
+                  ? tc("result.stoppedRows", retained)
+                  : t("result.stopped")}
+              </Notice>
+            ) : (
+              <Notice icon={<ClockIcon />} title={t("result.expired")}>
+                {tc("result.expiredRows", retained, {
+                  minutes: IDLE_RESULT_MINUTES,
+                })}
+              </Notice>
+            );
           if (retained > 0) grid = gridOf(result, null);
           break;
         }
-        case "expired":
-          // 더 가져오지 않아 닫았다. 받은 행은 그대로 두고 끝 줄이 알린다.
-          header = (
-            <Header sql={result.sql}>
-              <Meta>
-                {tc("result.rows", receivedRows(result), { elapsed })}
-              </Meta>
-            </Header>
-          );
-          grid = gridOf(result, t("result.expired"));
-          break;
         case "discarded":
           header = name;
           body = (

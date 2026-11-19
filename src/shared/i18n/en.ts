@@ -143,8 +143,11 @@ export const en = {
   "result.discarded": "Results discarded",
   "result.discardedDetail":
     "Running the next query discarded the rows not yet fetched. Run again to see them.",
-  "result.expired":
-    "Closed after 10 minutes without fetching more. Run again to see the rest.",
+  "result.expired": "Results closed",
+  "result.expiredRows.one":
+    "Nothing was fetched for {minutes} minutes, so the query was closed on the database. The 1 row received stays visible.",
+  "result.expiredRows.other":
+    "Nothing was fetched for {minutes} minutes, so the query was closed on the database. The {count} rows received stay visible.",
   "result.connectionLost": "Connection lost",
   "result.nextRunNewSession":
     "The next run opens a new session. SET values and temp tables are gone.",
