@@ -107,6 +107,8 @@ export const en = {
   "dialog.danger.first.update":
     "This updates every row in {tables} on {connection}.",
   "dialog.danger.first.drop": "This drops {names} on {connection}.",
+  "dialog.danger.first.dropOwned":
+    "This drops every object owned by {names} on {connection}.",
   "dialog.danger.second.reversible":
     "You're inside an open transaction, so you can roll it back until you commit.",
   "dialog.danger.second.final":
@@ -164,6 +166,8 @@ export const en = {
   "connectionForm.keepPassword": "Keep saved password",
   "connectionForm.passwordWillClear":
     "You changed where this connection points. Saving deletes the password stored in Keychain. Enter a new password below to save it instead.",
+  "connectionForm.savedButNotApplied":
+    "Saved to chilla.toml, but the commit failed. Tabs using this connection stay on the previous target until you save again.",
   "connectionForm.required": "Enter {field}",
   "connectionForm.nameTaken":
     "This name is already taken. To edit that connection, open it from the sidebar.",

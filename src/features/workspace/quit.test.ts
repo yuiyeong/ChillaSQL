@@ -45,7 +45,12 @@ function openTab(
   useRuns.setState((s) => ({
     transactions: {
       ...s.transactions,
-      [id]: { status, statements, openedAt: NOW - elapsedSecs * 1000 },
+      [id]: {
+        status,
+        statements,
+        openedAt: NOW - elapsedSecs * 1000,
+        openedBy: "app",
+      },
     },
   }));
   return id;

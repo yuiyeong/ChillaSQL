@@ -543,7 +543,10 @@ test("Choose…는 고른 파일을 sslrootcert에 넣는다", async () => {
 });
 
 test("save_stops_when_before_save_says_no", async () => {
-  const beforeSave = vi.fn(async () => false);
+  const settle = vi.fn(async () => true);
+  const beforeSave = vi.fn<
+    (connection: Connection) => Promise<(() => Promise<boolean>) | null>
+  >(async () => null);
   const onSaved = vi.fn();
   render(
     <ConnectionForm
@@ -565,14 +568,68 @@ test("save_stops_when_before_save_says_no", async () => {
   expect(onSaved).not.toHaveBeenCalled();
   expect(saveButton()).toBeEnabled();
 
-  beforeSave.mockResolvedValue(true);
+  beforeSave.mockResolvedValue(settle);
   await click(saveButton());
   expect(saveConnection).toHaveBeenCalledOnce();
+  // 고른 끝내기는 저장한 뒤에 한다.
+  expect(settle).toHaveBeenCalledOnce();
+  expect(vi.mocked(saveConnection).mock.invocationCallOrder[0]).toBeLessThan(
+    settle.mock.invocationCallOrder[0],
+  );
   expect(onSaved).toHaveBeenCalledWith(saved);
 });
 
+test("a_save_that_fails_does_not_end_the_transaction", async () => {
+  const settle = vi.fn(async () => true);
+  const onSaved = vi.fn();
+  vi.mocked(saveConnection).mockRejectedValue(
+    new CommandError("io", "chilla.toml을 쓸 수 없습니다"),
+  );
+  render(
+    <ConnectionForm
+      original={original}
+      existingNames={["local"]}
+      beforeSave={async () => settle}
+      onSaved={onSaved}
+      onClose={vi.fn()}
+    />,
+  );
+
+  change(screen.getByLabelText("host"), "db.example");
+  await click(saveButton());
+
+  expect(settle).not.toHaveBeenCalled();
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "chilla.toml을 쓸 수 없습니다",
+  );
+});
+
+test("a_commit_that_fails_after_saving_keeps_the_form_and_says_so", async () => {
+  const onSaved = vi.fn();
+  render(
+    <ConnectionForm
+      original={original}
+      existingNames={["local"]}
+      beforeSave={async () => async () => false}
+      onSaved={onSaved}
+      onClose={vi.fn()}
+    />,
+  );
+
+  change(screen.getByLabelText("host"), "db.example");
+  await click(saveButton());
+
+  expect(saveConnection).toHaveBeenCalledOnce();
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Saved to chilla.toml, but the commit failed. Tabs using this connection stay on the previous target until you save again.",
+  );
+  expect(saveButton()).toBeEnabled();
+});
+
 test("before_save_is_asked_only_when_the_target_changes", async () => {
-  const beforeSave = vi.fn(async () => true);
+  const beforeSave = vi.fn(async () => async () => true);
   render(
     <ConnectionForm
       original={original}

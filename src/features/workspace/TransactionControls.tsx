@@ -100,8 +100,7 @@ function TransactionStatus({ tx }: { tx: TxInfo }) {
   return (
     <span className="text-small text-fg-2 whitespace-nowrap">
       {tx.status === "failed" ? t("tx.failed") : t("tx.open")} ·{" "}
-      {statementsLabel(tx.statements)} ·{" "}
-      <span className="font-mono">{elapsed}</span>
+      {statementsLabel(tx)} · <span className="font-mono">{elapsed}</span>
     </span>
   );
 }

@@ -329,7 +329,7 @@ export const ResultPane = memo(function ResultPane({
       )}
       {runNotice?.kind === "transactionLost" && tabId !== null && (
         <TransactionLostBanner
-          statements={runNotice.statements}
+          tx={runNotice}
           onClose={() => useRuns.getState().dismissNotice(tabId)}
         />
       )}

@@ -1,6 +1,5 @@
 import { Fragment, type ReactNode } from "react";
-import { en, type MessageKey, type PluralKey } from "./en";
-import { formatCount, pluralKey } from "./t";
+import { en, type MessageKey } from "./en";
 
 /**
  * 문구의 `{name}`을 넘긴 node로 바꾼다(굵은 이름, code 같은 inline 요소를 문장 안에 넣을 때 쓴다).
@@ -19,15 +18,6 @@ export function rt(
       `{${part}}`
     );
   });
-}
-
-/** `tc`처럼 `count`로 복수형을 고르는 `rt`. `{count}`는 `formatCount`로 채운다. */
-export function rtc(
-  key: PluralKey,
-  count: number,
-  params: Record<string, ReactNode>,
-): ReactNode {
-  return rt(pluralKey(key, count), { ...params, count: formatCount(count) });
 }
 
 /** 본문 안에서 이름을 fg로 굵게 보인다. */

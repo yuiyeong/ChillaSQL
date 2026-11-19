@@ -29,16 +29,22 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** `elapsedSecs`초 전에 열린 트랜잭션 */
+/** `elapsedSecs`초 전에 열린 트랜잭션. 기본은 사용자가 쓴 BEGIN으로 연 것이다. */
 function open(
   statements: number,
   elapsedSecs: number,
   status: TxInfo["status"] = "open",
+  openedBy: TxInfo["openedBy"] = "user",
 ) {
   act(() =>
     useRuns.setState({
       transactions: {
-        t1: { status, statements, openedAt: Date.now() - elapsedSecs * 1000 },
+        t1: {
+          status,
+          statements,
+          openedAt: Date.now() - elapsedSecs * 1000,
+          openedBy,
+        },
       },
     }),
   );
@@ -104,6 +110,13 @@ test("auto_with_manual_begin_says_so", () => {
 
   expect(radio("Auto")).toHaveAttribute("aria-checked", "true");
   expect(status("Open · manual BEGIN · 0:42")).toBeInTheDocument();
+});
+
+test("a_manual_transaction_whose_first_statement_failed_says_0_statements", () => {
+  render(<TransactionControls tabId="t1" />);
+  open(0, 42, "failed", "app");
+
+  expect(status("Failed · 0 statements · 0:42")).toBeInTheDocument();
 });
 
 test("the elapsed time ticks every second", () => {

@@ -49,17 +49,23 @@ function tab(connection = "staging"): string {
   return id;
 }
 
-/** 그 탭에 `elapsedSecs`초 전에 열린 트랜잭션을 둔다. */
+/** 그 탭에 `elapsedSecs`초 전에 열린 트랜잭션을 둔다. 기본은 사용자가 쓴 BEGIN으로 연 것이다. */
 function open(
   tabId: string,
   statements: number,
   elapsedSecs = 192,
   status: TxInfo["status"] = "open",
+  openedBy: TxInfo["openedBy"] = "user",
 ): void {
   useRuns.setState((s) => ({
     transactions: {
       ...s.transactions,
-      [tabId]: { status, statements, openedAt: NOW - elapsedSecs * 1000 },
+      [tabId]: {
+        status,
+        statements,
+        openedAt: NOW - elapsedSecs * 1000,
+        openedBy,
+      },
     },
   }));
 }
@@ -308,6 +314,31 @@ test("several_tabs_saving_a_target_say_save", async () => {
   expect(asked().actions.map((action) => action.label)).toEqual([
     "Cancel",
     "Roll back all and save",
+  ]);
+});
+
+test("an_app_opened_transaction_without_statements_counts_0_statements", async () => {
+  const a = tab();
+  const b = tab();
+  open(a, 0, 192, "failed", "app");
+  open(b, 3);
+  answer("cancel");
+  answer("cancel");
+  answer("cancel");
+
+  await settleTransactions([a], "close");
+  await settleTransactions([a], "switchProject");
+  await settleTransactions([a, b], "saveTarget", { connection: "staging" });
+
+  expect(textOf(asked(0).body)).toBe(
+    "Closing Query 1 closes the staging session. What should happen to the 0 uncommitted statements?",
+  );
+  expect(textOf(asked(1).body)).toBe(
+    "Switching projects closes every tab's session. What should happen to the 0 uncommitted statements in Query 1?",
+  );
+  expect(asked(2).items?.map((item) => textOf(item.secondary))).toEqual([
+    "staging · 0 statements · 3:12",
+    "staging · 3 statements · 3:12",
   ]);
 });
 

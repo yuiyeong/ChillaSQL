@@ -25,6 +25,7 @@ import {
   splitStatements,
   writeSqlFile,
 } from "../../shared/api/commands";
+import { CommandError } from "../../shared/api/errors";
 import type { Project, QueryEvent } from "../../shared/api/types";
 import { homeDir } from "../../shared/api/path";
 import { openDocument } from "../editor/documents";
@@ -412,8 +413,18 @@ test("대상을 바꿔 저장하면 그 접속을 쓰는 탭의 열린 트랜잭
   act(() =>
     useRuns.setState({
       transactions: {
-        [a]: { status: "open", statements: 2, openedAt: Date.now() },
-        [b]: { status: "open", statements: 1, openedAt: Date.now() },
+        [a]: {
+          status: "open",
+          statements: 2,
+          openedAt: Date.now(),
+          openedBy: "app",
+        },
+        [b]: {
+          status: "open",
+          statements: 1,
+          openedAt: Date.now(),
+          openedBy: "app",
+        },
       },
     }),
   );
@@ -429,6 +440,46 @@ test("대상을 바꿔 저장하면 그 접속을 쓰는 탭의 열린 트랜잭
   );
   expect(saveConnection).not.toHaveBeenCalled();
   expect(connectionForm()).toBeInTheDocument();
+});
+
+test("대상을 바꿔 저장할 때 고른 끝내기는 저장한 뒤에 하고 저장하지 못하면 하지 않는다", async () => {
+  const project = openProjectWith([connection("local")]);
+  const a = tabWith("UPDATE a SET b = 1", "local");
+  const end = vi.fn(async () => true);
+  act(() =>
+    useRuns.setState({
+      transactions: {
+        [a]: {
+          status: "open",
+          statements: 2,
+          openedAt: Date.now(),
+          openedBy: "app",
+        },
+      },
+      endTransaction: end,
+    }),
+  );
+  vi.mocked(saveConnection).mockRejectedValueOnce(
+    new CommandError("io", "chilla.toml을 쓸 수 없습니다"),
+  );
+  renderWorkspace();
+
+  await click(screen.getByRole("button", { name: "Edit connection local" }));
+  change(screen.getByLabelText("host"), "db.example");
+  await click(within(connectionForm()).getByRole("button", { name: "Save" }));
+  await act(() => answerDialog("rollback"));
+  await vi.waitFor(() => expect(saveConnection).toHaveBeenCalledOnce());
+
+  expect(end).not.toHaveBeenCalled();
+  expect(connectionForm()).toBeInTheDocument();
+
+  vi.mocked(saveConnection).mockResolvedValueOnce(project);
+  await click(within(connectionForm()).getByRole("button", { name: "Save" }));
+  await act(() => answerDialog("rollback"));
+  await vi.waitFor(() => expect(end).toHaveBeenCalledWith(a, "rollback"));
+  expect(vi.mocked(saveConnection).mock.invocationCallOrder[1]).toBeLessThan(
+    end.mock.invocationCallOrder[0],
+  );
 });
 
 test("확인 dialog가 열려 있으면 단축키가 동작하지 않는다", async () => {

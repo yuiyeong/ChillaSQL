@@ -892,6 +892,7 @@ test("finished_updates_the_transaction", async () => {
     status: "open",
     statements: 0,
     openedAt: startedAt,
+    openedBy: "user",
   });
 
   await useRuns.getState().run("t1", prepared("COMMIT"));
@@ -1071,6 +1072,7 @@ test("losing the connection while ending reports the transaction lost", async ()
   expect(useRuns.getState().notices.t1).toEqual({
     kind: "transactionLost",
     statements: 2,
+    openedBy: "app",
   });
   expect(txOf("t1")).toBeUndefined();
   await vi.waitFor(() => expect(closeSession).toHaveBeenCalledWith(3));
@@ -1092,6 +1094,7 @@ test("an unknown session while ending reports the transaction lost", async () =>
   expect(useRuns.getState().notices.t1).toEqual({
     kind: "transactionLost",
     statements: 2,
+    openedBy: "app",
   });
   expect(txOf("t1")).toBeUndefined();
 });
@@ -1106,6 +1109,7 @@ test("a_stale_session_with_an_open_transaction_reports_it_lost", async () => {
   expect(useRuns.getState().notices.t1).toEqual({
     kind: "transactionLost",
     statements: 2,
+    openedBy: "app",
   });
   expect(txOf("t1")).toBeUndefined();
 
@@ -1134,8 +1138,45 @@ test("connection_lost_with_an_open_transaction_reports_it_lost", async () => {
   expect(useRuns.getState().notices.t1).toEqual({
     kind: "transactionLost",
     statements: 2,
+    openedBy: "app",
   });
   expect(txOf("t1")).toBeUndefined();
+});
+
+test("a_lost_manual_transaction_notice_keeps_who_opened_it", async () => {
+  await openTwoStatements();
+  expect(txOf("t1")?.openedBy).toBe("app");
+  await useRuns.getState().run("t1", prepared("SELECT 3"));
+  onEventOf(2)({
+    type: "finished",
+    tx: null,
+    elapsedMicros: 1,
+    outcome: "connection_lost",
+    message: "server closed",
+  });
+
+  expect(useRuns.getState().notices.t1).toEqual({
+    kind: "transactionLost",
+    statements: 2,
+    openedBy: "app",
+  });
+});
+
+test("a pending query cancelled without a state keeps the open transaction", async () => {
+  await openTwoStatements();
+  await useRuns.getState().run("t1", prepared("SELECT 3"));
+  // 서버에 보내기 전에 끝난 쿼리는 트랜잭션 상태를 싣지 않는다.
+  onEventOf(2)({
+    type: "finished",
+    tx: null,
+    elapsedMicros: 0,
+    outcome: "cancelled",
+  });
+
+  expect(txOf("t1")).toEqual(
+    expect.objectContaining({ status: "open", statements: 2 }),
+  );
+  expect(useRuns.getState().notices.t1).toBeUndefined();
 });
 
 test("connection_lost without a transaction shows no notice", async () => {

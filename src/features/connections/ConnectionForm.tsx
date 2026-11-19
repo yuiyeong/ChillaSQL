@@ -157,8 +157,11 @@ export function ConnectionForm({
   original: Connection | null;
   /** 프로젝트에 이미 있는 접속 이름. 새 접속이 이 이름을 쓰지 못하게 한다. */
   existingNames: string[];
-  /** 연결 대상을 바꾼 수정을 저장하기 전에 묻는다. false면 저장하지 않는다. */
-  beforeSave?(connection: Connection): Promise<boolean>;
+  /**
+   * 연결 대상을 바꾼 수정을 저장하기 전에 묻는다. null이면 저장하지 않는다. 돌려준 함수는 저장에
+   * 성공한 뒤에 부르고, false면(Commit 실패) 저장한 접속을 반영하지 않고 form을 연 채로 알린다.
+   */
+  beforeSave?(connection: Connection): Promise<(() => Promise<boolean>) | null>;
   onSaved(project: Project): void;
   onClose(): void;
 }) {
@@ -236,8 +239,19 @@ export function ConnectionForm({
     run(async (connection, secret) => {
       const retargeted =
         original !== null && targetChanged(connection, original);
-      if (retargeted && beforeSave && !(await beforeSave(connection))) return;
+      const settle =
+        retargeted && beforeSave ? await beforeSave(connection) : undefined;
+      if (settle === null) return;
       const project = await saveConnection(connection, secret);
+      if (settle !== undefined && !(await settle())) {
+        // 파일은 이미 저장했다. 다시 Save하면 다시 묻고 끝낸 뒤 반영한다.
+        setNotice({
+          kind: "error",
+          text: t("connectionForm.savedButNotApplied"),
+          output: null,
+        });
+        return;
+      }
       setPassword("");
       onSaved(project);
     });

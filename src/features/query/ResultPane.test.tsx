@@ -744,7 +744,9 @@ describe("트랜잭션", () => {
         t: { status: "finished", result: result(), outcome },
       },
       transactions:
-        status === null ? {} : { t: { status, statements: 2, openedAt: 0 } },
+        status === null
+          ? {}
+          : { t: { status, statements: 2, openedAt: 0, openedBy: "app" } },
     });
     render(<ResultPane tabId="t" hasConnection />);
   }
@@ -833,7 +835,9 @@ describe("트랜잭션", () => {
 
   test("transaction_lost_notice_dismisses_with_ok", () => {
     useRuns.setState({
-      notices: { t: { kind: "transactionLost", statements: 2 } },
+      notices: {
+        t: { kind: "transactionLost", statements: 2, openedBy: "app" },
+      },
     });
     show({ status: "idle" });
 
@@ -852,7 +856,9 @@ describe("트랜잭션", () => {
 
   test("transaction_lost_notice_counts_one_statement_and_none", () => {
     useRuns.setState({
-      notices: { t: { kind: "transactionLost", statements: 1 } },
+      notices: {
+        t: { kind: "transactionLost", statements: 1, openedBy: "app" },
+      },
     });
     show({ status: "idle" });
 
@@ -863,7 +869,9 @@ describe("트랜잭션", () => {
 
   test("transaction_lost_notice_without_statements_says_it_was_not_applied", () => {
     useRuns.setState({
-      notices: { t: { kind: "transactionLost", statements: 0 } },
+      notices: {
+        t: { kind: "transactionLost", statements: 0, openedBy: "user" },
+      },
     });
     show({ status: "idle" });
 
@@ -871,6 +879,19 @@ describe("트랜잭션", () => {
       screen.getByText(
         "The connection dropped while a transaction was open. It was not applied. The next run opens a new session.",
       ),
+    ).toBeInTheDocument();
+  });
+
+  test("transaction_lost_notice_of_an_app_opened_transaction_counts_0_statements", () => {
+    useRuns.setState({
+      notices: {
+        t: { kind: "transactionLost", statements: 0, openedBy: "app" },
+      },
+    });
+    show({ status: "idle" });
+
+    expect(
+      screen.getByText(/The 0 uncommitted statements were not applied\./),
     ).toBeInTheDocument();
   });
 

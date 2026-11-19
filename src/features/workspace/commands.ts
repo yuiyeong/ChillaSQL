@@ -194,11 +194,13 @@ export async function runAgain(tabId: string): Promise<void> {
 
 /**
  * 열린 트랜잭션이 있으면 어떻게 끝낼지, 저장하지 않은 변경이 있으면 저장할지 차례로 묻고,
- * 세션을 놓은 뒤 탭을 닫는다.
+ * 저장까지 끝난 뒤에 고른 대로 트랜잭션을 끝내고 세션을 놓은 뒤 탭을 닫는다. 저장 확인을
+ * Cancel하거나 저장하지 못하면 트랜잭션을 끝내지 않는다.
  */
 export async function closeTab(tabId: string): Promise<void> {
   if (findTab(tabId) === undefined) return;
-  if (!(await settleTransactions([tabId], "close"))) return;
+  const settlement = await chooseSettlement([tabId], "close");
+  if (settlement === null) return;
   const tab = findTab(tabId);
   if (tab === undefined) return;
   if (tab.dirty) {
@@ -223,6 +225,7 @@ export async function closeTab(tabId: string): Promise<void> {
       if ((await saveTab(tabId)) !== "saved") return;
     }
   }
+  if (!(await applySettlement(settlement))) return;
   // release는 store에서 세션을 바로 떼어 낸다. 세션을 닫는 응답은 탭을 닫은 뒤에 기다린다.
   const released = useRuns.getState().release(tabId);
   useTabs.getState().close(tabId);
@@ -275,6 +278,10 @@ export async function applySavedProject(project: Project): Promise<void> {
 /**
  * 다른 프로젝트를 연다. 열리면 탭과 실행 상태를 비운다. 열린 트랜잭션을 묻고, 저장하지 않은 변경을
  * 묻고, 폴더를 고른 뒤에야 고른 대로 끝낸다. 폴더를 고르지 않으면 끝내지 않는다.
+ *
+ * Rollback은 보내지 않는다. 프로젝트가 열리면 Rust가 옛 세션을 닫아 서버가 되돌리고, 열지 못하면
+ * 트랜잭션이 그대로 남는다. Commit은 세션이 닫히기 전, 열기 전에 보낸다. 그래서 Commit한 뒤에
+ * 프로젝트를 열지 못하면 Commit만 된 채 남는다.
  */
 export async function switchProject(): Promise<void> {
   const settlement = await chooseSettlement(
@@ -290,8 +297,10 @@ export async function switchProject(): Promise<void> {
     return;
   }
   if (dir === null) return;
-  // 프로젝트를 열면 Rust가 옛 세션을 닫으므로 그 전에 끝낸다.
-  if (!(await applySettlement(settlement))) return;
+  // 프로젝트를 열면 Rust가 옛 세션을 닫으므로 Commit은 그 전에 보낸다.
+  if (settlement.end === "commit" && !(await applySettlement(settlement))) {
+    return;
+  }
   if (!(await useProject.getState().open(dir))) return;
 
   // 옛 프로젝트의 세션은 Rust가 이미 닫았으므로 그 close는 실패하고 무시된다.

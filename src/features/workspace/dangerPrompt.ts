@@ -63,10 +63,16 @@ function firstSentence(danger: Danger, connection: string): ReactNode {
         connection: on,
       });
     case "drop":
-      return rt("dialog.danger.first.drop", {
-        names: names(danger.names),
-        connection: on,
-      });
+      // `DROP OWNED BY`의 이름은 지울 object가 아니라 그것을 가진 role이다.
+      return rt(
+        danger.object === "OWNED"
+          ? "dialog.danger.first.dropOwned"
+          : "dialog.danger.first.drop",
+        {
+          names: names(danger.names),
+          connection: on,
+        },
+      );
   }
 }
 

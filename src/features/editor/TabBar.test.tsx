@@ -264,6 +264,7 @@ test("shows_tx_and_elapsed_on_a_tab_with_an_open_transaction", () => {
           status: "open",
           statements: 2,
           openedAt: 1_000_000_000 - 192_000,
+          openedBy: "app",
         },
       },
     }),
@@ -290,7 +291,12 @@ test("a failed transaction also shows the badge", () => {
   act(() =>
     useRuns.setState({
       transactions: {
-        [a]: { status: "failed", statements: 1, openedAt: Date.now() },
+        [a]: {
+          status: "failed",
+          statements: 1,
+          openedAt: Date.now(),
+          openedBy: "app",
+        },
       },
     }),
   );

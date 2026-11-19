@@ -1,9 +1,10 @@
-import { t, tc } from "../../shared/i18n/t";
+import { t } from "../../shared/i18n/t";
 import { Button } from "../../shared/ui/Button";
 import { WarningIcon } from "../../shared/ui/icons";
 import { Kbd } from "../../shared/ui/Kbd";
 import { shortcutKeys, shortcutLabel } from "../workspace/shortcuts";
 import { Banner } from "./MessageBlock";
+import { statementsText, type TxCount } from "./transaction";
 
 /**
  * 실패한 트랜잭션의 오류 위에 두는 제목 줄. Rollback 전까지 모든 문장이 거부된다고 알린다.
@@ -41,10 +42,10 @@ export function failedHintOf(sqlstate: string): string {
 
 /** 끊긴 세션에 열린 트랜잭션이 있었다는 알림. 결과 위의 banner이고 OK로 닫는다. */
 export function TransactionLostBanner({
-  statements,
+  tx,
   onClose,
 }: {
-  statements: number;
+  tx: TxCount;
   onClose(): void;
 }) {
   return (
@@ -52,7 +53,7 @@ export function TransactionLostBanner({
       role="alert"
       icon={<WarningIcon size={16} className="text-fg mt-px shrink-0" />}
       title={t("tx.lostTitle")}
-      detail={tc("tx.lostBody", statements)}
+      detail={statementsText("tx.lostBody", tx)}
       action={
         <Button size="small" onClick={onClose}>
           {t("common.ok")}

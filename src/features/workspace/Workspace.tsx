@@ -25,7 +25,7 @@ import {
 import { useShortcuts } from "./shortcuts";
 import { StatusBar } from "./StatusBar";
 import { Toolbar } from "./Toolbar";
-import { settleTransactions } from "./transactionPrompts";
+import { applySettlement, chooseSettlement } from "./transactionPrompts";
 import { subscribeTunnelEvents } from "./tunnelEvents";
 import { t } from "../../shared/i18n/t";
 
@@ -80,15 +80,21 @@ export function Workspace() {
     setForm((current) => (current === from ? null : current));
   }
 
-  /** 대상을 바꿔 저장하면 그 접속을 쓰는 탭의 세션이 닫히므로 열린 트랜잭션을 먼저 묻는다. */
-  function settleBeforeSave(connection: Connection): Promise<boolean> {
+  /**
+   * 대상을 바꿔 저장하면 그 접속을 쓰는 탭의 세션이 닫히므로 열린 트랜잭션을 먼저 묻는다. 고른 대로
+   * 끝내는 것은 저장에 성공한 뒤에 form이 부른다.
+   */
+  async function settleBeforeSave(
+    connection: Connection,
+  ): Promise<(() => Promise<boolean>) | null> {
     const using = useTabs
       .getState()
       .tabs.filter((tab) => tab.connection === connection.name)
       .map((tab) => tab.id);
-    return settleTransactions(using, "saveTarget", {
+    const settlement = await chooseSettlement(using, "saveTarget", {
       connection: connection.name,
     });
+    return settlement === null ? null : () => applySettlement(settlement);
   }
 
   function nameTab(path: string) {

@@ -72,7 +72,9 @@ test("auto_mode_says_it_cannot_be_undone", async () => {
 
 test("auto_with_an_open_transaction_says_it_can_be_rolled_back", async () => {
   useRuns.setState({
-    transactions: { [TAB]: { status: "open", statements: 1, openedAt: 0 } },
+    transactions: {
+      [TAB]: { status: "open", statements: 1, openedAt: 0, openedBy: "app" },
+    },
   });
 
   const { spec } = await confirmWith(deleteAll);
@@ -102,6 +104,19 @@ test("drop_title_uses_the_object_kind", async () => {
 
   expect(textOf(spec.title)).toBe("Run DROP TABLE?");
   expect(textOf(spec.body)).toMatch(/^This drops a, b\.c on staging\./);
+});
+
+test("drop_owned_says_it_drops_what_the_roles_own", async () => {
+  const { spec } = await confirmWith({
+    kind: "drop",
+    object: "OWNED",
+    names: ["alice", "bob"],
+  });
+
+  expect(textOf(spec.title)).toBe("Run DROP OWNED?");
+  expect(textOf(spec.body)).toMatch(
+    /^This drops every object owned by alice, bob on staging\./,
+  );
 });
 
 test("unknown_drop_kind_says_drop", async () => {

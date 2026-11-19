@@ -29,7 +29,12 @@ import {
   type RunRequest,
   type RunState,
 } from "./runReducer";
-import { canEndTransaction, nextTx, type TxInfo } from "./transaction";
+import {
+  canEndTransaction,
+  nextTx,
+  type TxCount,
+  type TxInfo,
+} from "./transaction";
 
 /**
  * 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 Rejection을, 사용자가 그만두게 했으면(위험 쿼리
@@ -58,7 +63,7 @@ function openRejection(error: unknown, request: RunRequest): Rejection {
  * 열린 트랜잭션이 있던 세션이 끊겨 그 트랜잭션을 잃었다는 것이다.
  */
 export type RunNotice =
-  { kind: "reconnected" } | { kind: "transactionLost"; statements: number };
+  { kind: "reconnected" } | ({ kind: "transactionLost" } & TxCount);
 
 /** record에서 key의 값을 바꾼다. `undefined`면 지운다. 바뀌지 않으면 같은 object를 돌려준다. */
 function withEntry<T>(
@@ -256,7 +261,11 @@ export const useRuns = create<RunsState>()((set, get) => {
     const tx = get().transactions[tabId];
     if (tx === undefined) return;
     setTx(tabId, undefined);
-    setNotice(tabId, { kind: "transactionLost", statements: tx.statements });
+    setNotice(tabId, {
+      kind: "transactionLost",
+      statements: tx.statements,
+      openedBy: tx.openedBy,
+    });
   }
 
   /** 그 탭의 세션이 아직 `slot`이면 잊는다. 잊었으면 true. */

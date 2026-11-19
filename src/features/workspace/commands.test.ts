@@ -844,10 +844,12 @@ test("closing_a_tab_with_a_transaction_asks_before_the_unsaved_prompt", async ()
 
   const closing = closeTab(id);
   const first = await answerDialog("rollback");
+  // 저장하지 않은 변경을 묻는 동안은 아직 Rollback을 보내지 않는다.
+  await vi.waitFor(() => expect(useDialogs.getState().current).not.toBeNull());
+  expect(endTransaction).not.toHaveBeenCalled();
   const second = await answerDialog("discard");
   await closing;
 
-  // Rollback을 보낸 뒤에 저장하지 않은 변경을 묻는다.
   expect(endTransaction).toHaveBeenCalledExactlyOnceWith(3, "rollback");
   expect(dialogWhenEnded).toBeNull();
 
@@ -857,6 +859,54 @@ test("closing_a_tab_with_a_transaction_asks_before_the_unsaved_prompt", async ()
   );
   expect(textOf(second.title)).toBe("Save changes to Query 1?");
   expect(tabOf(id)).toBeUndefined();
+});
+
+test("cancelling the unsaved prompt after choosing rollback keeps the transaction", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  useTabs.getState().markDirty(id);
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+
+  const closing = closeTab(id);
+  await answerDialog("rollback");
+  await answerDialog("cancel");
+  await closing;
+
+  expect(endTransaction).not.toHaveBeenCalled();
+  expect(tabOf(id)).toBeDefined();
+  expect(useRuns.getState().transactions[id]).toBeDefined();
+});
+
+test("a save that does not finish before closing does not end the transaction", async () => {
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+  // 이름 없는 탭은 이름을 물으러 간다.
+  const untitled = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(untitled, "in_transaction");
+  useTabs.getState().markDirty(untitled);
+  const naming = closeTab(untitled);
+  await answerDialog("commit");
+  await answerDialog("save");
+  await naming;
+  expect(useTabs.getState().naming).toBe(untitled);
+
+  // 저장에 실패한다.
+  const file = tabWith("UPDATE a SET b = 2");
+  await runInTransaction(file, "in_transaction", 1);
+  useTabs.getState().markSaved(file, "queries/b.sql", "s1");
+  useTabs.getState().markDirty(file);
+  vi.mocked(writeSqlFile).mockRejectedValueOnce(
+    new CommandError("io", "쓸 수 없습니다"),
+  );
+  const failing = closeTab(file);
+  await answerDialog("rollback");
+  await answerDialog("save");
+  await failing;
+
+  expect(endTransaction).not.toHaveBeenCalled();
+  expect(tabOf(untitled)).toBeDefined();
+  expect(tabOf(file)).toBeDefined();
+  expect(useRuns.getState().transactions[untitled]).toBeDefined();
+  expect(useRuns.getState().transactions[file]).toBeDefined();
 });
 
 test("cancelling the transaction prompt keeps the tab and skips the unsaved prompt", async () => {
@@ -931,6 +981,41 @@ test("switch_project_commits_only_after_a_folder_is_chosen", async () => {
     vi.mocked(openProject).mock.invocationCallOrder[0],
   );
   expect(useTabs.getState().tabs).toEqual([]);
+});
+
+test("a project that fails to open does not roll back", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockRejectedValue(
+    new CommandError("project_not_found", "chilla.toml이 없습니다"),
+  );
+
+  const switching = switchProject();
+  await answerDialog("rollback");
+  await switching;
+
+  expect(openProject).toHaveBeenCalledWith("/q");
+  expect(endTransaction).not.toHaveBeenCalled();
+  expect(tabOf(id)).toBeDefined();
+  expect(useRuns.getState().transactions[id]).toBeDefined();
+});
+
+test("rolling back to switch projects leaves it to closing the sessions", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+
+  const switching = switchProject();
+  await answerDialog("rollback");
+  await switching;
+
+  // 프로젝트를 열면 Rust가 옛 세션을 닫고 서버가 되돌린다.
+  expect(endTransaction).not.toHaveBeenCalled();
+  expect(useTabs.getState().tabs).toEqual([]);
+  expect(useRuns.getState().transactions).toEqual({});
 });
 
 test("a failed commit does not switch projects", async () => {

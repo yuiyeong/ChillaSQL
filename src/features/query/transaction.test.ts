@@ -1,14 +1,37 @@
 import { describe, expect, it } from "vitest";
 import { emptyResult, type RunState } from "./runReducer";
-import { canEndTransaction, formatClock, nextTx } from "./transaction";
+import {
+  canEndTransaction,
+  formatClock,
+  nextTx,
+  statementsLabel,
+} from "./transaction";
+
+/** Manual에서 두 문장을 실행한 열린 트랜잭션 */
+const openTx = {
+  status: "open",
+  statements: 2,
+  openedAt: 100,
+  openedBy: "app",
+} as const;
 
 describe("nextTx", () => {
   it("counts completed statements while the transaction stays open", () => {
     const opened = nextTx(null, "in_transaction", "completed", "manual", 100);
-    expect(opened).toEqual({ status: "open", statements: 1, openedAt: 100 });
+    expect(opened).toEqual({
+      status: "open",
+      statements: 1,
+      openedAt: 100,
+      openedBy: "app",
+    });
     expect(
       nextTx(opened, "in_transaction", "completed", "manual", 200),
-    ).toEqual({ status: "open", statements: 2, openedAt: 100 });
+    ).toEqual({
+      status: "open",
+      statements: 2,
+      openedAt: 100,
+      openedBy: "app",
+    });
   });
 
   it("does not count the BEGIN that opened it in Auto mode", () => {
@@ -16,37 +39,33 @@ describe("nextTx", () => {
       status: "open",
       statements: 0,
       openedAt: 100,
+      openedBy: "user",
     });
   });
 
   it("counts statements after the BEGIN in Auto mode", () => {
-    const open = { status: "open", statements: 0, openedAt: 100 } as const;
+    const open = { ...openTx, statements: 0, openedBy: "user" } as const;
     expect(nextTx(open, "in_transaction", "completed", "auto", 200)).toEqual({
-      status: "open",
+      ...open,
       statements: 1,
-      openedAt: 100,
     });
   });
 
   it("keeps the count when the transaction fails", () => {
-    const open = { status: "open", statements: 2, openedAt: 100 } as const;
-    expect(nextTx(open, "failed", "failed", "manual", 300)).toEqual({
+    expect(nextTx(openTx, "failed", "failed", "manual", 300)).toEqual({
+      ...openTx,
       status: "failed",
-      statements: 2,
-      openedAt: 100,
     });
   });
 
   it("does not count a cancelled or expired statement", () => {
-    const open = { status: "open", statements: 2, openedAt: 100 } as const;
-    expect(nextTx(open, "in_transaction", "expired", "manual", 300)).toEqual(
-      open,
+    expect(nextTx(openTx, "in_transaction", "expired", "manual", 300)).toBe(
+      openTx,
     );
-    expect(nextTx(open, "failed", "cancelled", "manual", 300)).toEqual({
-      status: "failed",
-      statements: 2,
-      openedAt: 100,
-    });
+    // 트랜잭션 안에서 취소한 문장은 savepoint로 되돌려지고 트랜잭션은 열린 채다.
+    expect(nextTx(openTx, "in_transaction", "cancelled", "manual", 300)).toBe(
+      openTx,
+    );
   });
 
   it("opens a failed transaction when the first Manual statement fails", () => {
@@ -54,13 +73,48 @@ describe("nextTx", () => {
       status: "failed",
       statements: 0,
       openedAt: 100,
+      openedBy: "app",
     });
   });
 
+  it("keeps the transaction when a query that never started reports no state", () => {
+    expect(nextTx(openTx, null, "cancelled", "manual", 300)).toBe(openTx);
+    expect(nextTx(null, null, "cancelled", "manual", 300)).toBeNull();
+  });
+
   it("clears on idle or a lost connection", () => {
-    const open = { status: "open", statements: 2, openedAt: 100 } as const;
-    expect(nextTx(open, "idle", "completed", "manual", 300)).toBeNull();
-    expect(nextTx(open, null, "connection_lost", "manual", 300)).toBeNull();
+    expect(nextTx(openTx, "idle", "completed", "manual", 300)).toBeNull();
+    expect(nextTx(openTx, null, "connection_lost", "manual", 300)).toBeNull();
+  });
+});
+
+describe("openedBy", () => {
+  it("records whether the user's BEGIN or the app opened it", () => {
+    const user = nextTx(null, "in_transaction", "completed", "auto", 100);
+    expect(user?.openedBy).toBe("user");
+    const app = nextTx(null, "failed", "failed", "manual", 100);
+    expect(app?.openedBy).toBe("app");
+    // 뒤의 실행이 다른 모드여도 연 쪽은 그대로다.
+    expect(
+      nextTx(user, "in_transaction", "completed", "manual", 200)?.openedBy,
+    ).toBe("user");
+  });
+});
+
+describe("statementsLabel", () => {
+  it("says manual BEGIN only for a transaction the user's BEGIN opened", () => {
+    expect(statementsLabel({ statements: 0, openedBy: "user" })).toBe(
+      "manual BEGIN",
+    );
+    expect(statementsLabel({ statements: 0, openedBy: "app" })).toBe(
+      "0 statements",
+    );
+    expect(statementsLabel({ statements: 1, openedBy: "app" })).toBe(
+      "1 statement",
+    );
+    expect(statementsLabel({ statements: 2, openedBy: "user" })).toBe(
+      "2 statements",
+    );
   });
 });
 

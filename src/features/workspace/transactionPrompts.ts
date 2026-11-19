@@ -1,7 +1,7 @@
 import { createElement, type ReactNode } from "react";
 import type { TxEnd, TxMode } from "../../shared/api/types";
-import { bold, monoText, rt, rtc } from "../../shared/i18n/rich";
-import { t, tc } from "../../shared/i18n/t";
+import { bold, monoText, rt } from "../../shared/i18n/rich";
+import { formatCount, t, tc } from "../../shared/i18n/t";
 import {
   ask,
   type DialogAction,
@@ -14,7 +14,10 @@ import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import {
   formatClock,
+  statementsKey,
   statementsLabel,
+  statementsText,
+  type TxCount,
   type TxInfo,
 } from "../query/transaction";
 
@@ -66,11 +69,17 @@ export function openTabs(tabIds: string[]): OpenTab[] {
   });
 }
 
-/** `{question}`. 문장이 없으면 열린 트랜잭션을 묻는다. `title`을 주면 그 탭을 이름으로 가리킨다. */
-function question(statements: number, title?: string): ReactNode {
+/**
+ * `{question}`. 사용자가 쓴 BEGIN으로 연 트랜잭션에 문장이 없으면 열린 트랜잭션을 묻는다. `title`을
+ * 주면 그 탭을 이름으로 가리킨다.
+ */
+function question(tx: TxCount, title?: string): ReactNode {
   return title === undefined
-    ? tc("dialog.tx.question", statements)
-    : rtc("dialog.tx.questionIn", statements, { title: bold(title) });
+    ? statementsText("dialog.tx.question", tx)
+    : rt(statementsKey("dialog.tx.questionIn", tx), {
+        title: bold(title),
+        count: formatCount(tx.statements),
+      });
 }
 
 function oneTabText(
@@ -79,7 +88,6 @@ function oneTabText(
   context: TxContext,
 ): Pick<DialogSpec, "title" | "body" | "icon"> {
   const connection = bold(context.connection ?? tab.connection);
-  const { statements } = tab.tx;
   switch (action) {
     case "close":
       return {
@@ -87,7 +95,7 @@ function oneTabText(
         body: rt("dialog.tx.close.body", {
           title: bold(tab.title),
           connection,
-          question: question(statements),
+          question: question(tab.tx),
         }),
       };
     case "switchConnection":
@@ -98,27 +106,27 @@ function oneTabText(
         body: rt("dialog.tx.switchConnection.body", {
           target: bold(context.target ?? ""),
           connection,
-          question: question(statements),
+          question: question(tab.tx),
         }),
       };
     case "switchMode":
       return {
         title: t("dialog.tx.switchMode.title"),
-        body: question(statements),
+        body: question(tab.tx),
       };
     case "saveTarget":
       return {
         title: t("dialog.tx.saveTarget.title"),
         body: rt("dialog.tx.saveTarget.body", {
           connection,
-          question: question(statements, tab.title),
+          question: question(tab.tx, tab.title),
         }),
       };
     case "switchProject":
       return {
         title: t("dialog.tx.switchProject.title"),
         body: rt("dialog.tx.switchProject.body", {
-          question: question(statements, tab.title),
+          question: question(tab.tx, tab.title),
         }),
       };
   }
@@ -168,7 +176,7 @@ export function manyTabsSpec(tabs: OpenTab[], verb: Verb): DialogSpec {
       primary: tab.title,
       secondary: rt("dialog.tx.manyTabs.item", {
         connection: tab.connection,
-        statements: statementsLabel(tab.tx.statements),
+        statements: statementsLabel(tab.tx),
         elapsed: monoText(formatClock(now - tab.tx.openedAt)),
       }),
     })),
