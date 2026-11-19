@@ -4,10 +4,10 @@
 
 ## 지금
 
-- **진행 중**: M5 터널(2026-11-19 시작). 계획은 [M5](plans/M5-tunnel.md), 진행 기록은 `.superpowers/sdd/M5-tunnel/progress.md`(git에 올리지 않음)
+- **진행 중**: 없음. M5 터널을 끝냄(2026-11-19). 계획은 [M5](plans/M5-tunnel.md), 진행 기록은 `.superpowers/sdd/M5-tunnel/progress.md`(git에 올리지 않음)
 - **작업 위치**: branch `m5-tunnel`. main은 `12ae9da`이고 origin/main(`d2be9bf`) 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M5 Task 1~11과 private 정보 정리를 끝냈다. CLAUDE.md 개발 순서의 simplify, code-review(high), receiving-code-review를 돌린 뒤 M5를 완료로 바꾸고 branch를 main에 합친다
+- **다음 할 일**: branch `m5-tunnel`을 main에 합칠지 사용자에게 묻는다. 그다음 M6(트랜잭션과 안전장치)
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -36,7 +36,7 @@
 | M2 쿼리 실행 코어 | 1 | 완료 | [M2](plans/M2-query-core.md) | 2026-11-11 | 2026-11-11 |
 | M3 프로젝트·에디터 화면 | 1 | 완료 | [M3](plans/M3-project-editor.md) | 2026-11-12 | 2026-11-18 |
 | M4 결과 표 | 1 | 완료 | [M4](plans/M4-result-table.md) | 2026-11-18 | 2026-11-18 |
-| M5 터널 | 2 | 진행 중 | [M5](plans/M5-tunnel.md) | 2026-11-19 | |
+| M5 터널 | 2 | 완료 | [M5](plans/M5-tunnel.md) | 2026-11-19 | 2026-11-19 |
 | M6 트랜잭션과 안전장치 | 2 | 대기 | | | |
 | M7 스키마 트리와 자동완성 | 3 | 대기 | | | |
 | M8 에디터·실행 편의 | 3 | 대기 | | | |
@@ -204,6 +204,14 @@
 | 2026-11-19 | M5 | 터널이 다시 시작될 때 세션을 바꾸는 판단(stale 표시, 새 세션을 먼저 열기)은 화면에 둠. Rust가 세션을 `Lost`로 표시하거나 `reopen_session`을 두는 안은 쓰지 않음 | 계획에서 정한 구조이고 바꾸면 App과 session actor에 상태가 늘어남. 화면이 event 하나를 놓치면 다음 실행이 `connection_lost`로 끝나고 그다음 실행이 새 세션을 엶(simplify에서 고치지 않은 지적) |
 | 2026-11-19 | M5 | 재실행 뒤 멈춤(`afterRestart`)은 화면이 event 순서로 가림. Rust 상태에 `GaveUp`을 더하지 않음 | event는 한 channel로 순서대로 오고, 바꾸면 DTO와 화면 type이 함께 바뀜(simplify에서 고치지 않은 지적) |
 | 2026-11-19 | M5 | 세션을 닫을 때 터널이 꺼질 때까지 기다림(`close_session`이 늦어질 수 있음) | DB disconnect 뒤 터널 종료 순서와 "닫힌 뒤 프로세스가 남지 않음"을 지키는 가장 단순한 방법. 키체인 읽기와 터널 시작을 동시에 하는 것도 하지 않음(simplify에서 고치지 않은 지적) |
+| 2026-11-19 | M5 | 같은 터널인지는 명령, 디렉토리, host, port로 가림. `tunnel_timeout`만 다르면 열린 터널을 같이 씀 | 대기 시간만 바꿔 저장하면 화면이 세션을 닫지 않아(연결 대상 아님) 새 세션 열기가 옛 터널이 꺼지기를 끝없이 기다렸음(code-review) |
+| 2026-11-19 | M5 | 터널이 표에서 빠질 때는 실패로 멈춘 터널도 `Stopped`를 보냄. 처음 시작에서 실패하면 toolbar chip의 `Tunnel failed`는 곧 사라지고 결과 panel의 오류가 남음 | 화면이 없어진 터널의 실패 상태를 계속 갖고 있어 Try again이 아무것도 하지 않았음(code-review). 캔버스 Tunnel 2의 chip과 다름 |
+| 2026-11-19 | M5 | 터널이 끊기면 남은 자손을 끄기 전에 `Starting{1}`부터 알림. 같은 상태는 두 번 알리지 않음 | 끄는 데 2초까지 걸리는 동안 새 세션이 끊긴 터널을 열린 것으로 보고 연결 오류를 냈음(code-review) |
+| 2026-11-19 | M5 | 자손이 살아 있는지는 `kill(pid, 0)`(EPERM도 있음)과 zombie 확인으로 봄 | `proc_pidinfo`는 다른 사용자의 프로세스(sudo로 띄운 ssh 등)를 읽지 못해 죽은 것으로 보고 멀쩡한 터널을 다시 실행했음(code-review) |
+| 2026-11-19 | M5 | 터널이 다시 시작될 때 여는 중인 세션은 stale로 두지 않음 | 다시 시작된 터널로 붙는 세션까지 다음 실행이 바꾸고 Reconnected를 띄웠음(code-review) |
+| 2026-11-19 | M5 | 접속 테스트의 터널이 떠 있는 동안 같은 포트로 시작한 공유 터널이 `External`이 되는 경우는 고치지 않음 | 테스트와 실행을 동시에 하는 드문 경우이고, 테스트 터널이 꺼진 뒤 다음 실행이 포트가 닫힌 것을 보고 터널을 새로 띄움(code-review에서 고치지 않은 지적) |
+| 2026-11-19 | M5 | 끌 때 기억한 pid가 다른 프로세스에 다시 쓰였는지 확인하지 않음 | 2초 안에 pid가 다시 쓰일 가능성이 매우 낮음. 확인하려면 pid마다 시작 시각을 기억해야 함(code-review에서 고치지 않은 지적) |
+| 2026-11-19 | M5 | 끊긴 세션을 화면이 event로 추정하는 구조는 그대로 둠 | simplify의 같은 지적과 같은 이유(code-review에서 고치지 않은 지적) |
 | 2026-11-19 | M5 | 기획서, 마일스톤, 계획, 디자인 사본, test에 있던 실제 터널 명령과 서비스·프로젝트 이름을 지어낸 예시(`ssh -N -L 25432:db.internal:5432 bastion`, `app`, `billing`)로 바꿈 | 실제 환경 정보가 public 저장소에 남지 않게 함(사용자 지시). git history에는 남아 있음 |
 
 ## 작업 로그
@@ -212,6 +220,7 @@
 
 ### 2026-11-19
 
+- M5 code-review(high): 지적 9개를 `superpowers:receiving-code-review`로 검토해 6개를 고치고 3개를 고치지 않음. 고친 것마다 실패하는 test를 먼저 씀
 - M5 simplify: 4개 관점(reuse, simplification, efficiency, altitude) 검토의 지적 가운데 동작을 바꾸지 않는 것을 고침. Rust는 `wait_settled`가 `Result`를 돌려주고, `last_published`를 지우고, `PrivateTunnel`이 끝날 때 표에서 빠지고, `cancel`/`restart`를 동기 함수로 바꿈. 화면은 `useNow`, `MessageBlock`, `CommandOutput`/`Pre`, `useConnection`, `useTunnel`, `isTunnelStarting`을 함께 쓰게 하고, 같은 상태 event에서 store를 바꾸지 않고, 다시 실행 중에는 초를 세는 timer를 띄우지 않음. 고치지 않은 것은 결정 기록에 남김
 - M5 Task 2~10: `tunnel_timeout`, `ShellTunnelRunner`(login shell, process group과 자손 tree 끄기, 기억한 자손의 종료를 끊김으로 봄), `Tunnels`(공유, 재실행 3회, 취소, 모두 끄기, 접속 테스트용 private 터널), 세션·접속 테스트·앱 종료와 연결, Tauri event `tunnel`과 `cancel_tunnel`/`restart_tunnel`, forwarder로 실제 프로세스 통합 test, 화면의 터널 store와 stale 세션 바꾸기, 캔버스 배치의 접속 sheet, toolbar·탭·결과 panel의 터널 상태와 Reconnected banner
 - 문서, 디자인 사본, test, M1 계획의 실제 터널 명령과 서비스·프로젝트 이름을 지어낸 예시로 바꿈(사용자 지시). git history에는 남아 있음
