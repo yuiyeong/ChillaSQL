@@ -17,7 +17,7 @@
 | M1의 트랜잭션 상태 감지 | `TxTap`이 ReadyForQuery의 상태 byte를 읽고 actor가 쿼리가 끝날 때마다 `tx_status()`를 저장한다(`settle`). 화면으로는 `session_state` command로만 나가고 화면은 아직 부르지 않는다 | 쿼리마다 `Finished`에 `tx`를 싣는다. 화면이 따로 묻지 않으므로 순서가 꼬이지 않는다 |
 | DataGrip의 Commit, Rollback 키 | DataGrip과 같은 JetBrains DatabaseTools plugin(이 Mac의 PyCharm 2026.2에 든 것)의 `plugin.xml`: `Console.Transaction.Commit`은 `$default` keymap에 `control alt shift ENTER`, `Console.Transaction.Rollback`은 단축키가 없다. macOS keymap은 `control`을 `meta`로 바꾸므로 Commit은 `Opt+Shift+Cmd+Enter`다. 웹의 keymap 문서에는 두 action이 나오지 않는다 | Commit은 DataGrip대로 `Opt+Shift+Cmd+Enter`. Rollback은 DataGrip에 없으므로 디자인대로 `Opt+Shift+Cmd+Z`. 디자인의 Commit `Opt+Shift+Cmd+K`는 쓰지 않는다 |
 | 접속 저장과 프로젝트 바꾸기의 세션 닫기(M3) | `applySavedProject`는 연결 대상이 바뀐 접속을 쓰는 탭을 묻지 않고 `release`한다. `switchProject`는 `reset`한다 | 둘 다 열린 트랜잭션이 있으면 먼저 묻는다(Task 11) |
-| 현재 종료 경로 | menu의 Quit은 `PredefinedMenuItem::quit`이고, `RunEvent::Exit`에서 `shutdown`을 부른다. 창 닫기와 Dock의 Quit은 따로 다루지 않는다 | Quit을 custom menu item으로 바꾸고 창 닫기, `ExitRequested`를 막는다. Dock Quit이 `ExitRequested`로 오는지는 Task 1에서 확인한다 |
+| 현재 종료 경로 | menu의 Quit은 `PredefinedMenuItem::quit`이고, `RunEvent::Exit`에서 `shutdown`을 부른다. 창 닫기와 Dock의 Quit은 따로 다루지 않는다 | Quit을 custom menu item으로 바꾸고 창 닫기, `ExitRequested`를 막는다. Dock Quit이 `ExitRequested`로 오는지는 Task 1에서 확인한다. 확인 결과 `ExitRequested`가 오지 않는다(Task 1 결과 참고) |
 | 받다 만 결과를 버리는 방법(M2) | 다음 쿼리, 취소, 탭 닫기 모두 cancel + drain이다. 트랜잭션 안에서 cancel이 닿으면 문장이 `57014`로 실패해 트랜잭션이 failed가 된다 | 트랜잭션 안에서 *버릴* 때는 cancel 없이 끝까지 읽는다. 5초가 넘으면 cancel한다(아래). 사용자가 누른 Cancel은 지금처럼 cancel한다 |
 
 ## 이 계획에서 정한 것
@@ -945,7 +945,8 @@ git commit -m "feat: 접속 sheet에서 접속 색을 고르게 함"
 | 트랜잭션 안의 오류 | `Transaction failed`와 Rollback(States), Commit disabled |
 | `DELETE FROM t`(Manual, Auto) | 문구가 모드마다 다름(Safety A, B). Cancel이면 실행하지 않음 |
 | 열린 트랜잭션에서 탭 닫기, 접속 바꾸기, Auto 전환, 연결 대상 저장, 프로젝트 바꾸기 | Dialogs, Safety D의 문구와 버튼 |
-| 열린 트랜잭션에서 `Cmd+Q`, 창 닫기, Dock Quit | 앱 종료 확인. Cancel이면 남고, Roll back all이면 끝남 |
+| 열린 트랜잭션에서 `Cmd+Q`(custom menu item), 창 닫기 | 앱 종료 확인. Cancel이면 남고, Roll back all이면 끝남 |
+| 열린 트랜잭션에서 Dock의 Quit, `osascript -e 'quit app "ChillaSQL"'` | 확인 없이 끝나고 서버가 트랜잭션을 되돌림(Task 1 결과). 다시 열어 Commit되지 않았는지 확인 |
 | 저장하지 않은 탭 닫기 | 캔버스 dialog의 Don't save / Cancel / Save |
 | `color` swatch로 색을 바꿔 저장 | 창 상단 bar, 탭 dot, chip이 바뀜 |
 | 큰 결과를 받다 만 채로 Manual에서 다음 문장 | 트랜잭션이 Failed가 되지 않음 |
