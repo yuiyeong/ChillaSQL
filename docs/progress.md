@@ -5,9 +5,9 @@
 ## 지금
 
 - **진행 중**: 없음. M7 스키마 트리와 자동완성을 끝냄(2026-11-20, [M7](plans/M7-schema-autocomplete.md)). 다음은 M8 에디터·실행 편의(3단계의 마지막)
-- **작업 위치**: branch `m7-schema-autocomplete`(main `632cfba`에서). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
+- **작업 위치**: main. branch `m7-schema-autocomplete`를 2026-11-20에 fast-forward로 합치고 지움. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: branch `m7-schema-autocomplete`를 main에 합칠지 사용자에게 묻는다. 그 뒤 M8 계획(`superpowers:writing-plans`, `docs/plans/M8-<name>.md`). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: M8 계획(`superpowers:writing-plans`, `docs/plans/M8-<name>.md`). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -260,6 +260,7 @@
 
 ### 2026-11-20
 
+- branch `m7-schema-autocomplete`를 main에 fast-forward로 합치고 branch를 지움
 - M7 완료(branch `m7-schema-autocomplete`, `cb28bfa`..). Task 1 결정 기록, Task 2 catalog SQL(`infrastructure/postgres/catalog.rs`, test DB integration test 3개. oid 0에서 domain 제약조건이 잡혀 `contypid = 0`을 더함), Task 3 App의 catalog connection(접속마다 slot 하나, 터널 lease 공유, 끊기면 한 번 다시 연결. 첫 구현에서 프로젝트 바꾸기가 여는 중인 slot을 기다려 test가 멈춰서 쓰는 중인 slot은 background에서 닫게 함), Task 4 command 셋, Task 5 화면 store와 불러오는 때, Task 6 Schema 화면, Task 7 menu·Copy name·Select first rows, Task 8 자동완성 source, Task 9 popup(kind 글자, footer)
 - M7 simplify: catalog 쿼리를 `try_join!`으로 함께 보내고 relation당 한 줄(`array_agg`), 자동완성 source를 `EditorState.languageData`로(keyword는 `sql({ upperCaseKeywords })`), `shared/sql/catalog.ts`의 색인(WeakMap), details 불러오기를 store `toggle` 하나로. 고치지 않은 것: catalog connection을 actor로 바꾸기(큰 재구성, 지금 구조가 test로 검증됨), generation 확인을 `connect()`로 옮기기(`open_session`의 확인은 insert와 같은 lock 안이어야 함), 트리 렌더 가상화(큰 schema에서 느리면 그때)
 - M7 code-review(high): 지적 9개 중 8개를 고침. 고친 것마다 실패하는 test를 먼저 씀(`afecdd3`): footer가 option이 바뀐 뒤 목록 위로 감, `close_catalog`와 겹친 load가 map에서 빠진 slot에 연결, 탭이 없을 때 Choose connection, keyword 함수 이름을 감쌈, 따옴표 없는 대문자 테이블 이름, FROM 목록의 `AS` 뒤 테이블, 우클릭 menu가 창 밖으로 나감, 11px literal. 고치지 않은 것: kind 글자(s/c/t/f/k)와 트리 icon, `↵`/`esc`를 `en.ts`로 옮기기(단축키 glyph처럼 언어와 관계없는 기호). 남은 것: `close_catalog`와 `load_catalog` IPC가 순서를 바꿔 실행되면 map 안의 연결이 다음 forget이나 프로젝트 바꾸기까지 남음(드묾, 화면이 순서를 알려 줘야 고칠 수 있음)
