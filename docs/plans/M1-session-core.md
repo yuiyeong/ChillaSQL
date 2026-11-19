@@ -329,7 +329,7 @@ impl ProjectStore for TomlProjectStore { .. }
     // name == "my-service", dir == canonicalize(tempdir)
     // connections 의 이름 순서 == ["production", "staging", "local"]
     // production: host "203.0.113.10", port 5432, sslmode Require, color Some("red"), tunnel None
-    // staging: port 25432, tunnel Some("railway connect Postgres18 -e staging --tunnel-only -P 25432")
+    // staging: port 25432, tunnel Some("ssh -N -L 25432:db.internal:5432 bastion")
     // local: sslmode Disable
 }
 #[test] fn rejects_a_password_entry() {

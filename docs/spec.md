@@ -85,7 +85,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 
 ### 4.2 터널 연결 (선택)
 
-접속 정보에 터널 명령을 넣어 두면 DB에 연결하기 전에 앱이 그 명령을 입력한 그대로 실행한다. Railway CLI든 `ssh -L`이든 상관없다. 예: `railway connect Postgres18 -e staging --tunnel-only -P 25432`
+접속 정보에 터널 명령을 넣어 두면 DB에 연결하기 전에 앱이 그 명령을 입력한 그대로 실행한다. 터널 CLI든 `ssh -L`이든 상관없다. 예: `ssh -N -L 25432:db.internal:5432 bastion`
 
 세션 흐름은 (터널 실행) → DB connect → 작업 → DB disconnect → (터널 종료)다. 괄호 부분은 터널 명령이 있을 때만 실행된다.
 
@@ -93,7 +93,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | --- | --- |
 | 터널 명령 없음 | 저장된 host와 port로 바로 연결 |
 | 접속 시작 | 터널 명령을 자식 프로세스로 실행하고, 접속 정보의 host:port가 열리면 DB에 연결 |
-| 포트가 열리지 않음 | 20초(기본값, 접속별 변경 가능) 안에 열리지 않으면 연결을 중단하고 명령의 오류 출력을 그대로 표시 (예: Railway 로그인 만료) |
+| 포트가 열리지 않음 | 20초(기본값, 접속별 변경 가능) 안에 열리지 않으면 연결을 중단하고 명령의 오류 출력을 그대로 표시 (예: 터널 CLI의 로그인 만료) |
 | 포트가 이미 열려 있음 | 명령을 실행하지 않고 바로 연결. 앱이 띄우지 않은 터널을 쓰는 중이라고 탭에 표시하고, 이 터널은 앱이 끊지 않음 |
 | 여러 탭이 같은 접속 사용 | DB 연결은 탭마다 따로, 터널은 하나를 공유 |
 | 접속 종료 | DB disconnect 후 터널 종료. 같은 접속을 쓰는 마지막 탭이 끊길 때 실행 |
@@ -223,9 +223,9 @@ color = "red"
 [connections.staging]
 host = "localhost"
 port = 25432
-database = "railway"
+database = "app"
 user = "postgres"
-tunnel = "railway connect Postgres18 -e staging --tunnel-only -P 25432"
+tunnel = "ssh -N -L 25432:db.internal:5432 bastion"
 # tunnel_timeout = 30   # 포트가 열리기를 기다리는 초. 없으면 20
 color = "yellow"
 
@@ -281,7 +281,7 @@ color = "green"
 | 단계 | 들어가는 기능 | 완료 기준 |
 | --- | --- | --- |
 | 1. 뼈대 | 프로젝트 열기, 터널 없는 접속, SSL, 키체인 저장, 접속 테스트, 에디터와 Highlighting, 문장 나누기(SQL 파서), 커서 문장과 선택 영역 실행, 실행 정보, 결과 표(가상 스크롤, 나눠 가져오기, 보관 상한, 컬럼 너비), 셀과 행 복사, 쿼리 취소, 탭 = 세션 구조, 기본 단축키, 화면 디자인 적용, 영어 화면 문구, D2Coding | 로컬 DB에서 100만 행 결과를 끊김 없이 스크롤 |
-| 2. 터널과 트랜잭션 | 터널 명령 실행과 감시, 재연결과 재시도 제한, disconnect 시 터널 종료, Auto와 Manual 전환, 열린 트랜잭션 표시, 닫기 전 확인, 접속별 색상, 위험 쿼리 확인, 받다 만 결과 자동 닫기 | 터미널 없이 Railway staging에 접속해 Manual 트랜잭션을 Commit, Rollback |
+| 2. 터널과 트랜잭션 | 터널 명령 실행과 감시, 재연결과 재시도 제한, disconnect 시 터널 종료, Auto와 Manual 전환, 열린 트랜잭션 표시, 닫기 전 확인, 접속별 색상, 위험 쿼리 확인, 받다 만 결과 자동 닫기 | 터미널 없이 터널 뒤의 staging DB에 접속해 Manual 트랜잭션을 Commit, Rollback |
 | 3. 매일 쓰는 편의 | 스키마 트리, 빠른 조회, 자동완성, Formatting, 타입별 표시, 오류 위치, 읽기 전용, 타임아웃, 파일 전체 실행과 여러 결과 표시, 저장하지 않은 탭 자동 보관, 전역 설정 파일, 한국어 화면 문구와 언어 설정 | 하루 업무를 DataGrip 없이 처리 |
 | 4. 나머지 | 쿼리 기록, 셀 편집, 내보내기, EXPLAIN ANALYZE, DDL 보기, 파라미터, 화면 내 정렬, 단축키 변경 | 4장의 모든 기능 동작 |
 

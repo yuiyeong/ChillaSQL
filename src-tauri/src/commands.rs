@@ -610,7 +610,7 @@ mod tests {
             user: "app_user".into(),
             sslmode,
             sslrootcert: Some(PathBuf::from("/p/certs/ca.pem")),
-            tunnel: Some("railway connect".into()),
+            tunnel: Some("ssh -N -L 25432:db.internal:5432 bastion".into()),
             tunnel_timeout: Some(Duration::from_secs(30)),
             color: Some("red".into()),
         }

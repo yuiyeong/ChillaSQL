@@ -201,6 +201,7 @@
 | 2026-11-19 | M5 | 앱이 비정상 종료하면 터널이 남을 수 있음. 다음에는 그 포트를 `External`로 봄 | 정상 종료(`Cmd+Q`, 창 닫기)만 터널을 끔 |
 | 2026-11-19 | M5 | 접속 sheet는 캔버스 배치에서 `color`(M6), `read_only`와 `statement_timeout`(M8)을 뺌. 창 위쪽에 붙는 600px sheet. 테스트 성공은 `Connected · {ms} ms`, server version은 M8 | 각 칸은 그 기능의 마일스톤에서 더함 |
 | 2026-11-19 | M5 | `establish`와 `PgCancel`의 stream 여는 분기는 묶지 않음 | 터널은 local port를 열 뿐이라 여는 방법이 바뀌지 않음 |
+| 2026-11-19 | M5 | 기획서, 마일스톤, 계획, 디자인 사본, test에 있던 실제 터널 명령과 서비스·프로젝트 이름을 지어낸 예시(`ssh -N -L 25432:db.internal:5432 bastion`, `app`, `billing`)로 바꿈 | 실제 환경 정보가 public 저장소에 남지 않게 함(사용자 지시). git history에는 남아 있음 |
 
 ## 작업 로그
 

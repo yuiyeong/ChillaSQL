@@ -26,9 +26,9 @@ color = "red"
 [connections.staging]
 host = "localhost"
 port = 25432
-database = "railway"
+database = "app"
 user = "postgres"
-tunnel = "railway connect Postgres18 -e staging --tunnel-only -P 25432"
+tunnel = "ssh -N -L 25432:db.internal:5432 bastion"
 color = "yellow"
 
 [connections.local]
@@ -89,7 +89,7 @@ fn loads_the_spec_example() {
     assert_eq!(staging.port, 25432);
     assert_eq!(
         staging.tunnel.as_deref(),
-        Some("railway connect Postgres18 -e staging --tunnel-only -P 25432")
+        Some("ssh -N -L 25432:db.internal:5432 bastion")
     );
 
     assert_eq!(
@@ -435,7 +435,7 @@ fn save_connection_removes_optional_keys_that_are_unset() {
         name: "staging".into(),
         host: "localhost".into(),
         port: 25432,
-        database: "railway".into(),
+        database: "app".into(),
         user: "postgres".into(),
         sslmode: SslMode::Disable,
         sslrootcert: None,

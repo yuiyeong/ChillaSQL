@@ -46,7 +46,7 @@ button,input,textarea{font:inherit;color:inherit}
       </div>
       <div class="body">
         <p style="margin: 0">Ran the tunnel command. Connects once <span class="mono">localhost:25432</span> opens.</p>
-        <pre class="pre mono">railway connect Postgres18 -e staging --tunnel-only -P 25432</pre>
+        <pre class="pre mono">ssh -N -L 25432:db.internal:5432 bastion</pre>
         <div><button type="button" class="btn">Cancel</button></div>
       </div>
     </div>
@@ -65,8 +65,8 @@ button,input,textarea{font:inherit;color:inherit}
         <p style="margin: 0"><span class="mono">localhost:25432</span> didn't open within 20 seconds, so the connection stopped.</p>
         <div style="display: flex; flex-direction: column; gap: 6px">
           <span class="label">Command output (stderr)</span>
-          <pre class="pre mono">Unauthorized. Please login with `railway login`
-Error: failed to open tunnel</pre>
+          <pre class="pre mono">bastion: Permission denied (publickey).
+kex_exchange_identification: Connection closed by remote host</pre>
         </div>
         <div style="display: flex; gap: 8px"><button type="button" class="btn">Try again</button><button type="button" class="btn btn-ghost">Edit connection</button></div>
       </div>

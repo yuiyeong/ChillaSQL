@@ -64,7 +64,7 @@ button,input,textarea{font:inherit;color:inherit}
             <label class="fld"><span class="mono">port</span><input class="in" value="25432" inputmode="numeric" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
           </div>
           <div class="row2">
-            <label class="fld"><span class="mono">database</span><input class="in" value="railway" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
+            <label class="fld"><span class="mono">database</span><input class="in" value="app" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
             <label class="fld"><span class="mono">user</span><input class="in" value="postgres" autocorrect="off" autocapitalize="off" spellcheck="false"></label>
           </div>
           <label class="fld"><span><b class="mono" style="font-weight: 400">password</b><i>Saved in Keychain, never in chilla.toml</i></span><input class="in" type="password" value="secretsecret" autocomplete="off"></label>
@@ -74,7 +74,7 @@ button,input,textarea{font:inherit;color:inherit}
           <div class="seg" role="radiogroup" aria-labelledby="ssl-a"><button type="button" role="radio" aria-checked="true">disable</button><button type="button" role="radio" aria-checked="false">require</button><button type="button" role="radio" aria-checked="false">verify-full</button></div>
         </div>
         <div class="grp">
-          <label class="fld"><span><b class="mono" style="font-weight: 400">tunnel</b><i>Leave empty to connect directly</i></span><textarea class="ta" rows="2" autocorrect="off" autocapitalize="off" spellcheck="false">railway connect Postgres18 -e staging --tunnel-only -P 25432</textarea></label>
+          <label class="fld"><span><b class="mono" style="font-weight: 400">tunnel</b><i>Leave empty to connect directly</i></span><textarea class="ta" rows="2" autocorrect="off" autocapitalize="off" spellcheck="false">ssh -N -L 25432:db.internal:5432 bastion</textarea></label>
         </div>
         <div class="grp" style="flex-direction: row; align-items: center; gap: 12px; padding-top: 10px">
           <span style="flex: 1; display: flex; flex-direction: column"><span class="mono" style="font-size: 13px">read_only</span><span style="font-size: 13px; color: #8A8E99">Opens sessions read-only so the database rejects writes</span></span>
@@ -92,7 +92,7 @@ button,input,textarea{font:inherit;color:inherit}
           <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="8" cy="8" r="6"></circle><path d="M6 6l4 4M10 6l-4 4"></path></svg>
           <span class="mono">localhost:25432</span> didn't open within 20 seconds
         </span>
-        <pre class="mono" style="margin: 0; padding: 8px 10px; border-radius: 6px; background: #15161B; font-size: 13px; white-space: pre-wrap">Unauthorized. Please login with `railway login`</pre>
+        <pre class="mono" style="margin: 0; padding: 8px 10px; border-radius: 6px; background: #15161B; font-size: 13px; white-space: pre-wrap">bastion: Permission denied (publickey).</pre>
       </div>
       <footer class="foot">
         <button type="button" class="btn">Test</button>
@@ -138,7 +138,7 @@ button,input,textarea{font:inherit;color:inherit}
           <div class="seg" role="radiogroup" aria-labelledby="ssl-b"><button type="button" role="radio" aria-checked="false">disable</button><button type="button" role="radio" aria-checked="false">require</button><button type="button" role="radio" aria-checked="true">verify-full</button></div>
         </div>
         <div class="grp">
-          <label class="fld"><span><b class="mono" style="font-weight: 400">tunnel</b><i>Leave empty to connect directly</i></span><textarea class="ta" rows="1" placeholder="railway connect … or ssh -L …" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></label>
+          <label class="fld"><span><b class="mono" style="font-weight: 400">tunnel</b><i>Leave empty to connect directly</i></span><textarea class="ta" rows="1" placeholder="ssh -N -L … or another tunnel command" autocorrect="off" autocapitalize="off" spellcheck="false"></textarea></label>
         </div>
         <div class="grp" style="padding-top: 10px">
           <button type="button" class="disc" aria-expanded="true">

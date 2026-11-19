@@ -263,7 +263,7 @@ class Component extends DCLogic {
 
     const connections = [
       { name: 'local', sub: '127.0.0.1:54318/chilla_test', color: connColor },
-      { name: 'staging', sub: 'localhost:25432/railway', color: '#E8B04B', tunnel: true },
+      { name: 'staging', sub: 'localhost:25432/app', color: '#E8B04B', tunnel: true },
       { name: 'prod', sub: 'db.example.com:5432/app', color: '#EF6461', readonly: true }
     ].map((c) => ({
       ...c,
