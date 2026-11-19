@@ -4,8 +4,9 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use crate::domain::{
-    Column, ConnectionProfile, Danger, EndOutcome, FileStamp, Password, ProfileError, Project,
-    QueryOutcome, Row, ServerError, SqlFile, SqlPath, StatementSpan, TxStatus, WriteMode,
+    Catalog, Column, ConnectionProfile, Danger, EndOutcome, FileStamp, Password, ProfileError,
+    Project, QueryOutcome, Row, ServerError, SqlFile, SqlPath, StatementSpan, TableDetails,
+    TxStatus, WriteMode,
 };
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽고 쓴다.
@@ -126,6 +127,13 @@ pub trait DbConnection: Send + 'static {
     /// 결과 행이 없는 문장(`BEGIN`, `COMMIT`, `ROLLBACK`)을 simple query로 보내고 서버가 끝낼 때까지
     /// 기다린다. 서버가 거절하면 `Server`다. 연결이 끊겨 있으면 `ConnectionLost`다.
     fn simple_execute(&self, sql: &str) -> impl Future<Output = Result<(), QueryError>> + Send;
+    /// 스키마 트리와 자동완성의 catalog. 연결이 끊겨 있으면 `ConnectionLost`다.
+    fn read_catalog(&self) -> impl Future<Output = Result<Catalog, QueryError>> + Send;
+    /// 그 relation의 인덱스와 제약조건, 각각 이름 오름차순. 없는 OID면 둘 다 비어 있다.
+    fn read_table_details(
+        &self,
+        relation: u32,
+    ) -> impl Future<Output = Result<TableDetails, QueryError>> + Send;
     /// 이 연결에서 실행 중인 쿼리를 멈추는 요청. 연결과 따로 살아서 다른 task에서 쓸 수 있다.
     fn cancel_handle(&self) -> Self::Cancel;
     /// 서버가 세션을 끝낼 때까지 기다린다. 실행 중인 쿼리가 있으면 끝날 때까지 기다리지 않는다.

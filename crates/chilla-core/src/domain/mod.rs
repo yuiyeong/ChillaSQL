@@ -1,5 +1,6 @@
 //! 접속 정보, 세션 같은 개념과 규칙. 다른 layer와 I/O crate에 의존하지 않는다.
 
+mod catalog;
 mod connection;
 mod danger;
 mod password;
@@ -10,6 +11,10 @@ mod sql_file;
 mod statement;
 mod tunnel;
 
+pub use catalog::{
+    Catalog, CatalogColumn, ConstraintInfo, ConstraintKind, FunctionName, IndexInfo, Relation,
+    RelationKind, TableDetails,
+};
 pub use connection::{ConnectionColor, ConnectionProfile, ProfileError, SslMode};
 pub use danger::Danger;
 pub use password::Password;

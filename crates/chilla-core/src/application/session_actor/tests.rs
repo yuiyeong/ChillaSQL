@@ -20,6 +20,7 @@ fn session_with(limits: QueryLimits) -> (SessionHandle, FakeLink) {
         pid: 42,
         link: link.clone(),
         log: None,
+        catalog: Default::default(),
     };
     (spawn(connection, limits), link)
 }

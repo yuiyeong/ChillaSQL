@@ -1,6 +1,6 @@
 //! 가짜 DB 연결: 결과 stream, cancel, 트랜잭션 상태를 test가 밖에서 조작한다.
 
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::ops::Range;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -9,7 +9,7 @@ use tokio::sync::{OwnedRwLockWriteGuard, RwLock, watch};
 
 use super::numbered;
 use crate::application::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
-use crate::domain::{Column, Row, ServerError, TxStatus};
+use crate::domain::{Catalog, Column, Row, ServerError, TableDetails, TxStatus};
 
 /// 가짜 연결 하나를 test가 밖에서 보고 조작하는 손잡이.
 #[derive(Clone, Default)]
@@ -125,6 +125,17 @@ impl FakeLink {
     pub(crate) fn set_tx(&self, tx: TxStatus) {
         self.queries().tx = tx;
     }
+}
+
+/// 가짜 연결들이 함께 보는 catalog. `FakeConnector`가 갖고 연결마다 나눠 준다.
+#[derive(Default)]
+pub(crate) struct FakeCatalog {
+    pub(crate) catalog: Catalog,
+    pub(crate) details: HashMap<u32, TableDetails>,
+    /// 다음 읽기(`read_catalog`, `read_table_details`)들이 차례로 돌려줄 오류.
+    pub(crate) failures: VecDeque<QueryError>,
+    /// `read_catalog`가 불린 횟수.
+    pub(crate) reads: usize,
 }
 
 /// `code`만 채운 서버 오류. `message`는 `code`와 같다.
@@ -308,6 +319,19 @@ pub(crate) struct FakeConnection {
     pub(crate) link: FakeLink,
     /// 닫힐 때 `"db close"`를 남길 곳.
     pub(crate) log: Option<Arc<Mutex<Vec<&'static str>>>>,
+    pub(crate) catalog: Arc<Mutex<FakeCatalog>>,
+}
+
+impl FakeConnection {
+    /// 끊긴 연결이면 `ConnectionLost`, 아니면 예약한 오류.
+    fn catalog_failure(&self, catalog: &mut FakeCatalog) -> Option<QueryError> {
+        if self.is_closed() {
+            return Some(QueryError::ConnectionLost {
+                message: "가짜 연결이 끊겼다".into(),
+            });
+        }
+        catalog.failures.pop_front()
+    }
 }
 
 impl DbConnection for FakeConnection {
@@ -387,6 +411,23 @@ impl DbConnection for FakeConnection {
             queries.tx = TxStatus::Idle;
         }
         Ok(())
+    }
+
+    async fn read_catalog(&self) -> Result<Catalog, QueryError> {
+        let mut catalog = self.catalog.lock().unwrap();
+        catalog.reads += 1;
+        match self.catalog_failure(&mut catalog) {
+            Some(error) => Err(error),
+            None => Ok(catalog.catalog.clone()),
+        }
+    }
+
+    async fn read_table_details(&self, relation: u32) -> Result<TableDetails, QueryError> {
+        let mut catalog = self.catalog.lock().unwrap();
+        match self.catalog_failure(&mut catalog) {
+            Some(error) => Err(error),
+            None => Ok(catalog.details.get(&relation).cloned().unwrap_or_default()),
+        }
     }
 
     fn cancel_handle(&self) -> FakeCancel {

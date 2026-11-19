@@ -5,6 +5,7 @@
 //! 상태를 알 수 없다. 이 때문에 SCRAM channel binding은 쓰지 않는다.
 
 mod cancel;
+mod catalog;
 mod rows;
 mod tls;
 mod tx_tap;
@@ -21,7 +22,7 @@ use tokio_postgres::error::SqlState;
 use tokio_postgres::{Client, Config, NoTls, SimpleQueryMessage};
 
 use crate::application::{ConnectError, Connector, DbConnection, QueryError};
-use crate::domain::{ConnectionProfile, Password, SslMode, TxStatus};
+use crate::domain::{Catalog, ConnectionProfile, Password, SslMode, TableDetails, TxStatus};
 pub use cancel::PgCancel;
 pub use rows::PgRows;
 use tls::Verification;
@@ -225,6 +226,14 @@ impl DbConnection for PgConnection {
 
     async fn simple_execute(&self, sql: &str) -> Result<(), QueryError> {
         self.client.batch_execute(sql).await.map_err(query_error)
+    }
+
+    async fn read_catalog(&self) -> Result<Catalog, QueryError> {
+        catalog::read_catalog(&self.client).await
+    }
+
+    async fn read_table_details(&self, relation: u32) -> Result<TableDetails, QueryError> {
+        catalog::read_table_details(&self.client, relation).await
     }
 
     fn cancel_handle(&self) -> PgCancel {

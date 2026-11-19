@@ -13,17 +13,17 @@ use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio::time::timeout;
 
-pub(crate) use connection::{FakeConnection, FakeFeed, FakeLink, server_error};
+pub(crate) use connection::{FakeCatalog, FakeConnection, FakeFeed, FakeLink, server_error};
 pub(crate) use tunnel::{FakeRun, FakeRunner, events_sink};
 
 use super::{
     ConnectError, Connector, FileError, PasswordKey, PasswordStore, PasswordStoreError,
-    ProjectError, ProjectStore, QuerySink, SplitError, SqlFileStore, StatementInspector,
-    StatementSplitter,
+    ProjectError, ProjectStore, QueryError, QuerySink, SplitError, SqlFileStore,
+    StatementInspector, StatementSplitter,
 };
 use crate::domain::{
-    ConnectionColor, ConnectionProfile, Danger, FileStamp, Password, Project, QueryEvent, Row,
-    SqlFile, SqlPath, StatementSpan, WriteMode,
+    Catalog, ConnectionColor, ConnectionProfile, Danger, FileStamp, Password, Project, QueryEvent,
+    Row, SqlFile, SqlPath, StatementSpan, TableDetails, WriteMode,
 };
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
@@ -297,6 +297,7 @@ struct ConnectLog {
 #[derive(Clone, Default)]
 pub(crate) struct FakeConnector {
     log: Arc<Mutex<ConnectLog>>,
+    catalog: Arc<Mutex<FakeCatalog>>,
     gate: Arc<tokio::sync::RwLock<()>>,
 }
 
@@ -327,6 +328,35 @@ impl FakeConnector {
     /// 다음 연결 요청 하나가 `error`로 실패한다.
     pub(crate) fn fail_next(&self, error: ConnectError) {
         self.log.lock().unwrap().fail_next = Some(error);
+    }
+
+    // Task 3(App의 catalog connection) test가 쓴다.
+    #[allow(dead_code)]
+    /// 만든 연결들의 `read_catalog`가 돌려줄 catalog. 처음에는 빈 catalog다.
+    pub(crate) fn set_catalog(&self, catalog: Catalog) {
+        self.catalog.lock().unwrap().catalog = catalog;
+    }
+
+    /// 만든 연결들의 `read_table_details(relation)`이 돌려줄 값. 없으면 빈 값이다.
+    #[allow(dead_code)]
+    pub(crate) fn set_details(&self, relation: u32, details: TableDetails) {
+        self.catalog
+            .lock()
+            .unwrap()
+            .details
+            .insert(relation, details);
+    }
+
+    /// 다음 catalog 읽기 한 번이 `error`로 실패한다. 여러 번 부르면 차례로 쓴다.
+    #[allow(dead_code)]
+    pub(crate) fn fail_next_catalog(&self, error: QueryError) {
+        self.catalog.lock().unwrap().failures.push_back(error);
+    }
+
+    /// 만든 연결 전체의 `read_catalog` 호출 수.
+    #[allow(dead_code)]
+    pub(crate) fn catalog_reads(&self) -> usize {
+        self.catalog.lock().unwrap().reads
     }
 
     /// 만든 연결이 닫힐 때 `"db close"`를 `log`에 남긴다.
@@ -361,6 +391,7 @@ impl Connector for FakeConnector {
             pid: 1000 + log.links.len() as i32,
             link,
             log: log.close_log.clone(),
+            catalog: self.catalog.clone(),
         })
     }
 }
