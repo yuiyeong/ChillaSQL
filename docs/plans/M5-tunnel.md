@@ -843,7 +843,7 @@ git commit -m "feat: toolbar, 탭, 결과 panel에 터널 상태와 Reconnected 
 
 앱은 `scripts/build-app.sh --debug`로 만든 `.app`으로 Claude가 직접 띄워 확인한다(진행상황 "앱 동작 확인 방법"). 사용자가 허락한 실제 터널 접속을 쓰고, 그 명령은 문서에 적지 않는다.
 
-- [ ] **Step 1: 완료 기준을 확인한다**
+- [x] **Step 1: 완료 기준을 확인한다**
 
 | 확인 | 기준 |
 | --- | --- |
@@ -855,7 +855,7 @@ git commit -m "feat: toolbar, 탭, 결과 panel에 터널 상태와 Reconnected 
 | 터미널에서 먼저 터널을 띄우고 실행 | 탭과 chip에 `External tunnel`, 앱 종료 뒤에도 터미널의 터널이 살아 있다 |
 | 없는 서비스 이름으로 실행 | 20초를 기다리지 않고 `Tunnel failed`와 stderr, Try again과 Edit connection |
 
-- [ ] **Step 2: 문서를 갱신하고 commit한다**
+- [x] **Step 2: 문서를 갱신하고 commit한다**
 
 이 계획의 체크박스를 체크하고, 확인하며 달라진 것을 이 파일의 "Task 11 실행에서 달라진 것"에 적는다. 진행상황의 마일스톤 현황, "지금", 작업 로그, 결정 기록을 갱신한다.
 
@@ -866,5 +866,11 @@ Expected: 통과
 git add docs
 git commit -m "docs: M5 완료 확인 결과를 기록함"
 ```
+
+## Task 11 실행에서 달라진 것 (2026-11-19)
+
+- 실제 터널 CLI는 link된 디렉토리에서만 동작해서, 확인용 프로젝트는 scratchpad에 두고 명령에 project id를 넘겼다. 실제 명령과 값은 적지 않는다.
+- 표의 7가지를 모두 확인했다. 접속 테스트 `Connected · 3232 ms` 뒤 터널 프로세스가 남지 않음, 실행 때 chip `Starting tunnel n / 20 s`와 결과 panel의 명령·Cancel, 탭 둘이 터널 프로세스 하나를 씀, CLI 프로세스 `kill -9` 뒤 `Reconnecting 1/3`, 옛 ssh 자식이 정리되고 새로 뜸, 다음 실행에서 `Reconnected` banner, `Cmd+Q` 뒤 CLI·ssh 프로세스 없음과 포트 닫힘, 밖에서 띄운 터널은 `External tunnel`이고 앱 종료 뒤에도 남음, 없는 서비스 이름은 3초 안에 `Tunnel failed`와 stderr, Try again, Edit connection.
+- `External tunnel`의 hover 설명은 화면에서 확인하지 못했다(test가 덮음).
 
 M5가 끝나면 CLAUDE.md의 개발 순서대로 `simplify`, `code-review`(high), `superpowers:receiving-code-review`를 돌린다.

@@ -7,7 +7,7 @@
 - **진행 중**: M5 터널(2026-11-19 시작). 계획은 [M5](plans/M5-tunnel.md), 진행 기록은 `.superpowers/sdd/M5-tunnel/progress.md`(git에 올리지 않음)
 - **작업 위치**: branch `m5-tunnel`. main은 `12ae9da`이고 origin/main(`d2be9bf`) 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M5 계획의 Task 2부터 이어 간다. M5가 끝나면 실제 터널 명령과 서버 이름 같은 private 정보를 문서, 디자인 사본, test에서 지운다(사용자 지시)
+- **다음 할 일**: M5 Task 1~11과 private 정보 정리를 끝냈다. CLAUDE.md 개발 순서의 simplify, code-review(high), receiving-code-review를 돌린 뒤 M5를 완료로 바꾸고 branch를 main에 합친다
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -209,6 +209,9 @@
 
 ### 2026-11-19
 
+- M5 Task 2~10: `tunnel_timeout`, `ShellTunnelRunner`(login shell, process group과 자손 tree 끄기, 기억한 자손의 종료를 끊김으로 봄), `Tunnels`(공유, 재실행 3회, 취소, 모두 끄기, 접속 테스트용 private 터널), 세션·접속 테스트·앱 종료와 연결, Tauri event `tunnel`과 `cancel_tunnel`/`restart_tunnel`, forwarder로 실제 프로세스 통합 test, 화면의 터널 store와 stale 세션 바꾸기, 캔버스 배치의 접속 sheet, toolbar·탭·결과 panel의 터널 상태와 Reconnected banner
+- 문서, 디자인 사본, test, M1 계획의 실제 터널 명령과 서비스·프로젝트 이름을 지어낸 예시로 바꿈(사용자 지시). git history에는 남아 있음
+- M5 Task 11: 실제 터널로 앱에서 7가지를 확인함(계획 파일의 "Task 11 실행에서 달라진 것"). 확인용 프로젝트는 scratchpad에 두었고 지웠다. 그 프로젝트의 접속 비밀번호가 키체인에 남았을 수 있음(service `com.yuiyeong.chillasql`, account가 scratchpad 경로인 항목)
 - M5 계획(`docs/plans/M5-tunnel.md`)을 쓰고 branch `m5-tunnel`을 만듦. 1단계를 써 보는 기간은 건너뜀(사용자 결정)
 - M5 Task 1: 실제 터널로 프로세스 tree를 확인함. 포트는 약 3초에 열림. zsh가 단일 명령을 `exec`해 실행한 프로세스가 곧 터널 CLI임. 터널 CLI는 ssh를 다른 process group으로 띄우고, `SIGTERM`이나 `SIGINT`를 받아도 ssh를 남겨 포트가 열린 채 남음. ssh가 먼저 죽어도 CLI는 살아 있음. link되지 않은 디렉토리나 없는 서비스 이름이면 stderr에 이유를 쓰고 바로 exit 1. Finder로 띄운 `.app`에도 `SHELL=/bin/zsh`가 있고 `zsh -l -c`가 CLI를 찾음. 확인용 probe는 지움. 계획의 끄는 방법, 끊김 감지, cwd를 고침(결정 기록)
 - 터널 CLI는 터널이 열리면 stderr에 DB 비밀번호를 찍음. 화면은 터널이 열리지 않았을 때만 stderr를 보여 주므로 성공한 실행의 출력은 보이지 않음
