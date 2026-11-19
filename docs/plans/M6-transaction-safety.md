@@ -309,7 +309,7 @@ git commit -m "feat: Manual 모드의 BEGIN과 Commit, Rollback command를 만�
 - Produces (`domain`):
   - `QueryOutcome::Expired`
   - `QueryLimits.idle_result_timeout: Duration`(기본 600초), `QueryLimits.tx_drain_limit: Duration`(기본 5초)
-- Produces (DTO, 화면): outcome `"expired"`. 결과 표 아래 끝 줄 문구 `result.expired`: `"Closed after 10 minutes without fetching more. Run again to see the rest."`
+- Produces (DTO, 화면): outcome `"expired"`. 화면은 discarded, cancelled와 같은 끝난 상태 카드로 그린다(canvas States). 제목 `result.expired`: `"Results closed"`, 본문 `result.expiredRows.one`/`.other`: `"Nothing was fetched for {minutes} minutes, so the query was closed on the database. The {count} rows received stay visible."`(실행 중 R9로 바꿈. 처음 계획은 결과 표 아래 끝 줄 문구였다)
 
 - [x] **Step 1: actor test를 쓴다** (`tokio::time::pause`)
 
@@ -333,7 +333,7 @@ Expected: FAIL
 
 - `Query`는 시작할 때 트랜잭션 안이었는지(`in_transaction: bool`)를 갖는다. 버리기(`Discarded`, `Expired`)는 그 값이 true면 cancel 없이 `Draining`에 들어가고 `tx_drain_limit` 뒤에 cancel한다. `DrainReason`에 `Expired`를 더한다.
 - `Paused`에 들어갈 때 `idle_result_timeout`의 시각을 두고 `next_event`의 `select!`가 기다린다.
-- 화면: `runReducer`가 `expired`를 끝난 결과로 다룬다(`fetch: "none"`). `ResultPane`의 결과 끝 줄이 `result.expired`를 쓴다. `runReducer.test.ts`에 `expired_keeps_the_rows_and_stops_fetching`.
+- 화면: `runReducer`가 `expired`를 끝난 결과로 다룬다(`fetch: "none"`). `ResultPane`이 끝난 상태 카드에 `result.expired`와 `result.expiredRows`를 쓴다. `runReducer.test.ts`에 `expired_keeps_the_rows_and_stops_fetching`.
 
 - [x] **Step 5: 통과를 확인한다**
 
@@ -934,7 +934,7 @@ git commit -m "feat: 접속 sheet에서 접속 색을 고르게 함"
 
 앱을 띄우기 전에 사용자에게 해도 되는지 묻는다. 방법은 진행상황 "지금"의 "앱 동작 확인 방법"이다. staging 접속은 사용자의 local `chilla.toml`에 있는 실제 터널 접속이고, 문서에는 그 이름과 명령을 적지 않는다. staging에는 `CREATE TEMP TABLE`만 써서 공유 data를 건드리지 않는다.
 
-- [ ] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
+- [x] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
 
 | 확인 | 기준 |
 | --- | --- |
@@ -953,7 +953,7 @@ git commit -m "feat: 접속 sheet에서 접속 색을 고르게 함"
 
 받다 만 결과의 10분 자동 닫기는 자동 test로 확인하고 앱에서는 기다리지 않는다.
 
-- [ ] **Step 2: staging 터널에서 완료 기준을 확인한다**
+- [x] **Step 2: staging 터널에서 완료 기준을 확인한다**
 
 터미널 없이 앱에서 staging 접속을 열고(터널을 앱이 띄움) Manual 모드에서:
 
@@ -962,7 +962,7 @@ git commit -m "feat: 접속 sheet에서 접속 색을 고르게 함"
 3. `INSERT INTO m6_check VALUES (2)` → Rollback → `SELECT * FROM m6_check`가 여전히 1행
 4. 터널 프로세스를 밖에서 끝내 트랜잭션 중 끊김을 만들면 "Transaction lost"가 보인다
 
-- [ ] **Step 3: 기록하고 commit한다**
+- [x] **Step 3: 기록하고 commit한다**
 
 - 진행상황: M6을 `완료`(날짜), 작업 로그에 Task별 결과와 Step 1·2의 결과, "지금"의 다음 할 일(M7)을 쓴다.
 - 이 계획의 체크박스를 모두 체크한다.

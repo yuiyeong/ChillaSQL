@@ -4,10 +4,10 @@
 
 ## 지금
 
-- **진행 중**: M6 트랜잭션과 안전장치([M6](plans/M6-transaction-safety.md)). Task 1~14를 끝냄. 남은 것은 Task 15(앱 동작 확인과 staging 확인). 진행 기록은 `.superpowers/sdd/M6-transaction-safety/`(git에 올리지 않음). M5 터널은 끝냄(2026-11-19, [M5](plans/M5-tunnel.md))
+- **진행 중**: M6 트랜잭션과 안전장치([M6](plans/M6-transaction-safety.md))의 Task 1~15를 끝냄(2026-11-19). 남은 것은 simplify와 code-review(high). 진행 기록은 `.superpowers/sdd/M6-transaction-safety/`(git에 올리지 않음)
 - **작업 위치**: branch `m6-transactions`(main에서 2026-11-19에 만듦). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M6 Task 15([계획](plans/M6-transaction-safety.md)). 앱을 띄우기 전에 사용자에게 묻는다(2026-11-19에는 "나중에"로 미룸). Task 2~13의 review가 앱에서 보라고 넘긴 것(dialog 모양, `Cmd+Q` custom item과 창 닫기의 종료 확인)도 함께 본다. 그 뒤 simplify, code-review(high). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: M6 simplify → code-review(high) → 지적 검토 → main에 합치기 → M7 계획. 가끔 실패하는 test `discarding_a_paused_result_inside_a_transaction_keeps_it_open`도 이때 본다(작업 로그 2026-11-19 M6 Task 15). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -37,7 +37,7 @@
 | M3 프로젝트·에디터 화면 | 1 | 완료 | [M3](plans/M3-project-editor.md) | 2026-11-12 | 2026-11-18 |
 | M4 결과 표 | 1 | 완료 | [M4](plans/M4-result-table.md) | 2026-11-18 | 2026-11-18 |
 | M5 터널 | 2 | 완료 | [M5](plans/M5-tunnel.md) | 2026-11-19 | 2026-11-19 |
-| M6 트랜잭션과 안전장치 | 2 | 진행 중 | [M6](plans/M6-transaction-safety.md) | 2026-11-19 | |
+| M6 트랜잭션과 안전장치 | 2 | 완료 | [M6](plans/M6-transaction-safety.md) | 2026-11-19 | 2026-11-19 |
 | M7 스키마 트리와 자동완성 | 3 | 대기 | | | |
 | M8 에디터·실행 편의 | 3 | 대기 | | | |
 | M9 쿼리 도구 | 4 | 대기 | | | |
@@ -242,6 +242,12 @@
 
 ### 2026-11-19
 
+- M6 Task 15: `.app`(`afcd47b`)으로 확인함
+  - local test DB: 계획 표의 12항목이 모두 기준대로. Manual `INSERT`는 다른 탭에서 보이지 않고 Commit(`Opt+Shift+Cmd+Enter`) 뒤 보이고 Rollback(`Opt+Shift+Cmd+Z`) 뒤 사라짐. Auto의 `BEGIN`은 `Open · manual BEGIN`. 트랜잭션 안의 오류는 `Transaction failed`와 Rollback, Commit disabled. `DELETE FROM m6_t` 확인 문구가 Auto와 Manual에서 다르고 Cancel이면 실행하지 않음. 탭 닫기, 접속 바꾸기(시계 icon), Auto 전환, 연결 대상 저장, 프로젝트 바꾸기의 dialog가 캔버스와 같음. `Cmd+Q`와 창 닫기는 종료 확인을 띄우고 Cancel이면 남고 Roll back all and quit이면 끝나며 서버에 열린 트랜잭션이 없음. `osascript` quit과 Dock의 종료는 확인 없이 끝나고 서버가 되돌림. 저장하지 않은 탭 닫기는 캔버스 dialog. 받다 만 `big_table` 뒤 Manual 다음 문장은 Failed가 되지 않음
+  - 실제 터널 접속(사용자가 알려 준 `<터널 명령>`, 확인용 프로젝트는 scratchpad): 앱이 터널을 띄우고 접속 Test가 `Connected`. Manual에서 `CREATE TEMP TABLE m6_check` → `INSERT 1` → Commit → `SELECT` 1행, `INSERT 2` → 2행 → Rollback → 1행. 트랜잭션이 열린 채 터널 프로세스와 ssh를 밖에서 끝내자 곧바로 `Transaction lost`("The 3 uncommitted statements were not applied"). 다음 실행에서 터널이 다시 뜨고 `Reconnected`. 앱을 끝내면 터널 프로세스와 포트가 남지 않음. 터널 CLI가 link된 디렉토리에서 실행해야 해서 `tunnel`에 `cd <디렉토리> && `를 붙임
+  - 관찰: 트랜잭션 안에서 받다 만 `big_table`(100만 행)을 cancel 없이 버리는 데 local에서 약 4.3초 걸림. 그동안 다음 문장의 결과 panel은 "Waiting for the first row from the server". 버리기의 fallback(`tx_drain_limit` 5초)에 가까워 행이 넓거나 터널이 느리면 cancel로 넘어가 트랜잭션이 Failed가 될 수 있음. `generate_series` 100만 행(int 한 column)은 터널 너머에서도 몇 초 안에 끝남
+  - `pnpm check`에서 `discarding_a_paused_result_inside_a_transaction_keeps_it_open`(`SELECT id FROM big_table`, 단독 약 1.7초)이 한 번 실패하고 재실행에서 통과함. 병렬 실행 부하로 버리기가 5초를 넘어 cancel된 것으로 보임(확인하지 않음)
+  - 계획 Task 5의 Interfaces와 Step 4에 남아 있던 옛 문구(결과 표 아래 끝 줄)를 실제 구현(R9, 끝난 상태 카드 "Results closed")으로 고침
 - M6 Task 2~14(`dfddc0c`..`e07052e`): `chilla.toml`의 `color` 값 검사, `Finished`에 트랜잭션 상태, Manual 모드의 `BEGIN`과 Commit/Rollback command, 트랜잭션 안에서 cancel 없이 버리기와 받다 만 결과 10분 뒤 닫기, `pg_query`로 위험 쿼리 판별, 캔버스 모양의 확인 dialog(native `ask`를 걷어 냄), 탭의 트랜잭션 상태와 Auto/Manual 모드, toolbar의 Commit/Rollback과 탭의 `TX` 경과 시간, 결과 panel의 실패한 트랜잭션과 Transaction lost, 열린 트랜잭션을 잃는 동작의 확인, WHERE 없는 `UPDATE`/`DELETE`와 `DROP`, `TRUNCATE` 확인, 앱 종료 확인, 접속 sheet의 `color` swatch. Task마다 implementer와 review를 따로 돌림. 앱은 아직 띄우지 않음(Task 15)
 - M6 Task 14 앱 확인: `.app`에서 색 고르기, 저장, 다시 눌러 지우기와 창 상단 bar, 탭 dot, chip, sidebar dot, `chilla.toml` 반영을 확인함. 수정 sheet에서 `color` legend가 swatch 위 줄에 그려져 고침(`afcd47b`). WKWebView가 fieldset `<legend>`의 `float: left`를 따르지 않아 한 줄 배치는 `role="group"`과 label span으로 만듦. `pnpm check`에서 chilla-core의 `discarding_a_paused_result_inside_a_transaction_keeps_it_open`이 한 번 실패하고 재실행에서 통과함(flaky 의심, 원인은 보지 않음)
 - M6 계획(`docs/plans/M6-transaction-safety.md`)을 쓰고 branch `m6-transactions`를 만듦
