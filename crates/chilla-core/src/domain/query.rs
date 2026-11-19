@@ -48,9 +48,9 @@ pub enum QueryEvent {
     Finished {
         outcome: QueryOutcome,
         elapsed: Duration,
-        /// 그 쿼리가 끝난 뒤 서버가 알려 준 트랜잭션 상태. 연결이 끊겼거나 세션을 닫는 중이면 `None`이다.
-        /// 시작하지 않고 끝난 쿼리(`Discarded`, 기다리다 `Cancelled`)는 서버에 묻지 않으므로 세션이
-        /// 마지막으로 읽은 값이다.
+        /// 그 쿼리가 끝난 뒤(버린 문장은 되돌린 뒤) 서버가 알려 준 트랜잭션 상태. 연결이 끊겼거나
+        /// 세션을 닫는 중이면 `None`이다. 서버에 보내지 않고 끝난 쿼리(`Discarded`, 기다리다
+        /// `Cancelled`)도 상태를 모르므로 `None`이다.
         tx: Option<TxStatus>,
     },
 }
@@ -89,8 +89,6 @@ pub struct QueryLimits {
     pub retained_rows: u64,
     /// batch를 보낸 뒤 `fetch_more`를 이만큼 받지 못하면 결과를 닫는다(`Expired`).
     pub idle_result_timeout: Duration,
-    /// 트랜잭션 안의 결과는 cancel 없이 남은 행을 읽어 버린다. 이만큼 지나도 끝나지 않으면 cancel한다.
-    pub tx_drain_limit: Duration,
 }
 
 impl Default for QueryLimits {
@@ -100,7 +98,6 @@ impl Default for QueryLimits {
             batch_bytes: 4 * 1024 * 1024,
             retained_rows: 100_000,
             idle_result_timeout: Duration::from_secs(600),
-            tx_drain_limit: Duration::from_secs(5),
         }
     }
 }
@@ -123,7 +120,6 @@ mod tests {
         assert_eq!(limits.batch_bytes, 4 * 1024 * 1024);
         assert_eq!(limits.retained_rows, 100_000);
         assert_eq!(limits.idle_result_timeout, Duration::from_secs(600));
-        assert_eq!(limits.tx_drain_limit, Duration::from_secs(5));
         assert_eq!(limits.retained_from(0), 0);
         assert_eq!(limits.retained_from(100_000), 0);
         assert_eq!(limits.retained_from(100_500), 500);

@@ -5,18 +5,27 @@ mod support;
 
 use std::time::Duration;
 
-use tokio::time::timeout;
-
 use chilla_core::domain::{
-    EndOutcome, EndResult, QueryEvent, QueryOutcome, SessionId, SessionInfo, TxEnd, TxMode,
-    TxStatus,
+    EndOutcome, EndResult, QueryEvent, QueryId, QueryOutcome, SessionId, SessionInfo, TxEnd,
+    TxMode, TxStatus,
 };
-use support::{TestApp, admin, app_with_project, finished, next, sink, store_password};
+use support::{TestApp, admin, app_with_project, next, sink, store_password};
 
 /// 비밀번호를 저장하고 세션 하나를 연다.
 async fn open_session(app: &TestApp) -> SessionInfo {
     store_password(app).await;
     app.open_session("local").await.unwrap()
+}
+
+/// `Finished`까지 읽고 그 outcome과 tx를 돌려준다.
+async fn finished_tx(
+    events: &mut tokio::sync::mpsc::UnboundedReceiver<QueryEvent>,
+) -> (QueryOutcome, Option<TxStatus>) {
+    loop {
+        if let QueryEvent::Finished { outcome, tx, .. } = next(events).await {
+            return (outcome, tx);
+        }
+    }
 }
 
 /// 쿼리를 실행하고 `Finished`의 outcome과 tx를 돌려준다. 그 사이의 행은 버린다.
@@ -198,8 +207,8 @@ async fn a_failed_statement_leaves_the_transaction_failed() {
     app.close_session(session.id).await.unwrap();
 }
 
-/// 받다 만 결과를 cancel로 버리면 트랜잭션이 failed가 되어 다음 문장이 `25P02`로 거부된다.
-/// 트랜잭션 안에서는 남은 행을 읽어 버리므로 트랜잭션이 열린 채다.
+/// 받다 만 결과를 cancel로 버리면 문장이 `57014`로 실패해 트랜잭션이 failed가 된다. 세션은 그 문장
+/// 앞에 둔 savepoint로 되돌려 트랜잭션을 열린 채로 둔다. 남은 행을 다 읽지 않으므로 시간에 기대지 않는다.
 #[tokio::test]
 async fn discarding_a_paused_result_inside_a_transaction_keeps_it_open() {
     let (app, _dir) = app_with_project().await;
@@ -208,8 +217,7 @@ async fn discarding_a_paused_result_inside_a_transaction_keeps_it_open() {
     let (big, mut first) = sink();
     app.execute(
         session.id,
-        // 행 하나가 작아야 debug build에서도 남은 행을 `tx_drain_limit`(5초)보다 훨씬 빨리 읽는다.
-        // 그래도 socket buffer보다 훨씬 커서 첫 batch 뒤에 서버는 문장을 끝내지 못하고 기다린다.
+        // socket buffer보다 훨씬 커서 첫 batch 뒤에 서버는 문장을 끝내지 못하고 기다린다.
         "SELECT id FROM big_table".into(),
         TxMode::Manual,
         big,
@@ -219,28 +227,167 @@ async fn discarding_a_paused_result_inside_a_transaction_keeps_it_open() {
     assert!(matches!(next(&mut first).await, QueryEvent::Columns(_)));
     assert!(matches!(next(&mut first).await, QueryEvent::Rows(_)));
 
-    let (sink, mut second) = sink();
-    app.execute(session.id, "SELECT 1".into(), TxMode::Manual, sink)
-        .await
-        .unwrap();
-    // 100만 행을 다 읽어 버린 뒤에 시작한다.
-    let (outcome, tx) = timeout(Duration::from_secs(30), async {
-        loop {
-            let event = second.recv().await.expect("sink가 이벤트 없이 drop됐다");
-            if let QueryEvent::Finished { outcome, tx, .. } = event {
-                return (outcome, tx);
-            }
-        }
-    })
-    .await
-    .expect("SELECT 1이 30초 안에 끝나지 않았다");
+    let (outcome, tx) = run(&app, session.id, "SELECT 1", TxMode::Manual).await;
     assert_eq!(outcome, QueryOutcome::Completed { rows: 1 });
     assert_eq!(tx, Some(TxStatus::InTransaction));
-    assert_eq!(finished(&mut first).await, QueryOutcome::Discarded);
+    assert_eq!(
+        finished_tx(&mut first).await,
+        (QueryOutcome::Discarded, Some(TxStatus::InTransaction))
+    );
 
     assert_eq!(
         app.end_transaction(session.id, TxEnd::Rollback).await,
         Ok(ended())
+    );
+    app.close_session(session.id).await.unwrap();
+}
+
+/// `m6_sp`(id 1..=2000, v = 0)를 temp table로 만들고 Manual로 `(0, 0)`을 넣는다. 트랜잭션이 열린다.
+async fn insert_then_start_update(app: &TestApp, session: SessionId) -> (QueryId, EventsOf) {
+    let (outcome, _) = run(
+        app,
+        session,
+        "CREATE TEMP TABLE m6_sp AS SELECT g AS id, 0 AS v FROM generate_series(1, 2000) g",
+        TxMode::Auto,
+    )
+    .await;
+    assert_eq!(outcome, QueryOutcome::Completed { rows: 2000 });
+    let inserted = run(
+        app,
+        session,
+        "INSERT INTO m6_sp VALUES (0, 0)",
+        TxMode::Manual,
+    )
+    .await;
+    assert_eq!(
+        inserted,
+        (
+            QueryOutcome::Completed { rows: 1 },
+            Some(TxStatus::InTransaction)
+        )
+    );
+
+    // 결과가 batch 여러 개라 첫 batch 뒤에 멈춘다.
+    let (sink, mut events) = sink();
+    let query = app
+        .execute(
+            session,
+            "UPDATE m6_sp SET v = 1 RETURNING id".into(),
+            TxMode::Manual,
+            sink,
+        )
+        .await
+        .unwrap();
+    assert!(matches!(next(&mut events).await, QueryEvent::Columns(_)));
+    assert!(matches!(next(&mut events).await, QueryEvent::Rows(_)));
+    (query, events)
+}
+
+type EventsOf = tokio::sync::mpsc::UnboundedReceiver<QueryEvent>;
+
+/// `m6_sp`의 행 수와 `v = 1`인 행 수.
+async fn counts(app: &TestApp, session: SessionId) -> (String, String) {
+    (
+        count(app, session, "m6_sp").await,
+        count(app, session, "m6_sp WHERE v = 1").await,
+    )
+}
+
+/// 다음 문장이 받다 만 `UPDATE … RETURNING`을 버리면 그 문장만 되돌린다. 서버가 `UPDATE`를 이미
+/// 끝냈어도(결과 행만 남은 경우) 적용되지 않는다. 앞의 `INSERT`는 남고 트랜잭션은 열린 채다.
+#[tokio::test]
+async fn a_discarded_update_returning_is_rolled_back_and_earlier_statements_stay() {
+    let (app, _dir) = app_with_project().await;
+    let session = open_session(&app).await;
+    let (_, mut update) = insert_then_start_update(&app, session.id).await;
+
+    let (outcome, tx) = run(&app, session.id, "SELECT 1", TxMode::Manual).await;
+    assert_eq!(
+        (outcome, tx),
+        (
+            QueryOutcome::Completed { rows: 1 },
+            Some(TxStatus::InTransaction)
+        )
+    );
+    assert_eq!(
+        finished_tx(&mut update).await,
+        (QueryOutcome::Discarded, Some(TxStatus::InTransaction))
+    );
+    assert_eq!(
+        counts(&app, session.id).await,
+        ("2001".to_string(), "0".to_string())
+    );
+
+    assert_eq!(
+        app.end_transaction(session.id, TxEnd::Rollback).await,
+        Ok(ended())
+    );
+    app.close_session(session.id).await.unwrap();
+}
+
+/// 사용자의 Cancel도 그 문장만 되돌린다. 트랜잭션은 열린 채이고 앞 문장은 남는다.
+#[tokio::test]
+async fn user_cancel_inside_a_transaction_keeps_it_open() {
+    let (app, _dir) = app_with_project().await;
+    let session = open_session(&app).await;
+    let (update, mut update_events) = insert_then_start_update(&app, session.id).await;
+    app.cancel_query(session.id, update).await.unwrap();
+    assert_eq!(
+        finished_tx(&mut update_events).await,
+        (QueryOutcome::Cancelled, Some(TxStatus::InTransaction))
+    );
+
+    // 서버에서 실행 중인 문장도 같다.
+    let (sink, mut sleeping) = sink();
+    let sleep = app
+        .execute(
+            session.id,
+            "SELECT pg_sleep(30)".into(),
+            TxMode::Manual,
+            sink,
+        )
+        .await
+        .unwrap();
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    app.cancel_query(session.id, sleep).await.unwrap();
+    assert_eq!(
+        finished_tx(&mut sleeping).await,
+        (QueryOutcome::Cancelled, Some(TxStatus::InTransaction))
+    );
+
+    assert_eq!(
+        counts(&app, session.id).await,
+        ("2001".to_string(), "0".to_string())
+    );
+    let (outcome, tx) = run(&app, session.id, "SELECT 1", TxMode::Manual).await;
+    assert_eq!(
+        (outcome, tx),
+        (
+            QueryOutcome::Completed { rows: 1 },
+            Some(TxStatus::InTransaction)
+        )
+    );
+    app.close_session(session.id).await.unwrap();
+}
+
+/// Commit은 실행 중인 문장을 되돌린 뒤 보낸다. 버린 문장은 Commit되지 않는다.
+#[tokio::test]
+async fn commit_rolls_back_the_running_statement_first() {
+    let (app, _dir) = app_with_project().await;
+    let session = open_session(&app).await;
+    let (_, mut update) = insert_then_start_update(&app, session.id).await;
+
+    assert_eq!(
+        app.end_transaction(session.id, TxEnd::Commit).await,
+        Ok(ended())
+    );
+    assert_eq!(
+        finished_tx(&mut update).await,
+        (QueryOutcome::Discarded, Some(TxStatus::InTransaction))
+    );
+    assert_eq!(
+        counts(&app, session.id).await,
+        ("2001".to_string(), "0".to_string())
     );
     app.close_session(session.id).await.unwrap();
 }

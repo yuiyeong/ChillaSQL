@@ -368,8 +368,8 @@ impl DbConnection for FakeConnection {
         Ok(FakeRows(feed))
     }
 
-    /// 성공하면 서버처럼 트랜잭션 상태를 바꾼다: `BEGIN` 뒤에는 `InTransaction`, `COMMIT`과
-    /// `ROLLBACK` 뒤에는 `Idle`이다.
+    /// 성공하면 서버처럼 트랜잭션 상태를 바꾼다: `BEGIN`(뒤에 `SAVEPOINT`가 붙어도)과
+    /// `ROLLBACK TO SAVEPOINT` 뒤에는 `InTransaction`, `COMMIT`과 `ROLLBACK` 뒤에는 `Idle`이다.
     async fn simple_execute(&self, sql: &str) -> Result<(), QueryError> {
         let mut queries = self.link.queries();
         queries.sent.push(sql.to_string());
@@ -381,10 +381,10 @@ impl DbConnection for FakeConnection {
         if let Some(code) = queries.simple_error.take() {
             return Err(QueryError::Server(server_error(&code)));
         }
-        match sql {
-            "BEGIN" => queries.tx = TxStatus::InTransaction,
-            "COMMIT" | "ROLLBACK" => queries.tx = TxStatus::Idle,
-            _ => {}
+        if sql.starts_with("BEGIN") || sql.starts_with("ROLLBACK TO SAVEPOINT") {
+            queries.tx = TxStatus::InTransaction;
+        } else if sql == "COMMIT" || sql == "ROLLBACK" {
+            queries.tx = TxStatus::Idle;
         }
         Ok(())
     }

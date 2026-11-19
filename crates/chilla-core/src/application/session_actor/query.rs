@@ -31,17 +31,6 @@ impl DrainReason {
     }
 }
 
-/// 버리기 시작할 때 세션이 할 일.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Drain {
-    /// 이미 버리는 중이다.
-    Already,
-    /// cancel해서 문장을 멈춘다.
-    Cancel,
-    /// cancel 없이 남은 행을 읽어 버린다. 트랜잭션 안의 문장을 cancel하면 트랜잭션이 failed가 된다.
-    ReadOut,
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Phase {
     /// 행을 읽는 중.
@@ -90,12 +79,13 @@ pub(super) struct Pending {
 }
 
 impl Pending {
-    /// 시작하지 않고 마친다. `outcome`은 `Discarded` 또는 `Cancelled`이고, `tx`는 세션이 마지막으로 읽은 값이다.
-    pub(super) fn finish(mut self, outcome: QueryOutcome, tx: Option<TxStatus>) {
+    /// 시작하지 않고 마친다. `outcome`은 `Discarded` 또는 `Cancelled`다. 서버에 보내지 않았으므로
+    /// 트랜잭션 상태는 싣지 않는다. 세션이 마지막으로 읽은 값은 낡았을 수 있다.
+    pub(super) fn finish(mut self, outcome: QueryOutcome) {
         (self.sink)(QueryEvent::Finished {
             outcome,
             elapsed: Duration::ZERO,
-            tx,
+            tx: None,
         });
     }
 }
@@ -154,20 +144,22 @@ pub(super) struct Query<R> {
     /// 버리는 중에 화면에 보내지 않고 버린 행이 있다(보내지 않은 batch와 look-ahead 행 포함).
     discarded: bool,
     end: Option<End>,
-    /// 시작할 때 트랜잭션 안이었다. 다음 쿼리나 끝내기, 자동 닫기로 버릴 때 cancel하지 않는다.
-    in_transaction: bool,
+    /// 문장 앞에 세션의 savepoint를 두었다. 버리거나 취소하면 그 savepoint로 되돌린다.
+    savepoint: bool,
+    /// 버린 문장을 savepoint로 되돌렸다. 끝까지 돈 문장이어도 적용되지 않았다.
+    undone: bool,
     /// `Paused`일 때만 있다. 이 시각까지 `fetch_more`가 없으면 결과를 닫는다(`Expired`).
     expires_at: Option<Instant>,
 }
 
 impl<R: RowSource> Query<R> {
-    /// `started`는 문장을 보내기 직전의 시각이다. `in_transaction`은 그 문장을 트랜잭션 안에서 보냈는지다.
+    /// `started`는 문장을 보내기 직전의 시각이다. `savepoint`는 그 문장 앞에 세션의 savepoint를 두었는지다.
     pub(super) fn new(
         pending: Pending,
         rows: R,
         started: Instant,
         limits: QueryLimits,
-        in_transaction: bool,
+        savepoint: bool,
     ) -> Self {
         Self {
             id: pending.id,
@@ -184,7 +176,8 @@ impl<R: RowSource> Query<R> {
             error: None,
             discarded: false,
             end: None,
-            in_transaction,
+            savepoint,
+            undone: false,
             expires_at: None,
         }
     }
@@ -286,11 +279,11 @@ impl<R: RowSource> Query<R> {
         }
     }
 
-    /// 남은 결과를 버리기 시작하고 세션이 할 일을 돌려준다. 이미 버리는 중이면 아무것도 하지 않는다.
-    /// 트랜잭션 안의 쿼리는 사용자가 취소할 때만 cancel한다.
-    pub(super) fn drain(&mut self, reason: DrainReason) -> Drain {
+    /// 남은 결과를 버리기 시작한다. 세션은 cancel해야 한다. 이미 버리는 중이면 아무것도 하지 않고
+    /// false다.
+    pub(super) fn drain(&mut self, reason: DrainReason) -> bool {
         if self.is_draining() {
-            return Drain::Already;
+            return false;
         }
         self.phase = Phase::Draining(reason);
         self.expires_at = None;
@@ -299,11 +292,7 @@ impl<R: RowSource> Query<R> {
         self.batch = Vec::new();
         self.batch_bytes = 0;
         self.look_ahead = false;
-        if self.in_transaction && reason != DrainReason::Cancelled {
-            Drain::ReadOut
-        } else {
-            Drain::Cancel
-        }
+        true
     }
 
     /// 결과가 끝날 때까지 버린다.
@@ -311,6 +300,25 @@ impl<R: RowSource> Query<R> {
         while self.end.is_none() {
             let item = self.rows.next().await;
             self.receive(item);
+        }
+    }
+
+    /// 결과가 끝났고 savepoint로 되돌려야 한다: savepoint를 두었고, 버리거나 취소했고, 연결이 살아 있다.
+    /// 버리지 않았는데 스스로 끝난 문장(서버 오류 포함)은 되돌리지 않는다. 버리는 중에 문장이 스스로
+    /// 오류로 끝났어도 버린 문장이므로 되돌린다(outcome은 그 오류다).
+    pub(super) fn needs_undo(&self) -> bool {
+        self.savepoint && self.is_draining() && matches!(self.end, Some(End::Done))
+    }
+
+    /// savepoint로 되돌린 결과. 연결이 끊겨 되돌리지 못했으면 끊긴 것으로 마친다. 서버가 거절했으면
+    /// (savepoint가 없는 경우 등) 되돌리지 않은 것으로 둔다.
+    pub(super) fn undone(&mut self, result: Result<(), QueryError>) {
+        match result {
+            Ok(()) => self.undone = true,
+            Err(QueryError::ConnectionLost { message }) => {
+                self.end = Some(End::ConnectionLost { message });
+            }
+            Err(_) => {}
         }
     }
 
@@ -348,8 +356,8 @@ impl<R: RowSource> Query<R> {
     /// 버리는 중에 `None`까지 읽은 결과. 문장이 실제로 어떻게 끝났는지 알면 그것을 알린다.
     ///
     /// cancel이 늦게 닿았거나 실패하면 문장이 끝까지 돈다(commit된 DELETE 등). 그때 취소로
-    /// 알리면 화면이 틀린다. 다만 화면에 보내지 않고 버린 행이 있으면 결과를 다 받은 것이 아니므로
-    /// 버린 이유로 알린다.
+    /// 알리면 화면이 틀린다. 다만 화면에 보내지 않고 버린 행이 있으면 결과를 다 받은 것이 아니므로,
+    /// savepoint로 되돌렸으면 적용되지 않았으므로 버린 이유로 알린다.
     fn drained_outcome(&mut self, reason: DrainReason) -> QueryOutcome {
         if let Some(error) = self.error.take()
             && !error.is_query_canceled()
@@ -357,7 +365,7 @@ impl<R: RowSource> Query<R> {
             return error.outcome();
         }
         match self.completed {
-            Some(rows) if !self.discarded => QueryOutcome::Completed { rows },
+            Some(rows) if !self.discarded && !self.undone => QueryOutcome::Completed { rows },
             _ => reason.outcome(),
         }
     }

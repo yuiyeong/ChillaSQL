@@ -518,12 +518,13 @@ async fn cancel_of_a_waiting_query_removes_it() {
         .unwrap();
 
     assert_eq!(handle.cancel(b).await, Some(Ok(())));
+    // 서버에 보내지 않았으므로 트랜잭션 상태를 모른다.
     assert_eq!(
         next(&mut events_b).await,
         QueryEvent::Finished {
             outcome: QueryOutcome::Cancelled,
             elapsed: Duration::ZERO,
-            tx: Some(TxStatus::Idle),
+            tx: None,
         }
     );
     assert_eq!(events_b.recv().await, None);
@@ -893,9 +894,10 @@ async fn closing_the_session_reports_no_tx_status() {
     assert_eq!(finished_tx(next(&mut events).await), None);
 }
 
-/// 시작하지 않고 끝난 쿼리는 서버에 묻지 않고 actor가 마지막으로 읽은 값을 싣는다.
+/// 시작하지 않고 끝난 쿼리는 서버에 묻지 않았으므로 트랜잭션 상태를 싣지 않는다. actor가 마지막으로
+/// 읽은 값은 낡았을 수 있다.
 #[tokio::test]
-async fn a_discarded_pending_query_reports_the_last_tx_status() {
+async fn a_discarded_pending_query_has_no_tx_status() {
     let (handle, link) = session();
     link.set_tx(TxStatus::InTransaction);
     let (sink, mut events) = sink();
@@ -913,21 +915,28 @@ async fn a_discarded_pending_query_reports_the_last_tx_status() {
     handle.execute("A".into(), TxMode::Auto, sink_a).await;
     handle.execute("B".into(), TxMode::Auto, sink_b).await;
     handle.execute("C".into(), TxMode::Auto, sink_c).await;
-    // 서버의 상태가 바뀌어도 아직 읽지 않았으므로 마지막으로 읽은 값이 간다.
-    link.set_tx(TxStatus::Failed);
     let discarded = next(&mut events_b).await;
     assert_eq!(
         discarded,
         QueryEvent::Finished {
             outcome: QueryOutcome::Discarded,
             elapsed: Duration::ZERO,
-            tx: Some(TxStatus::InTransaction),
+            tx: None,
         }
     );
+    // cancel이 실패해 A는 끝까지 돌았지만 버린 문장이므로 되돌린다.
     feed_a.complete(0);
-    assert_eq!(
-        finished_tx(next(&mut events_a).await),
-        Some(TxStatus::Failed)
+    let finished_a = next(&mut events_a).await;
+    assert!(
+        matches!(
+            finished_a,
+            QueryEvent::Finished {
+                outcome: QueryOutcome::Discarded,
+                tx: Some(TxStatus::InTransaction),
+                ..
+            }
+        ),
+        "{finished_a:?}"
     );
 }
 
@@ -936,6 +945,22 @@ async fn a_discarded_pending_query_reports_the_last_tx_status() {
 async fn set_tx(handle: &SessionHandle, link: &FakeLink, tx: TxStatus) {
     link.set_tx(tx);
     assert_eq!(handle.state().await, SessionState::Open { tx });
+}
+
+/// actor가 트랜잭션 안의 문장 앞에 두는 savepoint와 버린 문장을 되돌리는 SQL.
+const SET_SAVEPOINT: &str = "SAVEPOINT chilla_statement";
+const RENEW_SAVEPOINT: &str = "RELEASE SAVEPOINT chilla_statement; SAVEPOINT chilla_statement";
+const BEGIN_WITH_SAVEPOINT: &str = "BEGIN; SAVEPOINT chilla_statement";
+const UNDO_STATEMENT: &str = "ROLLBACK TO SAVEPOINT chilla_statement";
+
+/// 이벤트마다 그때까지 연결이 받은 SQL을 함께 남기는 sink.
+fn logging_sink(link: &FakeLink) -> (QuerySink, UnboundedReceiver<(QueryEvent, Vec<String>)>) {
+    let (sender, events) = tokio::sync::mpsc::unbounded_channel();
+    let link = link.clone();
+    let sink: QuerySink = Box::new(move |event| {
+        let _ = sender.send((event, link.sent()));
+    });
+    (sink, events)
 }
 
 fn ended(tx: TxStatus) -> Option<EndResult> {
@@ -978,7 +1003,7 @@ async fn manual_execute_outside_a_transaction_sends_begin_first() {
             ..
         }
     ));
-    assert_eq!(link.sent(), ["BEGIN", "UPDATE t SET a = 1"]);
+    assert_eq!(link.sent(), [BEGIN_WITH_SAVEPOINT, "UPDATE t SET a = 1"]);
 }
 
 #[tokio::test]
@@ -993,7 +1018,187 @@ async fn manual_execute_inside_a_transaction_does_not_begin_again() {
         outcome(next(&mut events).await),
         QueryOutcome::Completed { rows: 0 }
     );
-    assert_eq!(link.sent(), ["UPDATE t SET a = 1"]);
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "UPDATE t SET a = 1"]);
+}
+
+/// 트랜잭션 안의 문장마다 savepoint를 둔다. 앞 문장의 savepoint는 풀고 새로 둔다(쌓이지 않게).
+/// Auto여도 트랜잭션 안(사용자가 쓴 `BEGIN`)이면 같다.
+#[tokio::test]
+async fn statements_inside_a_transaction_each_get_a_savepoint() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    for (sql, mode) in [
+        ("A", TxMode::Auto),
+        ("B", TxMode::Manual),
+        ("C", TxMode::Auto),
+    ] {
+        let (sink, mut events) = sink();
+        handle.execute(sql.into(), mode, sink).await;
+        assert_eq!(
+            finished_tx(next(&mut events).await),
+            Some(TxStatus::InTransaction)
+        );
+    }
+    assert_eq!(
+        link.sent(),
+        [
+            SET_SAVEPOINT,
+            "A",
+            RENEW_SAVEPOINT,
+            "B",
+            RENEW_SAVEPOINT,
+            "C"
+        ]
+    );
+}
+
+/// 트랜잭션 밖(Auto)과 실패한 트랜잭션에는 savepoint를 두지 않는다. 실패한 트랜잭션의 문장은 바로
+/// `25P02`로 끝난다.
+#[tokio::test]
+async fn no_savepoint_outside_a_transaction_or_in_a_failed_one() {
+    let (handle, link) = session();
+    let (sink, mut events) = sink();
+    handle.execute("A".into(), TxMode::Auto, sink).await;
+    outcome(next(&mut events).await);
+
+    set_tx(&handle, &link, TxStatus::Failed).await;
+    for mode in [TxMode::Auto, TxMode::Manual] {
+        let (sink, mut events) = self::sink();
+        handle.execute("B".into(), mode, sink).await;
+        outcome(next(&mut events).await);
+    }
+    assert_eq!(link.sent(), ["A", "B", "B"]);
+}
+
+/// 트랜잭션과 savepoint를 다루는 문장은 savepoint 없이 보낸다. 그 문장이 savepoint를 두거나 풀거나
+/// 트랜잭션을 끝냈을 수 있으므로, 다음 문장 앞에서는 앞 savepoint를 풀지 않고 새로 둔다(풀면 사용자의
+/// savepoint까지 풀리거나, savepoint가 없어 트랜잭션이 failed가 된다).
+#[tokio::test]
+async fn transaction_control_runs_without_a_savepoint_and_the_next_one_is_not_released() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let control = [
+        "SAVEPOINT a",
+        " release a",
+        "/* c */ ROLLBACK TO SAVEPOINT a",
+        "-- c\nCOMMIT AND CHAIN",
+        "ROLLBACK AND CHAIN",
+        ";END AND CHAIN",
+        "abort and chain",
+        "BEGIN",
+        "START TRANSACTION",
+        "PREPARE TRANSACTION 'x'",
+        "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+        "set  transaction read only",
+    ];
+    let mut expected = Vec::new();
+    for sql in control {
+        let (sink, mut events) = sink();
+        handle.execute(sql.into(), TxMode::Manual, sink).await;
+        outcome(next(&mut events).await);
+        expected.push(sql);
+    }
+    let (sink, mut events) = sink();
+    handle.execute("A".into(), TxMode::Manual, sink).await;
+    outcome(next(&mut events).await);
+    let (sink, mut events) = self::sink();
+    handle.execute("B".into(), TxMode::Manual, sink).await;
+    outcome(next(&mut events).await);
+    expected.extend([SET_SAVEPOINT, "A", RENEW_SAVEPOINT, "B"]);
+    assert_eq!(link.sent(), expected);
+}
+
+/// `SET TRANSACTION`은 subtransaction 안에서 실행할 수 없다. Manual의 첫 문장이면 `BEGIN`만 보낸다.
+#[tokio::test]
+async fn manual_set_transaction_begins_without_a_savepoint() {
+    let (handle, link) = session();
+    let (sink, mut events) = sink();
+    handle
+        .execute(
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE".into(),
+            TxMode::Manual,
+            sink,
+        )
+        .await;
+    assert_eq!(
+        finished_tx(next(&mut events).await),
+        Some(TxStatus::InTransaction)
+    );
+    let (sink, mut events) = self::sink();
+    handle.execute("A".into(), TxMode::Manual, sink).await;
+    outcome(next(&mut events).await);
+    assert_eq!(
+        link.sent(),
+        [
+            "BEGIN",
+            "SET TRANSACTION ISOLATION LEVEL SERIALIZABLE",
+            SET_SAVEPOINT,
+            "A"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn statements_that_only_look_like_transaction_control_get_a_savepoint() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    for sql in [
+        "SELECT 'COMMIT'",
+        "SETTINGS",
+        "SET search_path = a",
+        "savepoints",
+    ] {
+        let (sink, mut events) = sink();
+        handle.execute(sql.into(), TxMode::Manual, sink).await;
+        outcome(next(&mut events).await);
+    }
+    assert_eq!(
+        link.sent(),
+        [
+            SET_SAVEPOINT,
+            "SELECT 'COMMIT'",
+            RENEW_SAVEPOINT,
+            "SETTINGS",
+            RENEW_SAVEPOINT,
+            "SET search_path = a",
+            RENEW_SAVEPOINT,
+            "savepoints"
+        ]
+    );
+}
+
+/// savepoint를 두지 못하면 문장을 보내지 않고 그 오류로 마친다. 다음 문장은 풀 savepoint가 없다.
+#[tokio::test]
+async fn a_failed_savepoint_finishes_the_query_with_that_error() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    link.fail_next_simple("53200");
+    let (sink, mut events) = sink();
+    handle.execute("A".into(), TxMode::Manual, sink).await;
+    assert_eq!(
+        outcome(next(&mut events).await),
+        QueryOutcome::Failed(server_error("53200"))
+    );
+    let (sink, mut events) = self::sink();
+    handle.execute("B".into(), TxMode::Manual, sink).await;
+    outcome(next(&mut events).await);
+    assert_eq!(link.sent(), [SET_SAVEPOINT, SET_SAVEPOINT, "B"]);
+}
+
+/// 쿼리가 도는 동안의 `State`는 actor가 보낸 `BEGIN`을 안다.
+#[tokio::test]
+async fn state_during_a_query_knows_the_transaction_it_began() {
+    let (handle, link) = session();
+    link.expect_query();
+    let (sink, _events) = sink();
+    handle.execute("A".into(), TxMode::Manual, sink).await;
+    let state = timeout(Duration::from_secs(1), handle.state()).await;
+    assert_eq!(
+        state.expect("state가 쿼리를 기다렸다"),
+        SessionState::Open {
+            tx: TxStatus::InTransaction
+        }
+    );
 }
 
 #[tokio::test]
@@ -1027,7 +1232,7 @@ async fn a_failed_begin_finishes_the_query_with_that_error() {
         ),
         "{event:?}"
     );
-    assert_eq!(link.sent(), ["BEGIN"]);
+    assert_eq!(link.sent(), [BEGIN_WITH_SAVEPOINT]);
 }
 
 #[tokio::test]
@@ -1105,20 +1310,14 @@ async fn commit_on_a_lost_connection_is_connection_lost_even_if_the_transaction_
     assert_eq!(result.tx, None);
 }
 
+/// 끝내기는 실행 중인 문장을 cancel하고 savepoint로 되돌린 뒤 보낸다. 버린 문장은 Commit되지 않는다.
 #[tokio::test]
-async fn end_transaction_discards_a_paused_query_first() {
+async fn end_transaction_rolls_back_a_paused_query_before_ending() {
     let (handle, link) = session();
     set_tx(&handle, &link, TxStatus::InTransaction).await;
     let feed = link.expect_query();
     feed.rows(0..1200);
-    // `Finished`를 보내는 때까지 연결이 받은 문장을 함께 남긴다.
-    let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
-    let sink: QuerySink = Box::new({
-        let link = link.clone();
-        move |event| {
-            let _ = sender.send((event, link.sent()));
-        }
-    });
+    let (sink, mut events) = logging_sink(&link);
     handle.execute("A".into(), TxMode::Manual, sink).await;
     let (first, _) = timeout(Duration::from_secs(2), events.recv())
         .await
@@ -1126,23 +1325,25 @@ async fn end_transaction_discards_a_paused_query_first() {
         .unwrap();
     assert_eq!(batch(first).rows.len(), 500);
 
-    let ending = tokio::spawn({
-        let handle = handle.clone();
-        async move { handle.end_transaction(TxEnd::Commit).await }
-    });
-    // 남은 결과의 끝. 버리는 방법과 관계없이 A가 끝날 수 있게 한다.
-    feed.complete(1200);
     assert_eq!(
-        answer(async { ending.await.unwrap() }).await,
+        answer(handle.end_transaction(TxEnd::Commit)).await,
         ended(TxStatus::Idle)
     );
-
+    assert_eq!(link.cancels(), 1);
     let (event, sent_then) = events.recv().await.unwrap();
-    assert_eq!(outcome(event), QueryOutcome::Discarded);
-    assert_eq!(sent_then, ["A"]);
-    assert_eq!(link.sent(), ["A", "COMMIT"]);
-    // 트랜잭션 안이므로 cancel 없이 버렸다. cancel했으면 트랜잭션이 failed가 되어 Commit이 거부된다.
-    assert_eq!(link.cancels(), 0);
+    assert!(
+        matches!(
+            event,
+            QueryEvent::Finished {
+                outcome: QueryOutcome::Discarded,
+                tx: Some(TxStatus::InTransaction),
+                ..
+            }
+        ),
+        "{event:?}"
+    );
+    assert_eq!(sent_then, [SET_SAVEPOINT, "A", UNDO_STATEMENT]);
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "A", UNDO_STATEMENT, "COMMIT"]);
 }
 
 #[tokio::test]
@@ -1154,11 +1355,12 @@ async fn a_query_sent_after_end_runs_after_it() {
     let (sink_a, mut events_a) = sink();
     handle.execute("A".into(), TxMode::Manual, sink_a).await;
     assert_eq!(batch(next(&mut events_a).await).rows.len(), 500);
+    let gate = link.hold_cancels().await;
 
-    // A의 남은 결과가 끝나지 않았으므로 끝내기는 A를 버리는 동안 기다린다.
+    // A의 cancel이 끝나지 않았으므로 끝내기는 A를 버리는 동안 기다린다.
     let ending = handle.end_transaction(TxEnd::Commit);
     tokio::pin!(ending);
-    // poll해서 명령을 보낸다. A가 끝나지 않았으므로 답은 아직 없다.
+    // poll해서 명령을 보낸다. A를 마치지 않았으므로 답은 아직 없다.
     assert!(
         timeout(Duration::from_millis(50), &mut ending)
             .await
@@ -1166,7 +1368,7 @@ async fn a_query_sent_after_end_runs_after_it() {
     );
     let (sink_b, mut events_b) = sink();
     handle.execute("B".into(), TxMode::Manual, sink_b).await;
-    feed_a.complete(1200);
+    drop(gate);
 
     assert_eq!(answer(ending).await, ended(TxStatus::Idle));
     assert_eq!(
@@ -1178,7 +1380,17 @@ async fn a_query_sent_after_end_runs_after_it() {
         QueryOutcome::Completed { rows: 0 }
     );
     // 끝내기 뒤에는 트랜잭션 밖이므로 B 앞에 BEGIN이 간다.
-    assert_eq!(link.sent(), ["A", "COMMIT", "BEGIN", "B"]);
+    assert_eq!(
+        link.sent(),
+        [
+            SET_SAVEPOINT,
+            "A",
+            UNDO_STATEMENT,
+            "COMMIT",
+            BEGIN_WITH_SAVEPOINT,
+            "B"
+        ]
+    );
 }
 
 #[tokio::test]
@@ -1190,6 +1402,7 @@ async fn ends_waiting_for_a_query_run_in_order() {
     let (sink_a, mut events_a) = sink();
     handle.execute("A".into(), TxMode::Manual, sink_a).await;
     assert_eq!(batch(next(&mut events_a).await).rows.len(), 500);
+    let gate = link.hold_cancels().await;
 
     let commit = handle.end_transaction(TxEnd::Commit);
     let rollback = handle.end_transaction(TxEnd::Rollback);
@@ -1204,11 +1417,14 @@ async fn ends_waiting_for_a_query_run_in_order() {
             .await
             .is_err()
     );
-    feed_a.complete(1200);
+    drop(gate);
 
     assert_eq!(answer(commit).await, ended(TxStatus::Idle));
     assert_eq!(answer(rollback).await, ended(TxStatus::Idle));
-    assert_eq!(link.sent(), ["A", "COMMIT", "ROLLBACK"]);
+    assert_eq!(
+        link.sent(),
+        [SET_SAVEPOINT, "A", UNDO_STATEMENT, "COMMIT", "ROLLBACK"]
+    );
 }
 
 /// 1200행 결과의 첫 batch를 받고 actor가 look-ahead를 마쳐 `Paused`가 될 때까지 기다린다.
@@ -1260,21 +1476,23 @@ async fn fetch_more_restarts_the_idle_timer() {
     assert_eq!(outcome(next(&mut events).await), QueryOutcome::Expired);
 }
 
-/// 트랜잭션 안의 쿼리를 cancel하면 트랜잭션이 failed가 된다. 남은 행을 읽어 버린다.
+/// 트랜잭션 안의 문장을 다음 쿼리가 버리면 바로 cancel하고, cancel이 끝난 뒤 savepoint로 그 문장만
+/// 되돌린다. 트랜잭션은 열린 채다.
 #[tokio::test]
-async fn discarding_inside_a_transaction_reads_to_the_end_without_cancel() {
+async fn discarding_inside_a_transaction_cancels_then_rolls_back_the_statement() {
     let (handle, link) = session();
     set_tx(&handle, &link, TxStatus::InTransaction).await;
-    let (feed_a, _, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
+    let (_feed_a, _, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
+    let gate = link.hold_cancels().await;
     let (sink_b, mut events_b) = sink();
     handle.execute("B".into(), TxMode::Manual, sink_b).await;
 
+    // cancel이 끝나기 전에는 되돌리지 않는다. 늦게 닿은 cancel이 `ROLLBACK TO`를 멈출 수 있다.
+    assert!(eventually(|| link.cancels() == 1).await);
     quiet(&mut events_a).await;
-    assert_eq!(link.cancels(), 0);
-    assert_eq!(link.sent(), ["A"]);
-    assert_eq!(feed_a.unread(), 0);
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "A"]);
 
-    feed_a.complete(1200);
+    drop(gate);
     let finished_a = next(&mut events_a).await;
     assert!(
         matches!(
@@ -1288,68 +1506,120 @@ async fn discarding_inside_a_transaction_reads_to_the_end_without_cancel() {
         "{finished_a:?}"
     );
     assert_eq!(
-        outcome(next(&mut events_b).await),
-        QueryOutcome::Completed { rows: 0 }
+        finished_tx(next(&mut events_b).await),
+        Some(TxStatus::InTransaction)
     );
-    assert_eq!(link.sent(), ["A", "B"]);
-    assert_eq!(link.cancels(), 0);
+    // `ROLLBACK TO`는 savepoint를 남기므로 B 앞에서 풀고 다시 둔다.
+    assert_eq!(
+        link.sent(),
+        [SET_SAVEPOINT, "A", UNDO_STATEMENT, RENEW_SAVEPOINT, "B"]
+    );
+    assert_eq!(link.cancels(), 1);
 }
 
-/// Manual에서 `BEGIN`을 보내고 시작한 쿼리도 트랜잭션 안이다.
+/// Manual에서 `BEGIN`과 함께 savepoint를 두고 시작한 쿼리도 같다.
 #[tokio::test]
-async fn discarding_a_query_that_began_the_transaction_does_not_cancel() {
+async fn discarding_a_query_that_began_the_transaction_rolls_it_back() {
     let (handle, link) = session();
-    let (feed_a, _, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
+    let (_feed_a, _, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
     let (sink_b, mut events_b) = sink();
     handle.execute("B".into(), TxMode::Manual, sink_b).await;
 
-    quiet(&mut events_a).await;
-    assert_eq!(link.cancels(), 0);
-    feed_a.complete(1200);
     assert_eq!(
         finished_tx(finished_event(&mut events_a).await),
         Some(TxStatus::InTransaction)
     );
     outcome(next(&mut events_b).await);
-    assert_eq!(link.sent(), ["BEGIN", "A", "B"]);
-}
-
-#[tokio::test(start_paused = true)]
-async fn a_slow_discard_inside_a_transaction_falls_back_to_cancel() {
-    let (handle, link) = session();
-    set_tx(&handle, &link, TxStatus::InTransaction).await;
-    let (_feed_a, _, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
-    let (sink_b, mut events_b) = sink();
-    handle.execute("B".into(), TxMode::Manual, sink_b).await;
-
-    // 버리기 시작한 뒤 4.9초(quiet 50ms 두 번 포함).
-    quiet(&mut events_a).await;
-    tokio::time::advance(Duration::from_millis(4800)).await;
-    quiet(&mut events_a).await;
-    assert_eq!(link.cancels(), 0);
-
-    tokio::time::advance(Duration::from_millis(200)).await;
-    let finished_a = next(&mut events_a).await;
-    assert!(
-        matches!(
-            finished_a,
-            QueryEvent::Finished {
-                outcome: QueryOutcome::Discarded,
-                tx: Some(TxStatus::Failed),
-                ..
-            }
-        ),
-        "{finished_a:?}"
+    assert_eq!(
+        link.sent(),
+        [
+            BEGIN_WITH_SAVEPOINT,
+            "A",
+            UNDO_STATEMENT,
+            RENEW_SAVEPOINT,
+            "B"
+        ]
     );
     assert_eq!(link.cancels(), 1);
-    assert_eq!(
-        outcome(next(&mut events_b).await),
-        QueryOutcome::Completed { rows: 0 }
-    );
 }
 
+/// cancel이 늦어 문장이 끝까지 돌았어도 버린 문장이므로 되돌린다. 끝난 것으로 알리지 않는다.
 #[tokio::test]
-async fn user_cancel_inside_a_transaction_still_cancels() {
+async fn a_statement_that_completed_despite_the_cancel_is_rolled_back() {
+    for (user_cancel, expected) in [
+        (false, QueryOutcome::Discarded),
+        (true, QueryOutcome::Cancelled),
+    ] {
+        let (handle, link) = session();
+        set_tx(&handle, &link, TxStatus::InTransaction).await;
+        link.ignore_cancels(1);
+        let feed = link.expect_query();
+        let (sink, mut events) = sink();
+        let query = handle
+            .execute("UPDATE t SET a = 1".into(), TxMode::Manual, sink)
+            .await
+            .unwrap();
+        let (sink_b, mut events_b) = self::sink();
+        if user_cancel {
+            assert_eq!(handle.cancel(query).await, Some(Ok(())));
+        } else {
+            handle.execute("B".into(), TxMode::Manual, sink_b).await;
+        }
+        assert!(eventually(|| link.cancels() == 1).await);
+        feed.complete(3);
+
+        let finished = next(&mut events).await;
+        assert!(
+            matches!(
+                &finished,
+                QueryEvent::Finished {
+                    outcome,
+                    tx: Some(TxStatus::InTransaction),
+                    ..
+                } if *outcome == expected
+            ),
+            "{finished:?}"
+        );
+        assert_eq!(
+            link.sent()[..3],
+            [SET_SAVEPOINT, "UPDATE t SET a = 1", UNDO_STATEMENT]
+        );
+        if !user_cancel {
+            outcome(next(&mut events_b).await);
+        }
+    }
+}
+
+/// 문장이 스스로 오류로 끝나면 되돌리지 않는다. 트랜잭션은 failed다.
+#[tokio::test]
+async fn a_statement_failing_on_its_own_is_not_rolled_back() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let feed = link.expect_query();
+    let (sink, mut events) = sink();
+    handle
+        .execute("SELECT 1/0".into(), TxMode::Manual, sink)
+        .await;
+    link.set_tx(TxStatus::Failed);
+    feed.fail("22012");
+    let finished = next(&mut events).await;
+    assert!(
+        matches!(
+            &finished,
+            QueryEvent::Finished {
+                outcome: QueryOutcome::Failed(error),
+                tx: Some(TxStatus::Failed),
+                ..
+            } if *error == server_error("22012")
+        ),
+        "{finished:?}"
+    );
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "SELECT 1/0"]);
+}
+
+/// 사용자의 Cancel도 문장만 되돌린다. 트랜잭션은 열린 채다.
+#[tokio::test]
+async fn user_cancel_inside_a_transaction_rolls_back_the_statement() {
     let (handle, link) = session();
     set_tx(&handle, &link, TxStatus::InTransaction).await;
     let (_feed, query, mut events) = first_batch(&handle, &link, TxMode::Manual).await;
@@ -1362,45 +1632,51 @@ async fn user_cancel_inside_a_transaction_still_cancels() {
             finished,
             QueryEvent::Finished {
                 outcome: QueryOutcome::Cancelled,
-                tx: Some(TxStatus::Failed),
+                tx: Some(TxStatus::InTransaction),
                 ..
             }
         ),
         "{finished:?}"
     );
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "A", UNDO_STATEMENT]);
 }
 
+/// 사용자의 Cancel이 기다리는 쿼리를 빼도 버리는 중인 문장은 그대로 되돌린다.
 #[tokio::test]
-async fn user_cancel_while_discarding_inside_a_transaction_cancels() {
+async fn user_cancel_while_discarding_inside_a_transaction_still_rolls_back() {
     let (handle, link) = session();
     set_tx(&handle, &link, TxStatus::InTransaction).await;
-    let (_feed_a, query, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
+    link.fail_cancels();
+    let (feed_a, query, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
     let (sink_b, mut events_b) = sink();
     handle.execute("B".into(), TxMode::Manual, sink_b).await;
-    quiet(&mut events_a).await;
-    assert_eq!(link.cancels(), 0);
+    assert!(eventually(|| link.cancels() == 1).await);
 
-    assert_eq!(handle.cancel(query).await, Some(Ok(())));
-    assert_eq!(link.cancels(), 1);
-    assert_eq!(outcome(next(&mut events_a).await), QueryOutcome::Discarded);
+    // 버리는 중인 A에 사용자의 Cancel이 오면 cancel을 다시 보내고 그 결과를 답한다.
+    assert!(matches!(handle.cancel(query).await, Some(Err(_))));
+    assert_eq!(link.cancels(), 2);
+    feed_a.complete(1200);
+    assert_eq!(
+        outcome(finished_event(&mut events_a).await),
+        QueryOutcome::Discarded
+    );
     assert_eq!(
         finished_tx(next(&mut events_b).await),
-        Some(TxStatus::Failed)
+        Some(TxStatus::InTransaction)
+    );
+    assert_eq!(
+        link.sent(),
+        [SET_SAVEPOINT, "A", UNDO_STATEMENT, RENEW_SAVEPOINT, "B"]
     );
 }
 
 #[tokio::test(start_paused = true)]
-async fn expiry_inside_a_transaction_does_not_cancel() {
+async fn expiry_inside_a_transaction_cancels_and_rolls_back() {
     let (handle, link) = session();
     set_tx(&handle, &link, TxStatus::InTransaction).await;
-    let (feed, _, mut events) = first_batch(&handle, &link, TxMode::Manual).await;
+    let (_feed, _, mut events) = first_batch(&handle, &link, TxMode::Manual).await;
 
     tokio::time::advance(Duration::from_secs(600)).await;
-    quiet(&mut events).await;
-    assert_eq!(link.cancels(), 0);
-    assert_eq!(feed.unread(), 0);
-
-    feed.complete(1200);
     let finished = next(&mut events).await;
     assert!(
         matches!(
@@ -1413,23 +1689,84 @@ async fn expiry_inside_a_transaction_does_not_cancel() {
         ),
         "{finished:?}"
     );
-    assert_eq!(link.cancels(), 0);
+    assert_eq!(link.cancels(), 1);
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "A", UNDO_STATEMENT]);
 }
 
-/// 세션을 닫으면 연결이 닫혀 트랜잭션이 어차피 되돌아간다. cancel 없이 버리던 중이어도 cancel한다.
+/// `ROLLBACK TO`가 실패하면(사용자가 savepoint를 풀었거나 그 앞으로 되돌린 경우) 서버가 알려 주는
+/// 상태를 그대로 둔다. 다음 문장 앞에서는 savepoint를 풀지 않는다.
 #[tokio::test]
-async fn closing_while_discarding_inside_a_transaction_cancels() {
+async fn a_failed_rollback_to_leaves_the_state_the_server_reports() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let (_feed_a, query, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
+    link.fail_next_simple("3B001");
+    // 서버는 실패한 `ROLLBACK TO` 뒤에 트랜잭션을 failed로 둔다.
+    link.set_tx(TxStatus::Failed);
+
+    assert_eq!(handle.cancel(query).await, Some(Ok(())));
+    let finished = next(&mut events_a).await;
+    assert!(
+        matches!(
+            finished,
+            QueryEvent::Finished {
+                outcome: QueryOutcome::Cancelled,
+                tx: Some(TxStatus::Failed),
+                ..
+            }
+        ),
+        "{finished:?}"
+    );
+    let (sink_b, mut events_b) = sink();
+    handle.execute("B".into(), TxMode::Manual, sink_b).await;
+    outcome(next(&mut events_b).await);
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "A", UNDO_STATEMENT, "B"]);
+}
+
+/// 되돌리려는데 연결이 끊겼으면 끊긴 것으로 알린다. 화면은 트랜잭션을 잃은 것으로 안다.
+#[tokio::test]
+async fn connection_lost_while_rolling_back_is_connection_lost() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let (_feed_a, query, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
+    link.lose();
+
+    assert_eq!(handle.cancel(query).await, Some(Ok(())));
+    let finished = next(&mut events_a).await;
+    assert!(
+        matches!(
+            finished,
+            QueryEvent::Finished {
+                outcome: QueryOutcome::ConnectionLost { .. },
+                tx: None,
+                ..
+            }
+        ),
+        "{finished:?}"
+    );
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "A", UNDO_STATEMENT]);
+}
+
+/// 트랜잭션 밖의 문장을 버리면 되돌릴 savepoint가 없다.
+#[tokio::test]
+async fn discarding_outside_a_transaction_does_not_roll_back() {
+    let (handle, link) = session();
+    let (_feed_a, query, mut events_a) = first_batch(&handle, &link, TxMode::Auto).await;
+    assert_eq!(handle.cancel(query).await, Some(Ok(())));
+    assert_eq!(outcome(next(&mut events_a).await), QueryOutcome::Cancelled);
+    handle.state().await;
+    assert_eq!(link.sent(), ["A"]);
+}
+
+/// 세션을 닫으면 연결이 닫혀 트랜잭션이 어차피 되돌아간다. 되돌리지 않고 cancel만 한다.
+#[tokio::test]
+async fn closing_inside_a_transaction_cancels_without_rolling_back() {
     let (handle, link) = session();
     set_tx(&handle, &link, TxStatus::InTransaction).await;
     let (_feed_a, _, mut events_a) = first_batch(&handle, &link, TxMode::Manual).await;
-    let (sink_b, mut events_b) = sink();
-    handle.execute("B".into(), TxMode::Manual, sink_b).await;
-    quiet(&mut events_a).await;
-    assert_eq!(link.cancels(), 0);
 
     handle.close().await;
     assert_eq!(link.cancels(), 1);
     assert_eq!(outcome(next(&mut events_a).await), QueryOutcome::Discarded);
-    assert_eq!(outcome(next(&mut events_b).await), QueryOutcome::Discarded);
-    assert_eq!(link.sent(), ["A"]);
+    assert_eq!(link.sent(), [SET_SAVEPOINT, "A"]);
 }

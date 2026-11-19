@@ -8,7 +8,8 @@ pub enum Danger {
         table: String,
     },
     /// `kind`는 SQL keyword다: "TABLE", "VIEW", "MATERIALIZED VIEW", "INDEX", "SCHEMA",
-    /// "SEQUENCE", "FUNCTION", "TYPE", "EXTENSION", "DATABASE". 그 밖의 object는 "".
+    /// "SEQUENCE", "FUNCTION", "TYPE", "EXTENSION", "DATABASE", "ROLE", "TABLESPACE". 그 밖의 object는 "".
+    /// `DROP OWNED BY`는 "OWNED"이고 `names`는 지울 object를 가진 role이다.
     Drop {
         kind: String,
         names: Vec<String>,

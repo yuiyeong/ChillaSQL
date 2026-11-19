@@ -316,6 +316,7 @@ pub enum QueryEventDto {
         outcome: OutcomeDto,
         elapsed_micros: u64,
         /// `"idle"`, `"in_transaction"`, `"failed"`. 연결이 끊겼거나 세션을 닫는 중이면 `null`이다.
+        /// 서버에 보내지 않고 끝난 쿼리(기다리다 밀리거나 취소된 쿼리)도 상태를 모르므로 `null`이다.
         tx: Option<&'static str>,
     },
 }

@@ -4,10 +4,12 @@
 //! 받다 만 결과도 이 task가 갖는다. 결과는 batch 하나를 보낸 뒤 `fetch_more`가 올 때까지
 //! 읽지 않는다(backpressure). `fetch_more`가 `idle_result_timeout` 동안 오지 않으면 결과를 닫는다.
 //!
-//! 결과를 버릴 때는 cancel한다. 다만 트랜잭션 안의 쿼리는 cancel하면 트랜잭션이 failed가 되므로
-//! 사용자가 취소할 때 말고는 남은 행을 읽어 버리고, `tx_drain_limit` 안에 끝나지 않을 때만 cancel한다.
+//! 결과를 버릴 때는 cancel한다. cancel이 닿은 문장은 실패하므로 트랜잭션 안이면 트랜잭션이 failed가
+//! 된다. 그래서 트랜잭션 안의 문장 앞에는 savepoint를 두고, 버리거나 취소한 문장은 cancel이 끝난 뒤
+//! 그 savepoint로 되돌려 트랜잭션을 열린 채로 둔다([`savepoint`]).
 
 mod query;
+mod savepoint;
 
 use std::collections::VecDeque;
 use std::future::pending;
@@ -18,7 +20,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, sleep_until, timeout};
 
-use self::query::{Drain, DrainReason, Pending, Query};
+use self::query::{DrainReason, Pending, Query};
 use super::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
 use crate::domain::{
     EndOutcome, EndResult, QueryEvent, QueryId, QueryLimits, QueryOutcome, SessionState, TxEnd,
@@ -75,6 +77,7 @@ pub(crate) fn spawn<D: DbConnection>(connection: D, limits: QueryLimits) -> Sess
         limits,
         last_id: 0,
         tx: TxStatus::Idle,
+        savepoint_on_top: false,
         query: None,
         pending: None,
         ends: VecDeque::new(),
@@ -104,7 +107,11 @@ struct Actor<D: DbConnection> {
     limits: QueryLimits,
     last_id: u64,
     /// 쿼리가 없을 때 마지막으로 읽은 트랜잭션 상태. 쿼리가 있는 동안 `State`는 이 값을 답한다.
+    /// 쿼리 앞에 `BEGIN`이나 savepoint를 두었으면 그 쿼리가 도는 동안은 `InTransaction`이다.
     tx: TxStatus,
+    /// 세션이 둔 savepoint가 맨 위에 남아 있다. 다음 문장 앞에서 풀고 새로 둔다. 모르면 false이고,
+    /// 그때는 풀지 않고 새로 둔다(없는 savepoint를 풀면 트랜잭션이 failed가 된다).
+    savepoint_on_top: bool,
     query: Option<Query<D::Rows>>,
     /// 지금 쿼리를 버리는 동안 기다리는 다음 쿼리. `query`가 `Draining`일 때만 있다.
     pending: Option<Pending>,
@@ -113,8 +120,7 @@ struct Actor<D: DbConnection> {
     ends: VecDeque<(TxEnd, oneshot::Sender<EndResult>)>,
     /// spawn한 cancel. 한 번에 하나만 있다.
     cancel: Option<JoinHandle<()>>,
-    /// cancel을 보낼 시각. `Draining`이고 cancel이 없을 때만 있다: cancel이 끝났는데 결과는 끝나지
-    /// 않았거나(다시 보낸다), 트랜잭션 안의 결과를 cancel 없이 버리기 시작했을 때다.
+    /// cancel을 다시 보낼 시각. `Draining`이고 cancel이 끝났는데 결과는 끝나지 않았을 때만 있다.
     cancel_at: Option<Instant>,
 }
 
@@ -209,10 +215,10 @@ impl<D: DbConnection> Actor<D> {
             SessionCommand::Cancel { query, reply } => {
                 if let Some(waiting) = self.pending.take_if(|p| p.id == query) {
                     // 아직 서버에 보내지 않았으므로 cancel 요청 없이 빼기만 한다.
-                    waiting.finish(QueryOutcome::Cancelled, Some(self.tx));
+                    waiting.finish(QueryOutcome::Cancelled);
                     let _ = reply.send(Ok(()));
                 } else if self.query.as_ref().is_some_and(|q| q.id == query) {
-                    // 트랜잭션 안에서 cancel 없이 버리던 중이어도 사용자의 취소는 바로 cancel한다.
+                    // 이미 버리던 중이어도 cancel이 가고 있지 않으면 다시 보낸다.
                     self.discard(DrainReason::Cancelled, true, Some(reply));
                 } else {
                     let _ = reply.send(Ok(()));
@@ -243,29 +249,43 @@ impl<D: DbConnection> Actor<D> {
         }
         self.discard(DrainReason::Discarded, false, None);
         if let Some(replaced) = self.pending.replace(next) {
-            replaced.finish(QueryOutcome::Discarded, Some(self.tx));
+            replaced.finish(QueryOutcome::Discarded);
         }
     }
 
-    /// 쿼리가 없을 때 다음 쿼리를 시작한다. Manual이고 트랜잭션 밖이면 먼저 `BEGIN`을 보내고,
-    /// `BEGIN`이 실패하면 쿼리를 보내지 않고 그 오류로 마친다.
+    /// 쿼리가 없을 때 다음 쿼리를 시작한다. Manual이고 트랜잭션 밖이면 먼저 `BEGIN`을 보낸다.
+    /// 트랜잭션 안이 되는 문장 앞에는 savepoint를 함께 둔다. 실패한 트랜잭션의 문장은 바로 `25P02`로
+    /// 끝나므로 두지 않는다. `BEGIN`이나 savepoint가 실패하면 쿼리를 보내지 않고 그 오류로 마친다.
     async fn start(&mut self, mut next: Pending) {
         let started = Instant::now();
-        let begins = next.mode == TxMode::Manual && self.tx == TxStatus::Idle;
-        let begin = if begins {
-            self.connection.simple_execute("BEGIN").await
-        } else {
-            Ok(())
+        let plain = savepoint::runs_without_savepoint(&next.sql);
+        let (prepare, savepoint) = match self.tx {
+            TxStatus::Idle if next.mode == TxMode::Manual && plain => (Some("BEGIN"), false),
+            TxStatus::Idle if next.mode == TxMode::Manual => (Some(savepoint::BEGIN_AND_SET), true),
+            TxStatus::InTransaction if !plain && self.savepoint_on_top => {
+                (Some(savepoint::RENEW), true)
+            }
+            TxStatus::InTransaction if !plain => (Some(savepoint::SET), true),
+            _ => (None, false),
         };
-        let rows = match begin {
+        // 새로 두기 전까지는 맨 위가 세션의 savepoint인지 모른다. 사용자의 문장은 그 위에 savepoint를
+        // 두거나 그것을 풀 수 있다.
+        self.savepoint_on_top = false;
+        let prepared = match prepare {
+            Some(sql) => self.connection.simple_execute(sql).await,
+            None => Ok(()),
+        };
+        if prepared.is_ok() && prepare.is_some() {
+            self.tx = TxStatus::InTransaction;
+            self.savepoint_on_top = savepoint;
+        }
+        let rows = match prepared {
             Ok(()) => self.connection.start_query(&next.sql).await,
             Err(error) => Err(error),
         };
         match rows {
             Ok(rows) => {
-                // 실패한 트랜잭션의 문장은 바로 25P02로 끝나므로 cancel해도 잃을 것이 없다.
-                let in_transaction = begins || self.tx == TxStatus::InTransaction;
-                let query = Query::new(next, rows, started, self.limits, in_transaction);
+                let query = Query::new(next, rows, started, self.limits, savepoint);
                 self.query = Some(query);
             }
             Err(error) => {
@@ -289,10 +309,17 @@ impl<D: DbConnection> Actor<D> {
         if self.cancel.is_some() {
             return;
         }
-        let Some(query) = self.query.take_if(|query| query.is_over()) else {
+        let Some(mut query) = self.query.take_if(|query| query.is_over()) else {
             return;
         };
         self.cancel_at = None;
+        if query.needs_undo() {
+            // 버린 문장은 어떻게 끝났든(cancel이 늦어 끝까지 돌았어도) 되돌린다. 실패하면(사용자가
+            // savepoint를 풀었거나 그 앞으로 되돌린 경우) 서버가 알려 주는 상태를 그대로 둔다.
+            let undone = self.connection.simple_execute(savepoint::UNDO).await;
+            self.savepoint_on_top &= undone.is_ok();
+            query.undone(undone);
+        }
         // `Finished`에 싣기 전에 읽는다. 결과를 다 읽은 뒤라 서버의 ReadyForQuery가 온다.
         let tx = self.read_tx(query.is_lost()).await;
         query.finish(tx);
@@ -311,6 +338,7 @@ impl<D: DbConnection> Actor<D> {
     /// 끊긴 연결이면 마지막으로 읽은 상태는 죽은 연결의 것이므로 보지 않는다. 연결이 그 문장을
     /// 보내지 못하고 `ConnectionLost`로 답한다.
     async fn end_transaction(&mut self, end: TxEnd) -> EndResult {
+        self.savepoint_on_top = false;
         if end == TxEnd::Commit && self.tx == TxStatus::Failed && !self.connection.is_closed() {
             return EndResult {
                 outcome: EndOutcome::TransactionFailed,
@@ -341,28 +369,20 @@ impl<D: DbConnection> Actor<D> {
         Some(tx)
     }
 
-    /// 지금 쿼리를 버리기 시작한다. 트랜잭션 안의 쿼리는 cancel 없이 남은 행을 읽어 버리고,
-    /// `tx_drain_limit` 안에 끝나지 않으면 그때 cancel한다(트랜잭션은 failed가 된다).
+    /// 지금 쿼리를 버리기 시작하고 cancel한다. 트랜잭션 안의 문장은 결과가 끝난 뒤 `settle`이
+    /// savepoint로 되돌린다.
     ///
-    /// `force_cancel`이면 트랜잭션 안이어도, 이미 cancel 없이 버리던 중이어도 바로 cancel한다. 다만
-    /// cancel이 이미 가고 있거나 결과가 끝났으면 보내지 않는다. cancel하면 `reply`에 그 결과를,
-    /// 하지 않으면 바로 `Ok`를 답한다.
+    /// 이미 버리는 중이면 `force_cancel`일 때만 cancel을 다시 보낸다. 다만 cancel이 이미 가고 있거나
+    /// 결과가 끝났으면 보내지 않는다. cancel하면 `reply`에 그 결과를, 하지 않으면 바로 `Ok`를 답한다.
     fn discard(&mut self, reason: DrainReason, force_cancel: bool, reply: Option<CancelReply>) {
         let Some(query) = &mut self.query else {
             return answer(reply);
         };
-        match query.drain(reason) {
-            Drain::Cancel => self.send_cancel(reply),
-            Drain::ReadOut | Drain::Already
-                if force_cancel && self.cancel.is_none() && !query.is_over() =>
-            {
-                self.send_cancel(reply);
-            }
-            Drain::ReadOut if !force_cancel => {
-                self.cancel_at = Some(Instant::now() + self.limits.tx_drain_limit);
-                answer(reply);
-            }
-            Drain::ReadOut | Drain::Already => answer(reply),
+        let resend = force_cancel && self.cancel.is_none() && !query.is_over();
+        if query.drain(reason) || resend {
+            self.send_cancel(reply);
+        } else {
+            answer(reply);
         }
     }
 
@@ -380,7 +400,7 @@ impl<D: DbConnection> Actor<D> {
     }
 
     /// 쿼리를 멈추고 결과가 끝나기를 잠깐 기다린 뒤 연결을 닫는다. 연결을 닫으면 트랜잭션은
-    /// 어차피 되돌아가므로 트랜잭션 안이어도 cancel한다(cancel 없이 버리던 중이었어도).
+    /// 어차피 되돌아가므로 savepoint로 되돌리지 않는다.
     async fn close(mut self) {
         self.discard(DrainReason::Discarded, true, None);
         if let Some(mut query) = self.query.take() {
@@ -389,7 +409,7 @@ impl<D: DbConnection> Actor<D> {
             query.finish_closed();
         }
         if let Some(pending) = self.pending.take() {
-            pending.finish(QueryOutcome::Discarded, None);
+            pending.finish(QueryOutcome::Discarded);
         }
         self.connection.close().await;
     }

@@ -1054,7 +1054,7 @@ mod tests {
         );
         assert_eq!(
             f.connector.links()[0].sent(),
-            ["BEGIN", "SELECT 1", "COMMIT"]
+            ["BEGIN; SAVEPOINT chilla_statement", "SELECT 1", "COMMIT"]
         );
     }
 

@@ -1,4 +1,6 @@
-use pg_query::protobuf::{DropStmt, ObjectType, RangeVar, SelectStmt, WithClause};
+use pg_query::protobuf::{
+    DropStmt, ObjectType, RangeVar, RoleSpec, RoleSpecType, SelectStmt, WithClause,
+};
 use pg_query::{Node, NodeEnum};
 
 use crate::application::StatementInspector;
@@ -6,7 +8,8 @@ use crate::domain::Danger;
 
 /// `pg_query::parse`의 syntax tree로 위험한 문장을 찾는다.
 ///
-/// 읽는 것은 `UPDATE`, `DELETE`, `DROP`, `TRUNCATE`와 그것들이 숨은 자리(CTE, `EXPLAIN ANALYZE`)다.
+/// 읽는 것은 `UPDATE`, `DELETE`, `DROP`(`DROP ROLE`, `DROP OWNED`, `DROP TABLESPACE` 포함), `TRUNCATE`와
+/// 그것들이 숨은 자리(CTE, `EXPLAIN ANALYZE`)다.
 /// `DO` block, 함수 본문, `ALTER TABLE … DROP COLUMN`은 보지 않는다.
 pub struct PgQueryInspector;
 
@@ -50,6 +53,20 @@ fn node_danger(node: &Node) -> Option<Danger> {
         NodeEnum::DropdbStmt(stmt) => Some(Danger::Drop {
             kind: "DATABASE".into(),
             names: vec![stmt.dbname.clone()],
+        }),
+        // `DROP USER`와 `DROP GROUP`도 같은 문장이고 tree에서 구분되지 않는다.
+        NodeEnum::DropRoleStmt(stmt) => Some(Danger::Drop {
+            kind: "ROLE".into(),
+            names: stmt.roles.iter().filter_map(role_name).collect(),
+        }),
+        // role이 아니라 role이 가진 object를 지운다. `names`는 그 role이다.
+        NodeEnum::DropOwnedStmt(stmt) => Some(Danger::Drop {
+            kind: "OWNED".into(),
+            names: stmt.roles.iter().filter_map(role_name).collect(),
+        }),
+        NodeEnum::DropTableSpaceStmt(stmt) => Some(Danger::Drop {
+            kind: "TABLESPACE".into(),
+            names: vec![stmt.tablespacename.clone()],
         }),
         NodeEnum::TruncateStmt(stmt) => Some(Danger::Truncate {
             tables: stmt.relations.iter().filter_map(object_name).collect(),
@@ -118,6 +135,24 @@ fn object_name(node: &Node) -> Option<String> {
         NodeEnum::ObjectWithArgs(function) => Some(join_names(&function.objname)),
         _ => None,
     }
+}
+
+/// 이름이 없는 role(`CURRENT_USER` 등)은 그 keyword로 쓴다.
+fn role_name(node: &Node) -> Option<String> {
+    let NodeEnum::RoleSpec(RoleSpec {
+        roletype, rolename, ..
+    }) = node.node.as_ref()?
+    else {
+        return None;
+    };
+    let name = match RoleSpecType::try_from(*roletype) {
+        Ok(RoleSpecType::RolespecCurrentRole) => "CURRENT_ROLE",
+        Ok(RoleSpecType::RolespecCurrentUser) => "CURRENT_USER",
+        Ok(RoleSpecType::RolespecSessionUser) => "SESSION_USER",
+        Ok(RoleSpecType::RolespecPublic) => "PUBLIC",
+        _ => rolename,
+    };
+    Some(name.to_string())
 }
 
 fn join_names(parts: &[Node]) -> String {
@@ -303,6 +338,34 @@ mod tests {
         assert_eq!(kind("DROP EXTENSION e"), "EXTENSION");
         assert_eq!(kind("DROP TRIGGER g ON t"), "");
         assert_eq!(kind("DROP DOMAIN d"), "");
+    }
+
+    /// `DropStmt`가 아닌 DROP: role, role이 가진 object, tablespace.
+    #[test]
+    fn drops_of_roles_owned_objects_and_tablespaces_are_dangers() {
+        let drop = |kind: &str, names: &[&str]| {
+            Some(Danger::Drop {
+                kind: kind.into(),
+                names: names.iter().map(|name| name.to_string()).collect(),
+            })
+        };
+        assert_eq!(
+            danger("DROP ROLE alice, bob"),
+            drop("ROLE", &["alice", "bob"])
+        );
+        assert_eq!(
+            danger("DROP USER IF EXISTS alice"),
+            drop("ROLE", &["alice"])
+        );
+        assert_eq!(danger("DROP GROUP staff"), drop("ROLE", &["staff"]));
+        assert_eq!(
+            danger("DROP OWNED BY alice, CURRENT_USER CASCADE"),
+            drop("OWNED", &["alice", "CURRENT_USER"])
+        );
+        assert_eq!(
+            danger("DROP TABLESPACE fast"),
+            drop("TABLESPACE", &["fast"])
+        );
     }
 
     #[test]
