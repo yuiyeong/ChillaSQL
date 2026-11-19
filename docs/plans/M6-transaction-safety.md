@@ -470,7 +470,7 @@ export function isDialogOpen(): boolean;
 - `rt(key: MessageKey, params: Record<string, ReactNode>): ReactNode` — 문구의 `{name}`을 넘긴 node로 바꾼다. `bold(text)`, `sqlCode(text)`(D2Coding, bg-3, keyword 색 class를 줄 수 있는 `sqlCode(text, { keyword: true })`) helper를 함께 둔다.
 - 없어지는 것: `src/shared/api/dialog.ts`의 `confirm`.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `DialogHost.test.tsx`:
 
@@ -494,21 +494,21 @@ M3 확인의 test를 새 dialog로 바꾼다(`saveTab.test.ts`, `commands.test.t
 
 - `closing_a_dirty_tab_with_save_closes_only_when_saved`: Save를 고르고 `saveTab`이 `"saved"`면 닫고, `"needs_name"`이나 `"failed"`면 닫지 않는다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/shared src/features/editor src/features/workspace`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 모양은 `Dialogs.dc.html`과 `Safety.dc.html`의 `.dlg`(폭 452px, 창 위에서 84px, padding 20, gap 14, radius 12, `--shadow-dialog`, 배경 `--color-scrim`)와 Tokens의 dialog 규칙(제목 fg 17 semibold, 본문 fg-2 15, 이름만 fg 굵게)을 따른다. `icon: "warning"`은 Safety의 32px 경고 icon이다. `DialogHost`는 `App.tsx`에 한 번 둔다. `useShortcuts`의 `enabled`에 `!dialogOpen`을 더한다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

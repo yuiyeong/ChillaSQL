@@ -1,4 +1,4 @@
-import { ask, open } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 
 /** 폴더 선택 dialog. 취소하면 null이다. */
 export async function pickDirectory(): Promise<string | null> {
@@ -12,8 +12,4 @@ export async function pickFile(extensions: string[]): Promise<string | null> {
     multiple: false,
     filters: [{ name: extensions.join(", "), extensions }],
   });
-}
-
-export async function confirm(message: string): Promise<boolean> {
-  return ask(message, { kind: "warning" });
 }

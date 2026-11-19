@@ -1,11 +1,13 @@
 import type { ComponentProps } from "react";
 
-type Variant = "primary" | "secondary" | "ghost" | "dashed";
+type Variant = "primary" | "secondary" | "danger" | "ghost" | "dashed";
 
 const VARIANT: Record<Variant, string> = {
   primary:
     "border-accent bg-accent font-semibold text-bg-0 [&_kbd]:bg-bg-0/20 [&_kbd]:text-bg-0",
   secondary: "border-line-2 bg-bg-2 text-fg",
+  /** 위험 dialog의 실행 버튼 */
+  danger: "border-danger bg-danger font-semibold text-bg-0",
   ghost: "border-transparent bg-transparent text-fg-2",
   /** 아직 고르지 않은 것(접속이 없는 탭의 접속 chip) */
   dashed: "border-line-2 border-dashed bg-transparent text-fg",

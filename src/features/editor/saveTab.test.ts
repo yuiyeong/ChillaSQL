@@ -8,13 +8,14 @@ import {
   readSqlFile,
   writeSqlFile,
 } from "../../shared/api/commands";
-import { confirm } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
 import type { Project } from "../../shared/api/types";
 import { useProject } from "../project/projectStore";
 import { documentState, setDocumentState } from "./documents";
 import { normalizeNewPath, saveTab } from "./saveTab";
 import { useTabs } from "./tabsStore";
+import { useDialogs } from "../../shared/ui/dialogs";
+import { answerDialog, textOf } from "../../test/dialogs";
 import { deferred } from "../../test/deferred";
 import { resetStores } from "../../test/resetStores";
 
@@ -138,11 +139,17 @@ test("밖에서 바뀐 파일은 물어본 뒤에만 덮어쓴다", async () => 
   type(id, "-- ");
   useTabs.getState().markDirty(id);
 
-  vi.mocked(confirm).mockResolvedValueOnce(false);
-  expect(await saveTab(id)).toBe("cancelled");
-  expect(confirm).toHaveBeenCalledWith(
-    "queries/a.sql was edited by another program after you opened it. Overwriting discards those changes.",
+  const declined = saveTab(id);
+  const spec = await answerDialog("cancel");
+  expect(await declined).toBe("cancelled");
+  expect(textOf(spec.title)).toBe("queries/a.sql changed on disk");
+  expect(textOf(spec.body)).toBe(
+    "Another program edited this file after you opened it. Overwriting discards those changes.",
   );
+  expect(spec.actions.map(({ id, label }) => [id, label])).toEqual([
+    ["cancel", "Cancel"],
+    ["overwrite", "Overwrite"],
+  ]);
   expect(writeSqlFile).toHaveBeenCalledTimes(1);
   expect(tabOf(id)).toMatchObject({ dirty: true, stamp: "s1" });
   expect(useTabs.getState().error).toBeNull();
@@ -151,9 +158,10 @@ test("밖에서 바뀐 파일은 물어본 뒤에만 덮어쓴다", async () => 
   vi.mocked(writeSqlFile)
     .mockRejectedValueOnce(new CommandError("file_changed", "바뀌었습니다"))
     .mockResolvedValueOnce("s3");
-  vi.mocked(confirm).mockResolvedValueOnce(true);
 
-  expect(await saveTab(id)).toBe("saved");
+  const accepted = saveTab(id);
+  await answerDialog("overwrite");
+  expect(await accepted).toBe("saved");
   expect(writeSqlFile).toHaveBeenCalledTimes(2);
   expect(writeSqlFile).toHaveBeenLastCalledWith(
     "queries/a.sql",
@@ -173,11 +181,17 @@ test("밖에서 지워진 파일은 물어본 뒤 다시 만든다", async () =>
     new CommandError("file_not_found", "파일이 없습니다"),
   );
 
-  vi.mocked(confirm).mockResolvedValueOnce(false);
-  expect(await saveTab(id)).toBe("cancelled");
-  expect(confirm).toHaveBeenCalledWith(
-    "queries/a.sql was deleted from disk after you opened it. Recreate it with this tab's contents?",
+  const declined = saveTab(id);
+  const spec = await answerDialog("cancel");
+  expect(await declined).toBe("cancelled");
+  expect(textOf(spec.title)).toBe("queries/a.sql was deleted");
+  expect(textOf(spec.body)).toBe(
+    "It was deleted from disk after you opened it. Recreate it with this tab's contents?",
   );
+  expect(spec.actions.map(({ id, label }) => [id, label])).toEqual([
+    ["cancel", "Cancel"],
+    ["recreate", "Recreate"],
+  ]);
   expect(writeSqlFile).toHaveBeenCalledTimes(1);
   expect(tabOf(id)).toMatchObject({ dirty: true, stamp: "s1" });
   expect(useTabs.getState().error).toBeNull();
@@ -188,9 +202,10 @@ test("밖에서 지워진 파일은 물어본 뒤 다시 만든다", async () =>
       new CommandError("file_not_found", "파일이 없습니다"),
     )
     .mockResolvedValueOnce("s2");
-  vi.mocked(confirm).mockResolvedValueOnce(true);
 
-  expect(await saveTab(id)).toBe("saved");
+  const accepted = saveTab(id);
+  await answerDialog("recreate");
+  expect(await accepted).toBe("saved");
   expect(writeSqlFile).toHaveBeenCalledTimes(2);
   expect(writeSqlFile).toHaveBeenLastCalledWith(
     "queries/a.sql",
@@ -225,12 +240,13 @@ test("덮어쓰기가 실패하면 error를 두고 failed다", async () => {
   vi.mocked(writeSqlFile)
     .mockRejectedValueOnce(new CommandError("file_changed", "바뀌었습니다"))
     .mockRejectedValueOnce(new CommandError("io", "쓸 수 없습니다"));
-  vi.mocked(confirm).mockResolvedValue(true);
   await useTabs.getState().openFile("queries/a.sql");
   const id = useTabs.getState().tabs[0].id;
   useTabs.getState().markDirty(id);
 
-  expect(await saveTab(id)).toBe("failed");
+  const saving = saveTab(id);
+  await answerDialog("overwrite");
+  expect(await saving).toBe("failed");
   expect(useTabs.getState().error).toBe("쓸 수 없습니다");
   expect(tabOf(id).dirty).toBe(true);
 });
@@ -245,7 +261,7 @@ test("그 밖의 실패는 error를 두고 dirty인 채로 둔다", async () => 
   useTabs.getState().markDirty(id);
 
   expect(await saveTab(id)).toBe("failed");
-  expect(confirm).not.toHaveBeenCalled();
+  expect(useDialogs.getState().current).toBeNull();
   expect(useTabs.getState().error).toBe("쓸 수 없습니다");
   expect(tabOf(id).dirty).toBe(true);
 });
@@ -271,17 +287,15 @@ test("밖에서 바뀌었는지 묻는 동안에도 저장은 겹치지 않는�
   vi.mocked(writeSqlFile)
     .mockRejectedValueOnce(new CommandError("file_changed", "바뀌었습니다"))
     .mockResolvedValueOnce("s2");
-  const asking = deferred<boolean>();
-  vi.mocked(confirm).mockReturnValueOnce(asking.promise);
 
   const first = saveTab(id);
-  await vi.waitFor(() => expect(confirm).toHaveBeenCalled());
+  await vi.waitFor(() => expect(useDialogs.getState().current).not.toBeNull());
   expect(await saveTab(id)).toBe("cancelled");
 
-  asking.resolve(true);
+  await answerDialog("overwrite");
   expect(await first).toBe("saved");
   expect(writeSqlFile).toHaveBeenCalledTimes(2);
-  expect(confirm).toHaveBeenCalledTimes(1);
+  expect(useDialogs.getState().current).toBeNull();
 });
 
 test("쓰는 동안 고치면 저장 뒤에도 dirty다", async () => {

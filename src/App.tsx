@@ -1,11 +1,15 @@
 import { ProjectGate } from "./features/project/ProjectGate";
 import { Workspace } from "./features/workspace/Workspace";
+import { DialogHost } from "./shared/ui/DialogHost";
 
 function App() {
   return (
-    <ProjectGate>
-      <Workspace />
-    </ProjectGate>
+    <>
+      <ProjectGate>
+        <Workspace />
+      </ProjectGate>
+      <DialogHost />
+    </>
   );
 }
 

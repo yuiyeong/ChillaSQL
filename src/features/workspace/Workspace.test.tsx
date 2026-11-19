@@ -30,6 +30,7 @@ import { homeDir } from "../../shared/api/path";
 import { openDocument } from "../editor/documents";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
+import { ask, resolveDialog } from "../../shared/ui/dialogs";
 import { Workspace } from "./Workspace";
 
 /** 새 탭을 만들고 text와 접속을 둔다. */
@@ -400,6 +401,44 @@ test("저장 경로 dialog가 열려 있으면 단축키가 동작하지 않는�
   });
   expect(closeAgain.defaultPrevented).toBe(true);
   expect(useTabs.getState().tabs.map((tab) => tab.id)).toEqual([a]);
+});
+
+test("확인 dialog가 열려 있으면 단축키가 동작하지 않는다", async () => {
+  openProjectWith([connection("local")]);
+  const a = tabWith("SELECT 1", "local");
+  renderWorkspace();
+  const shortcut = () =>
+    new KeyboardEvent("keydown", {
+      code: "KeyW",
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+
+  let answer!: Promise<string>;
+  act(() => {
+    answer = ask({
+      title: "Save changes?",
+      actions: [{ id: "cancel", label: "Cancel" }],
+    });
+  });
+  const close = shortcut();
+  await act(async () => {
+    window.dispatchEvent(close);
+  });
+
+  expect(close.defaultPrevented).toBe(false);
+  expect(useTabs.getState().tabs.map((tab) => tab.id)).toEqual([a]);
+
+  // 답하면 다시 잡는다.
+  act(() => resolveDialog("cancel"));
+  expect(await answer).toBe("cancel");
+  const closeAgain = shortcut();
+  await act(async () => {
+    window.dispatchEvent(closeAgain);
+  });
+  expect(closeAgain.defaultPrevented).toBe(true);
+  expect(useTabs.getState().tabs).toEqual([]);
 });
 
 /** jsdom은 var()를 뜻으로 풀지 못해서 style attribute를 그대로 읽는다. */

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("./shared/api/commands");
@@ -13,6 +13,7 @@ import { resetStores } from "./test/resetStores";
 import { LAST_PROJECT_KEY } from "./features/project/projectStore";
 import { listSqlFiles, openProject } from "./shared/api/commands";
 import { homeDir } from "./shared/api/path";
+import { ask } from "./shared/ui/dialogs";
 
 beforeEach(async () => {
   await resetStores();
@@ -43,5 +44,20 @@ test("프로젝트가 없으면 프로젝트 열기 버튼을 보여 준다", as
 
   expect(
     await screen.findByRole("button", { name: "Open Project…" }),
+  ).toBeInTheDocument();
+});
+
+test("프로젝트를 열기 전에도 확인 dialog를 그린다", async () => {
+  render(<App />);
+
+  act(() => {
+    void ask({
+      title: "Any question?",
+      actions: [{ id: "cancel", label: "Cancel" }],
+    });
+  });
+
+  expect(
+    screen.getByRole("alertdialog", { name: "Any question?" }),
   ).toBeInTheDocument();
 });

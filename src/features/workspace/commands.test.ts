@@ -14,7 +14,7 @@ import {
   splitStatements,
   writeSqlFile,
 } from "../../shared/api/commands";
-import { confirm, pickDirectory } from "../../shared/api/dialog";
+import { pickDirectory } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
 import type { Project, QueryEvent, Session } from "../../shared/api/types";
 import {
@@ -35,6 +35,8 @@ import {
   switchProject,
 } from "./commands";
 import { useTunnels } from "../connections/tunnelsStore";
+import { useDialogs } from "../../shared/ui/dialogs";
+import { answerDialog, textOf } from "../../test/dialogs";
 import { deferred } from "../../test/deferred";
 import { connection } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
@@ -229,7 +231,7 @@ test("활성 탭이 없으면 command는 아무것도 하지 않는다", async (
 
   expect(useRuns.getState().runs).toEqual({});
   expect(writeSqlFile).not.toHaveBeenCalled();
-  expect(confirm).not.toHaveBeenCalled();
+  expect(useDialogs.getState().current).toBeNull();
 });
 
 test("dirty 탭은 물어본 뒤에 닫는다", async () => {
@@ -243,11 +245,22 @@ test("dirty 탭은 물어본 뒤에 닫는다", async () => {
   // 처음 state object를 고치지 않게 새 object에 spy를 단다.
   useRuns.setState({ ...useRuns.getState() });
   const release = vi.spyOn(useRuns.getState(), "release");
-  vi.mocked(confirm).mockResolvedValue(false);
 
-  await closeTab(id);
+  const cancelling = closeTab(id);
+  const spec = await answerDialog("cancel");
+  await cancelling;
 
-  expect(confirm).toHaveBeenCalledWith("Discard unsaved changes to Query 1?");
+  expect(textOf(spec.title)).toBe("Save changes to Query 1?");
+  expect(textOf(spec.body)).toBe(
+    "Your changes will be lost if you don't save them.",
+  );
+  expect(
+    spec.actions.map(({ id, label, variant }) => [id, label, variant]),
+  ).toEqual([
+    ["discard", "Don't save", "ghost"],
+    ["cancel", "Cancel", undefined],
+    ["save", "Save", "primary"],
+  ]);
   expect(tabOf(id)).toBeDefined();
   expect(release).not.toHaveBeenCalled();
 
@@ -256,9 +269,10 @@ test("dirty 탭은 물어본 뒤에 닫는다", async () => {
     openWhenReleased = tabOf(tabId) !== undefined;
     await useRuns.getInitialState().release(tabId);
   });
-  vi.mocked(confirm).mockResolvedValue(true);
 
-  await closeTab(id);
+  const discarding = closeTab(id);
+  await answerDialog("discard");
+  await discarding;
 
   expect(release).toHaveBeenCalledWith(id);
   expect(openWhenReleased).toBe(true);
@@ -272,8 +286,44 @@ test("dirty가 아닌 탭은 묻지 않고 닫는다", async () => {
 
   await execute("closeTab");
 
-  expect(confirm).not.toHaveBeenCalled();
+  expect(useDialogs.getState().current).toBeNull();
   expect(tabOf(id)).toBeUndefined();
+});
+
+test("dirty 탭의 Save는 저장에 성공했을 때만 닫는다", async () => {
+  // 이름이 없는 탭은 이름을 물으러 가므로 닫지 않는다.
+  const untitled = tabWith("SELECT 1");
+  useTabs.getState().markDirty(untitled);
+  const naming = closeTab(untitled);
+  await answerDialog("save");
+  await naming;
+  expect(tabOf(untitled)).toBeDefined();
+  expect(useTabs.getState().naming).toBe(untitled);
+  expect(writeSqlFile).not.toHaveBeenCalled();
+
+  // 저장에 실패해도 닫지 않는다.
+  const file = tabWith("SELECT 2");
+  useTabs.getState().markSaved(file, "queries/b.sql", "s1");
+  useTabs.getState().markDirty(file);
+  vi.mocked(writeSqlFile).mockRejectedValueOnce(
+    new CommandError("io", "쓸 수 없습니다"),
+  );
+  const failing = closeTab(file);
+  await answerDialog("save");
+  await failing;
+  expect(tabOf(file)).toBeDefined();
+  expect(useTabs.getState().error).toBe("쓸 수 없습니다");
+
+  // 저장하면 닫는다.
+  vi.mocked(writeSqlFile).mockResolvedValueOnce("s2");
+  const saving = closeTab(file);
+  await answerDialog("save");
+  await saving;
+  expect(writeSqlFile).toHaveBeenLastCalledWith("queries/b.sql", "SELECT 2", {
+    mode: "replace",
+    stamp: "s1",
+  });
+  expect(tabOf(file)).toBeUndefined();
 });
 
 test("접속을 바꾸면 세션을 놓는다", async () => {
@@ -365,15 +415,38 @@ test("dirty 탭이 있으면 프로젝트를 바꾸기 전에 묻는다", async 
   tabWith("SELECT 3");
   useTabs.getState().markDirty(a);
   useTabs.getState().markDirty(b);
-  vi.mocked(confirm).mockResolvedValue(false);
 
-  await switchProject();
+  const switching = switchProject();
+  const spec = await answerDialog("cancel");
+  await switching;
 
-  expect(confirm).toHaveBeenCalledWith(
-    "2 tabs have unsaved changes. Discard them and open another project?",
+  expect(textOf(spec.title)).toBe("2 tabs have unsaved changes");
+  expect(spec.items?.map((item) => item.primary)).toEqual([
+    "Query 1",
+    "Query 2",
+  ]);
+  expect(textOf(spec.note)).toBe(
+    "Switching projects discards these changes and closes every tab's session.",
   );
+  expect(spec.actions.map(({ id, label }) => [id, label])).toEqual([
+    ["cancel", "Cancel"],
+    ["switch", "Switch without saving"],
+  ]);
   expect(pickDirectory).not.toHaveBeenCalled();
   expect(useTabs.getState().tabs).toHaveLength(3);
+});
+
+test("dirty 탭이 하나면 단수 제목으로 묻고 바꾸겠다고 하면 폴더를 고른다", async () => {
+  const a = tabWith("SELECT 1");
+  useTabs.getState().markDirty(a);
+  vi.mocked(pickDirectory).mockResolvedValue(null);
+
+  const switching = switchProject();
+  const spec = await answerDialog("switch");
+  await switching;
+
+  expect(textOf(spec.title)).toBe("1 tab has unsaved changes");
+  expect(pickDirectory).toHaveBeenCalledTimes(1);
 });
 
 test("save, cancel, newTab, nextTab, prevTab은 활성 탭에 한다", async () => {
@@ -517,35 +590,6 @@ test("디렉토리 고르기가 실패하면 프로젝트 오류로 보여 준�
   expect(useProject.getState().project).toEqual(project);
   expect(tabOf(id)).toBeDefined();
   expect(runOf(id)?.status).toBe("running");
-
-  // dirty 탭을 묻는 확인 창이 실패해도 같다.
-  useProject.getState().clearError();
-  useTabs.getState().markDirty(id);
-  vi.mocked(confirm).mockRejectedValue(new Error("확인 창 오류"));
-
-  await switchProject();
-
-  expect(useProject.getState().error).toBe("확인 창 오류");
-  expect(tabOf(id)).toBeDefined();
-  expect(runOf(id)?.status).toBe("running");
-});
-
-test("확인 창이 실패하면 탭을 닫지 않고 오류를 보여 준다", async () => {
-  const id = tabWith("SELECT 1");
-  await useRuns.getState().run(id, () => ({
-    connection: "local",
-    sql: "SELECT 1",
-    origin: { line: 1, column: 1 },
-  }));
-  useTabs.getState().markDirty(id);
-  vi.mocked(confirm).mockRejectedValue(new Error("확인 창 오류"));
-
-  await closeTab(id);
-
-  expect(useTabs.getState().error).toBe("확인 창 오류");
-  expect(tabOf(id)).toBeDefined();
-  expect(runOf(id)?.status).toBe("running");
-  expect(closeSession).not.toHaveBeenCalled();
 });
 
 test("그 밖의 split 오류는 그 message를 title로 거절한다", async () => {

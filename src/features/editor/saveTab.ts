@@ -1,10 +1,11 @@
 import { writeSqlFile } from "../../shared/api/commands";
-import { confirm } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import { useProject } from "../project/projectStore";
 import { documentFileText, documentState, findDocument } from "./documents";
 import { useTabs } from "./tabsStore";
+import { mono, rt } from "../../shared/i18n/rich";
 import { t } from "../../shared/i18n/t";
+import { ask } from "../../shared/ui/dialogs";
 
 export type SaveResult = "saved" | "needs_name" | "cancelled" | "failed";
 
@@ -74,13 +75,18 @@ async function save(tabId: string, newPath?: string): Promise<SaveResult> {
     } catch (error) {
       const deleted = isCommandError(error, "file_not_found");
       if (!deleted && !isCommandError(error, "file_changed")) throw error;
-      const question = t(
-        deleted ? "dialog.fileDeleted" : "dialog.fileChanged",
-        {
-          path,
-        },
-      );
-      if (!(await confirm(question))) return "cancelled";
+      const [question, confirmId] = deleted
+        ? (["dialog.fileDeleted", "recreate"] as const)
+        : (["dialog.fileChanged", "overwrite"] as const);
+      const choice = await ask({
+        title: rt(`${question}.title`, { path: mono(path) }),
+        body: t(`${question}.body`),
+        actions: [
+          { id: "cancel", label: t("common.cancel") },
+          { id: confirmId, label: t(`${question}.confirm`) },
+        ],
+      });
+      if (choice === "cancel") return "cancelled";
       // overwrite는 파일이 없으면 부모 디렉토리까지 만든다.
       stamp = await writeSqlFile(path, text, { mode: "overwrite" });
       if (deleted) void useProject.getState().refreshFiles();

@@ -50,15 +50,22 @@ export const en = {
   "tabs.filePath": "Path inside the project",
   "tabs.filePathPlaceholder": "queries/name.sql",
 
-  "dialog.discardTab": "Discard unsaved changes to {title}?",
-  "dialog.discardForProject.one":
-    "1 tab has unsaved changes. Discard it and open another project?",
-  "dialog.discardForProject.other":
-    "{count} tabs have unsaved changes. Discard them and open another project?",
-  "dialog.fileDeleted":
-    "{path} was deleted from disk after you opened it. Recreate it with this tab's contents?",
-  "dialog.fileChanged":
-    "{path} was edited by another program after you opened it. Overwriting discards those changes.",
+  "dialog.closeTab.title": "Save changes to {title}?",
+  "dialog.closeTab.body": "Your changes will be lost if you don't save them.",
+  "dialog.closeTab.discard": "Don't save",
+  "dialog.switchProject.title.one": "1 tab has unsaved changes",
+  "dialog.switchProject.title.other": "{count} tabs have unsaved changes",
+  "dialog.switchProject.note":
+    "Switching projects discards these changes and closes every tab's session.",
+  "dialog.switchProject.confirm": "Switch without saving",
+  "dialog.fileChanged.title": "{path} changed on disk",
+  "dialog.fileChanged.body":
+    "Another program edited this file after you opened it. Overwriting discards those changes.",
+  "dialog.fileChanged.confirm": "Overwrite",
+  "dialog.fileDeleted.title": "{path} was deleted",
+  "dialog.fileDeleted.body":
+    "It was deleted from disk after you opened it. Recreate it with this tab's contents?",
+  "dialog.fileDeleted.confirm": "Recreate",
 
   "run.noConnection": "Choose a connection to run queries.",
   "run.emptySelection": "Nothing to run",

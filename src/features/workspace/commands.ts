@@ -3,7 +3,7 @@ import {
   restartTunnel,
   splitStatements,
 } from "../../shared/api/commands";
-import { confirm, pickDirectory } from "../../shared/api/dialog";
+import { pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import type { Project } from "../../shared/api/types";
 import { targetChanged } from "../connections/connectionValues";
@@ -15,7 +15,9 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import type { Origin, Rejection, RunRequest } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
+import { mono, rt } from "../../shared/i18n/rich";
 import { t, tc } from "../../shared/i18n/t";
+import { ask } from "../../shared/ui/dialogs";
 
 export type CommandId =
   "run" | "cancel" | "save" | "newTab" | "closeTab" | "nextTab" | "prevTab";
@@ -159,15 +161,22 @@ export async function closeTab(tabId: string): Promise<void> {
   const tab = findTab(tabId);
   if (tab === undefined) return;
   if (tab.dirty) {
-    let discard: boolean;
-    try {
-      discard = await confirm(t("dialog.discardTab", { title: tab.title }));
-    } catch (error) {
-      // 묻지 못했으면 닫지 않는다.
-      useTabs.getState().setError(messageOf(error));
-      return;
-    }
-    if (!discard) return;
+    const choice = await ask({
+      title: rt("dialog.closeTab.title", { title: mono(tab.title) }),
+      body: t("dialog.closeTab.body"),
+      actions: [
+        {
+          id: "discard",
+          label: t("dialog.closeTab.discard"),
+          variant: "ghost",
+        },
+        { id: "cancel", label: t("common.cancel"), spaceBefore: true },
+        { id: "save", label: t("common.save"), variant: "primary" },
+      ],
+    });
+    if (choice === "cancel") return;
+    // 저장하지 못했으면(이름을 묻거나 실패했으면) 닫지 않는다.
+    if (choice === "save" && (await saveTab(tabId)) !== "saved") return;
   }
   // release는 store에서 세션을 바로 떼어 낸다. 세션을 닫는 응답은 탭을 닫은 뒤에 기다린다.
   const released = useRuns.getState().release(tabId);
@@ -231,9 +240,18 @@ export async function switchProject(): Promise<void> {
 
 /** dirty 탭이 있으면 버릴지 묻고 디렉토리를 고르게 한다. 그만두면 null이다. */
 async function askProjectDir(): Promise<string | null> {
-  const dirty = useTabs.getState().tabs.filter((tab) => tab.dirty).length;
-  if (dirty > 0 && !(await confirm(tc("dialog.discardForProject", dirty)))) {
-    return null;
+  const dirty = useTabs.getState().tabs.filter((tab) => tab.dirty);
+  if (dirty.length > 0) {
+    const choice = await ask({
+      title: tc("dialog.switchProject.title", dirty.length),
+      items: dirty.map((tab) => ({ primary: tab.title, secondary: null })),
+      note: t("dialog.switchProject.note"),
+      actions: [
+        { id: "cancel", label: t("common.cancel") },
+        { id: "switch", label: t("dialog.switchProject.confirm") },
+      ],
+    });
+    if (choice !== "switch") return null;
   }
   return pickDirectory();
 }

@@ -27,6 +27,7 @@ import { StatusBar } from "./StatusBar";
 import { Toolbar } from "./Toolbar";
 import { subscribeTunnelEvents } from "./tunnelEvents";
 import { t } from "../../shared/i18n/t";
+import { useDialogs } from "../../shared/ui/dialogs";
 
 /** 연 접속 form. 열 때마다 새 object라서 닫은 form의 늦은 onSaved를 가려낸다. */
 interface OpenForm {
@@ -56,8 +57,10 @@ export function Workspace() {
   );
   // 저장 경로 dialog가 떠 있는지. TabBar와 같이 활성 탭의 이름을 물을 때만 dialog를 그린다.
   const naming = useTabs((s) => s.naming !== null && s.naming === s.activeId);
-  // 접속 form이나 저장 경로 dialog가 열려 있으면 뒤의 탭을 실행하거나 닫거나 바꾸지 않는다.
-  useShortcuts(form === null && !naming);
+  // 확인 dialog가 떠 있는지. App의 DialogHost가 그린다.
+  const confirming = useDialogs((s) => s.current !== null);
+  // 접속 form, 저장 경로 dialog, 확인 dialog가 열려 있으면 뒤의 탭을 실행하거나 닫거나 바꾸지 않는다.
+  useShortcuts(form === null && !naming && !confirming);
 
   // 터널 상태 event를 받는다. 구독이 끝나기 전에 unmount되면 끝난 뒤 바로 그만 받는다.
   useEffect(() => {
