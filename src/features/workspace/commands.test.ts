@@ -7,6 +7,7 @@ import {
   cancelQuery,
   cancelTunnel,
   closeSession,
+  endTransaction,
   executeQuery,
   listSqlFiles,
   openProject,
@@ -16,7 +17,12 @@ import {
 } from "../../shared/api/commands";
 import { pickDirectory } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
-import type { Project, QueryEvent, Session } from "../../shared/api/types";
+import type {
+  Project,
+  QueryEvent,
+  Session,
+  TxStatus,
+} from "../../shared/api/types";
 import {
   documentState,
   openDocument,
@@ -752,4 +758,71 @@ test("프로젝트를 바꾸면 터널 상태를 비운다", async () => {
   });
   await switchProject();
   expect(useTunnels.getState().tunnels).toEqual({});
+});
+
+/** 활성 탭에서 `sql`을 실행하고 끝난 뒤의 트랜잭션 상태를 `tx`로 한다. */
+async function runInTransaction(
+  tabId: string,
+  tx: TxStatus,
+  call = 0,
+): Promise<void> {
+  await useRuns.getState().run(tabId, () => ({
+    connection: "local",
+    sql: "UPDATE a SET b = 1",
+    origin: { line: 1, column: 1 },
+  }));
+  onEventOf(call)({
+    type: "finished",
+    tx,
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 0,
+  });
+}
+
+test("commit_shortcut_ends_the_active_transaction", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+
+  await execute("commit");
+
+  expect(endTransaction).toHaveBeenCalledWith(3, "commit");
+  expect(useRuns.getState().transactions[id]).toBeUndefined();
+
+  await runInTransaction(id, "in_transaction", 1);
+  await execute("rollback");
+  expect(endTransaction).toHaveBeenLastCalledWith(3, "rollback");
+});
+
+test("commit_does_nothing_when_failed", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "failed");
+
+  await execute("commit");
+
+  expect(endTransaction).not.toHaveBeenCalled();
+  expect(useRuns.getState().transactions[id]?.status).toBe("failed");
+
+  // 실패한 트랜잭션도 Rollback은 할 수 있다.
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+  await execute("rollback");
+  expect(endTransaction).toHaveBeenCalledWith(3, "rollback");
+});
+
+test("commit does nothing without a transaction or while a query is being read", async () => {
+  const id = tabWith("SELECT 1");
+  await execute("commit");
+  expect(endTransaction).not.toHaveBeenCalled();
+
+  await runInTransaction(id, "in_transaction");
+  await useRuns.getState().run(id, () => ({
+    connection: "local",
+    sql: "SELECT * FROM big",
+    origin: { line: 1, column: 1 },
+  }));
+  // 앞 줄을 받는 중이면 먼저 Cancel해야 한다.
+  expect(runOf(id).status).toBe("running");
+  await execute("rollback");
+  expect(endTransaction).not.toHaveBeenCalled();
 });

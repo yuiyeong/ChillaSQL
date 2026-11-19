@@ -18,6 +18,7 @@ import { Kbd } from "../../shared/ui/Kbd";
 import { Menu, MenuItem, MenuSeparator } from "../../shared/ui/Menu";
 import { changeConnection, execute } from "./commands";
 import { shortcutKeys, shortcutLabel } from "./shortcuts";
+import { TransactionControls } from "./TransactionControls";
 import { t } from "../../shared/i18n/t";
 import type { Connection } from "../../shared/api/types";
 
@@ -133,7 +134,7 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
           </div>
         </Menu>
 
-        <div className="flex-1" />
+        <TransactionControls tabId={tabId} />
 
         {busy ? (
           <Button

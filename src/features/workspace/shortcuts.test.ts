@@ -38,10 +38,15 @@ test("단축키 표시와 aria-keyshortcuts는 keymap에서 만든다", () => {
   expect(shortcutKeys("cancel")).toBe("Meta+F2");
   expect(shortcutKeys("newTab")).toBe("Shift+Meta+L");
   expect(shortcutKeys("prevTab")).toBe("Shift+Meta+[");
+  expect(shortcutLabel("commit")).toBe("⌥⇧⌘↵");
+  expect(shortcutLabel("rollback")).toBe("⌥⇧⌘Z");
+  expect(shortcutKeys("commit")).toBe("Alt+Shift+Meta+Enter");
+  expect(shortcutKeys("rollback")).toBe("Alt+Shift+Meta+Z");
 });
 
 const cmd = { metaKey: true };
 const shiftCmd = { metaKey: true, shiftKey: true };
+const optShiftCmd = { metaKey: true, shiftKey: true, altKey: true };
 
 beforeEach(async () => {
   await resetStores();
@@ -56,6 +61,8 @@ test("표의 key마다 command를 고른다", () => {
   expect(commandFor(key("KeyW", cmd))).toBe("closeTab");
   expect(commandFor(key("BracketRight", shiftCmd))).toBe("nextTab");
   expect(commandFor(key("BracketLeft", shiftCmd))).toBe("prevTab");
+  expect(commandFor(key("Enter", optShiftCmd))).toBe("commit");
+  expect(commandFor(key("KeyZ", optShiftCmd))).toBe("rollback");
 });
 
 test("한글 입력 상태에서도 code로 command를 고른다", () => {
@@ -70,6 +77,17 @@ test("modifier가 다르면 고르지 않는다", () => {
   expect(commandFor(key("KeyW", { metaKey: true, altKey: true }))).toBeNull();
   expect(commandFor(key("KeyL", cmd))).toBeNull();
   expect(commandFor(key("BracketRight", cmd))).toBeNull();
+  // Commit과 Rollback은 Opt, Shift, Cmd가 모두 있어야 한다.
+  expect(commandFor(key("KeyZ", shiftCmd))).toBeNull();
+  expect(commandFor(key("Enter", { metaKey: true, altKey: true }))).toBeNull();
+  expect(commandFor(key("KeyZ", { metaKey: true, altKey: true }))).toBeNull();
+  expect(
+    commandFor(key("Enter", { ...optShiftCmd, ctrlKey: true })),
+  ).toBeNull();
+  // 기존 key에 Opt가 더해지면 고르지 않는다.
+  expect(commandFor(key("KeyL", optShiftCmd))).toBeNull();
+  expect(commandFor(key("BracketRight", optShiftCmd))).toBeNull();
+  expect(commandFor(key("KeyS", { metaKey: true, altKey: true }))).toBeNull();
 });
 
 function Shortcuts() {

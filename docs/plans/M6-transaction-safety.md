@@ -629,7 +629,7 @@ git commit -m "feat: 탭마다 트랜잭션 상태와 Auto/Manual 모드를 둠"
   - `formatElapsed(ms: number): string` — `m:ss`, 한 시간이 넘으면 `h:mm:ss`(`src/features/query/transaction.ts`)
 - 문구(`en.ts`): `tx.mode` "Transaction mode", `tx.auto` "Auto", `tx.manual` "Manual", `tx.open` "Open", `tx.failed` "Failed", `tx.statements.one` "1 statement", `tx.statements.other` "{count} statements", `tx.manualBegin` "manual BEGIN", `tx.commit` "Commit", `tx.rollback` "Rollback", `tx.badge` "TX", `tx.badgeLabel` "Open transaction, {elapsed}"
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `shortcuts.test.ts`: `Opt+Shift+Cmd+Enter`가 `commit`, `Opt+Shift+Cmd+Z`가 `rollback`, `Shift+Cmd+Z`(alt 없음)는 null, `Opt+Cmd+Enter`(shift 없음)는 null. 기존 key에 alt가 더해지면 null.
 
@@ -646,21 +646,21 @@ git commit -m "feat: 탭마다 트랜잭션 상태와 Auto/Manual 모드를 둠"
 
 `commands.test.ts`: `commit_shortcut_ends_the_active_transaction`, `commit_does_nothing_when_failed`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/workspace src/features/editor`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 배치는 Safety A의 `.bar`: 접속 chip, mode segmented(`.seg`), 상태 문구(13px, fg-2, 시간은 D2Coding), 빈 칸, Rollback, Commit. 버튼은 같은 secondary다. 탭 badge는 `.tx`(Safety A). 경과 시간은 `useNow(1000)`으로 트랜잭션이 있을 때만 돈다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

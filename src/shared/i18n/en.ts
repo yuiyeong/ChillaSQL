@@ -165,6 +165,18 @@ export const en = {
   "result.end.other": "End · {count} rows",
   "result.resizeColumn": "Resize {name}",
 
+  "tx.mode": "Transaction mode",
+  "tx.auto": "Auto",
+  "tx.manual": "Manual",
+  "tx.open": "Open",
+  "tx.failed": "Failed",
+  "tx.statements.one": "1 statement",
+  "tx.statements.other": "{count} statements",
+  "tx.manualBegin": "manual BEGIN",
+  "tx.commit": "Commit",
+  "tx.rollback": "Rollback",
+  "tx.badge": "TX",
+  "tx.badgeLabel": "Open transaction, {elapsed}",
   "tx.commitFailed": "Commit failed",
   "tx.rollbackFailed": "Rollback failed",
   "tx.commitRefused":

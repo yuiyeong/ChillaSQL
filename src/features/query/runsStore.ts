@@ -128,7 +128,8 @@ interface RunsState {
    */
   endTransaction(tabId: string, end: TxEnd): Promise<boolean>;
   /**
-   * `prepare`가 끝나기 전에 같은 탭의 다음 동작이 오면 실행하지 않는다. `prepare`가 Rejection을
+   * 그 탭의 끝내기가 답을 기다리는 중이면 아무것도 하지 않는다. `prepare`가 끝나기 전에 같은 탭의
+   * 다음 동작이 오면 실행하지 않는다. `prepare`가 Rejection을
    * 돌려주면 rejected로 두는데, 그 탭이 연결 중이거나 실행 중이면 아무것도 바꾸지 않는다.
    */
   run(tabId: string, prepare: Prepare): Promise<void>;
@@ -307,6 +308,8 @@ export const useRuns = create<RunsState>()((set, get) => {
     },
 
     async run(tabId, prepare) {
+      // Commit이나 Rollback의 답을 기다리는 동안은 그 세션에 쿼리를 보내지 않는다.
+      if (get().ending[tabId]) return;
       const attempt = bump(attempts, tabId);
       setNotice(tabId, null);
 
@@ -375,8 +378,13 @@ export const useRuns = create<RunsState>()((set, get) => {
           const after = reduce(before, event);
           const runs =
             after === before ? s.runs : { ...s.runs, [tabId]: after };
-          // 버려진 쿼리의 tx는 actor가 앞서 읽은 값이라 지금 상태가 아닐 수 있다.
-          if (event.type !== "finished" || event.outcome === "discarded") {
+          // 버려진 쿼리의 tx는 actor가 앞서 읽은 값이라 지금 상태가 아닐 수 있다. stale 세션은
+          // 이미 트랜잭션을 잃은 것으로 알렸으므로 늦은 finished가 그 트랜잭션을 되살리지 않는다.
+          if (
+            event.type !== "finished" ||
+            event.outcome === "discarded" ||
+            slot.stale
+          ) {
             return runs === s.runs ? s : { runs };
           }
           const tx = nextTx(

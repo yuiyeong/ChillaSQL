@@ -2,6 +2,9 @@ import { useEffect, useRef } from "react";
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { TunnelTabIcon } from "../connections/TunnelStatus";
 import { useProject } from "../project/projectStore";
+import { useRuns } from "../query/runsStore";
+import { useElapsed } from "../query/useElapsed";
+import type { TxInfo } from "../query/transaction";
 import { CloseIcon, PlusIcon } from "../../shared/ui/icons";
 import type { ConnectionColor } from "../../shared/api/types";
 import { IconButton } from "../../shared/ui/IconButton";
@@ -25,6 +28,7 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
   const requestName = useTabs((state) => state.requestName);
   const setError = useTabs((state) => state.setError);
   const connections = useProject((state) => state.project?.connections);
+  const transactions = useRuns((state) => state.transactions);
 
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -90,6 +94,9 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
                     <ConnectionDot color={color} testId="tab-dot" />
                     <span className="truncate">{tab.title}</span>
                   </button>
+                  {transactions[tab.id] !== undefined && (
+                    <TransactionBadge tx={transactions[tab.id]} />
+                  )}
                   <span className="mr-1 inline-flex">
                     <TunnelTabIcon connection={tab.connection} />
                   </span>
@@ -151,5 +158,19 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
         </button>
       )}
     </>
+  );
+}
+
+/** 열린 트랜잭션이 있는 탭의 `TX 3:12`. 탭 이름에 섞이지 않게 탭 button 밖에 둔다. */
+function TransactionBadge({ tx }: { tx: TxInfo }) {
+  const elapsed = useElapsed(tx.openedAt);
+  return (
+    <span
+      role="img"
+      aria-label={t("tx.badgeLabel", { elapsed })}
+      className="text-label border-line-2 text-fg mr-1 inline-flex h-[18px] shrink-0 items-center gap-1 rounded-[4px] border px-1.5 font-medium whitespace-nowrap"
+    >
+      {t("tx.badge")} <span className="font-mono">{elapsed}</span>
+    </span>
   );
 }

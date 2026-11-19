@@ -1,5 +1,12 @@
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
-import { beforeEach, expect, onTestFinished, test, vi } from "vitest";
+import {
+  afterEach,
+  beforeEach,
+  expect,
+  onTestFinished,
+  test,
+  vi,
+} from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
 import { connection, openProjectWith } from "../../test/fixtures";
@@ -8,9 +15,14 @@ import { expectNoTextCorrection } from "../../test/textCorrection";
 import { TabBar } from "./TabBar";
 import { useTabs } from "./tabsStore";
 import { useTunnels } from "../connections/tunnelsStore";
+import { useRuns } from "../query/runsStore";
 
 beforeEach(async () => {
   await resetStores();
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 function renderBar() {
@@ -235,4 +247,62 @@ test("탭의 접속이 앱이 띄우지 않은 터널이면 icon으로 알린다
     screen.getByRole("img", { name: "External tunnel" }),
   ).toBeInTheDocument();
   expect(tab("Query 1")).toBeInTheDocument();
+});
+
+test("shows_tx_and_elapsed_on_a_tab_with_an_open_transaction", () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000_000_000);
+  onTestFinished(() => {
+    vi.useRealTimers();
+  });
+  const a = useTabs.getState().newTab();
+  useTabs.getState().newTab();
+  act(() =>
+    useRuns.setState({
+      transactions: {
+        [a]: {
+          status: "open",
+          statements: 2,
+          openedAt: 1_000_000_000 - 192_000,
+        },
+      },
+    }),
+  );
+  renderBar();
+
+  const badge = screen.getByRole("img", {
+    name: "Open transaction, 3:12",
+  });
+  expect(badge).toHaveTextContent("TX 3:12");
+  expect(screen.getAllByText(/^TX/)).toHaveLength(1);
+  // 탭의 이름은 그대로다.
+  expect(tab("Query 1")).toBeInTheDocument();
+  expect(within(tab("Query 1")).queryByRole("img")).toBeNull();
+
+  act(() => vi.advanceTimersByTime(2000));
+  expect(
+    screen.getByRole("img", { name: "Open transaction, 3:14" }),
+  ).toHaveTextContent("TX 3:14");
+});
+
+test("a failed transaction also shows the badge", () => {
+  const a = useTabs.getState().newTab();
+  act(() =>
+    useRuns.setState({
+      transactions: {
+        [a]: { status: "failed", statements: 1, openedAt: Date.now() },
+      },
+    }),
+  );
+  renderBar();
+
+  expect(screen.getByRole("img", { name: /^Open transaction/ })).toBeVisible();
+});
+
+test("a tab without a transaction has no badge", () => {
+  useTabs.getState().newTab();
+  renderBar();
+
+  expect(screen.queryByText(/^TX/)).toBeNull();
+  expect(screen.queryByRole("img", { name: /transaction/ })).toBeNull();
 });

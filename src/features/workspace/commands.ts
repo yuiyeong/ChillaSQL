@@ -5,7 +5,7 @@ import {
 } from "../../shared/api/commands";
 import { pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
-import type { Project } from "../../shared/api/types";
+import type { Project, TxEnd } from "../../shared/api/types";
 import { targetChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { documentSelection, documentText } from "../editor/documents";
@@ -15,12 +15,21 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import type { Origin, Rejection, RunRequest } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
+import { canEndTransaction } from "../query/transaction";
 import { mono, rt } from "../../shared/i18n/rich";
 import { t, tc } from "../../shared/i18n/t";
 import { ask } from "../../shared/ui/dialogs";
 
 export type CommandId =
-  "run" | "cancel" | "save" | "newTab" | "closeTab" | "nextTab" | "prevTab";
+  | "run"
+  | "cancel"
+  | "save"
+  | "newTab"
+  | "closeTab"
+  | "nextTab"
+  | "prevTab"
+  | "commit"
+  | "rollback";
 
 function findTab(tabId: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === tabId);
@@ -114,7 +123,23 @@ export async function execute(command: CommandId): Promise<void> {
       return;
     case "closeTab":
       return closeTab(tabId);
+    case "commit":
+    case "rollback":
+      await endActiveTransaction(tabId, command);
+      return;
   }
+}
+
+/**
+ * 탭의 트랜잭션을 Commit이나 Rollback한다. 트랜잭션이 없거나, 쿼리를 읽는 중이거나, 실패한
+ * 트랜잭션의 Commit이면 아무것도 하지 않는다(Rollback은 실패한 트랜잭션도 할 수 있다).
+ */
+async function endActiveTransaction(tabId: string, end: TxEnd): Promise<void> {
+  const { transactions, runs, endTransaction } = useRuns.getState();
+  const tx = transactions[tabId];
+  if (tx === undefined || !canEndTransaction(runs[tabId])) return;
+  if (end === "commit" && tx.status === "failed") return;
+  await endTransaction(tabId, end);
 }
 
 /**

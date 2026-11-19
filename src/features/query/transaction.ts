@@ -49,3 +49,13 @@ export function canEndTransaction(run: RunState | undefined): boolean {
       return true;
   }
 }
+
+/** 경과 시간 표시. `m:ss`, 한 시간이 넘으면 `h:mm:ss`. 시계가 거꾸로 갔으면 0이다. */
+export function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor(total / 60) % 60;
+  const seconds = String(total % 60).padStart(2, "0");
+  if (hours === 0) return `${minutes}:${seconds}`;
+  return `${hours}:${String(minutes).padStart(2, "0")}:${seconds}`;
+}
