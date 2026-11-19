@@ -195,6 +195,38 @@ pub enum ConnectError {
     Other { message: String },
 }
 
+/// 터널 명령을 실행하고 포트를 확인한다.
+pub trait TunnelRunner: Send + Sync + 'static {
+    type Process: TunnelProcess;
+
+    /// host:port에 TCP로 붙으면 true. 붙은 연결은 바로 닫는다. 500ms 안에 답이 없으면 false.
+    fn is_open(&self, host: &str, port: u16) -> impl Future<Output = bool> + Send;
+    /// 명령을 `dir`에서 사용자 login shell로 새 process group에서 실행한다.
+    fn spawn(&self, command: &str, dir: &Path) -> Result<Self::Process, SpawnError>;
+}
+
+/// 실행한 터널 명령 하나.
+pub trait TunnelProcess: Send + 'static {
+    /// 지금의 자손 프로세스를 기억한다. 포트가 열렸을 때 부른다. 그 뒤 `wait`는 기억한 자손이
+    /// 끝나는 것도 끝으로 본다(ssh를 띄우고 ssh가 죽어도 살아 남는 터널 CLI가 있다).
+    fn mark_ready(&mut self);
+    /// 실행한 프로세스나 `mark_ready`가 기억한 자손 가운데 하나가 끝날 때까지 기다린다. 실행한
+    /// 프로세스의 exit code를 돌려준다(아직 살아 있거나 signal로 끝났으면 `None`). cancel-safe다.
+    /// 이미 끝났으면 바로 같은 값을 돌려준다.
+    fn wait(&mut self) -> impl Future<Output = Option<i32>> + Send;
+    /// 지금까지 받은 stderr의 끝 16 KiB.
+    fn output(&self) -> String;
+    /// process group, 지금의 자손 tree, 기억한 자손에 SIGTERM을 보내고 2초 뒤에도 남아 있으면
+    /// SIGKILL을 보낸다. 모두 끝날 때까지 기다린다.
+    fn stop(self) -> impl Future<Output = ()> + Send;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("Could not run the tunnel command: {message}")]
+pub struct SpawnError {
+    pub message: String,
+}
+
 /// SQL text를 문장 단위로 나눈다. 문장이 문법에 맞는지는 보지 않는다.
 pub trait StatementSplitter: Send + Sync {
     /// 문장마다 span을 돌려준다. 빈 문장은 만들지 않는다. span은 start 오름차순이고 서로 겹치지 않는다.

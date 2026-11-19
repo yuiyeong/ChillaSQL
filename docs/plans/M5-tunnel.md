@@ -263,7 +263,7 @@ pub struct SpawnError { pub message: String }
 
 - Produces (`infrastructure`): `ShellTunnelRunner::new() -> Self`(shell을 이때 고른다), `ShellTunnelRunner::with_shell(shell: PathBuf) -> Self`(test용), `pub fn login_shell(env_shell: Option<OsString>) -> PathBuf`
 
-- [ ] **Step 1: `tests/tunnel_process.rs`를 쓴다**
+- [x] **Step 1: `tests/tunnel_process.rs`를 쓴다**
 
 모두 `ShellTunnelRunner::with_shell("/bin/zsh".into())`를 쓴다. 아래 code의 `spawn(command)`는 `spawn(command, &tmp())`(test마다 만든 빈 디렉토리)로 읽는다.
 
@@ -354,21 +354,21 @@ async fn spawn_with_a_missing_shell_is_an_error() {
 
 `layer_deps.rs`의 `domain`, `application` 금지 목록에 `libc`를 더한다.
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `cargo test -p chilla-core --test tunnel_process`
 Expected: FAIL (compile error)
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `ShellProcess`는 `tokio::process::Child`, process group id(= 자식 pid), `mark_ready`가 기억한 자손 pid 목록, stderr를 읽는 task가 채우는 `Arc<Mutex<VecDeque<u8>>>`(16 KiB 넘으면 앞을 버림), 끝난 exit code의 cache를 갖는다. `spawn`은 `Command::new(shell).args(["-l", "-c", command]).current_dir(dir).process_group(0).stdin(null).stdout(null).stderr(piped).kill_on_drop(true)`. 자손 찾기는 `libc::proc_listchildpids`를 부모부터 차례로 부르는 `fn descendants(root: i32) -> Vec<i32>`다. `wait`는 `child.wait()`와 500ms마다 기억한 자손이 살아 있는지(`kill(pid, 0)`) 보는 것 중 먼저 끝나는 쪽이다. `output`은 buffer를 `String::from_utf8_lossy`로 바꾼다(앞이 잘려 생긴 깨진 첫 글자는 버린다). `stop`은 group, `descendants(root)`, 기억한 자손에 `SIGTERM`을 보내고 50ms마다 모두 끝났는지 확인하다 2초가 지나면 남은 것에 `SIGKILL`. `is_open`은 `timeout(500ms, TcpStream::connect((host, port)))`. `docs/architecture.md`의 I/O crate 표에 `libc`를 더한다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `cargo test -p chilla-core --test tunnel_process --test layer_deps && cargo test -p chilla-core --lib tunnel_process`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add crates docs/architecture.md

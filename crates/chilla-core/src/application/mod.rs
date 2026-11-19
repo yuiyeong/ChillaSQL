@@ -12,5 +12,5 @@ pub use session_actor::QuerySink;
 pub use ports::{
     CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey, PasswordStore,
     PasswordStoreError, ProjectError, ProjectStore, QueryCancel, QueryError, RowItem, RowSource,
-    SplitError, SqlFileStore, StatementSplitter,
+    SpawnError, SplitError, SqlFileStore, StatementSplitter, TunnelProcess, TunnelRunner,
 };

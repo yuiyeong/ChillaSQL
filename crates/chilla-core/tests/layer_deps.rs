@@ -21,6 +21,7 @@ const DOMAIN_FORBIDDEN: &[&str] = &[
     "std::fs",
     "std::net",
     "std::process",
+    "libc",
 ];
 
 const APPLICATION_FORBIDDEN: &[&str] = &[
@@ -39,6 +40,7 @@ const APPLICATION_FORBIDDEN: &[&str] = &[
     "tokio::net",
     "tokio::fs",
     "tokio::process",
+    "libc",
 ];
 
 const LAYERS: [(&str, &[&str]); 2] = [
