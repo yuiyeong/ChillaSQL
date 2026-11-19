@@ -289,7 +289,7 @@ export const ResultPane = memo(function ResultPane({
   const tunnelState = tunnel?.state;
   const banners = (
     <>
-      {runNotice === "reconnected" && tabId !== null && (
+      {runNotice?.kind === "reconnected" && tabId !== null && (
         <ReconnectedBanner
           onClose={() => useRuns.getState().dismissNotice(tabId)}
         />

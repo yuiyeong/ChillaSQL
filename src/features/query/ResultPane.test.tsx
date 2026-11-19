@@ -708,7 +708,7 @@ describe("터널", () => {
   });
 
   test("Reconnected 알림은 Close로 닫는다", () => {
-    useRuns.setState({ notices: { t: "reconnected" } });
+    useRuns.setState({ notices: { t: { kind: "reconnected" } } });
     showFor({ status: "idle" });
 
     const banner = screen.getByText("Reconnected").closest('[role="status"]');

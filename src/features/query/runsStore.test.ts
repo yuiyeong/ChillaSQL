@@ -5,12 +5,14 @@ vi.mock("../../shared/api/commands");
 import {
   cancelQuery,
   closeSession,
+  endTransaction,
   executeQuery,
   fetchMore,
   openSession,
 } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
-import type { QueryEvent, Session } from "../../shared/api/types";
+import type { QueryEvent, Session, TxStatus } from "../../shared/api/types";
+import { t } from "../../shared/i18n/t";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
 import { deferred } from "../../test/deferred";
@@ -213,7 +215,7 @@ test("connection_lost로 끝나면 세션을 닫고 버린다", async () => {
 
   onEventOf(0)({
     type: "finished",
-    tx: "idle",
+    tx: null,
     elapsedMicros: 50,
     outcome: "connection_lost",
     message: "연결이 끊겼습니다",
@@ -238,7 +240,7 @@ test("앞 실행의 늦은 connection_lost도 세션을 닫고 버린다", async
 
   lateA({
     type: "finished",
-    tx: "idle",
+    tx: null,
     elapsedMicros: 50,
     outcome: "connection_lost",
     message: "연결이 끊겼습니다",
@@ -739,7 +741,7 @@ test("stale 세션은 새 세션을 먼저 연 뒤 닫고 Reconnected를 알린�
   expect(opened).toBeLessThan(closed);
   expect(closeSession).toHaveBeenCalledWith(3);
   expect(vi.mocked(executeQuery).mock.calls[1][0]).toBe(4);
-  expect(useRuns.getState().notices.t).toBe("reconnected");
+  expect(useRuns.getState().notices.t).toEqual({ kind: "reconnected" });
 });
 
 test("stale은 그 접속의 탭만 바꾼다", async () => {
@@ -763,7 +765,7 @@ test("끊긴 세션을 다음 실행이 대신하면 Reconnected를 알리고 �
   await useRuns.getState().run("t", prepared());
   onEventOf(0)({
     type: "finished",
-    tx: "idle",
+    tx: null,
     outcome: "connection_lost",
     message: "gone",
     elapsedMicros: 1,
@@ -771,7 +773,7 @@ test("끊긴 세션을 다음 실행이 대신하면 Reconnected를 알리고 �
 
   await useRuns.getState().run("t", prepared());
   expect(openSession).toHaveBeenCalledTimes(2);
-  expect(useRuns.getState().notices.t).toBe("reconnected");
+  expect(useRuns.getState().notices.t).toEqual({ kind: "reconnected" });
 
   await useRuns.getState().run("t", prepared());
   expect(useRuns.getState().notices.t).toBeUndefined();
@@ -782,7 +784,7 @@ test("dismissNotice는 알림을 지운다", async () => {
   useRuns.getState().markStale("local");
   vi.mocked(openSession).mockResolvedValueOnce(session(4));
   await useRuns.getState().run("t", prepared());
-  expect(useRuns.getState().notices.t).toBe("reconnected");
+  expect(useRuns.getState().notices.t).toEqual({ kind: "reconnected" });
 
   useRuns.getState().dismissNotice("t");
   expect(useRuns.getState().notices.t).toBeUndefined();
@@ -828,4 +830,349 @@ test("여는 중인 세션은 stale로 두지 않는다", async () => {
   expect(openSession).toHaveBeenCalledTimes(1);
   expect(closeSession).not.toHaveBeenCalled();
   expect(useRuns.getState().notices.t).toBeUndefined();
+});
+
+/** n번째(0부터) 실행을 completed로 끝낸다. 끝난 뒤의 트랜잭션 상태는 `tx`다. */
+function complete(call: number, tx: TxStatus | null): void {
+  onEventOf(call)({
+    type: "finished",
+    tx,
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 0,
+  });
+}
+
+function txOf(tabId: string) {
+  return useRuns.getState().transactions[tabId];
+}
+
+/** 탭 t1에서 Manual로 두 문장을 실행해 트랜잭션을 연다. */
+async function openTwoStatements(connection = "local"): Promise<void> {
+  useRuns.getState().setMode("t1", "manual");
+  await useRuns
+    .getState()
+    .run("t1", prepared("UPDATE a SET b = 1", connection));
+  complete(0, "in_transaction");
+  await useRuns
+    .getState()
+    .run("t1", prepared("UPDATE a SET b = 2", connection));
+  complete(1, "in_transaction");
+}
+
+test("run_sends_the_tab_mode", async () => {
+  useRuns.getState().setMode("t1", "manual");
+  await useRuns.getState().run("t1", prepared("SELECT 1"));
+
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "SELECT 1",
+    "manual",
+    expect.any(Function),
+  );
+  // 다른 탭은 Auto다.
+  await useRuns.getState().run("t2", prepared("SELECT 1"));
+  expect(vi.mocked(executeQuery).mock.calls[1][2]).toBe("auto");
+});
+
+test("finished_updates_the_transaction", async () => {
+  await useRuns.getState().run("t1", prepared("BEGIN"));
+  const run = runOf("t1");
+  const startedAt = run.status === "running" ? run.result.startedAt : -1;
+  complete(0, "in_transaction");
+  expect(txOf("t1")).toEqual({
+    status: "open",
+    statements: 0,
+    openedAt: startedAt,
+  });
+
+  await useRuns.getState().run("t1", prepared("COMMIT"));
+  complete(1, "idle");
+  expect(txOf("t1")).toBeUndefined();
+});
+
+test("a run counts statements by the mode it started with", async () => {
+  useRuns.getState().setMode("t1", "manual");
+  await useRuns.getState().run("t1", prepared("UPDATE a SET b = 1"));
+  useRuns.getState().setMode("t1", "auto");
+  complete(0, "in_transaction");
+
+  expect(txOf("t1")?.statements).toBe(1);
+});
+
+test("a discarded finished event keeps the transaction", async () => {
+  await openTwoStatements();
+  await useRuns.getState().run("t1", prepared("SELECT * FROM big"));
+  onEventOf(2)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "discarded",
+  });
+
+  expect(txOf("t1")).toEqual(expect.objectContaining({ statements: 2 }));
+});
+
+test("a late event of an earlier run does not change the transaction", async () => {
+  await useRuns.getState().run("t1", prepared("SELECT 1"));
+  const lateA = onEventOf(0);
+  await useRuns.getState().run("t1", prepared("BEGIN"));
+  complete(1, "in_transaction");
+
+  lateA({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 0,
+  });
+  expect(txOf("t1")).toEqual(expect.objectContaining({ status: "open" }));
+});
+
+test("end_transaction_commits_and_clears", async () => {
+  await openTwoStatements();
+  const ending = deferred<{ outcome: "ended"; tx: TxStatus | null }>();
+  vi.mocked(endTransaction).mockReturnValue(ending.promise);
+
+  const committed = useRuns.getState().endTransaction("t1", "commit");
+  expect(useRuns.getState().ending.t1).toBe(true);
+  expect(endTransaction).toHaveBeenCalledWith(3, "commit");
+
+  ending.resolve({ outcome: "ended", tx: "idle" });
+  await expect(committed).resolves.toBe(true);
+  expect(txOf("t1")).toBeUndefined();
+  expect(useRuns.getState().ending.t1).toBeUndefined();
+});
+
+test("a second end while one is in flight sends nothing and returns false", async () => {
+  await openTwoStatements();
+  const ending = deferred<{ outcome: "ended"; tx: TxStatus | null }>();
+  vi.mocked(endTransaction).mockReturnValue(ending.promise);
+
+  const committed = useRuns.getState().endTransaction("t1", "commit");
+  await expect(
+    useRuns.getState().endTransaction("t1", "rollback"),
+  ).resolves.toBe(false);
+  expect(endTransaction).toHaveBeenCalledTimes(1);
+
+  ending.resolve({ outcome: "ended", tx: "idle" });
+  await expect(committed).resolves.toBe(true);
+});
+
+test("ending without a session or a transaction sends nothing", async () => {
+  await expect(useRuns.getState().endTransaction("t1", "commit")).resolves.toBe(
+    true,
+  );
+
+  await useRuns.getState().run("t1", prepared("SELECT 1"));
+  complete(0, "idle");
+  await expect(
+    useRuns.getState().endTransaction("t1", "rollback"),
+  ).resolves.toBe(true);
+  expect(endTransaction).not.toHaveBeenCalled();
+  expect(useRuns.getState().ending.t1).toBeUndefined();
+});
+
+test("a_failed_commit_shows_the_server_error", async () => {
+  await openTwoStatements();
+  vi.mocked(endTransaction).mockResolvedValue({
+    outcome: "server_error",
+    tx: "idle",
+    error: {
+      code: "23503",
+      message: "insert or update violates foreign key constraint",
+      detail: null,
+      hint: null,
+      position: null,
+    },
+  });
+
+  await expect(useRuns.getState().endTransaction("t1", "commit")).resolves.toBe(
+    false,
+  );
+
+  const state = runOf("t1");
+  expect(state.status).toBe("rejected");
+  if (state.status !== "rejected") return;
+  expect(state.rejection.title).toBe(t("tx.commitFailed"));
+  expect(state.rejection.detail).toContain(
+    "insert or update violates foreign key constraint",
+  );
+  expect(state.rejection.detail).toContain("SQLSTATE 23503");
+  expect(txOf("t1")).toBeUndefined();
+  expect(useRuns.getState().ending.t1).toBeUndefined();
+});
+
+test("a failed rollback that leaves the transaction keeps it", async () => {
+  await openTwoStatements();
+  vi.mocked(endTransaction).mockResolvedValue({
+    outcome: "server_error",
+    tx: "failed",
+    error: {
+      code: "XX000",
+      message: "boom",
+      detail: null,
+      hint: null,
+      position: null,
+    },
+  });
+
+  await expect(
+    useRuns.getState().endTransaction("t1", "rollback"),
+  ).resolves.toBe(false);
+
+  const state = runOf("t1");
+  expect(state.status === "rejected" && state.rejection.title).toBe(
+    t("tx.rollbackFailed"),
+  );
+  expect(txOf("t1")).toEqual(
+    expect.objectContaining({ status: "failed", statements: 2 }),
+  );
+});
+
+test("committing a failed transaction is refused", async () => {
+  await openTwoStatements();
+  vi.mocked(endTransaction).mockResolvedValue({
+    outcome: "transaction_failed",
+    tx: "failed",
+  });
+
+  await expect(useRuns.getState().endTransaction("t1", "commit")).resolves.toBe(
+    false,
+  );
+
+  expect(runOf("t1")).toEqual({
+    status: "rejected",
+    rejection: { title: t("tx.commitRefused"), detail: null },
+  });
+  expect(txOf("t1")?.status).toBe("failed");
+});
+
+test("losing the connection while ending reports the transaction lost", async () => {
+  await openTwoStatements();
+  vi.mocked(endTransaction).mockResolvedValue({
+    outcome: "connection_lost",
+    tx: null,
+    message: "server closed",
+  });
+
+  await expect(useRuns.getState().endTransaction("t1", "commit")).resolves.toBe(
+    false,
+  );
+
+  expect(useRuns.getState().notices.t1).toEqual({
+    kind: "transactionLost",
+    statements: 2,
+  });
+  expect(txOf("t1")).toBeUndefined();
+  await vi.waitFor(() => expect(closeSession).toHaveBeenCalledWith(3));
+  vi.mocked(openSession).mockResolvedValueOnce(session(4));
+  await useRuns.getState().run("t1", prepared());
+  expect(openSession).toHaveBeenCalledTimes(2);
+});
+
+test("an unknown session while ending reports the transaction lost", async () => {
+  await openTwoStatements();
+  vi.mocked(endTransaction).mockRejectedValue(
+    new CommandError("unknown_session", "세션이 없습니다"),
+  );
+
+  await expect(
+    useRuns.getState().endTransaction("t1", "rollback"),
+  ).resolves.toBe(false);
+
+  expect(useRuns.getState().notices.t1).toEqual({
+    kind: "transactionLost",
+    statements: 2,
+  });
+  expect(txOf("t1")).toBeUndefined();
+});
+
+test("a_stale_session_with_an_open_transaction_reports_it_lost", async () => {
+  vi.mocked(openSession)
+    .mockResolvedValueOnce(session(3, "staging"))
+    .mockResolvedValueOnce(session(4, "staging"));
+  await openTwoStatements("staging");
+
+  useRuns.getState().markStale("staging");
+  expect(useRuns.getState().notices.t1).toEqual({
+    kind: "transactionLost",
+    statements: 2,
+  });
+  expect(txOf("t1")).toBeUndefined();
+
+  await useRuns.getState().run("t1", prepared("SELECT 1", "staging"));
+  expect(openSession).toHaveBeenCalledTimes(2);
+  expect(closeSession).toHaveBeenCalledWith(3);
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    4,
+    "SELECT 1",
+    "manual",
+    expect.any(Function),
+  );
+});
+
+test("connection_lost_with_an_open_transaction_reports_it_lost", async () => {
+  await openTwoStatements();
+  await useRuns.getState().run("t1", prepared("SELECT 3"));
+  onEventOf(2)({
+    type: "finished",
+    tx: null,
+    elapsedMicros: 1,
+    outcome: "connection_lost",
+    message: "server closed",
+  });
+
+  expect(useRuns.getState().notices.t1).toEqual({
+    kind: "transactionLost",
+    statements: 2,
+  });
+  expect(txOf("t1")).toBeUndefined();
+});
+
+test("connection_lost without a transaction shows no notice", async () => {
+  await useRuns.getState().run("t1", prepared());
+  onEventOf(0)({
+    type: "finished",
+    tx: null,
+    elapsedMicros: 1,
+    outcome: "connection_lost",
+    message: "server closed",
+  });
+  expect(useRuns.getState().notices.t1).toBeUndefined();
+});
+
+test("release_forgets_the_transaction_and_mode", async () => {
+  await openTwoStatements();
+  const ending = deferred<{ outcome: "ended"; tx: TxStatus | null }>();
+  vi.mocked(endTransaction).mockReturnValue(ending.promise);
+  void useRuns.getState().endTransaction("t1", "commit");
+
+  await useRuns.getState().release("t1");
+
+  expect(txOf("t1")).toBeUndefined();
+  expect(useRuns.getState().modes.t1).toBeUndefined();
+  expect(useRuns.getState().ending.t1).toBeUndefined();
+
+  // 늦게 온 끝내기의 결과는 아무것도 바꾸지 않는다.
+  ending.resolve({ outcome: "ended", tx: "idle" });
+  await Promise.resolve();
+  expect(runOf("t1")).toBeUndefined();
+});
+
+test("release that keeps the mode forgets only the transaction", async () => {
+  await openTwoStatements();
+  await useRuns.getState().release("t1", { keepMode: true });
+
+  expect(txOf("t1")).toBeUndefined();
+  expect(useRuns.getState().modes.t1).toBe("manual");
+});
+
+test("reset forgets every transaction and mode", async () => {
+  await openTwoStatements();
+  await useRuns.getState().reset();
+
+  expect(useRuns.getState().transactions).toEqual({});
+  expect(useRuns.getState().modes).toEqual({});
+  expect(useRuns.getState().ending).toEqual({});
 });

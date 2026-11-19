@@ -165,6 +165,11 @@ export const en = {
   "result.end.other": "End · {count} rows",
   "result.resizeColumn": "Resize {name}",
 
+  "tx.commitFailed": "Commit failed",
+  "tx.rollbackFailed": "Rollback failed",
+  "tx.commitRefused":
+    "The transaction failed, so it can't be committed. Roll back instead.",
+
   "toast.copiedMessage": "Copied message",
   "toast.copiedCell": "Copied cell",
   "toast.copiedRows.one": "Copied 1 row (tab-separated)",

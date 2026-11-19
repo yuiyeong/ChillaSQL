@@ -554,7 +554,7 @@ export function canEndTransaction(run: RunState | undefined): boolean;
   - `RunNotice`가 `{ kind: "reconnected" } | { kind: "transactionLost"; statements: number }`로 바뀐다
 - `release`, `reset`은 그 탭의 `transactions`, `modes`, `ending`도 지운다. `reset`은 모드도 지운다(프로젝트가 바뀌면 탭이 새로 생긴다).
 
-- [ ] **Step 1: 순수 함수 test를 쓴다**
+- [x] **Step 1: 순수 함수 test를 쓴다**
 
 `transaction.test.ts`:
 
@@ -580,7 +580,7 @@ it("clears on idle or a lost connection", () => {
 
 `canEndTransaction`: idle, finished, rejected, running+`ready`은 true. connecting, running+`none`, running+`fetching`은 false.
 
-- [ ] **Step 2: store test를 쓴다**
+- [x] **Step 2: store test를 쓴다**
 
 `runsStore.test.ts`(api mock):
 
@@ -592,21 +592,21 @@ it("clears on idle or a lost connection", () => {
 - `connection_lost_with_an_open_transaction_reports_it_lost`: finished `connection_lost`(tx null)이고 앞에 트랜잭션이 있었으면 같은 notice.
 - `release_forgets_the_transaction_and_mode`.
 
-- [ ] **Step 3: 실패를 확인한다**
+- [x] **Step 3: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query`
 Expected: FAIL
 
-- [ ] **Step 4: 구현한다**
+- [x] **Step 4: 구현한다**
 
 `onEvent`의 finished에서 `nextTx`로 바꾼다. 실행의 `startedAt`과 모드는 실행을 시작할 때 잡아 둔다(실행 중에 모드가 바뀌어도 그 실행은 시작 때 모드로 센다).
 
-- [ ] **Step 5: 통과를 확인한다**
+- [x] **Step 5: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 6: commit**
+- [x] **Step 6: commit**
 
 ```bash
 git add src

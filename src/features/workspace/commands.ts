@@ -188,12 +188,12 @@ export async function closeTab(tabId: string): Promise<void> {
   await released;
 }
 
-/** 지금 세션을 놓고 탭의 접속을 바꾼다. 다음 실행이 새 접속으로 세션을 연다. */
+/** 지금 세션을 놓고 탭의 접속을 바꾼다. 다음 실행이 새 접속으로 세션을 연다. 모드는 그대로다. */
 export async function changeConnection(
   tabId: string,
   connection: string | null,
 ): Promise<void> {
-  const released = useRuns.getState().release(tabId);
+  const released = useRuns.getState().release(tabId, { keepMode: true });
   useTabs.getState().setConnection(tabId, connection);
   await released;
 }
@@ -217,7 +217,7 @@ export async function applySavedProject(project: Project): Promise<void> {
     .tabs.filter(
       (tab) => tab.connection !== null && changed.has(tab.connection),
     )
-    .map((tab) => useRuns.getState().release(tab.id));
+    .map((tab) => useRuns.getState().release(tab.id, { keepMode: true }));
   useProject.getState().applyProject(project);
   await Promise.all(released);
 }

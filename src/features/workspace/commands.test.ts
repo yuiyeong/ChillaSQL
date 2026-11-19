@@ -366,6 +366,15 @@ test("접속을 바꾸면 세션을 놓는다", async () => {
   expect(runOf(id)).toBeUndefined();
 });
 
+test("접속을 바꿔도 탭의 모드는 남는다", async () => {
+  const id = tabWith("SELECT 1");
+  useRuns.getState().setMode(id, "manual");
+
+  await changeConnection(id, "staging");
+
+  expect(useRuns.getState().modes[id]).toBe("manual");
+});
+
 test("프로젝트를 바꾸면 탭과 실행 상태를 비운다", async () => {
   const other: Project = { name: "other", dir: "/q", connections: [] };
   const id = tabWith("SELECT 1");
@@ -572,6 +581,22 @@ test("대상이 바뀐 접속을 쓰는 탭의 세션을 놓는다", async () =>
   await execute("run");
   expect(openSession).toHaveBeenCalledTimes(3);
   expect(openSession).toHaveBeenLastCalledWith("local");
+});
+
+test("대상이 바뀐 접속의 세션을 놓아도 탭의 모드는 남는다", async () => {
+  useProject.setState({
+    project: { ...project, connections: [connection("local")] },
+  });
+  const id = await ranTab("local", 3);
+  useRuns.getState().setMode(id, "manual");
+
+  await applySavedProject({
+    ...project,
+    connections: [connection("local", { host: "b.internal" })],
+  });
+
+  expect(closeSession).toHaveBeenCalledWith(3);
+  expect(useRuns.getState().modes[id]).toBe("manual");
 });
 
 test("대상이 그대로면 세션을 놓지 않는다", async () => {
