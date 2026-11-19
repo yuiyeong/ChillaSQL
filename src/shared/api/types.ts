@@ -3,6 +3,8 @@
 
 export type SslMode = "disable" | "require" | "verify-full";
 
+export type ConnectionColor = "green" | "yellow" | "red" | "blue" | "purple";
+
 export interface Connection {
   name: string;
   host: string;
@@ -14,7 +16,7 @@ export interface Connection {
   tunnel: string | null;
   /** 터널의 포트를 기다리는 초. 없으면 20초다. */
   tunnelTimeout: number | null;
-  color: string | null;
+  color: ConnectionColor | null;
 }
 
 export interface Project {

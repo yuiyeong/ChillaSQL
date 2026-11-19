@@ -40,6 +40,40 @@ impl FromStr for SslMode {
     }
 }
 
+/// 접속에 붙이는 색. `chilla.toml`의 `color`는 이 다섯 이름만 쓴다.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ConnectionColor {
+    Green,
+    Yellow,
+    Red,
+    Blue,
+    Purple,
+}
+
+impl ConnectionColor {
+    pub const ALL: [ConnectionColor; 5] = [
+        ConnectionColor::Green,
+        ConnectionColor::Yellow,
+        ConnectionColor::Red,
+        ConnectionColor::Blue,
+        ConnectionColor::Purple,
+    ];
+
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|color| color.as_str() == name)
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ConnectionColor::Green => "green",
+            ConnectionColor::Yellow => "yellow",
+            ConnectionColor::Red => "red",
+            ConnectionColor::Blue => "blue",
+            ConnectionColor::Purple => "purple",
+        }
+    }
+}
+
 /// 접속 정보. 비밀번호는 여기 없고 키체인에만 있다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ConnectionProfile {
@@ -54,7 +88,7 @@ pub struct ConnectionProfile {
     pub tunnel: Option<String>,
     /// 터널의 포트가 열리기를 기다리는 시간. 없으면 [`DEFAULT_TUNNEL_TIMEOUT`]이다. `tunnel`이 있을 때만 쓴다.
     pub tunnel_timeout: Option<Duration>,
-    pub color: Option<String>,
+    pub color: Option<ConnectionColor>,
 }
 
 impl ConnectionProfile {
@@ -153,6 +187,8 @@ pub enum ProfileError {
     RootCertWithoutVerifyFull,
     #[error("sslmode '{value}' is not supported. Use disable, require or verify-full")]
     UnknownSslMode { value: String },
+    #[error("color must be green, yellow, red, blue or purple, not '{value}'")]
+    UnknownColor { value: String },
     #[error("tunnel_timeout can only be used with tunnel")]
     TunnelTimeoutWithoutTunnel,
     #[error("tunnel_timeout must be 1 to 300 seconds, not {secs}")]
@@ -189,6 +225,17 @@ mod tests {
 
     fn local() -> ConnectionProfile {
         ConnectionProfile::fixture("local")
+    }
+
+    #[test]
+    fn color_parses_only_the_five_names() {
+        for name in ["green", "yellow", "red", "blue", "purple"] {
+            assert_eq!(ConnectionColor::parse(name).unwrap().as_str(), name);
+        }
+        assert_eq!(ConnectionColor::ALL.len(), 5);
+        for name in ["orange", "Red", ""] {
+            assert_eq!(ConnectionColor::parse(name), None, "{name}");
+        }
     }
 
     #[test]
@@ -315,7 +362,7 @@ mod tests {
     fn same_target_ignores_the_color_and_tunnel_timeout() {
         let saved = local();
         assert!(saved.same_target(&ConnectionProfile {
-            color: Some("red".into()),
+            color: Some(ConnectionColor::Red),
             ..local()
         }));
         assert!(saved.same_target(&ConnectionProfile {

@@ -24,7 +24,7 @@ const original = connection("local", {
   sslmode: "verify-full",
   sslrootcert: "/certs/ca.crt",
   tunnel: "bastion",
-  color: "#ff0000",
+  color: "red",
 });
 
 test("새 접속의 초기값은 port 5432와 sslmode disable이다", () => {
@@ -171,7 +171,7 @@ test("수정은 이름과 color를 original에서 가져온다", () => {
       sslrootcert: null,
       tunnel: "bastion",
       tunnelTimeout: null,
-      color: "#ff0000",
+      color: "red",
     },
   });
 });
@@ -238,9 +238,7 @@ describe("targetChanged", () => {
   });
 
   test("color만 다르면 false다", () => {
-    expect(targetChanged({ ...original, color: "#00ff00" }, original)).toBe(
-      false,
-    );
+    expect(targetChanged({ ...original, color: "blue" }, original)).toBe(false);
     expect(targetChanged({ ...original, color: null }, original)).toBe(false);
   });
 

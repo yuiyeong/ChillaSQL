@@ -156,27 +156,27 @@ git commit -m "docs: M6 계획과 Task 1 종료 경로 확인 결과를 기록�
   - `ProfileError::UnknownColor { value: String }`: `"color must be green, yellow, red, blue or purple, not '{value}'"`
 - Produces (화면): `type ConnectionColor = "green" | "yellow" | "red" | "blue" | "purple"`, `Connection.color: ConnectionColor | null`. `connectionColor(color: ConnectionColor | null): string`
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `connection.rs`: `color_parses_only_the_five_names` — 다섯 이름은 `Some`이고 `as_str`로 돌아온다. `"orange"`, `"Red"`, `""`는 `None`.
 - `tests/project_file.rs`: `unknown_color_is_rejected` — `color = "orange"`면 `ProjectError::InvalidConnection { source: ProfileError::UnknownColor { value: "orange" } }`. `color_round_trips` — `color = "red"`를 읽으면 `Some(Red)`이고, `None`으로 저장하면 그 줄이 지워진다.
 - `commands.rs`: `connection_dto_rejects_an_unknown_color` — DTO의 `color: Some("orange")`를 `ConnectionProfile::try_from`하면 `UnknownColor`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core color && cargo test -p chillasql connection_dto`
 Expected: FAIL(`ConnectionColor`가 없음)
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `project_file.rs`는 문자열로 읽은 뒤 `ConnectionColor::parse`로 바꾸고, 실패하면 `UnknownColor`다. DTO는 계속 `Option<String>`이다. 화면의 `colors.ts`는 type만 좁힌다(fallback은 그대로 `var(--color-line-2)`).
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src

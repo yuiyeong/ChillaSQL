@@ -9,9 +9,9 @@ use std::time::Duration;
 
 use chilla_core::application::{App, AppError};
 use chilla_core::domain::{
-    Column, ConnectionProfile, FileStamp, Password, ProfileError, Project, QueryEvent, QueryId,
-    QueryOutcome, RowBatch, ServerError, SessionId, SessionInfo, SessionState, SqlFile,
-    StatementSpan, TunnelEvent, TunnelFailure, TunnelState, TxStatus, WriteMode,
+    Column, ConnectionColor, ConnectionProfile, FileStamp, Password, ProfileError, Project,
+    QueryEvent, QueryId, QueryOutcome, RowBatch, ServerError, SessionId, SessionInfo, SessionState,
+    SqlFile, StatementSpan, TunnelEvent, TunnelFailure, TunnelState, TxStatus, WriteMode,
 };
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
@@ -77,7 +77,7 @@ impl From<&ConnectionProfile> for ConnectionDto {
                 .map(|path| path.display().to_string()),
             tunnel: profile.tunnel.clone(),
             tunnel_timeout: profile.tunnel_timeout.map(|timeout| timeout.as_secs()),
-            color: profile.color.clone(),
+            color: profile.color.map(|color| color.as_str().to_string()),
         }
     }
 }
@@ -96,7 +96,12 @@ impl TryFrom<ConnectionDto> for ConnectionProfile {
             sslrootcert: dto.sslrootcert.map(PathBuf::from),
             tunnel: dto.tunnel,
             tunnel_timeout: dto.tunnel_timeout.map(Duration::from_secs),
-            color: dto.color,
+            color: dto
+                .color
+                .map(|name| {
+                    ConnectionColor::parse(&name).ok_or(ProfileError::UnknownColor { value: name })
+                })
+                .transpose()?,
         })
     }
 }
@@ -612,7 +617,7 @@ mod tests {
             sslrootcert: Some(PathBuf::from("/p/certs/ca.pem")),
             tunnel: Some("ssh -N -L 25432:db.internal:5432 bastion".into()),
             tunnel_timeout: Some(Duration::from_secs(30)),
-            color: Some("red".into()),
+            color: Some(ConnectionColor::Red),
         }
     }
 
@@ -718,6 +723,18 @@ mod tests {
             let back = ConnectionProfile::try_from(ConnectionDto::from(&original)).unwrap();
             assert_eq!(back, original);
         }
+    }
+
+    #[test]
+    fn connection_dto_rejects_an_unknown_color() {
+        let mut dto = ConnectionDto::from(&profile(SslMode::Disable));
+        dto.color = Some("orange".into());
+        assert_eq!(
+            ConnectionProfile::try_from(dto).unwrap_err(),
+            ProfileError::UnknownColor {
+                value: "orange".into()
+            }
+        );
     }
 
     #[test]

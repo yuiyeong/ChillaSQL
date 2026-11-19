@@ -78,7 +78,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 접속 정보 | host, port, database, user, password를 저장. 터널 유무와 관계없이 형식은 하나. 연결 대상을 고쳐 저장하면 그 접속을 쓰는 탭의 세션을 묻지 않고 닫음(다음 실행이 새 세션을 엶). 접속 추가는 이미 있는 이름을 거절 |
 | 터널 옵션 | 접속 정보에 터널 명령을 추가할 수 있음. 비워 두면 바로 연결 (4.2) |
 | 접속 테스트 | 저장 전에 연결 가능 여부 확인. 터널 명령이 있으면 터널까지 포함해 확인 |
-| 접속별 색상 | 창 상단 bar(창 전체 폭), 탭, toolbar의 접속 표시에만 색을 써서 어느 DB인지 구분. 오류, 트랜잭션 같은 상태 표시에는 접속 색을 쓰지 않고 icon과 문장으로 구분. 고를 수 있는 색은 green, yellow, red, blue, purple |
+| 접속별 색상 | 창 상단 bar(창 전체 폭), 탭, toolbar의 접속 표시에만 색을 써서 어느 DB인지 구분. 오류, 트랜잭션 같은 상태 표시에는 접속 색을 쓰지 않고 icon과 문장으로 구분. 고를 수 있는 색은 green, yellow, red, blue, purple. `chilla.toml`의 `color`에 다른 값이 있으면 프로젝트를 열지 않는다(모르는 key와 같다) |
 | 탭의 접속 | 탭마다 접속 하나. 탭의 접속은 toolbar에서만 바꾸고, sidebar의 접속 목록은 추가와 수정에만 씀 |
 | 읽기 전용 | 접속 단위로 켜고 끔 |
 | SSL | `sslmode`로 선택: `disable`(기본값), `require`(암호화만), `verify-full`(서버 인증서와 host 이름까지 확인). `verify-full`은 `sslrootcert`로 신뢰할 CA 파일을 정할 수 있고, 없으면 macOS의 trust store로 확인 |

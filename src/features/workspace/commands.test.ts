@@ -490,7 +490,7 @@ test("대상이 그대로면 세션을 놓지 않는다", async () => {
   const id = await ranTab("local", 3);
   const saved: Project = {
     ...project,
-    connections: [connection("local", { color: "#ff0000" })],
+    connections: [connection("local", { color: "red" })],
   };
 
   await applySavedProject(saved);

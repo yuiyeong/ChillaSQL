@@ -9,7 +9,7 @@ mod sql_file;
 mod statement;
 mod tunnel;
 
-pub use connection::{ConnectionProfile, ProfileError, SslMode};
+pub use connection::{ConnectionColor, ConnectionProfile, ProfileError, SslMode};
 pub use password::Password;
 pub use project::Project;
 pub use query::{

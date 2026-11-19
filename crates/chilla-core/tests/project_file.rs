@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use chilla_core::application::{ProjectError, ProjectStore};
-use chilla_core::domain::{ConnectionProfile, ProfileError, Project, SslMode};
+use chilla_core::domain::{ConnectionColor, ConnectionProfile, ProfileError, Project, SslMode};
 use chilla_core::infrastructure::TomlProjectStore;
 use tempfile::TempDir;
 
@@ -82,7 +82,7 @@ fn loads_the_spec_example() {
     assert_eq!(production.user, "app_user");
     assert_eq!(production.sslmode, SslMode::Require);
     assert_eq!(production.sslrootcert, None);
-    assert_eq!(production.color.as_deref(), Some("red"));
+    assert_eq!(production.color, Some(ConnectionColor::Red));
     assert_eq!(production.tunnel, None);
 
     let staging = project.connection("staging").unwrap();
@@ -145,6 +145,36 @@ fn rejects_malformed_entries() {
     parse_message(load("this is not toml").1);
     let (_dir, result) = load("[connections.local]\ndatabase = \"app\"\nuser = \"postgres\"\n");
     assert!(parse_message(result).contains("host"));
+}
+
+#[test]
+fn unknown_color_is_rejected() {
+    assert_eq!(
+        load_local("color = \"orange\""),
+        Err(ProjectError::InvalidConnection {
+            connection: "local".into(),
+            source: ProfileError::UnknownColor {
+                value: "orange".into()
+            }
+        })
+    );
+}
+
+#[test]
+fn color_round_trips() {
+    let (_dir, result) = load(SPEC_EXAMPLE);
+    let project = result.unwrap();
+    let production = project.connection("production").unwrap().clone();
+    assert_eq!(production.color, Some(ConnectionColor::Red));
+
+    let colorless = ConnectionProfile {
+        color: None,
+        ..production
+    };
+    let (_dir, result, text) = saved(SPEC_EXAMPLE, colorless);
+    result.unwrap();
+    assert!(!text.contains("color = \"red\""), "{text}");
+    assert_eq!(text, SPEC_EXAMPLE.replace("color = \"red\"\n", ""));
 }
 
 #[test]
@@ -291,7 +321,7 @@ fn production() -> ConnectionProfile {
         sslrootcert: None,
         tunnel: None,
         tunnel_timeout: None,
-        color: Some("red".into()),
+        color: Some(ConnectionColor::Red),
     }
 }
 
@@ -365,7 +395,7 @@ fn create_writes_a_minimal_file_that_loads() {
 #[test]
 fn save_connection_changes_only_that_connection() {
     let blue = ConnectionProfile {
-        color: Some("blue".into()),
+        color: Some(ConnectionColor::Blue),
         ..production()
     };
     let (_dir, result, text) = saved(SPEC_EXAMPLE, blue.clone());
@@ -494,7 +524,7 @@ fn save_connection_keeps_comments_above_removed_keys() {
         sslrootcert: None,
         tunnel: None,
         tunnel_timeout: None,
-        color: Some("green".into()),
+        color: Some(ConnectionColor::Green),
     };
     let (_dir, result, text) = saved(toml, local);
     result.unwrap();
@@ -600,7 +630,7 @@ fn save_connection_quotes_names_that_need_it() {
     assert!(!text.to_lowercase().contains("password"), "{text}");
 
     let recolored = ConnectionProfile {
-        color: Some("blue".into()),
+        color: Some(ConnectionColor::Blue),
         ..quoted
     };
     let project = TomlProjectStore

@@ -272,6 +272,7 @@ mod tests {
                 ProfileError::EmptyField { field: "host" },
                 ProfileError::RootCertWithoutVerifyFull,
                 ProfileError::UnknownSslMode { value: "x".into() },
+                ProfileError::UnknownColor { value: "x".into() },
                 ProfileError::TunnelTimeoutWithoutTunnel,
                 ProfileError::TunnelTimeoutRange { secs: 0 },
             ]

@@ -8,7 +8,7 @@ use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
 use super::atomic_write::{Missing, create_new_file, write_atomically};
 use crate::application::{ProjectError, ProjectStore};
-use crate::domain::{ConnectionProfile, Project, SslMode};
+use crate::domain::{ConnectionColor, ConnectionProfile, ProfileError, Project, SslMode};
 
 const FILE_NAME: &str = "chilla.toml";
 
@@ -198,7 +198,10 @@ fn write_fields(
                 .tunnel_timeout
                 .map(|timeout| Value::from(i64::try_from(timeout.as_secs()).unwrap_or(i64::MAX))),
         ),
-        ("color", profile.color.as_deref().map(Value::from)),
+        (
+            "color",
+            profile.color.map(|color| Value::from(color.as_str())),
+        ),
     ];
     for (key, value) in fields {
         match value {
@@ -321,6 +324,14 @@ fn connection(
         None => SslMode::default(),
         Some(value) => value.parse().map_err(invalid)?,
     };
+    let color = match &raw.color {
+        None => None,
+        Some(value) => Some(ConnectionColor::parse(value).ok_or_else(|| {
+            invalid(ProfileError::UnknownColor {
+                value: value.clone(),
+            })
+        })?),
+    };
     let tunnel_timeout = match raw.tunnel_timeout {
         None => None,
         Some(toml::Value::Integer(secs)) if secs >= 0 => {
@@ -351,7 +362,7 @@ fn connection(
         sslrootcert: raw.sslrootcert,
         tunnel: raw.tunnel,
         tunnel_timeout,
-        color: raw.color,
+        color,
     }
     .resolved_under(dir);
     profile.validate().map_err(invalid)?;

@@ -21,7 +21,7 @@ import { ConnectionForm } from "./ConnectionForm";
 
 const saved: Project = { name: "demo", dir: "/p", connections: [] };
 
-const original = connection("local", { tunnel: "bastion", color: "#ff0000" });
+const original = connection("local", { tunnel: "bastion", color: "red" });
 
 const warning =
   "You changed where this connection points. Saving deletes the password stored in Keychain. Enter a new password below to save it instead.";

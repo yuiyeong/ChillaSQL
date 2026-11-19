@@ -1,3 +1,4 @@
+import type { ConnectionColor } from "../../shared/api/types";
 import { connectionColor } from "./colors";
 
 /**
@@ -8,7 +9,7 @@ export function ConnectionDot({
   color,
   testId,
 }: {
-  color: string | null | undefined;
+  color: ConnectionColor | null | undefined;
   testId?: string;
 }) {
   if (color === undefined) {

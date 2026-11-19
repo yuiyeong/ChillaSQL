@@ -3,6 +3,7 @@ import { ConnectionDot } from "../connections/ConnectionDot";
 import { TunnelTabIcon } from "../connections/TunnelStatus";
 import { useProject } from "../project/projectStore";
 import { CloseIcon, PlusIcon } from "../../shared/ui/icons";
+import type { ConnectionColor } from "../../shared/api/types";
 import { IconButton } from "../../shared/ui/IconButton";
 import { SaveNameDialog } from "./SaveNameDialog";
 import { useTabs } from "./tabsStore";
@@ -40,7 +41,9 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
       : undefined;
 
   /** 접속이 없으면 undefined(빈 원), 있으면 그 접속의 color 이름이다. */
-  function dotColor(connection: string | null): string | null | undefined {
+  function dotColor(
+    connection: string | null,
+  ): ConnectionColor | null | undefined {
     if (connection === null) return undefined;
     return connections?.find((c) => c.name === connection)?.color ?? null;
   }

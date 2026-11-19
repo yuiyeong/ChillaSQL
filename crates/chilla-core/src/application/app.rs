@@ -531,8 +531,8 @@ mod tests {
     };
     use crate::application::{CancelError, PasswordKey, PasswordStore, ProjectError, SplitError};
     use crate::domain::{
-        FileStamp, ProfileError, QueryEvent, QueryOutcome, SessionState, SslMode, StatementSpan,
-        TxStatus, WriteMode,
+        ConnectionColor, FileStamp, ProfileError, QueryEvent, QueryOutcome, SessionState, SslMode,
+        StatementSpan, TxStatus, WriteMode,
     };
     use crate::domain::{TunnelEvent, TunnelFailure};
 
@@ -903,7 +903,7 @@ mod tests {
         let f = opened().await;
         f.app.set_password("local", pw("stored")).await.unwrap();
         let mut draft = profile("local");
-        draft.color = Some("red".into());
+        draft.color = Some(ConnectionColor::Red);
 
         f.app.test_connection(draft, None).await.unwrap();
 
@@ -1135,7 +1135,7 @@ mod tests {
         let f = opened().await;
         f.app.set_password("local", pw("stored")).await.unwrap();
         let mut recolored = profile("local");
-        recolored.color = Some("red".into());
+        recolored.color = Some(ConnectionColor::Red);
         f.app.save_connection(recolored, None).await.unwrap();
         assert_eq!(f.app.has_password("local").await, Ok(true));
 

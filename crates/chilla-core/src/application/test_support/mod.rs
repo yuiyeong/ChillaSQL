@@ -21,8 +21,8 @@ use super::{
     ProjectError, ProjectStore, QuerySink, SplitError, SqlFileStore, StatementSplitter,
 };
 use crate::domain::{
-    ConnectionProfile, FileStamp, Password, Project, QueryEvent, Row, SqlFile, SqlPath,
-    StatementSpan, WriteMode,
+    ConnectionColor, ConnectionProfile, FileStamp, Password, Project, QueryEvent, Row, SqlFile,
+    SqlPath, StatementSpan, WriteMode,
 };
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
@@ -364,7 +364,7 @@ mod tests {
         );
 
         let red = ConnectionProfile {
-            color: Some("red".into()),
+            color: Some(ConnectionColor::Red),
             ..profile("a")
         };
         projects
