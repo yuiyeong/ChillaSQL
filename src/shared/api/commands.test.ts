@@ -16,6 +16,7 @@ import {
   executeQuery,
   fetchMore,
   hasPassword,
+  inspectStatement,
   listSqlFiles,
   openProject,
   openSession,
@@ -87,6 +88,11 @@ test("command 이름과 인자 key를 그대로 보낸다", async () => {
   await splitStatements("a; b");
   expect(invokeMock).toHaveBeenLastCalledWith("split_statements", {
     sql: "a; b",
+  });
+
+  await inspectStatement("delete from s");
+  expect(invokeMock).toHaveBeenLastCalledWith("inspect_statement", {
+    sql: "delete from s",
   });
 
   await cancelQuery(3, 7);

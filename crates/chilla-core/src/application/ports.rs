@@ -4,8 +4,8 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use crate::domain::{
-    Column, ConnectionProfile, FileStamp, Password, ProfileError, Project, Row, ServerError,
-    SqlFile, SqlPath, StatementSpan, TxStatus, WriteMode,
+    Column, ConnectionProfile, Danger, FileStamp, Password, ProfileError, Project, Row,
+    ServerError, SqlFile, SqlPath, StatementSpan, TxStatus, WriteMode,
 };
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽고 쓴다.
@@ -234,6 +234,12 @@ pub struct SpawnError {
 pub trait StatementSplitter: Send + Sync {
     /// 문장마다 span을 돌려준다. 빈 문장은 만들지 않는다. span은 start 오름차순이고 서로 겹치지 않는다.
     fn split(&self, sql: &str) -> Result<Vec<StatementSpan>, SplitError>;
+}
+
+/// 실행할 문장 하나가 위험한지 본다.
+pub trait StatementInspector: Send + Sync {
+    /// 첫 위험 하나. 문장을 읽을 수 없으면 `None`이다(서버가 오류를 낸다).
+    fn danger(&self, sql: &str) -> Option<Danger>;
 }
 
 /// 따옴표, `$$`, 주석이 닫히지 않아 문장 경계를 알 수 없다.

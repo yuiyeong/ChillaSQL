@@ -18,11 +18,12 @@ pub(crate) use tunnel::{FakeRun, FakeRunner, events_sink};
 
 use super::{
     ConnectError, Connector, FileError, PasswordKey, PasswordStore, PasswordStoreError,
-    ProjectError, ProjectStore, QuerySink, SplitError, SqlFileStore, StatementSplitter,
+    ProjectError, ProjectStore, QuerySink, SplitError, SqlFileStore, StatementInspector,
+    StatementSplitter,
 };
 use crate::domain::{
-    ConnectionColor, ConnectionProfile, FileStamp, Password, Project, QueryEvent, Row, SqlFile,
-    SqlPath, StatementSpan, WriteMode,
+    ConnectionColor, ConnectionProfile, Danger, FileStamp, Password, Project, QueryEvent, Row,
+    SqlFile, SqlPath, StatementSpan, WriteMode,
 };
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
@@ -239,6 +240,23 @@ impl StatementSplitter for FakeSplitter {
             start = end + 1;
         }
         Ok(spans)
+    }
+}
+
+/// `DROP`으로 시작하면 `Drop`, `TRUNCATE`로 시작하면 `Truncate`, 그 밖에는 위험 없음이다.
+pub(crate) struct FakeInspector;
+
+impl StatementInspector for FakeInspector {
+    fn danger(&self, sql: &str) -> Option<Danger> {
+        let name = sql.split_whitespace().nth(1)?.to_string();
+        match sql.split_whitespace().next()? {
+            "DROP" => Some(Danger::Drop {
+                kind: "TABLE".into(),
+                names: vec![name],
+            }),
+            "TRUNCATE" => Some(Danger::Truncate { tables: vec![name] }),
+            _ => None,
+        }
     }
 }
 

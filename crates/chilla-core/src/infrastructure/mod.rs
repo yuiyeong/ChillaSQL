@@ -6,6 +6,7 @@ mod memory_password_store;
 mod postgres;
 mod project_file;
 mod sql_files;
+mod statement_inspector;
 mod statement_splitter;
 mod tunnel_process;
 
@@ -14,5 +15,6 @@ pub use memory_password_store::MemoryPasswordStore;
 pub use postgres::{PgCancel, PgConnection, PgConnector, PgRows};
 pub use project_file::TomlProjectStore;
 pub use sql_files::FsSqlFileStore;
+pub use statement_inspector::PgQueryInspector;
 pub use statement_splitter::PgQuerySplitter;
 pub use tunnel_process::{ShellProcess, ShellTunnelRunner, login_shell};

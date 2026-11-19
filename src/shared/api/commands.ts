@@ -2,6 +2,7 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { toCommandError } from "./errors";
 import type {
   Connection,
+  Danger,
   EndResult,
   Project,
   QueryEvent,
@@ -63,6 +64,11 @@ export function closeSession(sessionId: number): Promise<void> {
 
 export function splitStatements(sql: string): Promise<StatementSpan[]> {
   return call("split_statements", { sql });
+}
+
+/** 문장 하나의 첫 위험을 돌려준다. 위험이 없거나 문장을 읽을 수 없으면 null이다. */
+export function inspectStatement(sql: string): Promise<Danger | null> {
+  return call("inspect_statement", { sql });
 }
 
 /** query id를 돌려준다. event는 이 promise가 끝나기 전에도 `onEvent`로 온다. */

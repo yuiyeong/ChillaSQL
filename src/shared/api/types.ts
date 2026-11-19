@@ -37,6 +37,15 @@ export interface StatementSpan {
   end: number;
 }
 
+/**
+ * 실행 전에 확인할 위험한 문장. 이름은 문장에 쓴 그대로다.
+ * `drop`의 `object`는 SQL keyword("TABLE", "MATERIALIZED VIEW" 등)이고 그 밖의 object는 "".
+ */
+export type Danger =
+  | { kind: "update_without_where" | "delete_without_where"; table: string }
+  | { kind: "drop"; object: string; names: string[] }
+  | { kind: "truncate"; tables: string[] };
+
 export interface ServerError {
   code: string;
   message: string;

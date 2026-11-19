@@ -1,6 +1,7 @@
 //! 접속 정보, 세션 같은 개념과 규칙. 다른 layer와 I/O crate에 의존하지 않는다.
 
 mod connection;
+mod danger;
 mod password;
 mod project;
 mod query;
@@ -10,6 +11,7 @@ mod statement;
 mod tunnel;
 
 pub use connection::{ConnectionColor, ConnectionProfile, ProfileError, SslMode};
+pub use danger::Danger;
 pub use password::Password;
 pub use project::Project;
 pub use query::{

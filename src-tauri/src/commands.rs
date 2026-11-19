@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use chilla_core::application::{App, AppError};
 use chilla_core::domain::{
-    Column, ConnectionColor, ConnectionProfile, EndOutcome, EndResult, FileStamp, Password,
+    Column, ConnectionColor, ConnectionProfile, Danger, EndOutcome, EndResult, FileStamp, Password,
     ProfileError, Project, QueryEvent, QueryId, QueryOutcome, RowBatch, ServerError, SessionId,
     SessionInfo, SessionState, SqlFile, StatementSpan, TunnelEvent, TunnelFailure, TunnelState,
     TxEnd, TxMode, TxStatus, WriteMode,
@@ -230,6 +230,30 @@ fn utf16_spans(sql: &str, spans: &[StatementSpan]) -> Vec<StatementSpanDto> {
             end: advance_to(span.end),
         })
         .collect()
+}
+
+/// 실행 전에 확인할 위험. `kind`로 구분한다. `Drop`의 `object`는 SQL keyword("TABLE" 등)다.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum DangerDto {
+    UpdateWithoutWhere { table: String },
+    DeleteWithoutWhere { table: String },
+    Drop { object: String, names: Vec<String> },
+    Truncate { tables: Vec<String> },
+}
+
+impl From<Danger> for DangerDto {
+    fn from(danger: Danger) -> Self {
+        match danger {
+            Danger::UpdateWithoutWhere { table } => Self::UpdateWithoutWhere { table },
+            Danger::DeleteWithoutWhere { table } => Self::DeleteWithoutWhere { table },
+            Danger::Drop { kind, names } => Self::Drop {
+                object: kind,
+                names,
+            },
+            Danger::Truncate { tables } => Self::Truncate { tables },
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -634,6 +658,12 @@ pub fn split_statements(
     Ok(utf16_spans(&sql, &spans))
 }
 
+/// 문장 하나의 첫 위험을 돌려준다. `pg_query::parse`는 text 길이만큼 걸리므로 async runtime에서 돈다.
+#[tauri::command(async)]
+pub fn inspect_statement(app: State<'_, CoreApp>, sql: String) -> Option<DangerDto> {
+    app.inspect_statement(&sql).map(DangerDto::from)
+}
+
 /// query id를 돌려주고 바로 끝난다. 결과는 `on_event`로 간다.
 #[tauri::command]
 pub async fn execute_query(
@@ -725,6 +755,36 @@ mod tests {
             tunnel_timeout: Some(Duration::from_secs(30)),
             color: Some(ConnectionColor::Red),
         }
+    }
+
+    #[test]
+    fn danger_dto_shapes() {
+        let dto = |danger| serde_json::to_value(DangerDto::from(danger)).unwrap();
+        assert_eq!(
+            dto(Danger::UpdateWithoutWhere {
+                table: "public.users".into()
+            }),
+            json!({ "kind": "update_without_where", "table": "public.users" })
+        );
+        assert_eq!(
+            dto(Danger::DeleteWithoutWhere {
+                table: "sessions".into()
+            }),
+            json!({ "kind": "delete_without_where", "table": "sessions" })
+        );
+        assert_eq!(
+            dto(Danger::Drop {
+                kind: "MATERIALIZED VIEW".into(),
+                names: vec!["a".into(), "b".into()]
+            }),
+            json!({ "kind": "drop", "object": "MATERIALIZED VIEW", "names": ["a", "b"] })
+        );
+        assert_eq!(
+            dto(Danger::Truncate {
+                tables: vec!["a".into()]
+            }),
+            json!({ "kind": "truncate", "tables": ["a"] })
+        );
     }
 
     #[test]

@@ -13,8 +13,8 @@ use chilla_core::domain::{
     ConnectionProfile, Password, QueryEvent, QueryOutcome, SslMode, TunnelEvent,
 };
 use chilla_core::infrastructure::{
-    FsSqlFileStore, MemoryPasswordStore, PgConnection, PgConnector, PgQuerySplitter,
-    ShellTunnelRunner, TomlProjectStore,
+    FsSqlFileStore, MemoryPasswordStore, PgConnection, PgConnector, PgQueryInspector,
+    PgQuerySplitter, ShellTunnelRunner, TomlProjectStore,
 };
 use tempfile::TempDir;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
@@ -200,6 +200,7 @@ pub async fn app_with_toml(toml: &str) -> (TestApp, TempDir, TunnelEvents) {
         Arc::new(TomlProjectStore),
         Arc::new(MemoryPasswordStore::default()),
         Arc::new(PgQuerySplitter),
+        Arc::new(PgQueryInspector),
         Arc::new(FsSqlFileStore),
         PgConnector::new(),
         ShellTunnelRunner::new(),

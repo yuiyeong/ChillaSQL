@@ -11,13 +11,13 @@ use super::session_actor::{self, QuerySink, SessionHandle};
 use super::tunnels::{TunnelError, TunnelLease, TunnelSink, Tunnels};
 use super::{
     CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey, PasswordStore,
-    PasswordStoreError, ProjectError, ProjectStore, SplitError, SqlFileStore, StatementSplitter,
-    TunnelRunner,
+    PasswordStoreError, ProjectError, ProjectStore, SplitError, SqlFileStore, StatementInspector,
+    StatementSplitter, TunnelRunner,
 };
 use crate::domain::{
-    ConnectionProfile, EndResult, FileStamp, Password, ProfileError, Project, QueryId, QueryLimits,
-    SessionId, SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError, StatementSpan, TxEnd,
-    TxMode, WriteMode,
+    ConnectionProfile, Danger, EndResult, FileStamp, Password, ProfileError, Project, QueryId,
+    QueryLimits, SessionId, SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError,
+    StatementSpan, TxEnd, TxMode, WriteMode,
 };
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -60,6 +60,7 @@ pub struct App<C: Connector, T: TunnelRunner> {
     projects: Arc<dyn ProjectStore>,
     passwords: Arc<dyn PasswordStore>,
     splitter: Arc<dyn StatementSplitter>,
+    inspector: Arc<dyn StatementInspector>,
     files: Arc<dyn SqlFileStore>,
     connector: C,
     tunnels: Tunnels<T>,
@@ -84,10 +85,13 @@ struct State {
 }
 
 impl<C: Connector, T: TunnelRunner> App<C, T> {
+    // 구현 선택(port)을 setup 한 곳에서 모두 받는 생성자라 인자가 많다.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         projects: Arc<dyn ProjectStore>,
         passwords: Arc<dyn PasswordStore>,
         splitter: Arc<dyn StatementSplitter>,
+        inspector: Arc<dyn StatementInspector>,
         files: Arc<dyn SqlFileStore>,
         connector: C,
         runner: T,
@@ -97,6 +101,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             projects,
             passwords,
             splitter,
+            inspector,
             files,
             connector,
             tunnels: Tunnels::new(runner, on_tunnel),
@@ -390,6 +395,11 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         Ok(self.splitter.split(sql)?)
     }
 
+    /// 문장 하나가 위험한지 본다. 첫 위험 하나를 돌려준다. 프로젝트나 세션이 없어도 된다.
+    pub fn inspect_statement(&self, sql: &str) -> Option<Danger> {
+        self.inspector.danger(sql)
+    }
+
     /// 문장 하나를 세션에 맡기고 바로 돌아온다. 결과는 `sink`로 간다.
     ///
     /// 문장이 하나로 나뉘거나 나눌 수 없을 때(따옴표가 닫히지 않은 경우 등) 받은 `sql`을
@@ -542,8 +552,8 @@ mod tests {
     use super::*;
     use crate::application::TunnelError;
     use crate::application::test_support::{
-        FakeConnector, FakeFiles, FakePasswords, FakeProjects, FakeRun, FakeRunner, FakeSplitter,
-        events_sink, next, profile, sink,
+        FakeConnector, FakeFiles, FakeInspector, FakePasswords, FakeProjects, FakeRun, FakeRunner,
+        FakeSplitter, events_sink, next, profile, sink,
     };
     use crate::application::{CancelError, PasswordKey, PasswordStore, ProjectError, SplitError};
     use crate::domain::{
@@ -577,6 +587,7 @@ mod tests {
                 projects.clone(),
                 passwords.clone(),
                 Arc::new(FakeSplitter),
+                Arc::new(FakeInspector),
                 files.clone(),
                 connector.clone(),
                 runner.clone(),
@@ -1105,6 +1116,26 @@ mod tests {
             f.app.split_statements("a 'b"),
             Err(AppError::Split(SplitError { .. }))
         ));
+    }
+
+    #[tokio::test]
+    async fn inspect_statement_works_without_a_project() {
+        let f = fixture();
+
+        assert_eq!(
+            f.app.inspect_statement("DROP users"),
+            Some(Danger::Drop {
+                kind: "TABLE".into(),
+                names: vec!["users".into()]
+            })
+        );
+        assert_eq!(
+            f.app.inspect_statement("TRUNCATE users"),
+            Some(Danger::Truncate {
+                tables: vec!["users".into()]
+            })
+        );
+        assert_eq!(f.app.inspect_statement("SELECT 1"), None);
     }
 
     #[tokio::test]

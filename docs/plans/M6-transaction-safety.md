@@ -375,7 +375,7 @@ pub enum Danger {
 - Produces (command): `inspect_statement(sql) -> DangerDto | null`. `DangerDto`는 `{ kind: "update_without_where" | "delete_without_where", table } | { kind: "drop", object: string, names: string[] } | { kind: "truncate", tables: string[] }`
 - Produces (화면 api): `inspectStatement(sql: string): Promise<Danger | null>`, type `Danger`(DTO와 같은 모양)
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `statement_inspector.rs`의 test(`PgQueryInspector.danger(sql)`):
 
@@ -409,21 +409,21 @@ fn finds_dangers_inside_ctes_and_explain_analyze() {
 
 `app.rs`의 test: `inspect_statement_works_without_a_project`(fake inspector가 돌려준 값을 그대로). `commands.rs`: `danger_dto_shapes`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core statement_inspector`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `pg_query::parse(sql)`의 `protobuf.stmts`를 본다. `SelectStmt`, `InsertStmt`, `UpdateStmt`, `DeleteStmt`의 `with_clause`의 CTE를 재귀로 보고, `ExplainStmt`는 `options`에 `analyze`가 있고 값이 false가 아닐 때만 `query`를 본다. `ObjectType`에서 `kind`로의 대응은 위 목록만 두고 나머지는 `""`다. `docs/architecture.md`의 구성요소 표 "쿼리 실행" 행의 `infrastructure`에 "`pg_query` 위험 쿼리 판별"을 더한다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src docs/architecture.md

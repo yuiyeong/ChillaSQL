@@ -31,7 +31,7 @@ crates/chilla-core/src/
 | --- | --- | --- | --- |
 | 세션 관리 | 세션과 접속 정보 | 세션을 열고 닫는 use case, DB 연결 port | `tokio-postgres`로 연결하는 구현, keychain 비밀번호 저장 |
 | 터널 관리 | 터널 상태 | 터널을 띄우고 감시하는 use case, 터널 port | `tokio::process`로 터널 명령을 실행하는 구현 |
-| 쿼리 실행 | 문장, 결과 행 | 실행, 취소, 결과 나눠 가져오기 use case, 문장 나누기 port | `tokio-postgres` 실행, `pg_query` 문장 나누기 |
+| 쿼리 실행 | 문장, 결과 행 | 실행, 취소, 결과 나눠 가져오기 use case, 문장 나누기 port | `tokio-postgres` 실행, `pg_query` 문장 나누기, `pg_query` 위험 쿼리 판별 |
 
 ### 의존 방향 검사
 

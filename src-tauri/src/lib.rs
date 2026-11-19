@@ -5,8 +5,8 @@ mod menu;
 use std::sync::Arc;
 
 use chilla_core::infrastructure::{
-    FsSqlFileStore, KeychainPasswordStore, PgConnector, PgQuerySplitter, ShellTunnelRunner,
-    TomlProjectStore,
+    FsSqlFileStore, KeychainPasswordStore, PgConnector, PgQueryInspector, PgQuerySplitter,
+    ShellTunnelRunner, TomlProjectStore,
 };
 
 use commands::{CoreApp, TunnelEventDto};
@@ -29,6 +29,7 @@ pub fn run() {
                 Arc::new(TomlProjectStore),
                 Arc::new(passwords),
                 Arc::new(PgQuerySplitter),
+                Arc::new(PgQueryInspector),
                 Arc::new(FsSqlFileStore),
                 PgConnector::new(),
                 ShellTunnelRunner::new(),
@@ -55,6 +56,7 @@ pub fn run() {
             commands::session_state,
             commands::close_session,
             commands::split_statements,
+            commands::inspect_statement,
             commands::execute_query,
             commands::end_transaction,
             commands::fetch_more,
