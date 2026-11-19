@@ -18,6 +18,7 @@ const values: FormValues = {
   sslrootcert: "",
   tunnel: "",
   tunnelTimeout: "",
+  color: null,
 };
 
 const original = connection("local", {
@@ -38,6 +39,7 @@ test("새 접속의 초기값은 port 5432와 sslmode disable이다", () => {
     sslrootcert: "",
     tunnel: "",
     tunnelTimeout: "",
+    color: null,
   });
 });
 
@@ -52,6 +54,7 @@ test("수정의 초기값은 original에서 온다", () => {
     sslrootcert: "/certs/ca.crt",
     tunnel: "bastion",
     tunnelTimeout: "",
+    color: "red",
   });
   expect(initialValues({ ...original, tunnelTimeout: 30 }).tunnelTimeout).toBe(
     "30",
@@ -153,9 +156,15 @@ test("sslrootcert는 verify-full일 때만 보낸다", () => {
   ).toMatchObject({ connection: { sslrootcert: null } });
 });
 
-test("수정은 이름과 color를 original에서 가져온다", () => {
+test("수정은 이름을 original에서 가져온다", () => {
   const result = toConnection(
-    { ...values, name: "renamed", host: "db.example", tunnel: "bastion" },
+    {
+      ...values,
+      name: "renamed",
+      host: "db.example",
+      tunnel: "bastion",
+      color: "red",
+    },
     original,
     [],
   );
@@ -173,6 +182,20 @@ test("수정은 이름과 color를 original에서 가져온다", () => {
       tunnelTimeout: null,
       color: "red",
     },
+  });
+});
+
+test("color_round_trips_through_the_form", () => {
+  const form = initialValues(original);
+  expect(form.color).toBe("red");
+  expect(toConnection(form, original, [])).toMatchObject({
+    connection: { color: "red" },
+  });
+  expect(toConnection({ ...form, color: null }, original, [])).toMatchObject({
+    connection: { color: null },
+  });
+  expect(toConnection({ ...values, color: "blue" }, null, [])).toMatchObject({
+    connection: { color: "blue" },
   });
 });
 
@@ -237,7 +260,7 @@ describe("targetChanged", () => {
     );
   });
 
-  test("color만 다르면 false다", () => {
+  test("changing_only_the_color_is_not_a_target_change", () => {
     expect(targetChanged({ ...original, color: "blue" }, original)).toBe(false);
     expect(targetChanged({ ...original, color: null }, original)).toBe(false);
   });

@@ -899,26 +899,26 @@ git commit -m "feat: 열린 트랜잭션이 있으면 앱 종료 전에 확인�
 - Consumes: Task 2의 `ConnectionColor`
 - Produces: `FormValues.color: ConnectionColor | null`. `toConnection`이 그대로 싣는다. `color`는 연결 대상이 아니므로 `targetChanged`가 보지 않는다(지금과 같음). 문구: swatch의 `aria-label`은 색 이름 그대로(`green` … — `chilla.toml`의 값이라 번역하지 않음)
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `connectionValues.test.ts`: `color_round_trips_through_the_form`, `changing_only_the_color_is_not_a_target_change`.
 - `ConnectionForm.test.tsx`(ConnectionForm A, B): `color_is_a_radiogroup_of_five`(legend `color`, 다섯 radio, 처음 접속의 색이 checked), `clicking_the_checked_swatch_clears_the_color`, `new_connection_has_no_color`, `saving_sends_the_color`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/connections`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 배치는 ConnectionForm A의 Name 옆 fieldset(32px 높이, gap 6)이다. swatch 색은 `connectionColor`의 token이고 checked는 바깥 ring이다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

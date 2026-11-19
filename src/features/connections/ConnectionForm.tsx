@@ -6,7 +6,12 @@ import {
 } from "../../shared/api/commands";
 import { pickFile } from "../../shared/api/dialog";
 import { CommandError, messageOf } from "../../shared/api/errors";
-import type { Connection, Project, SslMode } from "../../shared/api/types";
+import type {
+  Connection,
+  ConnectionColor,
+  Project,
+  SslMode,
+} from "../../shared/api/types";
 import { Button } from "../../shared/ui/Button";
 import {
   CheckIcon,
@@ -17,6 +22,7 @@ import {
 } from "../../shared/ui/icons";
 import { noTextCorrection } from "../../shared/ui/noTextCorrection";
 import { Pre } from "./CommandOutput";
+import { CONNECTION_COLORS, connectionColor } from "./colors";
 import {
   initialValues,
   targetChanged,
@@ -69,6 +75,63 @@ function Field({
       </div>
       {children({ id, describedBy: hint === undefined ? undefined : hintId })}
     </div>
+  );
+}
+
+/**
+ * 접속 색을 고르는 swatch 다섯 개. 고른 swatch를 다시 누르면 색이 없어진다.
+ * 새 접속은 Name 옆에 세로로, 수정은 한 줄로 놓는다.
+ */
+function ColorField({
+  value,
+  inline,
+  onChange,
+}: {
+  value: ConnectionColor | null;
+  inline: boolean;
+  onChange(color: ConnectionColor | null): void;
+}) {
+  return (
+    <fieldset
+      className={
+        inline ? "m-0 flex items-center gap-3 border-0 p-0" : "m-0 border-0 p-0"
+      }
+    >
+      <legend
+        className={[
+          "text-small text-fg-2 p-0 font-mono",
+          inline ? "float-left w-16" : "mb-1.5",
+        ].join(" ")}
+      >
+        color
+      </legend>
+      <div
+        role="radiogroup"
+        aria-label="color"
+        className={["flex items-center gap-1.5", inline ? "" : "h-8"].join(" ")}
+      >
+        {CONNECTION_COLORS.map((color) => {
+          const checked = value === color;
+          return (
+            <button
+              key={color}
+              type="button"
+              role="radio"
+              aria-checked={checked}
+              aria-label={color}
+              className="border-bg-2 focus-visible:outline-accent size-[22px] cursor-pointer rounded-full border-2 p-0 focus-visible:outline-2"
+              style={{
+                background: connectionColor(color),
+                boxShadow: checked
+                  ? `0 0 0 2px ${connectionColor(color)}`
+                  : undefined,
+              }}
+              onClick={() => onChange(checked ? null : color)}
+            />
+          );
+        })}
+      </div>
+    </fieldset>
   );
 }
 
@@ -196,18 +259,31 @@ export function ConnectionForm({
       </header>
 
       <div className="flex flex-col gap-3.5 px-6 pt-1 pb-[18px]">
-        {original === null && (
-          <Field label="name">
-            {({ id }) => (
-              <input
-                id={id}
-                className={inputClass}
-                {...noTextCorrection}
-                value={values.name}
-                onChange={(e) => edit({ name: e.target.value })}
-              />
-            )}
-          </Field>
+        {original === null ? (
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
+            <Field label="name">
+              {({ id }) => (
+                <input
+                  id={id}
+                  className={inputClass}
+                  {...noTextCorrection}
+                  value={values.name}
+                  onChange={(e) => edit({ name: e.target.value })}
+                />
+              )}
+            </Field>
+            <ColorField
+              value={values.color}
+              inline={false}
+              onChange={(color) => edit({ color })}
+            />
+          </div>
+        ) : (
+          <ColorField
+            value={values.color}
+            inline
+            onChange={(color) => edit({ color })}
+          />
         )}
 
         <div className={groupClass}>

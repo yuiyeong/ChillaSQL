@@ -1,4 +1,8 @@
-import type { Connection, SslMode } from "../../shared/api/types";
+import type {
+  Connection,
+  ConnectionColor,
+  SslMode,
+} from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
 
 /** form의 입력값. 숫자도 입력 중에는 문자열이다. */
@@ -13,6 +17,7 @@ export interface FormValues {
   tunnel: string;
   /** 초. 비우면 기본값(20초)이다 */
   tunnelTimeout: string;
+  color: ConnectionColor | null;
 }
 
 export function initialValues(original: Connection | null): FormValues {
@@ -27,6 +32,7 @@ export function initialValues(original: Connection | null): FormValues {
       sslrootcert: "",
       tunnel: "",
       tunnelTimeout: "",
+      color: null,
     };
   }
   return {
@@ -40,6 +46,7 @@ export function initialValues(original: Connection | null): FormValues {
     tunnel: original.tunnel ?? "",
     tunnelTimeout:
       original.tunnelTimeout === null ? "" : String(original.tunnelTimeout),
+    color: original.color,
   };
 }
 
@@ -100,7 +107,7 @@ export function toConnection(
           : null,
       tunnel: tunnel === "" ? null : tunnel,
       tunnelTimeout,
-      color: original?.color ?? null,
+      color: values.color,
     },
   };
 }

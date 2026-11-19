@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
@@ -153,6 +153,82 @@ test("수정은 original의 tunnel과 color를 그대로 저장한다", async ()
   await click(saveButton());
 
   expect(saveConnection).toHaveBeenCalledWith(original, null);
+});
+
+const colorGroup = () => screen.getByRole("radiogroup", { name: "color" });
+const swatch = (name: string) =>
+  within(colorGroup()).getByRole("radio", { name });
+
+test("color_is_a_radiogroup_of_five", () => {
+  renderForm(original);
+
+  expect(screen.getByRole("group", { name: "color" })).toBeInTheDocument();
+  const radios = within(colorGroup()).getAllByRole("radio");
+  expect(radios.map((radio) => radio.getAttribute("aria-label"))).toEqual([
+    "green",
+    "yellow",
+    "red",
+    "blue",
+    "purple",
+  ]);
+  expect(
+    radios.filter((radio) => radio.getAttribute("aria-checked") === "true"),
+  ).toEqual([swatch("red")]);
+});
+
+test("clicking_an_unchecked_swatch_picks_it", async () => {
+  renderForm(original);
+
+  await click(swatch("blue"));
+
+  expect(swatch("blue")).toHaveAttribute("aria-checked", "true");
+  expect(swatch("red")).toHaveAttribute("aria-checked", "false");
+});
+
+test("clicking_the_checked_swatch_clears_the_color", async () => {
+  renderForm(original);
+
+  await click(swatch("red"));
+
+  expect(swatch("red")).toHaveAttribute("aria-checked", "false");
+  await click(saveButton());
+  expect(saveConnection).toHaveBeenCalledWith(
+    { ...original, color: null },
+    null,
+  );
+});
+
+test("new_connection_has_no_color", async () => {
+  renderForm();
+
+  for (const radio of within(colorGroup()).getAllByRole("radio")) {
+    expect(radio).toHaveAttribute("aria-checked", "false");
+  }
+  fillNew();
+  await click(saveButton());
+  expect(saveConnection).toHaveBeenCalledWith(
+    expect.objectContaining({ color: null }),
+    null,
+  );
+});
+
+test("saving_sends_the_color", async () => {
+  renderForm();
+  fillNew();
+
+  await click(swatch("purple"));
+  await click(saveButton());
+
+  expect(saveConnection).toHaveBeenCalledWith(
+    expect.objectContaining({ color: "purple" }),
+    null,
+  );
+});
+
+test("a_swatch_is_filled_with_its_connection_color_token", () => {
+  renderForm(original);
+
+  expect(swatch("green").style.background).toBe("var(--color-conn-green)");
 });
 
 test("테스트는 성공과 실패를 문구로 보여 준다", async () => {
