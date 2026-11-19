@@ -26,6 +26,9 @@ import {
   testConnection,
   writeSqlFile,
   cancelTunnel,
+  closeCatalog,
+  loadCatalog,
+  loadTableDetails,
   quitApp,
   restartTunnel,
 } from "./commands";
@@ -74,6 +77,22 @@ test("command 이름과 인자 key를 그대로 보낸다", async () => {
   expect(invokeMock).toHaveBeenLastCalledWith("test_connection", {
     connection: conn,
     password: null,
+  });
+
+  await loadCatalog("local");
+  expect(invokeMock).toHaveBeenLastCalledWith("load_catalog", {
+    connection: "local",
+  });
+
+  await loadTableDetails("local", 16385);
+  expect(invokeMock).toHaveBeenLastCalledWith("load_table_details", {
+    connection: "local",
+    relation: 16385,
+  });
+
+  await closeCatalog("local");
+  expect(invokeMock).toHaveBeenLastCalledWith("close_catalog", {
+    connection: "local",
   });
 
   await openSession("local");

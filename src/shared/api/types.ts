@@ -31,6 +31,54 @@ export interface Session {
   backendPid: number;
 }
 
+export type RelationKind =
+  | "table"
+  | "partitioned_table"
+  | "foreign_table"
+  | "view"
+  | "materialized_view";
+
+export interface CatalogColumn {
+  name: string;
+  /** `format_type`이 만든 이름(`timestamp with time zone` 등) */
+  type: string;
+  primaryKey: boolean;
+}
+
+/** 테이블이나 뷰 하나. 컬럼은 테이블에 정의된 순서다. */
+export interface Relation {
+  oid: number;
+  schema: string;
+  name: string;
+  kind: RelationKind;
+  columns: CatalogColumn[];
+}
+
+/** 접속 하나의 catalog. 목록은 모두 이름 오름차순이다(searchPath는 순서 그대로). */
+export interface Catalog {
+  /** `current_schemas(false)`. 자동완성의 기본 schema는 첫 값이다. */
+  searchPath: string[];
+  schemas: string[];
+  relations: Relation[];
+  functions: { schema: string; name: string }[];
+  /** unreserved가 아닌 keyword. 이름을 따옴표로 감쌀지 정할 때 쓴다. */
+  reservedWords: string[];
+}
+
+export type ConstraintKind =
+  "primary_key" | "foreign_key" | "unique" | "check" | "exclusion";
+
+/** 테이블 하나의 인덱스와 제약조건. 각각 이름 오름차순이다. */
+export interface TableDetails {
+  indexes: {
+    name: string;
+    definition: string;
+    unique: boolean;
+    primary: boolean;
+  }[];
+  constraints: { name: string; kind: ConstraintKind; definition: string }[];
+}
+
 /** 문장의 위치. `start`와 `end`는 JS 문자열의 UTF-16 code unit offset이다. */
 export interface StatementSpan {
   start: number;

@@ -9,10 +9,11 @@ use std::time::Duration;
 
 use chilla_core::application::{App, AppError};
 use chilla_core::domain::{
-    Column, ConnectionProfile, Danger, EndOutcome, EndResult, FileStamp, Password, ProfileError,
-    Project, QueryEvent, QueryId, QueryOutcome, RowBatch, ServerError, SessionId, SessionInfo,
-    SessionState, SqlFile, StatementSpan, TunnelEvent, TunnelFailure, TunnelState, TxEnd, TxMode,
-    TxStatus, WriteMode,
+    Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo, ConstraintKind, Danger,
+    EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, Password, ProfileError, Project,
+    QueryEvent, QueryId, QueryOutcome, Relation, RelationKind, RowBatch, ServerError, SessionId,
+    SessionInfo, SessionState, SqlFile, StatementSpan, TableDetails, TunnelEvent, TunnelFailure,
+    TunnelState, TxEnd, TxMode, TxStatus, WriteMode,
 };
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
@@ -225,6 +226,161 @@ fn utf16_spans(sql: &str, spans: &[StatementSpan]) -> Vec<StatementSpanDto> {
             end: advance_to(span.end),
         })
         .collect()
+}
+
+/// 스키마 트리와 자동완성의 catalog.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogDto {
+    pub search_path: Vec<String>,
+    pub schemas: Vec<String>,
+    pub relations: Vec<RelationDto>,
+    pub functions: Vec<FunctionNameDto>,
+    pub reserved_words: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RelationDto {
+    pub oid: u32,
+    pub schema: String,
+    pub name: String,
+    pub kind: RelationKindDto,
+    pub columns: Vec<CatalogColumnDto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RelationKindDto {
+    Table,
+    PartitionedTable,
+    ForeignTable,
+    View,
+    MaterializedView,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogColumnDto {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub type_name: String,
+    pub primary_key: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FunctionNameDto {
+    pub schema: String,
+    pub name: String,
+}
+
+impl From<Catalog> for CatalogDto {
+    fn from(catalog: Catalog) -> Self {
+        Self {
+            search_path: catalog.search_path,
+            schemas: catalog.schemas,
+            relations: catalog
+                .relations
+                .into_iter()
+                .map(RelationDto::from)
+                .collect(),
+            functions: catalog
+                .functions
+                .into_iter()
+                .map(|FunctionName { schema, name }| FunctionNameDto { schema, name })
+                .collect(),
+            reserved_words: catalog.reserved_words,
+        }
+    }
+}
+
+impl From<Relation> for RelationDto {
+    fn from(relation: Relation) -> Self {
+        Self {
+            oid: relation.oid,
+            schema: relation.schema,
+            name: relation.name,
+            kind: match relation.kind {
+                RelationKind::Table => RelationKindDto::Table,
+                RelationKind::PartitionedTable => RelationKindDto::PartitionedTable,
+                RelationKind::ForeignTable => RelationKindDto::ForeignTable,
+                RelationKind::View => RelationKindDto::View,
+                RelationKind::MaterializedView => RelationKindDto::MaterializedView,
+            },
+            columns: relation
+                .columns
+                .into_iter()
+                .map(|column: CatalogColumn| CatalogColumnDto {
+                    name: column.name,
+                    type_name: column.type_name,
+                    primary_key: column.primary_key,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// 테이블 하나의 인덱스와 제약조건.
+#[derive(Debug, Serialize)]
+pub struct TableDetailsDto {
+    pub indexes: Vec<IndexDto>,
+    pub constraints: Vec<ConstraintDto>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct IndexDto {
+    pub name: String,
+    pub definition: String,
+    pub unique: bool,
+    pub primary: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ConstraintDto {
+    pub name: String,
+    pub kind: ConstraintKindDto,
+    pub definition: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConstraintKindDto {
+    PrimaryKey,
+    ForeignKey,
+    Unique,
+    Check,
+    Exclusion,
+}
+
+impl From<TableDetails> for TableDetailsDto {
+    fn from(details: TableDetails) -> Self {
+        Self {
+            indexes: details
+                .indexes
+                .into_iter()
+                .map(|index: IndexInfo| IndexDto {
+                    name: index.name,
+                    definition: index.definition,
+                    unique: index.unique,
+                    primary: index.primary,
+                })
+                .collect(),
+            constraints: details
+                .constraints
+                .into_iter()
+                .map(|constraint: ConstraintInfo| ConstraintDto {
+                    name: constraint.name,
+                    kind: match constraint.kind {
+                        ConstraintKind::PrimaryKey => ConstraintKindDto::PrimaryKey,
+                        ConstraintKind::ForeignKey => ConstraintKindDto::ForeignKey,
+                        ConstraintKind::Unique => ConstraintKindDto::Unique,
+                        ConstraintKind::Check => ConstraintKindDto::Check,
+                        ConstraintKind::Exclusion => ConstraintKindDto::Exclusion,
+                    },
+                    definition: constraint.definition,
+                })
+                .collect(),
+        }
+    }
 }
 
 /// 실행 전에 확인할 위험. `kind`로 구분한다. `Drop`의 `object`는 SQL keyword("TABLE" 등)다.
@@ -632,6 +788,28 @@ pub async fn open_session(
 }
 
 #[tauri::command]
+pub async fn load_catalog(
+    app: State<'_, CoreApp>,
+    connection: String,
+) -> CommandResult<CatalogDto> {
+    Ok(app.load_catalog(&connection).await?.into())
+}
+
+#[tauri::command]
+pub async fn load_table_details(
+    app: State<'_, CoreApp>,
+    connection: String,
+    relation: u32,
+) -> CommandResult<TableDetailsDto> {
+    Ok(app.load_table_details(&connection, relation).await?.into())
+}
+
+#[tauri::command]
+pub async fn close_catalog(app: State<'_, CoreApp>, connection: String) -> CommandResult<()> {
+    Ok(app.close_catalog(&connection).await?)
+}
+
+#[tauri::command]
 pub async fn session_state(
     app: State<'_, CoreApp>,
     session_id: u64,
@@ -758,6 +936,93 @@ mod tests {
             tunnel_timeout: Some(Duration::from_secs(30)),
             color: Some(ConnectionColor::Red),
         }
+    }
+
+    #[test]
+    fn catalog_dto_uses_camel_case_and_snake_case_kinds() {
+        let catalog = Catalog {
+            search_path: vec!["public".into()],
+            schemas: vec!["public".into()],
+            relations: vec![Relation {
+                oid: 16385,
+                schema: "public".into(),
+                name: "users".into(),
+                kind: RelationKind::MaterializedView,
+                columns: vec![CatalogColumn {
+                    name: "id".into(),
+                    type_name: "bigint".into(),
+                    primary_key: true,
+                }],
+            }],
+            functions: vec![FunctionName {
+                schema: "pg_catalog".into(),
+                name: "now".into(),
+            }],
+            reserved_words: vec!["select".into()],
+        };
+        assert_eq!(
+            serde_json::to_value(CatalogDto::from(catalog)).unwrap(),
+            serde_json::json!({
+                "searchPath": ["public"],
+                "schemas": ["public"],
+                "relations": [{
+                    "oid": 16385,
+                    "schema": "public",
+                    "name": "users",
+                    "kind": "materialized_view",
+                    "columns": [{ "name": "id", "type": "bigint", "primaryKey": true }],
+                }],
+                "functions": [{ "schema": "pg_catalog", "name": "now" }],
+                "reservedWords": ["select"],
+            })
+        );
+    }
+
+    #[test]
+    fn table_details_dto_kinds() {
+        let details = TableDetails {
+            indexes: vec![IndexInfo {
+                name: "users_pkey".into(),
+                definition: "CREATE UNIQUE INDEX …".into(),
+                unique: true,
+                primary: true,
+            }],
+            constraints: [
+                ConstraintKind::PrimaryKey,
+                ConstraintKind::ForeignKey,
+                ConstraintKind::Unique,
+                ConstraintKind::Check,
+                ConstraintKind::Exclusion,
+            ]
+            .into_iter()
+            .map(|kind| ConstraintInfo {
+                name: "c".into(),
+                kind,
+                definition: "d".into(),
+            })
+            .collect(),
+        };
+        let json = serde_json::to_value(TableDetailsDto::from(details)).unwrap();
+        assert_eq!(
+            json["indexes"][0],
+            serde_json::json!({
+                "name": "users_pkey",
+                "definition": "CREATE UNIQUE INDEX …",
+                "unique": true,
+                "primary": true,
+            })
+        );
+        let kinds: Vec<&str> = json["constraints"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|c| c["kind"].as_str().unwrap())
+            .collect();
+        assert_eq!(
+            kinds,
+            ["primary_key", "foreign_key", "unique", "check", "exclusion"]
+        );
+        assert_eq!(json["constraints"][0]["definition"], "d");
     }
 
     #[test]

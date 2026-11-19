@@ -77,8 +77,8 @@ mod tests {
     use std::path::PathBuf;
 
     use chilla_core::application::{
-        CancelError, ConnectError, FileError, PasswordStoreError, ProjectError, SplitError,
-        TunnelError,
+        CancelError, ConnectError, FileError, PasswordStoreError, ProjectError, QueryError,
+        SplitError, TunnelError,
     };
     use chilla_core::domain::{ProfileError, QueryId, SessionId, SqlPathError, TunnelFailure};
 
@@ -96,6 +96,12 @@ mod tests {
         let mut errors: Vec<(AppError, &'static str)> = vec![
             (AppError::NoProject, "no_project"),
             (AppError::ProjectChanged, "project_changed"),
+            (
+                AppError::Catalog(QueryError::ConnectionLost {
+                    message: message.clone(),
+                }),
+                "catalog_failed",
+            ),
             (
                 AppError::UnknownConnection { name: "x".into() },
                 "unknown_connection",

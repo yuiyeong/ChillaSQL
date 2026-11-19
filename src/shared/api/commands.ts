@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { toCommandError } from "./errors";
 import type {
+  Catalog,
   Connection,
   Danger,
   EndResult,
@@ -9,6 +10,7 @@ import type {
   Session,
   SqlFile,
   StatementSpan,
+  TableDetails,
   TxEnd,
   TxMode,
   WriteMode,
@@ -60,6 +62,23 @@ export function openSession(connection: string): Promise<Session> {
 
 export function closeSession(sessionId: number): Promise<void> {
   return call("close_session", { sessionId });
+}
+
+/** 그 접속의 catalog. Rust가 접속마다 따로 연 연결로 읽는다(터널을 함께 씀). */
+export function loadCatalog(connection: string): Promise<Catalog> {
+  return call("load_catalog", { connection });
+}
+
+export function loadTableDetails(
+  connection: string,
+  relation: number,
+): Promise<TableDetails> {
+  return call("load_table_details", { connection, relation });
+}
+
+/** 그 접속의 catalog 연결을 닫는다. 그 접속을 쓰는 탭이 없어졌을 때 부른다. */
+export function closeCatalog(connection: string): Promise<void> {
+  return call("close_catalog", { connection });
 }
 
 export function splitStatements(sql: string): Promise<StatementSpan[]> {
