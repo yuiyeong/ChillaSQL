@@ -75,15 +75,16 @@ pub(crate) struct TunnelLease {
 /// 접속 테스트가 띄운 터널. 공유하지 않는다.
 #[must_use]
 pub(crate) struct PrivateTunnel {
-    handle: Option<Handle>,
+    id: u64,
+    handle: Handle,
+    table: Arc<Mutex<Table>>,
 }
 
 impl PrivateTunnel {
-    /// 터널을 끄고 꺼질 때까지 기다린다. 앱이 띄우지 않은 터널이면 아무것도 하지 않는다.
+    /// 터널을 끄고 꺼질 때까지 기다린다. 앱이 띄우지 않은 터널이면 프로세스는 없고 task만 끝난다.
     pub(crate) async fn stop(self) {
-        if let Some(handle) = self.handle {
-            handle.stop().await;
-        }
+        self.handle.stop().await;
+        self.table.lock().unwrap().privates.remove(&self.id);
     }
 }
 
@@ -230,14 +231,12 @@ impl<R: TunnelRunner> Tunnels<R> {
         if restart {
             handle.send(Command::Start);
         }
-        let outcome = wait_settled(&mut state, restart).await;
-        match outcome {
-            TunnelState::Ready | TunnelState::External => Ok(lease),
-            TunnelState::Failed(failure) => {
+        match wait_settled(&mut state, restart).await {
+            Ok(()) => Ok(lease),
+            Err(failure) => {
                 self.release(lease).await;
                 Err(tunnel_error(target, failure))
             }
-            _ => unreachable!("wait_settled는 settled 상태만 돌려준다"),
         }
     }
 
@@ -267,7 +266,7 @@ impl<R: TunnelRunner> Tunnels<R> {
     }
 
     /// 시작 중이면 멈추고 기다리던 acquire를 모두 Cancelled로 끝낸다.
-    pub(crate) async fn cancel(&self, connection: &str) {
+    pub(crate) fn cancel(&self, connection: &str) {
         if let Some(handle) =
             self.handle_in(connection, |s| matches!(s, TunnelState::Starting { .. }))
         {
@@ -276,7 +275,7 @@ impl<R: TunnelRunner> Tunnels<R> {
     }
 
     /// 멈춘(Failed) 터널을 처음부터 다시 시작한다. lease가 없거나 멈추지 않았으면 아무것도 하지 않는다.
-    pub(crate) async fn restart(&self, connection: &str) {
+    pub(crate) fn restart(&self, connection: &str) {
         if let Some(handle) = self.handle_in(connection, |s| matches!(s, TunnelState::Failed(_))) {
             handle.send(Command::Start);
         }
@@ -303,17 +302,17 @@ impl<R: TunnelRunner> Tunnels<R> {
             (id, handle)
         };
         let mut state = handle.state.clone();
-        let outcome = wait_settled(&mut state, false).await;
-        match outcome {
-            TunnelState::Ready | TunnelState::External => Ok(PrivateTunnel {
-                handle: Some(handle),
-            }),
-            TunnelState::Failed(failure) => {
-                handle.stop().await;
-                self.table.lock().unwrap().privates.remove(&id);
+        let tunnel = PrivateTunnel {
+            id,
+            handle,
+            table: self.table.clone(),
+        };
+        match wait_settled(&mut state, false).await {
+            Ok(()) => Ok(tunnel),
+            Err(failure) => {
+                tunnel.stop().await;
                 Err(tunnel_error(target, failure))
             }
-            _ => unreachable!("wait_settled는 settled 상태만 돌려준다"),
         }
     }
 
@@ -356,7 +355,6 @@ impl<R: TunnelRunner> Tunnels<R> {
             }),
             state: state_tx,
             commands: receiver,
-            last_published: None,
         };
         tokio::spawn(async move {
             supervisor.run().await;
@@ -378,24 +376,26 @@ fn tunnel_error(target: &TunnelTarget, failure: TunnelFailure) -> TunnelError {
     }
 }
 
-/// settled 상태를 기다린다. `fresh`면 지금 값은 보지 않고 바뀐 뒤의 값만 본다.
-/// supervisor가 끝나 버렸으면 Cancelled다.
-async fn wait_settled(state: &mut watch::Receiver<TunnelState>, fresh: bool) -> TunnelState {
-    if !fresh && settled(&state.borrow_and_update()) {
-        return state.borrow().clone();
+/// 터널이 열릴(Ready, External) 때까지 기다린다. 멈추면 그 이유다. `fresh`면 지금 값은 보지 않고
+/// 바뀐 뒤의 값만 본다. supervisor가 끝나 버렸으면 Cancelled다.
+async fn wait_settled(
+    state: &mut watch::Receiver<TunnelState>,
+    fresh: bool,
+) -> Result<(), TunnelFailure> {
+    let outcome = |state: &TunnelState| match state {
+        TunnelState::Ready | TunnelState::External => Some(Ok(())),
+        TunnelState::Failed(failure) => Some(Err(failure.clone())),
+        _ => None,
+    };
+    if !fresh && let Some(result) = outcome(&state.borrow_and_update()) {
+        return result;
     }
     loop {
         if state.changed().await.is_err() {
-            let last = state.borrow().clone();
-            return if settled(&last) {
-                last
-            } else {
-                TunnelState::Failed(TunnelFailure::Cancelled)
-            };
+            return outcome(&state.borrow()).unwrap_or(Err(TunnelFailure::Cancelled));
         }
-        let current = state.borrow_and_update().clone();
-        if settled(&current) {
-            return current;
+        if let Some(result) = outcome(&state.borrow_and_update()) {
+            return result;
         }
     }
 }
@@ -414,8 +414,6 @@ struct Supervisor<R: TunnelRunner> {
     shared: Option<Shared>,
     state: watch::Sender<TunnelState>,
     commands: mpsc::UnboundedReceiver<Command>,
-    /// 마지막으로 sink에 보낸 상태.
-    last_published: Option<TunnelState>,
 }
 
 /// 시작 한 번의 결과.
@@ -588,27 +586,27 @@ impl<R: TunnelRunner> Supervisor<R> {
     }
 
     fn publish(&mut self, state: TunnelState) {
-        self.state.send_replace(state.clone());
         if let Some(shared) = &self.shared {
             (shared.sink)(TunnelEvent {
                 connection: shared.connection.clone(),
                 state: state.clone(),
             });
         }
-        self.last_published = Some(state);
+        self.state.send_replace(state);
     }
 
     /// 프로세스를 다 정리한 뒤 부른다. 표에서 이 터널을 지우고 Stopped를 알린다. 실패로 멈춘
     /// 터널이면 그 실패를 화면에 남기려고 Stopped를 보내지 않는다.
     fn finish(mut self) {
+        // 마지막으로 알린 상태가 취소가 아닌 실패였는가.
+        let failed = matches!(
+            &*self.state.borrow(),
+            TunnelState::Failed(failure) if *failure != TunnelFailure::Cancelled
+        );
         if !settled(&self.state.borrow()) {
             self.state
                 .send_replace(TunnelState::Failed(TunnelFailure::Cancelled));
         }
-        let failed = matches!(
-            &self.last_published,
-            Some(TunnelState::Failed(failure)) if *failure != TunnelFailure::Cancelled
-        );
         if let Some(shared) = self.shared.take() {
             {
                 let mut table = shared.table.lock().unwrap();

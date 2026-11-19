@@ -6,13 +6,13 @@ vi.mock("../../shared/api/clipboard");
 vi.mock("../workspace/commands", () => ({
   runAgain: vi.fn(),
   cancelRun: vi.fn(),
+  retryTunnel: vi.fn(),
 }));
 
 import { copyText } from "../../shared/api/clipboard";
 import { stubLayout } from "../../test/layout";
 import type { Cell, Outcome } from "../../shared/api/types";
-import { cancelRun, runAgain } from "../workspace/commands";
-import { restartTunnel } from "../../shared/api/commands";
+import { cancelRun, retryTunnel, runAgain } from "../workspace/commands";
 import { useTunnels } from "../connections/tunnelsStore";
 import { connection, openProjectWith } from "../../test/fixtures";
 import type { TunnelState } from "../../shared/api/types";
@@ -668,7 +668,7 @@ describe("터널", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("e3")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(restartTunnel).toHaveBeenCalledWith("staging");
+    expect(retryTunnel).toHaveBeenCalledWith("staging");
   });
 
   test("Reconnected 알림은 Close로 닫는다", () => {

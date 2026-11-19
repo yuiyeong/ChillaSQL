@@ -1,29 +1,11 @@
-import type { ReactNode } from "react";
 import { t } from "../../shared/i18n/t";
 import { Button } from "../../shared/ui/Button";
 import { ErrorIcon, ReconnectIcon } from "../../shared/ui/icons";
+import { CommandOutput, Pre } from "../connections/CommandOutput";
 import { useTunnelTarget } from "../connections/TunnelStatus";
-import { useProject } from "../project/projectStore";
-import type { Rejection } from "./runReducer";
-
-function Pre({ children }: { children: ReactNode }) {
-  return (
-    <pre className="bg-bg-1 border-line-1 text-small m-0 rounded-[8px] border px-3 py-2.5 font-mono leading-relaxed whitespace-pre-wrap">
-      {children}
-    </pre>
-  );
-}
-
-function Output({ text }: { text: string }) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <span className="text-label text-fg-2 font-semibold tracking-[0.04em]">
-        {t("tunnel.output")}
-      </span>
-      <Pre>{text}</Pre>
-    </div>
-  );
-}
+import { useConnection } from "../project/projectStore";
+import { MessageBlock } from "./MessageBlock";
+import type { Rejection, RunRequest } from "./runReducer";
 
 /** 터널이 열리기를 기다리는 동안의 결과 panel. 실행한 명령과 Cancel. */
 export function TunnelStarting({
@@ -34,10 +16,7 @@ export function TunnelStarting({
   onCancel(): void;
 }) {
   const target = useTunnelTarget(connection);
-  const command = useProject(
-    (s) =>
-      s.project?.connections.find((c) => c.name === connection)?.tunnel ?? null,
-  );
+  const command = useConnection(connection)?.tunnel ?? null;
   return (
     <div className="flex flex-col gap-2.5 p-4">
       <p className="text-body">
@@ -54,25 +33,23 @@ export function TunnelStarting({
 /** 터널을 열지 못한 실행. message, 명령의 stderr, Try again과 Edit connection. */
 export function TunnelFailed({
   rejection,
+  retry,
   onRetry,
   onEditConnection,
 }: {
   rejection: Rejection;
+  retry: RunRequest;
   onRetry(): void;
   onEditConnection?(name: string): void;
 }) {
-  const { retry, output } = rejection;
   return (
-    <div className="flex gap-3 p-4">
-      <ErrorIcon size={16} className="text-fg mt-px shrink-0" />
+    <MessageBlock icon={ErrorIcon}>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
         <p className="text-body">{rejection.title}</p>
-        {output !== undefined && output !== "" && <Output text={output} />}
+        <CommandOutput text={rejection.output} />
         <div className="flex gap-2">
-          {retry !== undefined && (
-            <Button onClick={onRetry}>{t("tunnel.tryAgain")}</Button>
-          )}
-          {retry !== undefined && onEditConnection !== undefined && (
+          <Button onClick={onRetry}>{t("tunnel.tryAgain")}</Button>
+          {onEditConnection !== undefined && (
             <Button
               variant="ghost"
               onClick={() => onEditConnection(retry.connection)}
@@ -82,7 +59,7 @@ export function TunnelFailed({
           )}
         </div>
       </div>
-    </div>
+    </MessageBlock>
   );
 }
 
@@ -111,7 +88,7 @@ export function TunnelGaveUp({
       <ErrorIcon size={16} className="text-fg mt-px shrink-0" />
       <div className="flex min-w-0 flex-1 flex-col gap-2">
         <span className="text-small text-fg-2">{t("tunnel.gaveUp")}</span>
-        {output !== null && output !== "" && <Output text={output} />}
+        <CommandOutput text={output} />
         <div>
           <Button onClick={onRetry}>{t("tunnel.tryAgain")}</Button>
         </div>

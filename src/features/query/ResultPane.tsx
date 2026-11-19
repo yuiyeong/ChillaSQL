@@ -1,7 +1,6 @@
 import {
   memo,
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
@@ -22,10 +21,11 @@ import {
   WarningIcon,
 } from "../../shared/ui/icons";
 import { Kbd } from "../../shared/ui/Kbd";
+import { useNow } from "../../shared/ui/useNow";
 import { Toast, useToast } from "../../shared/ui/Toast";
-import { restartTunnel } from "../../shared/api/commands";
-import { useTunnels } from "../connections/tunnelsStore";
-import { cancelRun, runAgain } from "../workspace/commands";
+import { useTunnel } from "../connections/tunnelsStore";
+import { cancelRun, retryTunnel, runAgain } from "../workspace/commands";
+import { MessageBlock } from "./MessageBlock";
 import { shortcutLabel } from "../workspace/shortcuts";
 import {
   affectedText,
@@ -67,9 +67,7 @@ export const ResultPane = memo(function ResultPane({
   const runNotice = useRuns((s) =>
     tabId === null ? undefined : s.notices[tabId],
   );
-  const tunnel = useTunnels((s) =>
-    connection === null ? undefined : s.tunnels[connection],
-  );
+  const tunnel = useTunnel(connection);
   const toast = useToast();
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
@@ -247,15 +245,15 @@ export const ResultPane = memo(function ResultPane({
     }
     case "rejected": {
       const { rejection } = state;
-      if (rejection.output !== undefined || rejection.retry !== undefined) {
+      const { retry } = rejection;
+      if (retry !== undefined) {
         body = (
           <TunnelFailed
             rejection={rejection}
+            retry={retry}
             onRetry={() => {
-              const { retry } = rejection;
-              if (tabId !== null && retry !== undefined) {
+              if (tabId !== null)
                 void useRuns.getState().run(tabId, () => retry);
-              }
             }}
             onEditConnection={onEditConnection}
           />
@@ -293,13 +291,7 @@ export const ResultPane = memo(function ResultPane({
         connection !== null && (
           <TunnelGaveUp
             output={"output" in tunnelState ? tunnelState.output : null}
-            onRetry={async () => {
-              try {
-                await restartTunnel(connection);
-              } catch {
-                // 그 사이 프로젝트가 바뀌었다. 터널 상태는 event로 온다.
-              }
-            }}
+            onRetry={() => void retryTunnel(connection)}
           />
         )}
     </>
@@ -376,11 +368,7 @@ function Meta({ children }: { children: ReactNode }) {
 
 /** 실행 중 경과 시간. 100ms마다 다시 잰다. */
 function LiveMeta({ startedAt }: { startedAt: number }) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), LIVE_MS);
-    return () => clearInterval(timer);
-  }, []);
+  const now = useNow(LIVE_MS);
   return (
     <Meta>
       {t("result.running", {
@@ -433,22 +421,6 @@ function Notice({
       <div className="text-small text-fg-2 flex flex-col gap-1.5">
         {children}
       </div>
-    </div>
-  );
-}
-
-/** 16px icon과 그 옆의 내용. 오류와 실행하지 못한 이유에 쓴다. */
-function MessageBlock({
-  icon: Icon,
-  children,
-}: {
-  icon: typeof ErrorIcon;
-  children: ReactNode;
-}) {
-  return (
-    <div className="flex gap-3 p-4">
-      <Icon size={16} className="text-fg mt-px shrink-0" />
-      {children}
     </div>
   );
 }

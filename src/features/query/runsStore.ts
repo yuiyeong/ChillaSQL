@@ -22,8 +22,6 @@ import {
   type RunState,
 } from "./runReducer";
 
-export type { RunRequest };
-
 /** 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 Rejection을 돌려준다. */
 export type Prepare = () =>
   Promise<RunRequest | Rejection> | RunRequest | Rejection;
@@ -157,16 +155,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     if (previous === undefined) {
       opened = open();
     } else if (previous.stale) {
-      opened = open().then(
-        (id) => {
-          void closeSlot(previous);
-          return id;
-        },
-        (error: unknown) => {
-          void closeSlot(previous);
-          throw error;
-        },
-      );
+      opened = open().finally(() => void closeSlot(previous));
     } else {
       opened = closeSlot(previous).then(open);
     }

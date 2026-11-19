@@ -41,18 +41,17 @@ export const useTunnels = create<TunnelsState>()((set) => ({
 
   apply({ connection, state }, now = Date.now()) {
     set((s) => {
+      const previous = s.tunnels[connection];
       const tunnels = { ...s.tunnels };
       if (state.status === "stopped") {
+        if (previous === undefined) return s;
         delete tunnels[connection];
         return { tunnels };
       }
-      const previous = s.tunnels[connection];
+      if (previous !== undefined && sameState(previous.state, state)) return s;
       tunnels[connection] = {
         state,
-        since:
-          previous !== undefined && sameState(previous.state, state)
-            ? previous.since
-            : now,
+        since: now,
         afterRestart: afterRestart(state, previous),
       };
       return { tunnels };
@@ -63,3 +62,20 @@ export const useTunnels = create<TunnelsState>()((set) => ({
     set({ tunnels: {} });
   },
 }));
+
+/** 그 접속의 터널 상태. 접속이 없거나 터널이 없으면 undefined다. */
+export function useTunnel(connection: string | null): TunnelView | undefined {
+  return useTunnels((s) =>
+    connection === null ? undefined : s.tunnels[connection],
+  );
+}
+
+/** 그 접속의 터널이 시작 중(처음 시작이나 다시 실행)인가. */
+export function isTunnelStarting(
+  tunnels: Record<string, TunnelView>,
+  connection: string | null,
+): boolean {
+  return (
+    connection !== null && tunnels[connection]?.state.status === "starting"
+  );
+}

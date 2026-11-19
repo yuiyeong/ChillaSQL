@@ -201,6 +201,9 @@
 | 2026-11-19 | M5 | 앱이 비정상 종료하면 터널이 남을 수 있음. 다음에는 그 포트를 `External`로 봄 | 정상 종료(`Cmd+Q`, 창 닫기)만 터널을 끔 |
 | 2026-11-19 | M5 | 접속 sheet는 캔버스 배치에서 `color`(M6), `read_only`와 `statement_timeout`(M8)을 뺌. 창 위쪽에 붙는 600px sheet. 테스트 성공은 `Connected · {ms} ms`, server version은 M8 | 각 칸은 그 기능의 마일스톤에서 더함 |
 | 2026-11-19 | M5 | `establish`와 `PgCancel`의 stream 여는 분기는 묶지 않음 | 터널은 local port를 열 뿐이라 여는 방법이 바뀌지 않음 |
+| 2026-11-19 | M5 | 터널이 다시 시작될 때 세션을 바꾸는 판단(stale 표시, 새 세션을 먼저 열기)은 화면에 둠. Rust가 세션을 `Lost`로 표시하거나 `reopen_session`을 두는 안은 쓰지 않음 | 계획에서 정한 구조이고 바꾸면 App과 session actor에 상태가 늘어남. 화면이 event 하나를 놓치면 다음 실행이 `connection_lost`로 끝나고 그다음 실행이 새 세션을 엶(simplify에서 고치지 않은 지적) |
+| 2026-11-19 | M5 | 재실행 뒤 멈춤(`afterRestart`)은 화면이 event 순서로 가림. Rust 상태에 `GaveUp`을 더하지 않음 | event는 한 channel로 순서대로 오고, 바꾸면 DTO와 화면 type이 함께 바뀜(simplify에서 고치지 않은 지적) |
+| 2026-11-19 | M5 | 세션을 닫을 때 터널이 꺼질 때까지 기다림(`close_session`이 늦어질 수 있음) | DB disconnect 뒤 터널 종료 순서와 "닫힌 뒤 프로세스가 남지 않음"을 지키는 가장 단순한 방법. 키체인 읽기와 터널 시작을 동시에 하는 것도 하지 않음(simplify에서 고치지 않은 지적) |
 | 2026-11-19 | M5 | 기획서, 마일스톤, 계획, 디자인 사본, test에 있던 실제 터널 명령과 서비스·프로젝트 이름을 지어낸 예시(`ssh -N -L 25432:db.internal:5432 bastion`, `app`, `billing`)로 바꿈 | 실제 환경 정보가 public 저장소에 남지 않게 함(사용자 지시). git history에는 남아 있음 |
 
 ## 작업 로그
@@ -209,6 +212,7 @@
 
 ### 2026-11-19
 
+- M5 simplify: 4개 관점(reuse, simplification, efficiency, altitude) 검토의 지적 가운데 동작을 바꾸지 않는 것을 고침. Rust는 `wait_settled`가 `Result`를 돌려주고, `last_published`를 지우고, `PrivateTunnel`이 끝날 때 표에서 빠지고, `cancel`/`restart`를 동기 함수로 바꿈. 화면은 `useNow`, `MessageBlock`, `CommandOutput`/`Pre`, `useConnection`, `useTunnel`, `isTunnelStarting`을 함께 쓰게 하고, 같은 상태 event에서 store를 바꾸지 않고, 다시 실행 중에는 초를 세는 timer를 띄우지 않음. 고치지 않은 것은 결정 기록에 남김
 - M5 Task 2~10: `tunnel_timeout`, `ShellTunnelRunner`(login shell, process group과 자손 tree 끄기, 기억한 자손의 종료를 끊김으로 봄), `Tunnels`(공유, 재실행 3회, 취소, 모두 끄기, 접속 테스트용 private 터널), 세션·접속 테스트·앱 종료와 연결, Tauri event `tunnel`과 `cancel_tunnel`/`restart_tunnel`, forwarder로 실제 프로세스 통합 test, 화면의 터널 store와 stale 세션 바꾸기, 캔버스 배치의 접속 sheet, toolbar·탭·결과 panel의 터널 상태와 Reconnected banner
 - 문서, 디자인 사본, test, M1 계획의 실제 터널 명령과 서비스·프로젝트 이름을 지어낸 예시로 바꿈(사용자 지시). git history에는 남아 있음
 - M5 Task 11: 실제 터널로 앱에서 7가지를 확인함(계획 파일의 "Task 11 실행에서 달라진 것"). 확인용 프로젝트는 scratchpad에 두었고 지웠다. 그 프로젝트의 접속 비밀번호가 키체인에 남았을 수 있음(service `com.yuiyeong.chillasql`, account가 scratchpad 경로인 항목)

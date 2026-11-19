@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { TunnelChipStatus } from "../connections/TunnelStatus";
-import { useTunnels } from "../connections/tunnelsStore";
+import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { connectionTarget } from "../connections/connectionTarget";
 import { useEditorStatus } from "../editor/editorStatus";
 import { useTabs } from "../editor/tabsStore";
@@ -51,10 +51,8 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
   const hasSelection = useEditorStatus(
     (s) => s.tabId === tabId && s.hasSelection,
   );
-  const tunnelStarting = useTunnels(
-    (s) =>
-      tab?.connection != null &&
-      s.tunnels[tab.connection]?.state.status === "starting",
+  const tunnelStarting = useTunnels((s) =>
+    isTunnelStarting(s.tunnels, tab?.connection ?? null),
   );
   const [connectionMenu, setConnectionMenu] = useState(false);
   const chipRef = useRef<HTMLButtonElement>(null);

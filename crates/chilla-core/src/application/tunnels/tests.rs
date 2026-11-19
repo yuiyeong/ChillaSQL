@@ -317,12 +317,12 @@ async fn restart_starts_a_failed_tunnel_again() {
     let lease = gave_up(&f).await;
     let before = f.states().len();
 
-    f.tunnels.restart(NAME).await;
+    f.tunnels.restart(NAME);
     sleep(Duration::from_secs(1)).await;
     assert_eq!(f.states()[before..], [starting(0), TunnelState::Ready]);
 
     // 열려 있는 터널은 다시 시작하지 않는다.
-    f.tunnels.restart(NAME).await;
+    f.tunnels.restart(NAME);
     sleep(Duration::from_secs(1)).await;
     assert_eq!(f.states().len(), before + 2);
     f.tunnels.release(lease).await;
@@ -336,7 +336,7 @@ async fn cancel_fails_waiters_with_cancelled() {
     let b = f.acquire_later("tunnel");
     sleep(Duration::from_secs(1)).await;
 
-    f.tunnels.cancel(NAME).await;
+    f.tunnels.cancel(NAME);
 
     assert_eq!(failure(a.await.unwrap()), TunnelFailure::Cancelled);
     assert_eq!(failure(b.await.unwrap()), TunnelFailure::Cancelled);

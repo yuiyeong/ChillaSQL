@@ -11,8 +11,8 @@ import {
 } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
 import type { QueryEvent, Session } from "../../shared/api/types";
-import type { Rejection } from "./runReducer";
-import { useRuns, type Prepare, type RunRequest } from "./runsStore";
+import type { Rejection, RunRequest } from "./runReducer";
+import { useRuns, type Prepare } from "./runsStore";
 import { deferred } from "../../test/deferred";
 
 function session(id: number, connection = "local"): Session {

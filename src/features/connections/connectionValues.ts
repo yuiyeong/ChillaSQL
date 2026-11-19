@@ -81,12 +81,8 @@ export function toConnection(
   let tunnelTimeout: number | null = null;
   const timeoutText = values.tunnelTimeout.trim();
   if (tunnel !== "" && timeoutText !== "") {
-    tunnelTimeout = /^\d+$/.test(timeoutText) ? Number(timeoutText) : NaN;
-    if (
-      !Number.isInteger(tunnelTimeout) ||
-      tunnelTimeout < 1 ||
-      tunnelTimeout > MAX_TUNNEL_TIMEOUT
-    ) {
+    tunnelTimeout = /^\d+$/.test(timeoutText) ? Number(timeoutText) : 0;
+    if (tunnelTimeout < 1 || tunnelTimeout > MAX_TUNNEL_TIMEOUT) {
       return { error: t("connectionForm.tunnelTimeoutRange") };
     }
   }

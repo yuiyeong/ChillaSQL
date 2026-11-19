@@ -5,7 +5,7 @@ import {
   openProject,
 } from "../../shared/api/commands";
 import { isCommandError, messageOf } from "../../shared/api/errors";
-import type { Project } from "../../shared/api/types";
+import type { Connection, Project } from "../../shared/api/types";
 
 export const LAST_PROJECT_KEY = "chilla.lastProjectDir";
 
@@ -129,3 +129,12 @@ export const useProject = create<ProjectState>()((set, get) => {
     },
   };
 });
+
+/** 열린 프로젝트의 그 이름의 접속. 없으면 undefined다. */
+export function useConnection(name: string | null): Connection | undefined {
+  return useProject((s) =>
+    name === null
+      ? undefined
+      : s.project?.connections.find((c) => c.name === name),
+  );
+}

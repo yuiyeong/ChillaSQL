@@ -1,16 +1,19 @@
-import { cancelTunnel, splitStatements } from "../../shared/api/commands";
+import {
+  cancelTunnel,
+  restartTunnel,
+  splitStatements,
+} from "../../shared/api/commands";
 import { confirm, pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import type { Project } from "../../shared/api/types";
 import { targetChanged } from "../connections/connectionValues";
-import { useTunnels } from "../connections/tunnelsStore";
+import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { documentSelection, documentText } from "../editor/documents";
 import { saveTab } from "../editor/saveTab";
 import { lineColumn, statementAt } from "../editor/statementAt";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
-import type { Origin, Rejection } from "../query/runReducer";
-import type { RunRequest } from "../query/runReducer";
+import type { Origin, Rejection, RunRequest } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
 import { t, tc } from "../../shared/i18n/t";
 
@@ -119,12 +122,10 @@ export async function execute(command: CommandId): Promise<void> {
 export async function cancelRun(tabId: string): Promise<void> {
   const connection = findTab(tabId)?.connection ?? null;
   const connecting = useRuns.getState().runs[tabId]?.status === "connecting";
-  const tunnel =
-    connection === null ? undefined : useTunnels.getState().tunnels[connection];
   if (
     connecting &&
     connection !== null &&
-    tunnel?.state.status === "starting"
+    isTunnelStarting(useTunnels.getState().tunnels, connection)
   ) {
     try {
       await cancelTunnel(connection);
@@ -134,6 +135,15 @@ export async function cancelRun(tabId: string): Promise<void> {
     return;
   }
   return useRuns.getState().cancel(tabId);
+}
+
+/** 다시 실행하다 멈춘 그 접속의 터널을 처음부터 다시 시작한다. */
+export async function retryTunnel(connection: string): Promise<void> {
+  try {
+    await restartTunnel(connection);
+  } catch {
+    // 그 사이 프로젝트가 바뀌었다. 터널 상태는 event로 온다.
+  }
 }
 
 /** 그 탭의 결과에 쓴 SQL을 탭의 지금 접속으로 다시 실행한다. 결과가 없으면 아무것도 하지 않는다. */

@@ -16,6 +16,7 @@ import {
   LockIcon,
 } from "../../shared/ui/icons";
 import { noTextCorrection } from "../../shared/ui/noTextCorrection";
+import { Pre } from "./CommandOutput";
 import {
   initialValues,
   targetChanged,
@@ -24,8 +25,11 @@ import {
 } from "./connectionValues";
 import { t } from "../../shared/i18n/t";
 
-const inputClass =
-  "border-line-2 bg-bg-0 text-fg placeholder:text-fg-3 focus-visible:outline-accent rounded-control text-small h-8 w-full border px-2.5 font-mono focus-visible:outline-2 focus-visible:-outline-offset-1 disabled:text-fg-3 disabled:opacity-60";
+/** 입력 칸과 textarea가 같이 쓰는 모양. */
+const fieldClass =
+  "border-line-2 bg-bg-0 text-fg placeholder:text-fg-3 focus-visible:outline-accent rounded-control text-small w-full border px-2.5 font-mono focus-visible:outline-2 focus-visible:-outline-offset-1 disabled:text-fg-3 disabled:opacity-60";
+const inputClass = `${fieldClass} h-8`;
+const textareaClass = `${fieldClass} resize-none py-2 leading-normal`;
 
 const groupClass = "border-line-1 flex flex-col gap-2.5 border-t pt-3.5";
 
@@ -313,7 +317,7 @@ export function ConnectionForm({
               <textarea
                 id={id}
                 aria-describedby={describedBy}
-                className="border-line-2 bg-bg-0 text-fg placeholder:text-fg-3 focus-visible:outline-accent rounded-control text-small w-full resize-none border px-2.5 py-2 font-mono leading-normal focus-visible:outline-2 focus-visible:-outline-offset-1"
+                className={textareaClass}
                 {...noTextCorrection}
                 rows={hasTunnel ? 2 : 1}
                 placeholder={t("connectionForm.tunnelPlaceholder")}
@@ -414,9 +418,7 @@ export function ConnectionForm({
               <span>{notice.text}</span>
             </span>
             {notice.output !== null && notice.output !== "" && (
-              <pre className="bg-bg-1 text-small m-0 rounded-[6px] px-2.5 py-2 font-mono whitespace-pre-wrap">
-                {notice.output}
-              </pre>
+              <Pre>{notice.output}</Pre>
             )}
           </div>
         ))}

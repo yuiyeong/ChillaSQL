@@ -363,14 +363,14 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     /// 그 접속의 터널이 시작 중이면 멈춘다. 기다리던 세션 열기는 `Tunnel(Cancelled)`로 끝난다.
     pub async fn cancel_tunnel(&self, connection: &str) -> Result<(), AppError> {
         self.project_dir().await?;
-        self.tunnels.cancel(connection).await;
+        self.tunnels.cancel(connection);
         Ok(())
     }
 
     /// 다시 실행하다 멈춘 그 접속의 터널을 처음부터 다시 시작한다.
     pub async fn restart_tunnel(&self, connection: &str) -> Result<(), AppError> {
         self.project_dir().await?;
-        self.tunnels.restart(connection).await;
+        self.tunnels.restart(connection);
         Ok(())
     }
 
@@ -446,18 +446,14 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     /// 연결이 이미 끊긴(`Lost`) 세션도 정상으로 닫힌다. DB 연결을 닫은 뒤 터널을 놓는다.
     pub async fn close_session(&self, id: SessionId) -> Result<(), AppError> {
         let entry = self.state.lock().await.sessions.remove(&id);
-        self.close_entry(entry.ok_or(AppError::UnknownSession { id })?)
-            .await;
+        let entry = entry.ok_or(AppError::UnknownSession { id })?;
+        close_entry(entry, self.tunnels.clone()).await;
         Ok(())
     }
 
     pub async fn close_all_sessions(&self) {
         let sessions = std::mem::take(&mut self.state.lock().await.sessions);
         self.close_all(sessions).await;
-    }
-
-    async fn close_entry(&self, entry: SessionEntry) {
-        close_entry(entry, self.tunnels.clone()).await;
     }
 
     /// 세션들을 한꺼번에 닫는다. 하나가 오래 걸려도 나머지가 기다리지 않는다.
