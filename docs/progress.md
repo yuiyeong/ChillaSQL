@@ -4,10 +4,10 @@
 
 ## 지금
 
-- **진행 중**: M6 트랜잭션과 안전장치([M6](plans/M6-transaction-safety.md))의 Task 1~15, simplify, code-review를 끝냄(2026-11-19). branch를 main에 합치는 것만 남음. 진행 기록은 `.superpowers/sdd/M6-transaction-safety/`(git에 올리지 않음)
-- **작업 위치**: branch `m6-transactions`(main에서 2026-11-19에 만듦). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
+- **진행 중**: 없음. M6 트랜잭션과 안전장치를 끝내고 main에 합침(2026-11-20, [M6](plans/M6-transaction-safety.md)). 다음은 M7 스키마 트리와 자동완성
+- **작업 위치**: main. branch `m6-transactions`를 2026-11-20에 fast-forward로 합치고 지움. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 사용자 확인을 받아 branch `m6-transactions`를 main에 합치기 → M7 계획. 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: M7 계획(`superpowers:writing-plans`, `docs/plans/M7-<name>.md`). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -247,6 +247,7 @@
 
 ### 2026-11-20
 
+- branch `m6-transactions`를 main에 fast-forward로 합치고 branch를 지움
 - M6 SAVEPOINT 방식 앱 확인(`.app`, `b6c2589`, local test DB, Manual 모드): (1) `INSERT` → 받다 만 `SELECT * FROM big_table` → 다음 `INSERT`가 약 0.9초에 끝나고(전에는 버리기에 약 4.3초) `Open · 2 statements`, (2) 받다 만 `UPDATE m6_t SET n = n + 1000000 RETURNING n`(2002행) 뒤 `SELECT max(n)`이 2000으로 되돌려졌고 앞 `INSERT`는 남음, (3) 실행 중 `pg_sleep(5)`를 Cancel하면 `Cancelled`이고 트랜잭션은 `Open`, 앞 문장 남음, (4) 받다 만 결과가 있는 채로 Commit(`Opt+Shift+Cmd+Enter`)하면 "Ending the transaction discarded…"가 보이고 밖에서 두 `INSERT`가 보이며 열린 트랜잭션 없음, (5) Manual 첫 문장이 문법 오류면 `Failed · 0 statements`
 - 관찰(고치지 않음): 확인 dialog가 떠 있는 동안 `Cmd+A`를 누르면 dialog 뒤 화면의 글자가 모두 선택됨. 단축키는 꺼져 있어 실행은 되지 않음
 
