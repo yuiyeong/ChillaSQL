@@ -148,3 +148,33 @@ test("kind_letters", () => {
   expect(letter("type")).toBe("k");
   expect(letter("variable")).toBe("k");
 });
+
+test("completes_within_50ms_on_a_large_catalog", async () => {
+  const schemas = ["s0", "s1", "s2"];
+  const relations = Array.from({ length: 5000 }, (_, i) =>
+    relation(
+      i + 1,
+      schemas[i % 3],
+      `t${i}`,
+      Array.from({ length: 20 }, (_, c): [string, string] => [`c${c}`, "text"]),
+    ),
+  );
+  const large = catalogFixture({
+    searchPath: ["s0"],
+    schemas,
+    relations,
+  });
+  catalogSources(large);
+
+  for (const doc of [
+    "SELECT t.| FROM s1.t4999 t",
+    "SELECT c1| FROM s2.t10",
+    "SELECT * FROM t49|",
+  ]) {
+    const started = performance.now();
+    const options = await complete(doc, { withCatalog: large });
+    const elapsed = performance.now() - started;
+    expect(options.length).toBeGreaterThan(0);
+    expect(elapsed, doc).toBeLessThan(50);
+  }
+});

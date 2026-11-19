@@ -15,6 +15,7 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { Sidebar } from "../project/Sidebar";
 import { Hints, ResultPane } from "../query/ResultPane";
+import { useSchema } from "../schema/schemaStore";
 import { useSchemaLifecycle } from "../schema/useSchemaLifecycle";
 import { colorOf, connectionColor } from "../connections/colors";
 import {
@@ -47,6 +48,11 @@ export function Workspace() {
   const activeId = useTabs((s) => s.activeId);
   const connectionName = useTabs(
     (s) => s.tabs.find((tab) => tab.id === s.activeId)?.connection ?? null,
+  );
+  const catalog = useSchema((s) =>
+    connectionName === null
+      ? null
+      : (s.entries[connectionName]?.catalog ?? null),
   );
   const openFile = useTabs((s) => s.openFile);
   const markDirty = useTabs((s) => s.markDirty);
@@ -161,7 +167,11 @@ export function Workspace() {
           >
             <div className="absolute inset-0">
               {activeId !== null ? (
-                <SqlEditor tabId={activeId} onDocChange={markDirty} />
+                <SqlEditor
+                  tabId={activeId}
+                  catalog={catalog}
+                  onDocChange={markDirty}
+                />
               ) : (
                 <Hints />
               )}

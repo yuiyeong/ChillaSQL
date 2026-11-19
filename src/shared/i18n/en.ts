@@ -168,6 +168,9 @@ export const en = {
   "schema.menu.copyName": "Copy name",
   "schema.copied": "Copied {name}",
   "completion.view": "view",
+  "completion.insert": "Insert",
+  "completion.close": "Close",
+  "completion.legend": "s schema · c column · t table · f function · k keyword",
 
   "connectionForm.titleNew": "New Connection",
   "connectionForm.titleEdit": "Edit {name}",

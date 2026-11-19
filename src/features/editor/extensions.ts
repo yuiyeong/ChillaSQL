@@ -1,4 +1,9 @@
-import { closeBrackets, closeBracketsKeymap } from "@codemirror/autocomplete";
+import {
+  autocompletion,
+  closeBrackets,
+  closeBracketsKeymap,
+  completionStatus,
+} from "@codemirror/autocomplete";
 import {
   defaultKeymap,
   history,
@@ -19,8 +24,12 @@ import {
   EditorView,
   keymap,
   lineNumbers,
+  ViewPlugin,
+  type ViewUpdate,
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
+import { t } from "../../shared/i18n/t";
+import { catalogField, kindLetter, sqlCompletionSources } from "./completion";
 
 const color = (name: string) => `var(--color-${name})`;
 
@@ -59,6 +68,81 @@ const editorTheme = EditorView.theme(
       textAlign: "right",
     },
     ".cm-panels": { backgroundColor: color("bg-2"), color: color("fg") },
+    // 자동완성 popup. 캔버스 Tools의 M7 자동완성(.pop, .ac)을 따른다.
+    ".cm-tooltip.cm-tooltip-autocomplete": {
+      width: "340px",
+      padding: "4px",
+      boxSizing: "border-box",
+      backgroundColor: color("bg-3"),
+      border: `1px solid ${color("line-2")}`,
+      borderRadius: "8px",
+      boxShadow: "var(--shadow-popover)",
+      color: color("fg"),
+    },
+    ".cm-tooltip.cm-tooltip-autocomplete > ul": {
+      fontFamily: "inherit",
+      maxHeight: "260px",
+    },
+    ".cm-tooltip.cm-tooltip-autocomplete > ul > li": {
+      display: "flex",
+      alignItems: "center",
+      gap: "10px",
+      height: "26px",
+      padding: "0 8px",
+      borderRadius: "5px",
+      fontSize: "var(--text-small)",
+      lineHeight: "26px",
+    },
+    ".cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]": {
+      backgroundColor: `color-mix(in srgb, ${color("accent")} 16%, transparent)`,
+      color: color("fg"),
+    },
+    ".cm-completionKind": {
+      width: "16px",
+      flexShrink: "0",
+      textAlign: "center",
+      fontFamily: "var(--font-mono)",
+      fontSize: "11px",
+      color: color("fg-3"),
+    },
+    ".cm-completionLabel": {
+      fontFamily: "var(--font-mono)",
+      overflow: "hidden",
+      textOverflow: "ellipsis",
+    },
+    ".cm-completionMatchedText": {
+      textDecoration: "none",
+      fontWeight: "700",
+    },
+    ".cm-completionDetail": {
+      marginLeft: "auto",
+      paddingLeft: "8px",
+      fontFamily: "var(--font-mono)",
+      fontSize: "var(--text-label)",
+      fontStyle: "normal",
+      color: color("fg-2"),
+      whiteSpace: "nowrap",
+    },
+    ".cm-completionFooter": {
+      display: "flex",
+      gap: "14px",
+      marginTop: "4px",
+      padding: "6px 8px 2px",
+      borderTop: `1px solid ${color("line-2")}`,
+      fontSize: "var(--text-label)",
+      color: color("fg-2"),
+      whiteSpace: "nowrap",
+    },
+    ".cm-completionLegend": { marginLeft: "auto" },
+    ".cm-completionKbd": {
+      fontFamily: "inherit",
+      fontSize: "var(--text-label)",
+      fontWeight: "500",
+      padding: "1px 5px",
+      borderRadius: "4px",
+      backgroundColor: color("line-2"),
+      color: color("fg-2"),
+    },
     ".cm-panels.cm-panels-bottom": {
       borderTop: `1px solid ${color("line-1")}`,
     },
@@ -85,6 +169,70 @@ export const syntaxStyle = HighlightStyle.define([
   },
 ]);
 
+/** `autocompletion`의 설정 type. package가 이름으로 export하지 않는다. */
+type CompletionConfig = NonNullable<Parameters<typeof autocompletion>[0]>;
+
+/** 자동완성 설정. 입력하면 바로 뜬다(기본 지연 100ms로는 0.05초를 못 맞춘다). */
+export const AUTOCOMPLETION: CompletionConfig = {
+  override: [...sqlCompletionSources()],
+  activateOnTypingDelay: 0,
+  icons: false,
+  addToOptions: [
+    {
+      render(completion) {
+        const kind = document.createElement("span");
+        kind.className = "cm-completionKind";
+        kind.textContent = kindLetter(completion);
+        return kind;
+      },
+      position: 20,
+    },
+  ],
+};
+
+/** popup 아래의 안내 줄: `↵ Insert`, `esc Close`, kind 글자의 뜻. */
+function completionFooter(): HTMLElement {
+  const footer = document.createElement("div");
+  footer.className = "cm-completionFooter";
+  const hint = (key: string, label: string) => {
+    const item = document.createElement("span");
+    const kbd = document.createElement("kbd");
+    kbd.className = "cm-completionKbd";
+    kbd.textContent = key;
+    item.append(kbd, ` ${label}`);
+    return item;
+  };
+  const legend = document.createElement("span");
+  legend.className = "cm-completionLegend";
+  legend.textContent = t("completion.legend");
+  footer.append(
+    hint("↵", t("completion.insert")),
+    hint("esc", t("completion.close")),
+    legend,
+  );
+  return footer;
+}
+
+/** popup이 열리면 끝에 안내 줄을 한 번 붙인다. popup은 tooltip이 그린 뒤에 있으므로 measure의 write에서 본다. */
+const footerPlugin = ViewPlugin.fromClass(
+  class {
+    update(update: ViewUpdate) {
+      if (completionStatus(update.state) !== "active") return;
+      update.view.requestMeasure({
+        key: footerPlugin,
+        read: () => null,
+        write: (_, view) => {
+          const popup = view.dom.querySelector(".cm-tooltip-autocomplete");
+          if (popup === null || popup.querySelector(".cm-completionFooter")) {
+            return;
+          }
+          popup.append(completionFooter());
+        },
+      });
+    }
+  },
+);
+
 // 모든 문서가 같은 extension 값을 나눠 쓴다.
 const extensions: Extension = [
   lineNumbers(),
@@ -102,11 +250,14 @@ const extensions: Extension = [
     indentWithTab,
   ]),
   sql({ dialect: PostgreSQL }),
+  catalogField,
+  autocompletion(AUTOCOMPLETION),
+  footerPlugin,
   editorTheme,
   syntaxHighlighting(syntaxStyle),
 ];
 
-/** SQL 편집기의 extension. 자동 완성은 넣지 않는다. */
+/** SQL 편집기의 extension. 자동완성은 문서의 catalog(`setCatalog`)를 쓴다. */
 export function editorExtensions(): Extension {
   return extensions;
 }

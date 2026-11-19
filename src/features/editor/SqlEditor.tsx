@@ -1,15 +1,19 @@
 import { EditorView } from "@codemirror/view";
 import { useEffect, useRef } from "react";
+import type { Catalog } from "../../shared/api/types";
+import { catalogField, setCatalog } from "./completion";
 import { documentState, setDocumentState } from "./documents";
 import { useEditorStatus } from "./editorStatus";
 
 interface SqlEditorProps {
   tabId: string;
+  /** 자동완성에 쓸 활성 탭 접속의 catalog. 없으면 keyword만 나온다. */
+  catalog: Catalog | null;
   onDocChange(tabId: string): void;
 }
 
 /** EditorView 하나를 갖고, tabId가 바뀌면 그 tab의 EditorState로 바꾼다. */
-export function SqlEditor({ tabId, onDocChange }: SqlEditorProps) {
+export function SqlEditor({ tabId, catalog, onDocChange }: SqlEditorProps) {
   const parentRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   // view가 들고 있는 state의 tab. dispatchTransactions가 이 값을 본다.
@@ -55,6 +59,15 @@ export function SqlEditor({ tabId, onDocChange }: SqlEditorProps) {
     useEditorStatus.getState().update(tabId, state);
     view.focus();
   }, [tabId]);
+
+  // 탭을 바꾼 effect 뒤에 돈다. 바뀐 문서에도 지금 catalog를 넣는다.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) return;
+    const current = view.state.field(catalogField, false)?.catalog ?? null;
+    if (current === catalog) return;
+    view.dispatch({ effects: setCatalog.of(catalog) });
+  }, [catalog, tabId]);
 
   return <div ref={parentRef} className="h-full" />;
 }

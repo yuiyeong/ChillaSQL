@@ -3,7 +3,8 @@ import { highlightingFor } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import { expect, test } from "vitest";
-import { editorExtensions, syntaxStyle } from "./extensions";
+import { sqlCompletionSources } from "./completion";
+import { AUTOCOMPLETION, editorExtensions, syntaxStyle } from "./extensions";
 
 interface ParsedNode {
   name: string;
@@ -96,4 +97,10 @@ test("문법 색은 token을 쓴다", () => {
 
 test("문법 색에 hex literal이 없다(oneDark 등 외부 theme을 쓰지 않는다)", () => {
   expect(syntaxStyle.module?.getRules()).not.toMatch(/#[0-9a-f]{3,6}/i);
+});
+
+test("autocompletion_is_on_without_typing_delay", () => {
+  expect(AUTOCOMPLETION.activateOnTypingDelay).toBe(0);
+  expect(AUTOCOMPLETION.icons).toBe(false);
+  expect(AUTOCOMPLETION.override).toEqual([...sqlCompletionSources()]);
 });
