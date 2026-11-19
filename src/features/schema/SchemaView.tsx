@@ -32,7 +32,7 @@ const CONSTRAINT_LABEL: Record<ConstraintKind, string> = {
 };
 
 const ROW =
-  "text-small flex h-6 w-full items-center gap-1.5 rounded-[5px] border-0 pr-2 text-left whitespace-nowrap";
+  "text-small flex h-6 w-full items-center gap-1.5 overflow-hidden rounded-[5px] border-0 pr-2 text-left whitespace-nowrap select-none";
 
 /** 줄의 왼쪽 여백. 캔버스(Sidebar A)의 `8 + depth * 14`px이다. */
 function indent(depth: number) {
@@ -325,12 +325,15 @@ function TreeRow({
       >
         {iconOf(row)}
       </span>
-      <span className={`truncate ${row.kind === "group" ? "" : "font-mono"}`}>
+      <span
+        className={`min-w-0 truncate ${row.kind === "group" ? "" : "font-mono"}`}
+      >
         {nameOf(row)}
       </span>
       {label !== null && " "}
       {label !== null && (
-        <span className="text-label text-fg-3 ml-auto shrink-0 pl-2 font-mono">
+        // 긴 type(`timestamp with time zone`)이 이름을 밀어내지 않게 너비를 반으로 막는다.
+        <span className="text-label text-fg-3 ml-auto max-w-1/2 shrink-0 truncate pl-2 font-mono">
           {label}
         </span>
       )}

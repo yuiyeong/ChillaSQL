@@ -123,9 +123,11 @@ const editorTheme = EditorView.theme(
       color: color("fg-2"),
       whiteSpace: "nowrap",
     },
+    // legend가 popup 너비(340px)를 넘으면 다음 줄로 내린다.
     ".cm-completionFooter": {
       display: "flex",
-      gap: "14px",
+      flexWrap: "wrap",
+      gap: "2px 14px",
       marginTop: "4px",
       padding: "6px 8px 2px",
       borderTop: `1px solid ${color("line-2")}`,
