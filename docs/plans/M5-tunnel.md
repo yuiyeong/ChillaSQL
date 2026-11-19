@@ -594,7 +594,7 @@ git commit -m "feat: 터널 상태 event와 cancel_tunnel, restart_tunnel comman
 
 `forward.py <listen_port> <target_port> <pid_file>`는 `127.0.0.1:<listen_port>`에서 받아 `127.0.0.1:<target_port>`(test DB 54318)로 잇는 thread forwarder다. 시작하면 자기 pid를 `pid_file`에 쓴다. 터널 명령은 `exec python3 <절대 경로>/forward.py <port> 54318 <pid_file>`이다. port는 test마다 `TcpListener::bind("127.0.0.1:0")`으로 빈 port를 얻어 쓴다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 | test | 단언 |
 | --- | --- |
@@ -604,17 +604,17 @@ git commit -m "feat: 터널 상태 event와 cancel_tunnel, restart_tunnel comman
 | `an_already_open_port_is_used_as_is` | forwarder를 test가 먼저 띄움 → event `External`, `close_session`과 `shutdown` 뒤에도 그 forwarder가 살아 있다 |
 | `shutdown_leaves_no_tunnel_process` | 세션 둘(같은 접속)과 터널 하나 → `shutdown` 뒤 pid가 없다 |
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `cargo test -p chilla-core --test tunnels`
 Expected: 구현은 Task 5에서 끝났으므로 통과해야 한다. 실패하면 원인을 Task 3~5에서 고친다. test가 정말 확인하는지 보려고 `ShellProcess::stop`의 `killpg`를 잠시 지우고 `shutdown_leaves_no_tunnel_process`가 실패하는 것을 본 뒤 되돌린다.
 
-- [ ] **Step 3: test가 통과하는지 확인한다**
+- [x] **Step 3: test가 통과하는지 확인한다**
 
 Run: `scripts/test-db.sh up && cargo test -p chilla-core --test tunnels`
 Expected: PASS
 
-- [ ] **Step 4: commit한다**
+- [x] **Step 4: commit한다**
 
 ```bash
 git add crates/chilla-core/tests

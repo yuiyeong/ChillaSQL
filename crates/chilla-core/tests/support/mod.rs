@@ -9,7 +9,9 @@ use std::time::Duration;
 use chilla_core::application::{
     App, ConnectError, Connector, QueryError, QuerySink, RowItem, RowSource,
 };
-use chilla_core::domain::{ConnectionProfile, Password, QueryEvent, QueryOutcome, SslMode};
+use chilla_core::domain::{
+    ConnectionProfile, Password, QueryEvent, QueryOutcome, SslMode, TunnelEvent,
+};
 use chilla_core::infrastructure::{
     FsSqlFileStore, MemoryPasswordStore, PgConnection, PgConnector, PgQuerySplitter,
     ShellTunnelRunner, TomlProjectStore,
@@ -174,16 +176,26 @@ pub async fn eventually(mut check: impl AsyncFnMut() -> bool) -> bool {
     check().await
 }
 
-/// 실제 구성에서 키체인만 메모리로 바꾼 App과, test DB를 가리키는 접속 `local`이 있는 프로젝트.
 /// test에 쓰는 실제 구성의 App.
 pub type TestApp = App<PgConnector, ShellTunnelRunner>;
 
+/// 받은 터널 event.
+pub type TunnelEvents = Arc<std::sync::Mutex<Vec<TunnelEvent>>>;
+
+/// 실제 구성에서 키체인만 메모리로 바꾼 App과, test DB를 가리키는 접속 `local`이 있는 프로젝트.
 pub async fn app_with_project() -> (TestApp, TempDir) {
-    let dir = tempfile::tempdir().unwrap();
     let toml = format!(
         "[connections.local]\nhost = \"127.0.0.1\"\nport = {TEST_DB_PORT}\ndatabase = \"{DATABASE}\"\nuser = \"{USER}\"\n"
     );
+    let (app, dir, _events) = app_with_toml(&toml).await;
+    (app, dir)
+}
+
+/// `toml`을 `chilla.toml`로 쓴 프로젝트를 연 App과 그 터널 event.
+pub async fn app_with_toml(toml: &str) -> (TestApp, TempDir, TunnelEvents) {
+    let dir = tempfile::tempdir().unwrap();
     fs::write(dir.path().join("chilla.toml"), toml).unwrap();
+    let events: TunnelEvents = Arc::default();
     let app = App::new(
         Arc::new(TomlProjectStore),
         Arc::new(MemoryPasswordStore::default()),
@@ -191,10 +203,13 @@ pub async fn app_with_project() -> (TestApp, TempDir) {
         Arc::new(FsSqlFileStore),
         PgConnector::new(),
         ShellTunnelRunner::new(),
-        Arc::new(|_| {}),
+        Arc::new({
+            let events = events.clone();
+            move |event| events.lock().unwrap().push(event)
+        }),
     );
     app.open_project(dir.path()).await.unwrap();
-    (app, dir)
+    (app, dir, events)
 }
 
 pub async fn store_password(app: &TestApp) {
