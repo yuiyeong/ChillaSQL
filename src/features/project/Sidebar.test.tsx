@@ -36,6 +36,7 @@ function handlers() {
     onAddConnection: vi.fn(),
     onEditConnection: vi.fn(),
     onSwitchProject: vi.fn(),
+    onChooseConnection: vi.fn(),
   };
 }
 
@@ -220,19 +221,29 @@ test("새로고침은 파일 목록을 다시 읽는다", async () => {
   ).toBeInTheDocument();
 });
 
-test("Schema와 History는 disabled다", async () => {
-  await renderSidebar();
+test("schema_segment_switches_the_view", async () => {
+  const h = await renderSidebar();
 
   const list = screen.getByRole("tablist", { name: "Sidebar view" });
-  expect(within(list).getByRole("tab", { name: "Files" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  for (const name of ["Schema", "History"]) {
-    const tab = within(list).getByRole("tab", { name });
-    expect(tab).toHaveAttribute("aria-disabled", "true");
-    expect(tab).toHaveAttribute("aria-selected", "false");
-  }
+  const files = within(list).getByRole("tab", { name: "Files" });
+  const schema = within(list).getByRole("tab", { name: "Schema" });
+  const history = within(list).getByRole("tab", { name: "History" });
+  expect(files).toHaveAttribute("aria-selected", "true");
+  expect(schema).toHaveAttribute("aria-selected", "false");
+  expect(history).toHaveAttribute("aria-disabled", "true");
+
+  await click(schema);
+  expect(schema).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByRole("region", { name: "SQL Files" })).toBeNull();
+  // 활성 탭이 없으니 접속이 없다.
+  await click(screen.getByRole("button", { name: "Choose connection" }));
+  expect(h.onChooseConnection).toHaveBeenCalledTimes(1);
+
+  await click(history);
+  expect(schema).toHaveAttribute("aria-selected", "true");
+
+  await click(files);
+  expect(screen.getByRole("region", { name: "SQL Files" })).toBeInTheDocument();
 });
 
 test("위 38px은 창을 끄는 빈 자리다", async () => {

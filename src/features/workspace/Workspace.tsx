@@ -54,6 +54,7 @@ export function Workspace() {
   const error = useProject((s) => s.error);
   const clearError = useProject((s) => s.clearError);
   const [form, setForm] = useState<OpenForm | null>(null);
+  const [connectionMenu, setConnectionMenu] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
   const barColor = connectionColor(
     colorOf(project?.connections, connectionName) ?? null,
@@ -122,6 +123,7 @@ export function Workspace() {
                 onAddConnection={() => setForm({ original: null })}
                 onEditConnection={editConnection}
                 onSwitchProject={() => void switchProject()}
+                onChooseConnection={() => setConnectionMenu(true)}
               />
             </div>
           </div>
@@ -147,7 +149,11 @@ export function Workspace() {
             onNew={() => void execute("newTab")}
             onName={nameTab}
           />
-          <Toolbar onAddConnection={() => setForm({ original: null })} />
+          <Toolbar
+            onAddConnection={() => setForm({ original: null })}
+            connectionMenuOpen={connectionMenu}
+            onConnectionMenuChange={setConnectionMenu}
+          />
           <div
             ref={editorRef}
             data-testid="editor-area"

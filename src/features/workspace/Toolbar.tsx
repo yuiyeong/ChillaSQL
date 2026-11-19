@@ -33,7 +33,16 @@ const RUN_MENU_WIDTH = 230;
 const NO_CONNECTIONS: Connection[] = [];
 
 /** 활성 탭의 접속 chip과 menu, 실행 버튼. 활성 탭이 없으면 모두 disabled다. */
-export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
+export function Toolbar({
+  onAddConnection,
+  connectionMenuOpen: connectionMenu,
+  onConnectionMenuChange: setConnectionMenu,
+}: {
+  onAddConnection(): void;
+  /** 접속 menu의 열림. sidebar의 Choose connection도 열므로 Workspace가 갖는다. */
+  connectionMenuOpen: boolean;
+  onConnectionMenuChange(open: boolean): void;
+}) {
   const tab = useTabs((s) => s.tabs.find((tab) => tab.id === s.activeId));
   const tabId = tab?.id ?? null;
   const connections = useProject(
@@ -55,7 +64,6 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
   const tunnelStarting = useTunnels((s) =>
     isTunnelStarting(s.tunnels, tab?.connection ?? null),
   );
-  const [connectionMenu, setConnectionMenu] = useState(false);
   const chipRef = useRef<HTMLButtonElement>(null);
 
   const current = connections.find((c) => c.name === tab?.connection);
@@ -77,7 +85,7 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
           aria-haspopup="menu"
           aria-expanded={connectionMenu}
           disabled={tab === undefined}
-          onClick={() => setConnectionMenu((open) => !open)}
+          onClick={() => setConnectionMenu(!connectionMenu)}
         >
           {connected ? (
             <>

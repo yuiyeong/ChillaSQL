@@ -21,6 +21,7 @@ import {
   type TreeNode,
 } from "./fileTree";
 import { useProject } from "./projectStore";
+import { SchemaView } from "../schema/SchemaView";
 import { t } from "../../shared/i18n/t";
 
 const LABEL = "text-label text-fg-2 m-0 font-semibold tracking-[0.04em]";
@@ -44,10 +45,13 @@ function visibleRows(
   ]);
 }
 
+type View = "files" | "schema";
+
+/** History(M9)는 아직 없다. */
 const SEGMENTS = [
-  { key: "sidebar.viewFiles", selected: true },
-  { key: "sidebar.viewSchema", selected: false },
-  { key: "sidebar.viewHistory", selected: false },
+  { key: "sidebar.viewFiles", view: "files" },
+  { key: "sidebar.viewSchema", view: "schema" },
+  { key: "sidebar.viewHistory", view: null },
 ] as const;
 
 export function Sidebar({
@@ -55,11 +59,14 @@ export function Sidebar({
   onAddConnection,
   onEditConnection,
   onSwitchProject,
+  onChooseConnection,
 }: {
   onOpenFile(path: string): void;
   onAddConnection(): void;
   onEditConnection(name: string): void;
   onSwitchProject(): void;
+  /** Schema 화면의 Choose connection. toolbar의 접속 menu를 연다. */
+  onChooseConnection(): void;
 }) {
   const project = useProject((s) => s.project);
   const files = useProject((s) => s.files);
@@ -70,6 +77,7 @@ export function Sidebar({
   const dirId = useId();
   const [home, setHome] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
+  const [view, setView] = useState<View>("files");
 
   useEffect(() => {
     let live = true;
@@ -196,89 +204,105 @@ export function Sidebar({
         aria-label={t("sidebar.views")}
         className="border-line-2 bg-bg-2 rounded-control mx-2.5 mt-3 mb-2 flex gap-0.5 border p-0.5"
       >
-        {SEGMENTS.map(({ key, selected }) => (
-          <button
-            key={key}
-            type="button"
-            role="tab"
-            aria-selected={selected}
-            aria-disabled={selected ? undefined : true}
-            className={[
-              "text-small h-[22px] flex-1 rounded-[5px] border-0 font-medium",
-              selected
-                ? "bg-bg-3 text-fg cursor-pointer"
-                : "text-fg-2 cursor-default bg-transparent opacity-50",
-            ].join(" ")}
-          >
-            {t(key)}
-          </button>
-        ))}
+        {SEGMENTS.map(({ key, view: target }) => {
+          const selected = target === view;
+          return (
+            <button
+              key={key}
+              type="button"
+              role="tab"
+              aria-selected={selected}
+              aria-disabled={target === null ? true : undefined}
+              className={[
+                "text-small h-[22px] flex-1 rounded-[5px] border-0 font-medium",
+                selected
+                  ? "bg-bg-3 text-fg cursor-pointer"
+                  : target === null
+                    ? "text-fg-2 cursor-default bg-transparent opacity-50"
+                    : "text-fg-2 hover:text-fg cursor-pointer bg-transparent",
+              ].join(" ")}
+              onClick={() => {
+                if (target !== null) setView(target);
+              }}
+            >
+              {t(key)}
+            </button>
+          );
+        })}
       </div>
 
-      <section
-        aria-label={t("sidebar.files")}
-        className="flex min-h-0 flex-1 flex-col gap-px px-1.5 py-1"
-      >
-        <div className="flex items-center justify-between px-2 pb-1">
-          <h3 className={LABEL}>{t("sidebar.files")}</h3>
-          <IconButton
-            size={22}
-            label={t("sidebar.refresh")}
-            onClick={() => void refreshFiles()}
-          >
-            <RefreshIcon />
-          </IconButton>
-        </div>
-        <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-px overflow-y-auto p-0">
-          {rows.map(({ node, depth }) => {
-            const active = node.kind === "file" && node.path === activePath;
-            const className = [
-              "text-small text-fg focus-visible:outline-accent flex h-[26px] w-full cursor-pointer items-center gap-1.5 rounded-[6px] border-0 pr-2 text-left focus-visible:outline-2",
-              active ? "bg-accent/14" : "hover:bg-bg-2 bg-transparent",
-            ].join(" ");
-            const style = { paddingLeft: `${8 + depth * 16}px` };
-            return (
-              <li key={node.path}>
-                {node.kind === "folder" ? (
-                  <button
-                    type="button"
-                    aria-expanded={!collapsed.has(node.path)}
-                    className={className}
-                    style={style}
-                    onClick={() => toggle(node.path)}
-                  >
-                    {collapsed.has(node.path) ? (
-                      <ChevronRightIcon className="text-fg-2 shrink-0" />
-                    ) : (
-                      <ChevronDownIcon className="text-fg-2 shrink-0" />
-                    )}
-                    <FolderIcon className="text-fg-2 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{node.name}</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    aria-current={active ? "true" : undefined}
-                    className={className}
-                    style={style}
-                    onClick={() => onOpenFile(node.path)}
-                  >
-                    <FileIcon className="text-fg-3 shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{node.name}</span>
-                    {dirtyPaths.has(node.path) && (
-                      <span
-                        role="img"
-                        aria-label={t("tabs.unsaved")}
-                        className="bg-fg size-1.5 shrink-0 rounded-full"
-                      />
-                    )}
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+      {view === "schema" ? (
+        <SchemaView onChooseConnection={onChooseConnection} />
+      ) : (
+        <section
+          aria-label={t("sidebar.files")}
+          className="flex min-h-0 flex-1 flex-col gap-px px-1.5 py-1"
+        >
+          <div className="flex items-center justify-between px-2 pb-1">
+            <h3 className={LABEL}>{t("sidebar.files")}</h3>
+            <IconButton
+              size={22}
+              label={t("sidebar.refresh")}
+              onClick={() => void refreshFiles()}
+            >
+              <RefreshIcon />
+            </IconButton>
+          </div>
+          <ul className="m-0 flex min-h-0 flex-1 list-none flex-col gap-px overflow-y-auto p-0">
+            {rows.map(({ node, depth }) => {
+              const active = node.kind === "file" && node.path === activePath;
+              const className = [
+                "text-small text-fg focus-visible:outline-accent flex h-[26px] w-full cursor-pointer items-center gap-1.5 rounded-[6px] border-0 pr-2 text-left focus-visible:outline-2",
+                active ? "bg-accent/14" : "hover:bg-bg-2 bg-transparent",
+              ].join(" ");
+              const style = { paddingLeft: `${8 + depth * 16}px` };
+              return (
+                <li key={node.path}>
+                  {node.kind === "folder" ? (
+                    <button
+                      type="button"
+                      aria-expanded={!collapsed.has(node.path)}
+                      className={className}
+                      style={style}
+                      onClick={() => toggle(node.path)}
+                    >
+                      {collapsed.has(node.path) ? (
+                        <ChevronRightIcon className="text-fg-2 shrink-0" />
+                      ) : (
+                        <ChevronDownIcon className="text-fg-2 shrink-0" />
+                      )}
+                      <FolderIcon className="text-fg-2 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {node.name}
+                      </span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-current={active ? "true" : undefined}
+                      className={className}
+                      style={style}
+                      onClick={() => onOpenFile(node.path)}
+                    >
+                      <FileIcon className="text-fg-3 shrink-0" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {node.name}
+                      </span>
+                      {dirtyPaths.has(node.path) && (
+                        <span
+                          role="img"
+                          aria-label={t("tabs.unsaved")}
+                          className="bg-fg size-1.5 shrink-0 rounded-full"
+                        />
+                      )}
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
     </aside>
   );
 }
