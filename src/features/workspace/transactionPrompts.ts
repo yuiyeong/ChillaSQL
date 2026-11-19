@@ -34,8 +34,11 @@ export interface TxSettlement {
   tabIds: string[];
 }
 
-/** 버튼 문구의 동사 */
-const VERB: Record<TxAction, "close" | "switch" | "save"> = {
+/** 버튼 문구의 동사. 앱 종료는 `TxAction`이 아니라 여러 탭 목록만 쓴다. */
+type TxVerb = "close" | "switch" | "save";
+type Verb = TxVerb | "quit";
+
+const VERB: Record<TxAction, TxVerb> = {
   close: "close",
   switchMode: "switch",
   switchConnection: "switch",
@@ -43,7 +46,7 @@ const VERB: Record<TxAction, "close" | "switch" | "save"> = {
   switchProject: "switch",
 };
 
-interface OpenTab {
+export interface OpenTab {
   id: string;
   title: string;
   connection: string;
@@ -51,7 +54,7 @@ interface OpenTab {
 }
 
 /** `tabIds` 가운데 열린 트랜잭션이 있는 탭. 순서는 `tabIds`를 따른다. */
-function openTabs(tabIds: string[]): OpenTab[] {
+export function openTabs(tabIds: string[]): OpenTab[] {
   const { transactions } = useRuns.getState();
   const { tabs } = useTabs.getState();
   return tabIds.flatMap((id) => {
@@ -153,13 +156,16 @@ function oneTabSpec(
   return { ...oneTabText(tab, action, context), actions };
 }
 
-/** 여러 탭이면 앱 종료처럼 목록과 "Roll back all and …"만 둔다. 한꺼번에 Commit하지 않는다. */
-function manyTabsSpec(tabs: OpenTab[], action: TxAction): DialogSpec {
+/**
+ * 탭 목록과 "Roll back all and …"만 둔다. 한꺼번에 Commit하지 않는다.
+ * 여러 탭을 닫거나 바꿀 때와 앱 종료가 같이 쓴다.
+ */
+export function manyTabsSpec(tabs: OpenTab[], verb: Verb): DialogSpec {
   // 목록은 다시 그리지 않으므로 경과 시간은 물을 때 한 번 센다.
   const now = Date.now();
   const connections = useProject.getState().project?.connections ?? [];
   return {
-    title: t("dialog.tx.manyTabs.title", { count: formatCount(tabs.length) }),
+    title: tc("dialog.tx.manyTabs.title", tabs.length),
     items: tabs.map((tab) => ({
       // 앱 종료의 목록처럼 줄마다 그 접속의 색 dot을 둔다.
       marker: createElement(ConnectionDot, {
@@ -177,7 +183,7 @@ function manyTabsSpec(tabs: OpenTab[], action: TxAction): DialogSpec {
       cancel(),
       {
         id: "rollback",
-        label: t(`dialog.tx.rollbackAll.${VERB[action]}`),
+        label: t(`dialog.tx.rollbackAll.${verb}`),
         spaceBefore: true,
       },
     ],
@@ -199,7 +205,7 @@ export async function chooseSettlement(
   const choice = await ask(
     rest.length === 0
       ? oneTabSpec(first, action, context)
-      : manyTabsSpec(tabs, action),
+      : manyTabsSpec(tabs, VERB[action]),
   );
   if (choice !== "commit" && choice !== "rollback") return null;
   return { end: choice, tabIds: tabs.map((tab) => tab.id) };

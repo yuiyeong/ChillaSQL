@@ -26,6 +26,7 @@ import {
   testConnection,
   writeSqlFile,
   cancelTunnel,
+  quitApp,
   restartTunnel,
 } from "./commands";
 import { CommandError } from "./errors";
@@ -194,4 +195,9 @@ test("cancelTunnel과 restartTunnel은 접속 이름을 보낸다", async () => 
   expect(invokeMock).toHaveBeenLastCalledWith("restart_tunnel", {
     connection: "staging",
   });
+});
+
+test("quitApp은 인자 없이 quit_app을 부른다", async () => {
+  await quitApp();
+  expect(invokeMock).toHaveBeenLastCalledWith("quit_app");
 });

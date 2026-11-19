@@ -856,7 +856,7 @@ git commit -m "feat: WHERE 없는 UPDATE와 DELETE, DROP, TRUNCATE를 실행 전
 - Produces (화면): `quitApp(): Promise<void>`, `onQuitRequested(handler: () => void): Promise<() => void>`, `requestQuit(): Promise<void>`, `useQuitRequests()`(App에서 한 번)
 - 문구(Dialogs "앱 종료"): 제목 `{count} tabs have open transactions`(`.one`: `1 tab has an open transaction`), 목록(탭 제목, `{connection} · {n statements} · {elapsed}`), note `To decide tab by tab, cancel and use Commit or Rollback in each tab.`, action `Cancel`, `Roll back all and quit`
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `quit.test.ts`:
 
@@ -867,21 +867,21 @@ git commit -m "feat: WHERE 없는 UPDATE와 DELETE, DROP, TRUNCATE를 실행 전
 
 `commands.rs`: Rust 쪽은 menu와 event라 단위 test가 어렵다. `quit_app`과 `Quitting` flag는 Task 15의 앱 확인에서 본다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/workspace/quit.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 Task 1에서 Dock Quit이 막히지 않는다고 나왔으면 그 경로는 그대로 두고, 결정 기록대로다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src-tauri src

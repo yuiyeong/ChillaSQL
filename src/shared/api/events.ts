@@ -7,3 +7,8 @@ export function onTunnelEvent(
 ): Promise<() => void> {
   return listen<TunnelEvent>("tunnel", (event) => handler(event.payload));
 }
+
+/** 앱을 끝내려는 요청(Cmd+Q, 창 닫기)을 받는다. 끝낼지는 화면이 묻고 `quitApp`으로 끝낸다. */
+export function onQuitRequested(handler: () => void): Promise<() => void> {
+  return listen("quit-requested", () => handler());
+}

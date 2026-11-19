@@ -5,6 +5,7 @@
 //! `Password`는 `Serialize`가 아니라서 실수로 넣어도 compile되지 않는다.
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use chilla_core::application::{App, AppError};
@@ -733,6 +734,30 @@ pub async fn cancel_query(
         .await?)
 }
 
+/// 화면이 종료를 확인했는지. `quit_app`이 true로 두고, 그 뒤의 종료 요청은 막지 않는다.
+#[derive(Default)]
+pub struct Quitting(AtomicBool);
+
+impl Quitting {
+    /// `ExitRequested`를 막고 화면에 물어야 하면 true. 코드가 있는 종료(`app.exit(n)`)나
+    /// 이미 확인한 종료는 막지 않는다.
+    pub fn should_prevent_exit(&self, code: Option<i32>) -> bool {
+        code.is_none() && !self.0.load(Ordering::SeqCst)
+    }
+
+    fn confirm(&self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+
+/// 화면이 확인을 마친 뒤 앱을 끝낸다. `RunEvent::Exit`의 `shutdown`이 세션을 닫고,
+/// 열린 트랜잭션은 서버가 되돌린다.
+#[tauri::command]
+pub fn quit_app(app: tauri::AppHandle, quitting: State<'_, Quitting>) {
+    quitting.confirm();
+    app.exit(0);
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeSet;
@@ -741,6 +766,16 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn exit_is_prevented_only_for_an_unconfirmed_request_without_code() {
+        let quitting = Quitting::default();
+        assert!(quitting.should_prevent_exit(None));
+        assert!(!quitting.should_prevent_exit(Some(0)));
+
+        quitting.confirm();
+        assert!(!quitting.should_prevent_exit(None));
+    }
 
     fn profile(sslmode: SslMode) -> ConnectionProfile {
         ConnectionProfile {

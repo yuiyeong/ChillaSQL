@@ -126,3 +126,8 @@ export function writeSqlFile(
 ): Promise<string> {
   return call("write_sql_file", { path, text, mode });
 }
+
+/** 앱을 끝낸다. 열린 세션은 닫히고 서버가 열린 트랜잭션을 되돌린다. */
+export function quitApp(): Promise<void> {
+  return call("quit_app");
+}

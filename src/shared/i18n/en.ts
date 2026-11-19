@@ -83,7 +83,8 @@ export const en = {
     "What should happen to the {count} uncommitted statements in {title}?",
   "dialog.tx.questionIn.none":
     "What should happen to the open transaction in {title}?",
-  "dialog.tx.manyTabs.title": "{count} tabs have open transactions",
+  "dialog.tx.manyTabs.title.one": "1 tab has an open transaction",
+  "dialog.tx.manyTabs.title.other": "{count} tabs have open transactions",
   "dialog.tx.manyTabs.item": "{connection} · {statements} · {elapsed}",
   "dialog.tx.manyTabs.note":
     "To decide tab by tab, cancel and use Commit or Rollback in each tab.",
@@ -96,6 +97,7 @@ export const en = {
   "dialog.tx.rollbackAll.close": "Roll back all and close",
   "dialog.tx.rollbackAll.switch": "Roll back all and switch",
   "dialog.tx.rollbackAll.save": "Roll back all and save",
+  "dialog.tx.rollbackAll.quit": "Roll back all and quit",
   "dialog.danger.title.delete": "Run {delete} without {where}?",
   "dialog.danger.title.update": "Run {update} without {where}?",
   "dialog.danger.title.drop": "Run {drop}?",

@@ -4,6 +4,7 @@ import { beforeEach, expect, test, vi } from "vitest";
 vi.mock("./shared/api/commands");
 vi.mock("./shared/api/events", () => ({
   onTunnelEvent: vi.fn(() => Promise.resolve(() => {})),
+  onQuitRequested: vi.fn(() => Promise.resolve(() => {})),
 }));
 vi.mock("./shared/api/dialog");
 vi.mock("./shared/api/path");
