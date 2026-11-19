@@ -21,6 +21,8 @@ import { t } from "../../shared/i18n/t";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
 import { deferred } from "../../test/deferred";
+import { setTabMode } from "../../test/fixtures";
+import { modeOf, useTabs } from "../editor/tabsStore";
 
 function session(id: number, connection = "local"): Session {
   return { id, connection, backendPid: 100 + id };
@@ -53,6 +55,7 @@ const rowsEvent: QueryEvent = {
 beforeEach(async () => {
   // 앞 test의 세션을 닫는 호출이 mock 기록을 지우기 전에 끝나게 한다.
   await useRuns.getState().reset();
+  useTabs.getState().reset();
   vi.resetAllMocks();
   vi.mocked(openSession).mockResolvedValue(session(3));
   vi.mocked(executeQuery).mockResolvedValue(7);
@@ -854,7 +857,7 @@ function txOf(tabId: string) {
 
 /** 탭 t1에서 Manual로 두 문장을 실행해 트랜잭션을 연다. */
 async function openTwoStatements(connection = "local"): Promise<void> {
-  useRuns.getState().setMode("t1", "manual");
+  setTabMode("t1", "manual");
   await useRuns
     .getState()
     .run("t1", prepared("UPDATE a SET b = 1", connection));
@@ -866,7 +869,7 @@ async function openTwoStatements(connection = "local"): Promise<void> {
 }
 
 test("run_sends_the_tab_mode", async () => {
-  useRuns.getState().setMode("t1", "manual");
+  setTabMode("t1", "manual");
   await useRuns.getState().run("t1", prepared("SELECT 1"));
 
   expect(executeQuery).toHaveBeenCalledWith(
@@ -897,9 +900,9 @@ test("finished_updates_the_transaction", async () => {
 });
 
 test("a run counts statements by the mode it started with", async () => {
-  useRuns.getState().setMode("t1", "manual");
+  setTabMode("t1", "manual");
   await useRuns.getState().run("t1", prepared("UPDATE a SET b = 1"));
-  useRuns.getState().setMode("t1", "auto");
+  setTabMode("t1", "auto");
   complete(0, "in_transaction");
 
   expect(txOf("t1")?.statements).toBe(1);
@@ -940,7 +943,7 @@ test("end_transaction_commits_and_clears", async () => {
   vi.mocked(endTransaction).mockReturnValue(ending.promise);
 
   const committed = useRuns.getState().endTransaction("t1", "commit");
-  expect(useRuns.getState().ending.t1).toBe(true);
+  expect(useRuns.getState().ending.t1).toBeDefined();
   expect(endTransaction).toHaveBeenCalledWith(3, "commit");
 
   ending.resolve({ outcome: "ended", tx: "idle" });
@@ -1147,7 +1150,7 @@ test("connection_lost without a transaction shows no notice", async () => {
   expect(useRuns.getState().notices.t1).toBeUndefined();
 });
 
-test("release_forgets_the_transaction_and_mode", async () => {
+test("release_forgets_the_transaction", async () => {
   await openTwoStatements();
   const ending = deferred<EndResult>();
   vi.mocked(endTransaction).mockReturnValue(ending.promise);
@@ -1156,7 +1159,6 @@ test("release_forgets_the_transaction_and_mode", async () => {
   await useRuns.getState().release("t1");
 
   expect(txOf("t1")).toBeUndefined();
-  expect(useRuns.getState().modes.t1).toBeUndefined();
   expect(useRuns.getState().ending.t1).toBeUndefined();
 
   // 늦게 온 끝내기의 결과는 아무것도 바꾸지 않는다. 오류 결과는 소유 확인이 없으면 결과 panel을 그린다.
@@ -1191,11 +1193,12 @@ test("a_released_end_settling_late_keeps_the_new_end_ending", async () => {
   const second = deferred<EndResult>();
   vi.mocked(endTransaction).mockReturnValueOnce(second.promise);
   const secondEnded = useRuns.getState().endTransaction("t1", "rollback");
-  expect(useRuns.getState().ending.t1).toBe(true);
+  const secondCall = useRuns.getState().ending.t1;
+  expect(secondCall).toBeDefined();
 
   first.resolve({ outcome: "ended", tx: "idle" });
   await firstEnded;
-  expect(useRuns.getState().ending.t1).toBe(true);
+  expect(useRuns.getState().ending.t1).toBe(secondCall);
   expect(txOf("t1")).toBeDefined();
 
   second.resolve({ outcome: "ended", tx: "idle" });
@@ -1239,20 +1242,19 @@ test("a_finished_event_of_a_stale_session_does_not_revive_the_transaction", asyn
   expect(runOf("t1").status).toBe("finished");
 });
 
-test("release that keeps the mode forgets only the transaction", async () => {
+test("release forgets the transaction and keeps the tab mode", async () => {
   await openTwoStatements();
-  await useRuns.getState().release("t1", { keepMode: true });
+  await useRuns.getState().release("t1");
 
   expect(txOf("t1")).toBeUndefined();
-  expect(useRuns.getState().modes.t1).toBe("manual");
+  expect(modeOf(useTabs.getState(), "t1")).toBe("manual");
 });
 
-test("reset forgets every transaction and mode", async () => {
+test("reset forgets every transaction", async () => {
   await openTwoStatements();
   await useRuns.getState().reset();
 
   expect(useRuns.getState().transactions).toEqual({});
-  expect(useRuns.getState().modes).toEqual({});
   expect(useRuns.getState().ending).toEqual({});
 });
 

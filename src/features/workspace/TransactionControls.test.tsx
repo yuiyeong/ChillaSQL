@@ -1,6 +1,7 @@
 import { act, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { click } from "../../test/click";
+import { setTabMode } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("./commands", () => ({ execute: vi.fn() }));
@@ -70,7 +71,7 @@ test("shows_the_mode_radiogroup", async () => {
 });
 
 test("the checked radio follows the tab mode", () => {
-  act(() => useRuns.setState({ modes: { t1: "manual" } }));
+  act(() => setTabMode("t1", "manual"));
   render(<TransactionControls tabId="t1" />);
 
   expect(radio("Auto")).toHaveAttribute("aria-checked", "false");
@@ -164,7 +165,7 @@ test("disabled_while_connecting", () => {
 test("disabled_while_ending", () => {
   render(<TransactionControls tabId="t1" />);
   open(2, 10);
-  act(() => useRuns.setState({ ending: { t1: true } }));
+  act(() => useRuns.setState({ ending: { t1: {} } }));
 
   expect(commit()).toBeDisabled();
   expect(rollback()).toBeDisabled();

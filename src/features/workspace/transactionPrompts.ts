@@ -1,18 +1,19 @@
 import { createElement, type ReactNode } from "react";
 import type { TxEnd, TxMode } from "../../shared/api/types";
-import { bold, monoText, rt } from "../../shared/i18n/rich";
-import { formatCount, t, tc } from "../../shared/i18n/t";
+import { bold, monoText, rt, rtc } from "../../shared/i18n/rich";
+import { t, tc } from "../../shared/i18n/t";
 import {
   ask,
   type DialogAction,
   type DialogSpec,
 } from "../../shared/ui/dialogs";
+import { colorOf } from "../connections/colors";
 import { ConnectionDot } from "../connections/ConnectionDot";
-import { useTabs } from "../editor/tabsStore";
+import { modeOf, useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import {
-  formatElapsed,
+  formatClock,
   statementsLabel,
   type TxInfo,
 } from "../query/transaction";
@@ -67,16 +68,9 @@ export function openTabs(tabIds: string[]): OpenTab[] {
 
 /** `{question}`. 문장이 없으면 열린 트랜잭션을 묻는다. `title`을 주면 그 탭을 이름으로 가리킨다. */
 function question(statements: number, title?: string): ReactNode {
-  if (title === undefined) {
-    return statements === 0
-      ? t("dialog.tx.question.none")
-      : tc("dialog.tx.question", statements);
-  }
-  const form = statements === 0 ? "none" : statements === 1 ? "one" : "other";
-  return rt(`dialog.tx.questionIn.${form}`, {
-    count: formatCount(statements),
-    title: bold(title),
-  });
+  return title === undefined
+    ? tc("dialog.tx.question", statements)
+    : rtc("dialog.tx.questionIn", statements, { title: bold(title) });
 }
 
 function oneTabText(
@@ -169,13 +163,13 @@ export function manyTabsSpec(tabs: OpenTab[], verb: Verb): DialogSpec {
     items: tabs.map((tab) => ({
       // 앱 종료의 목록처럼 줄마다 그 접속의 색 dot을 둔다.
       marker: createElement(ConnectionDot, {
-        color: connections.find((c) => c.name === tab.connection)?.color,
+        color: colorOf(connections, tab.connection),
       }),
       primary: tab.title,
       secondary: rt("dialog.tx.manyTabs.item", {
         connection: tab.connection,
         statements: statementsLabel(tab.tx.statements),
-        elapsed: monoText(formatElapsed(now - tab.tx.openedAt)),
+        elapsed: monoText(formatClock(now - tab.tx.openedAt)),
       }),
     })),
     note: t("dialog.tx.manyTabs.note"),
@@ -197,7 +191,7 @@ export function manyTabsSpec(tabs: OpenTab[], verb: Verb): DialogSpec {
 export async function chooseSettlement(
   tabIds: string[],
   action: TxAction,
-  context: TxContext,
+  context: TxContext = {},
 ): Promise<TxSettlement | null> {
   const tabs = openTabs(tabIds);
   const [first, ...rest] = tabs;
@@ -236,7 +230,7 @@ export async function applySettlement({
 export async function settleTransactions(
   tabIds: string[],
   action: TxAction,
-  context: TxContext,
+  context: TxContext = {},
 ): Promise<boolean> {
   const settlement = await chooseSettlement(tabIds, action, context);
   return settlement !== null && applySettlement(settlement);
@@ -245,9 +239,9 @@ export async function settleTransactions(
 /** 탭의 모드를 바꾼다. Manual에서 Auto로 바꿀 때 열린 트랜잭션이 있으면 먼저 끝내게 한다. */
 export async function switchMode(tabId: string, mode: TxMode): Promise<void> {
   const leavingManual =
-    mode === "auto" && useRuns.getState().modes[tabId] === "manual";
-  if (leavingManual && !(await settleTransactions([tabId], "switchMode", {}))) {
+    mode === "auto" && modeOf(useTabs.getState(), tabId) === "manual";
+  if (leavingManual && !(await settleTransactions([tabId], "switchMode"))) {
     return;
   }
-  useRuns.getState().setMode(tabId, mode);
+  useTabs.getState().setMode(tabId, mode);
 }

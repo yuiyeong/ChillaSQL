@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { colorOf } from "../connections/colors";
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { TunnelTabIcon } from "../connections/TunnelStatus";
 import { useProject } from "../project/projectStore";
@@ -6,7 +7,6 @@ import { useRuns } from "../query/runsStore";
 import { useElapsed } from "../query/useElapsed";
 import type { TxInfo } from "../query/transaction";
 import { CloseIcon, PlusIcon } from "../../shared/ui/icons";
-import type { ConnectionColor } from "../../shared/api/types";
 import { IconButton } from "../../shared/ui/IconButton";
 import { SaveNameDialog } from "./SaveNameDialog";
 import { useTabs } from "./tabsStore";
@@ -28,7 +28,6 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
   const requestName = useTabs((state) => state.requestName);
   const setError = useTabs((state) => state.setError);
   const connections = useProject((state) => state.project?.connections);
-  const transactions = useRuns((state) => state.transactions);
 
   const scroller = useRef<HTMLDivElement>(null);
 
@@ -43,14 +42,6 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
     naming !== null && naming === activeId
       ? tabs.find((tab) => tab.id === naming)
       : undefined;
-
-  /** 접속이 없으면 undefined(빈 원), 있으면 그 접속의 color 이름이다. */
-  function dotColor(
-    connection: string | null,
-  ): ConnectionColor | null | undefined {
-    if (connection === null) return undefined;
-    return connections?.find((c) => c.name === connection)?.color ?? null;
-  }
 
   return (
     <>
@@ -72,7 +63,7 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
           >
             {tabs.map((tab) => {
               const selected = tab.id === activeId;
-              const color = dotColor(tab.connection);
+              const color = colorOf(connections, tab.connection);
               return (
                 <div
                   key={tab.id}
@@ -94,9 +85,7 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
                     <ConnectionDot color={color} testId="tab-dot" />
                     <span className="truncate">{tab.title}</span>
                   </button>
-                  {transactions[tab.id] !== undefined && (
-                    <TransactionBadge tx={transactions[tab.id]} />
-                  )}
+                  <TransactionBadge tabId={tab.id} />
                   <span className="mr-1 inline-flex">
                     <TunnelTabIcon connection={tab.connection} />
                   </span>
@@ -161,8 +150,17 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
   );
 }
 
-/** 열린 트랜잭션이 있는 탭의 `TX 3:12`. 탭 이름에 섞이지 않게 탭 button 밖에 둔다. */
-function TransactionBadge({ tx }: { tx: TxInfo }) {
+/**
+ * 열린 트랜잭션이 있는 탭의 `TX 3:12`. 탭 이름에 섞이지 않게 탭 button 밖에 둔다. 그 탭의
+ * 트랜잭션만 구독하므로 다른 탭의 트랜잭션이 바뀌어도 탭 줄을 다시 그리지 않는다.
+ */
+function TransactionBadge({ tabId }: { tabId: string }) {
+  const tx = useRuns((state) => state.transactions[tabId]);
+  return tx === undefined ? null : <TransactionClock tx={tx} />;
+}
+
+/** 트랜잭션이 있을 때만 그려서 시계도 그때만 돈다. */
+function TransactionClock({ tx }: { tx: TxInfo }) {
   const elapsed = useElapsed(tx.openedAt);
   return (
     <span

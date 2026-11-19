@@ -5,6 +5,7 @@ vi.mock("../../shared/api/commands");
 import { inspectStatement } from "../../shared/api/commands";
 import type { Danger } from "../../shared/api/types";
 import { answerDialog, textOf } from "../../test/dialogs";
+import { setTabMode } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 import { useDialogs } from "../../shared/ui/dialogs";
 import type { RunRequest } from "../query/runReducer";
@@ -45,7 +46,7 @@ test("safe_statements_run_without_asking", async () => {
 });
 
 test("manual_mode_says_it_can_be_rolled_back", async () => {
-  useRuns.getState().setMode(TAB, "manual");
+  setTabMode(TAB, "manual");
 
   const { spec } = await confirmWith(deleteAll);
 

@@ -20,8 +20,14 @@ export function t(key: MessageKey, params?: Params): string {
   });
 }
 
-/** `count`가 1이면 `<key>.one`, 아니면 `<key>.other`다. `{count}`는 `formatCount`로 채운다. */
+/** `count`에 맞는 복수형 key. 0이고 `<key>.none`이 있으면 그것, 1이면 `<key>.one`, 아니면 `<key>.other`다. */
+export function pluralKey(key: PluralKey, count: number): MessageKey {
+  const none = `${key}.none`;
+  if (count === 0 && none in en) return none as MessageKey;
+  return count === 1 ? `${key}.one` : `${key}.other`;
+}
+
+/** `pluralKey`로 고른 문구. `{count}`는 `formatCount`로 채운다. */
 export function tc(key: PluralKey, count: number, params?: Params): string {
-  const form = count === 1 ? "one" : "other";
-  return t(`${key}.${form}`, { ...params, count: formatCount(count) });
+  return t(pluralKey(key, count), { ...params, count: formatCount(count) });
 }

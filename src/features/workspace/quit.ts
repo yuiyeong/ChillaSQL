@@ -2,7 +2,6 @@ import { useEffect } from "react";
 import { quitApp } from "../../shared/api/commands";
 import { onQuitRequested } from "../../shared/api/events";
 import { ask } from "../../shared/ui/dialogs";
-import { useRuns } from "../query/runsStore";
 import { useTabs } from "../editor/tabsStore";
 import { manyTabsSpec, openTabs } from "./transactionPrompts";
 
@@ -17,13 +16,7 @@ export async function requestQuit(): Promise<void> {
   if (asking) return;
   asking = true;
   try {
-    const { transactions } = useRuns.getState();
-    const tabs = openTabs(
-      useTabs
-        .getState()
-        .tabs.map((tab) => tab.id)
-        .filter((id) => transactions[id] !== undefined),
-    );
+    const tabs = openTabs(useTabs.getState().tabs.map((tab) => tab.id));
     if (
       tabs.length > 0 &&
       (await ask(manyTabsSpec(tabs, "quit"))) !== "rollback"

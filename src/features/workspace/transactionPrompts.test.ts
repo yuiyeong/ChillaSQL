@@ -8,7 +8,7 @@ vi.mock("../../shared/ui/dialogs", async (importOriginal) => ({
 
 import type { TxEnd } from "../../shared/api/types";
 import { ask, type DialogSpec } from "../../shared/ui/dialogs";
-import { useTabs } from "../editor/tabsStore";
+import { modeOf, useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import type { TxInfo } from "../query/transaction";
@@ -84,7 +84,7 @@ function actionsOf(spec: DialogSpec) {
 test("does_not_ask_without_a_transaction", async () => {
   const id = tab();
 
-  expect(await settleTransactions([id], "close", {})).toBe(true);
+  expect(await settleTransactions([id], "close")).toBe(true);
 
   expect(ask).not.toHaveBeenCalled();
   expect(endTransaction).not.toHaveBeenCalled();
@@ -95,7 +95,7 @@ test("commit_and_close_commits_then_proceeds", async () => {
   open(id, 2);
   answer("commit");
 
-  expect(await settleTransactions([id], "close", {})).toBe(true);
+  expect(await settleTransactions([id], "close")).toBe(true);
 
   const spec = asked();
   expect(textOf(spec.title)).toBe("This tab has an open transaction");
@@ -116,7 +116,7 @@ test("roll_back_and_close_rolls_back_then_proceeds", async () => {
   open(id, 1);
   answer("rollback");
 
-  expect(await settleTransactions([id], "close", {})).toBe(true);
+  expect(await settleTransactions([id], "close")).toBe(true);
 
   expect(textOf(asked().body)).toBe(
     "Closing Query 1 closes the staging session. What should happen to the 1 uncommitted statement?",
@@ -165,7 +165,7 @@ test("a_failed_commit_keeps_the_tab_open", async () => {
   answer("commit");
   endTransaction.mockResolvedValue(false);
 
-  expect(await settleTransactions([id], "close", {})).toBe(false);
+  expect(await settleTransactions([id], "close")).toBe(false);
 });
 
 test("a_failed_commit_activates_the_tab_that_shows_the_error", async () => {
@@ -175,7 +175,7 @@ test("a_failed_commit_activates_the_tab_that_shows_the_error", async () => {
   answer("commit");
   endTransaction.mockResolvedValue(false);
 
-  expect(await settleTransactions([id], "switchProject", {})).toBe(false);
+  expect(await settleTransactions([id], "switchProject")).toBe(false);
 
   expect(useTabs.getState().activeId).toBe(id);
 });
@@ -186,7 +186,7 @@ test("a_failed_rollback_still_proceeds", async () => {
   answer("rollback");
   endTransaction.mockResolvedValue(false);
 
-  expect(await settleTransactions([id], "close", {})).toBe(true);
+  expect(await settleTransactions([id], "close")).toBe(true);
 });
 
 test("a_failed_transaction_offers_no_commit", async () => {
@@ -194,7 +194,7 @@ test("a_failed_transaction_offers_no_commit", async () => {
   open(id, 2, 10, "failed");
   answer("rollback");
 
-  expect(await settleTransactions([id], "close", {})).toBe(true);
+  expect(await settleTransactions([id], "close")).toBe(true);
 
   expect(textOf(asked().body)).toBe(
     "Closing Query 1 closes the staging session. What should happen to the 2 uncommitted statements?",
@@ -213,9 +213,9 @@ test("switch_mode_and_one_tab_wordings", async () => {
   answer("cancel");
   answer("cancel");
 
-  await settleTransactions([id], "switchMode", {});
+  await settleTransactions([id], "switchMode");
   await settleTransactions([id], "saveTarget", { connection: "staging" });
-  await settleTransactions([id], "switchProject", {});
+  await settleTransactions([id], "switchProject");
 
   expect(asked(0).icon).toBeUndefined();
   expect(asked(1).icon).toBeUndefined();
@@ -263,9 +263,7 @@ test("several_tabs_offer_only_roll_back_all", async () => {
   open(b, 1, 42);
   answer("rollback");
 
-  expect(await settleTransactions([a, b, quiet], "switchProject", {})).toBe(
-    true,
-  );
+  expect(await settleTransactions([a, b, quiet], "switchProject")).toBe(true);
 
   const spec = asked();
   expect(spec.icon).toBeUndefined();
@@ -318,7 +316,7 @@ test("cancel_does_nothing", async () => {
   open(id, 2);
   answer("cancel");
 
-  expect(await settleTransactions([id], "close", {})).toBe(false);
+  expect(await settleTransactions([id], "close")).toBe(false);
 
   expect(endTransaction).not.toHaveBeenCalled();
   expect(useRuns.getState().transactions[id]).toBeDefined();
@@ -331,37 +329,37 @@ test("switch_mode_to_manual_does_not_ask", async () => {
   await switchMode(id, "manual");
 
   expect(ask).not.toHaveBeenCalled();
-  expect(useRuns.getState().modes[id]).toBe("manual");
+  expect(modeOf(useTabs.getState(), id)).toBe("manual");
 });
 
 test("switch_mode_to_auto_asks_only_with_a_transaction", async () => {
   const id = tab();
-  useRuns.getState().setMode(id, "manual");
+  useTabs.getState().setMode(id, "manual");
 
   await switchMode(id, "auto");
   expect(ask).not.toHaveBeenCalled();
-  expect(useRuns.getState().modes[id]).toBe("auto");
+  expect(modeOf(useTabs.getState(), id)).toBe("auto");
 
-  useRuns.getState().setMode(id, "manual");
+  useTabs.getState().setMode(id, "manual");
   open(id, 2);
   answer("cancel");
   await switchMode(id, "auto");
-  expect(useRuns.getState().modes[id]).toBe("manual");
+  expect(modeOf(useTabs.getState(), id)).toBe("manual");
 
   answer("rollback");
   await switchMode(id, "auto");
   expect(endTransaction).toHaveBeenCalledWith(id, "rollback");
-  expect(useRuns.getState().modes[id]).toBe("auto");
+  expect(modeOf(useTabs.getState(), id)).toBe("auto");
 });
 
 test("switch_mode_stays_manual_when_the_commit_fails", async () => {
   const id = tab();
-  useRuns.getState().setMode(id, "manual");
+  useTabs.getState().setMode(id, "manual");
   open(id, 2);
   answer("commit");
   endTransaction.mockResolvedValue(false);
 
   await switchMode(id, "auto");
 
-  expect(useRuns.getState().modes[id]).toBe("manual");
+  expect(modeOf(useTabs.getState(), id)).toBe("manual");
 });

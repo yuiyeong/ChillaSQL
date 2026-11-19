@@ -8,6 +8,7 @@ import {
   type DialogSpec,
 } from "./dialogs";
 import { ClockIcon, WarningIcon } from "./icons";
+import { MODAL_PANEL, Scrim } from "./Modal";
 
 const FOCUSABLE = "button:not(:disabled)";
 
@@ -50,8 +51,8 @@ function Dialog({ spec }: { spec: DialogSpec }) {
   useEffect(() => cancel.current?.focus(), [spec]);
 
   return (
-    <div
-      className="bg-scrim fixed inset-0 z-50 flex items-start justify-center pt-[84px]"
+    <Scrim
+      top
       // 막을 눌러도 focus가 dialog를 떠나지 않는다. dialog 안은 SQL을 선택하고 scrollbar를 끌 수 있어야 하므로 막지 않는다.
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) event.preventDefault();
@@ -63,7 +64,7 @@ function Dialog({ spec }: { spec: DialogSpec }) {
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={spec.body === undefined ? undefined : bodyId}
-        className="border-line-2 bg-bg-2 shadow-dialog flex max-h-[calc(100vh-108px)] w-[452px] flex-col gap-3.5 rounded-xl border p-5"
+        className={`${MODAL_PANEL} max-h-[calc(100vh-108px)]`}
       >
         <Header spec={spec} titleId={titleId} bodyId={bodyId} />
         {spec.sql !== undefined && (
@@ -79,7 +80,7 @@ function Dialog({ spec }: { spec: DialogSpec }) {
           ))}
         </div>
       </div>
-    </div>
+    </Scrim>
   );
 }
 

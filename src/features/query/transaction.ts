@@ -1,5 +1,5 @@
 import type { Outcome, TxMode, TxStatus } from "../../shared/api/types";
-import { t, tc } from "../../shared/i18n/t";
+import { tc } from "../../shared/i18n/t";
 import type { RunState } from "./runReducer";
 
 /** 탭의 열린 트랜잭션. 트랜잭션 밖이면 없다. */
@@ -32,18 +32,17 @@ export function nextTx(
       openedAt: startedAt,
     };
   }
-  return {
-    status,
-    statements: previous.statements + (counted ? 1 : 0),
-    openedAt: previous.openedAt,
-  };
+  const statements = previous.statements + (counted ? 1 : 0);
+  // 바뀐 것이 없으면 같은 object를 돌려주어 구독한 화면을 다시 그리지 않는다.
+  if (status === previous.status && statements === previous.statements) {
+    return previous;
+  }
+  return { status, statements, openedAt: previous.openedAt };
 }
 
 /** `2 statements`. 문장이 없으면 사용자가 직접 BEGIN한 트랜잭션이다(Auto 모드). */
 export function statementsLabel(statements: number): string {
-  return statements === 0
-    ? t("tx.manualBegin")
-    : tc("tx.statements", statements);
+  return tc("tx.statements", statements);
 }
 
 /** Commit, Rollback, 모드 전환이 가능한지(계획의 "가능한 때"). 쿼리를 읽는 동안은 먼저 Cancel해야 한다. */
@@ -59,7 +58,7 @@ export function canEndTransaction(run: RunState | undefined): boolean {
 }
 
 /** 경과 시간 표시. `m:ss`, 한 시간이 넘으면 `h:mm:ss`. 시계가 거꾸로 갔으면 0이다. */
-export function formatElapsed(ms: number): string {
+export function formatClock(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
   const hours = Math.floor(total / 3600);
   const minutes = Math.floor(total / 60) % 60;

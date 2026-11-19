@@ -25,6 +25,12 @@ describe("t", () => {
     expect(tc("toast.copiedRows", 2)).toBe("Copied 2 rows (tab-separated)");
   });
 
+  test("tc는 0이고 none이 있으면 none을 고른다", () => {
+    expect(tc("tx.statements", 0)).toBe("manual BEGIN");
+    expect(tc("tx.statements", 1)).toBe("1 statement");
+    expect(tc("toast.copiedRows", 0)).toBe("Copied 0 rows (tab-separated)");
+  });
+
   test("tc는 count를 묶어 쓴다", () => {
     expect(tc("toast.copiedRows", 12000)).toBe(
       "Copied 12,000 rows (tab-separated)",

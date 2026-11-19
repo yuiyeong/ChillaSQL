@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { readSqlFile } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
+import type { TxMode } from "../../shared/api/types";
 import { closeDocument, openDocument } from "./documents";
 import { t } from "../../shared/i18n/t";
 
@@ -12,6 +13,8 @@ export interface Tab {
   stamp: string | null;
   dirty: boolean;
   connection: string | null;
+  /** 트랜잭션 모드. 새 탭은 auto다. 접속을 바꿔도 그대로다. */
+  mode: TxMode;
 }
 
 export interface TabsState {
@@ -28,6 +31,8 @@ export interface TabsState {
   next(): void;
   prev(): void;
   setConnection(id: string, connection: string | null): void;
+  /** 다음 실행부터 그 모드로 보낸다. 확인은 부르는 쪽이 한다. */
+  setMode(id: string, mode: TxMode): void;
   markDirty(id: string): void;
   /** 저장을 기록한다. 쓰는 동안 더 고쳤으면 `dirty`가 true다. */
   markSaved(id: string, path: string, stamp: string, dirty?: boolean): void;
@@ -38,6 +43,11 @@ export interface TabsState {
 
 function lastComponent(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
+}
+
+/** 그 탭의 트랜잭션 모드. 탭이 없으면 auto다. */
+export function modeOf(state: Pick<TabsState, "tabs">, id: string): TxMode {
+  return state.tabs.find((tab) => tab.id === id)?.mode ?? "auto";
 }
 
 function updateTab(tabs: Tab[], id: string, patch: Partial<Tab>): Tab[] {
@@ -91,6 +101,7 @@ export const useTabs = create<TabsState>()((set, get) => {
           stamp: null,
           dirty: false,
           connection: activeConnection(),
+          mode: "auto",
         },
         "",
       );
@@ -118,6 +129,7 @@ export const useTabs = create<TabsState>()((set, get) => {
           stamp: file.stamp,
           dirty: false,
           connection: activeConnection(),
+          mode: "auto",
         },
         file.text,
       );
@@ -149,6 +161,10 @@ export const useTabs = create<TabsState>()((set, get) => {
 
     setConnection(id, connection) {
       set((state) => ({ tabs: updateTab(state.tabs, id, { connection }) }));
+    },
+
+    setMode(id, mode) {
+      set((state) => ({ tabs: updateTab(state.tabs, id, { mode }) }));
     },
 
     markDirty(id) {

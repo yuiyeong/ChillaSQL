@@ -1,6 +1,7 @@
 /**
  * 화면 문구의 영어 dictionary. 화면 문구는 여기서만 정하고 `t(key)`로 쓴다.
  * key는 `<영역>.<이름>`이다. 개수에 따라 달라지는 문구는 `<이름>.one`과 `<이름>.other`를 짝으로 두고 `tc`로 쓴다.
+ * 0개일 때 다른 문구가 필요하면 `<이름>.none`을 더한다.
  * PostgreSQL 오류 메시지, SQL, 설정 파일의 key, 결과 data는 여기 두지 않는다.
  */
 export const en = {
@@ -98,8 +99,7 @@ export const en = {
   "dialog.tx.rollbackAll.switch": "Roll back all and switch",
   "dialog.tx.rollbackAll.save": "Roll back all and save",
   "dialog.tx.rollbackAll.quit": "Roll back all and quit",
-  "dialog.danger.title.delete": "Run {delete} without {where}?",
-  "dialog.danger.title.update": "Run {update} without {where}?",
+  "dialog.danger.title.withoutWhere": "Run {verb} without {where}?",
   "dialog.danger.title.drop": "Run {drop}?",
   "dialog.danger.title.truncate": "Run {truncate}?",
   "dialog.danger.first.delete":
@@ -107,8 +107,6 @@ export const en = {
   "dialog.danger.first.update":
     "This updates every row in {tables} on {connection}.",
   "dialog.danger.first.drop": "This drops {names} on {connection}.",
-  "dialog.danger.first.truncate":
-    "This deletes every row in {tables} on {connection}.",
   "dialog.danger.second.reversible":
     "You're inside an open transaction, so you can roll it back until you commit.",
   "dialog.danger.second.final":
@@ -232,7 +230,7 @@ export const en = {
   "tx.failed": "Failed",
   "tx.statements.one": "1 statement",
   "tx.statements.other": "{count} statements",
-  "tx.manualBegin": "manual BEGIN",
+  "tx.statements.none": "manual BEGIN",
   "tx.commit": "Commit",
   "tx.rollback": "Rollback",
   "tx.badge": "TX",

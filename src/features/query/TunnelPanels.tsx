@@ -4,7 +4,7 @@ import { ErrorIcon, ReconnectIcon } from "../../shared/ui/icons";
 import { CommandOutput, Pre } from "../connections/CommandOutput";
 import { useTunnelTarget } from "../connections/TunnelStatus";
 import { useConnection } from "../project/projectStore";
-import { MessageBlock } from "./MessageBlock";
+import { Banner, MessageBlock } from "./MessageBlock";
 import type { Rejection, RunRequest } from "./runReducer";
 
 /** 터널이 열리기를 기다리는 동안의 결과 panel. 실행한 명령과 Cancel. */
@@ -100,20 +100,16 @@ export function TunnelGaveUp({
 /** 끊긴 세션을 새 세션이 대신했다는 알림. */
 export function ReconnectedBanner({ onClose }: { onClose(): void }) {
   return (
-    <div
+    <Banner
       role="status"
-      className="border-line-1 bg-bg-1 flex shrink-0 items-start gap-3 border-b px-3.5 py-3"
-    >
-      <ReconnectIcon className="text-fg mt-px shrink-0" />
-      <div className="flex flex-1 flex-col gap-1">
-        <span className="text-body font-medium">{t("result.reconnected")}</span>
-        <span className="text-small text-fg-2">
-          {t("result.reconnectedDetail")}
-        </span>
-      </div>
-      <Button variant="ghost" size="small" onClick={onClose}>
-        {t("common.close")}
-      </Button>
-    </div>
+      icon={<ReconnectIcon className="text-fg mt-px shrink-0" />}
+      title={t("result.reconnected")}
+      detail={t("result.reconnectedDetail")}
+      action={
+        <Button variant="ghost" size="small" onClick={onClose}>
+          {t("common.close")}
+        </Button>
+      }
+    />
   );
 }

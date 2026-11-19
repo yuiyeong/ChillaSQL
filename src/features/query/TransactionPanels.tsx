@@ -3,16 +3,17 @@ import { Button } from "../../shared/ui/Button";
 import { WarningIcon } from "../../shared/ui/icons";
 import { Kbd } from "../../shared/ui/Kbd";
 import { shortcutKeys, shortcutLabel } from "../workspace/shortcuts";
+import { Banner } from "./MessageBlock";
 
 /**
  * 실패한 트랜잭션의 오류 위에 두는 제목 줄. Rollback 전까지 모든 문장이 거부된다고 알린다.
- * Rollback은 toolbar와 같은 규칙으로 답을 기다리는 동안 disabled다.
+ * Rollback은 toolbar와 같은 규칙(`endable`)으로 disabled다.
  */
 export function TransactionFailedHeader({
-  ending,
+  disabled,
   onRollback,
 }: {
-  ending: boolean;
+  disabled: boolean;
   onRollback(): void;
 }) {
   return (
@@ -22,7 +23,7 @@ export function TransactionFailedHeader({
       </span>
       <Button
         size="kbd"
-        disabled={ending}
+        disabled={disabled}
         aria-keyshortcuts={shortcutKeys("rollback")}
         onClick={onRollback}
       >
@@ -47,22 +48,16 @@ export function TransactionLostBanner({
   onClose(): void;
 }) {
   return (
-    <div
+    <Banner
       role="alert"
-      className="border-line-1 bg-bg-1 flex shrink-0 items-start gap-3 border-b px-3.5 py-3"
-    >
-      <WarningIcon size={16} className="text-fg mt-px shrink-0" />
-      <div className="flex flex-1 flex-col gap-1">
-        <span className="text-body font-medium">{t("tx.lostTitle")}</span>
-        <span className="text-small text-fg-2">
-          {statements === 0
-            ? t("tx.lostBody.none")
-            : tc("tx.lostBody", statements)}
-        </span>
-      </div>
-      <Button size="small" onClick={onClose}>
-        {t("common.ok")}
-      </Button>
-    </div>
+      icon={<WarningIcon size={16} className="text-fg mt-px shrink-0" />}
+      title={t("tx.lostTitle")}
+      detail={tc("tx.lostBody", statements)}
+      action={
+        <Button size="small" onClick={onClose}>
+          {t("common.ok")}
+        </Button>
+      }
+    />
   );
 }

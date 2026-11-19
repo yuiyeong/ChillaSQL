@@ -377,11 +377,11 @@ test("접속을 바꾸면 세션을 놓는다", async () => {
 
 test("접속을 바꿔도 탭의 모드는 남는다", async () => {
   const id = tabWith("SELECT 1");
-  useRuns.getState().setMode(id, "manual");
+  useTabs.getState().setMode(id, "manual");
 
   await changeConnection(id, "staging");
 
-  expect(useRuns.getState().modes[id]).toBe("manual");
+  expect(tabOf(id)?.mode).toBe("manual");
 });
 
 test("프로젝트를 바꾸면 탭과 실행 상태를 비운다", async () => {
@@ -597,7 +597,7 @@ test("대상이 바뀐 접속의 세션을 놓아도 탭의 모드는 남는다"
     project: { ...project, connections: [connection("local")] },
   });
   const id = await ranTab("local", 3);
-  useRuns.getState().setMode(id, "manual");
+  useTabs.getState().setMode(id, "manual");
 
   await applySavedProject({
     ...project,
@@ -605,7 +605,7 @@ test("대상이 바뀐 접속의 세션을 놓아도 탭의 모드는 남는다"
   });
 
   expect(closeSession).toHaveBeenCalledWith(3);
-  expect(useRuns.getState().modes[id]).toBe("manual");
+  expect(tabOf(id)?.mode).toBe("manual");
 });
 
 test("대상이 그대로면 세션을 놓지 않는다", async () => {
@@ -833,7 +833,7 @@ test("commit does nothing without a transaction or while a query is being read",
 test("closing_a_tab_with_a_transaction_asks_before_the_unsaved_prompt", async () => {
   const id = tabWith("UPDATE a SET b = 1");
   // Manual 모드라 앱이 BEGIN을 붙인 이 문장도 센다.
-  useRuns.getState().setMode(id, "manual");
+  useTabs.getState().setMode(id, "manual");
   await runInTransaction(id, "in_transaction");
   useTabs.getState().markDirty(id);
   let dialogWhenEnded: unknown;
@@ -953,7 +953,7 @@ test("a failed commit does not switch projects", async () => {
 
 test("switch_mode_to_auto_with_a_transaction_asks", async () => {
   const id = tabWith("UPDATE a SET b = 1");
-  useRuns.getState().setMode(id, "manual");
+  useTabs.getState().setMode(id, "manual");
   await runInTransaction(id, "in_transaction");
   vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
 
@@ -965,7 +965,7 @@ test("switch_mode_to_auto_with_a_transaction_asks", async () => {
     "End the transaction before switching to Auto",
   );
   expect(endTransaction).toHaveBeenCalledWith(3, "commit");
-  expect(useRuns.getState().modes[id]).toBe("auto");
+  expect(tabOf(id)?.mode).toBe("auto");
   expect(useRuns.getState().transactions[id]).toBeUndefined();
 });
 
@@ -1011,7 +1011,7 @@ test("run_asks_before_a_dangerous_statement_and_does_nothing_on_cancel", async (
   vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 21 }]);
   vi.mocked(inspectStatement).mockResolvedValue(deleteAll);
   const id = tabWith("DELETE FROM sessions;");
-  useRuns.getState().setMode(id, "manual");
+  useTabs.getState().setMode(id, "manual");
 
   const running = execute("run");
   const spec = await answerDialog("cancel");

@@ -1,5 +1,6 @@
 import { useId, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Button } from "../../shared/ui/Button";
+import { MODAL_PANEL, Scrim } from "../../shared/ui/Modal";
 import { noTextCorrection } from "../../shared/ui/noTextCorrection";
 import { t } from "../../shared/i18n/t";
 
@@ -27,12 +28,12 @@ export function SaveNameDialog({
   }
 
   return (
-    <div className="bg-scrim fixed inset-0 z-10 flex items-start justify-center pt-[84px]">
+    <Scrim>
       <form
         role="dialog"
         aria-modal="true"
         aria-labelledby={headingId}
-        className="border-line-2 bg-bg-2 shadow-dialog flex w-[452px] flex-col gap-3.5 rounded-xl border p-5"
+        className={MODAL_PANEL}
         onSubmit={submit}
         onKeyDown={keyDown}
       >
@@ -59,6 +60,6 @@ export function SaveNameDialog({
           </Button>
         </div>
       </form>
-    </div>
+    </Scrim>
   );
 }

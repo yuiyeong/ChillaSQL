@@ -66,6 +66,7 @@ export function resolveDialog(id: string): void {
   answered.resolve(id);
 }
 
+/** dialog가 떠 있는지. 떠 있는 동안은 단축키가 동작하지 않는다. */
 export function isDialogOpen(): boolean {
   return useDialogs.getState().current !== null;
 }

@@ -1,4 +1,5 @@
-import { useRuns } from "../query/runsStore";
+import { modeOf, useTabs } from "../editor/tabsStore";
+import { endable, useRuns } from "../query/runsStore";
 import {
   canEndTransaction,
   statementsLabel,
@@ -22,13 +23,22 @@ const MODES: { mode: TxMode; label: "tx.auto" | "tx.manual" }[] = [
  * 쿼리의 행을 읽는 동안과 Commit이나 Rollback의 답을 기다리는 동안은 모두 disabled다.
  */
 export function TransactionControls({ tabId }: { tabId: string | null }) {
-  const mode = useRuns((s) => (tabId === null ? undefined : s.modes[tabId]));
+  const mode = useTabs((s) => (tabId === null ? "auto" : modeOf(s, tabId)));
   const tx = useRuns((s) =>
     tabId === null ? undefined : s.transactions[tabId],
   );
+  // 모드는 트랜잭션이 없어도 바꿀 수 있으므로 `endable`이 아니라 실행과 끝내기만 본다.
   const settled = useRuns(
     (s) =>
-      tabId !== null && !s.ending[tabId] && canEndTransaction(s.runs[tabId]),
+      tabId !== null &&
+      s.ending[tabId] === undefined &&
+      canEndTransaction(s.runs[tabId]),
+  );
+  const canRollback = useRuns(
+    (s) => tabId !== null && endable(s, tabId, "rollback"),
+  );
+  const canCommit = useRuns(
+    (s) => tabId !== null && endable(s, tabId, "commit"),
   );
 
   return (
@@ -39,7 +49,7 @@ export function TransactionControls({ tabId }: { tabId: string | null }) {
         className="border-line-2 bg-bg-2 flex shrink-0 gap-0.5 rounded-[7px] border p-0.5"
       >
         {MODES.map(({ mode: value, label }) => {
-          const checked = (mode ?? "auto") === value;
+          const checked = mode === value;
           return (
             <button
               key={value}
@@ -65,14 +75,14 @@ export function TransactionControls({ tabId }: { tabId: string | null }) {
       {tx !== undefined && (
         <>
           <Button
-            disabled={!settled}
+            disabled={!canRollback}
             aria-keyshortcuts={shortcutKeys("rollback")}
             onClick={() => void execute("rollback")}
           >
             {t("tx.rollback")}
           </Button>
           <Button
-            disabled={!settled || tx.status === "failed"}
+            disabled={!canCommit}
             aria-keyshortcuts={shortcutKeys("commit")}
             onClick={() => void execute("commit")}
           >

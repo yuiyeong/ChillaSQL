@@ -16,10 +16,10 @@ import type {
   EndResult,
   QueryEvent,
   TxEnd,
-  TxMode,
   TxStatus,
 } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
+import { modeOf, useTabs } from "../editor/tabsStore";
 import { clearGridViews, dropGridView } from "./gridViews";
 import {
   emptyResult,
@@ -29,7 +29,7 @@ import {
   type RunRequest,
   type RunState,
 } from "./runReducer";
-import { nextTx, type TxInfo } from "./transaction";
+import { canEndTransaction, nextTx, type TxInfo } from "./transaction";
 
 /**
  * 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 Rejection을, 사용자가 그만두게 했으면(위험 쿼리
@@ -66,7 +66,9 @@ function withEntry<T>(
   key: string,
   value: T | undefined,
 ): Record<string, T> {
-  if (value !== undefined) return { ...record, [key]: value };
+  if (value !== undefined) {
+    return record[key] === value ? record : { ...record, [key]: value };
+  }
   if (!(key in record)) return record;
   const next = { ...record };
   delete next[key];
@@ -117,22 +119,22 @@ interface RunsState {
   discardedByEnd: Record<string, true>;
   /** tab id → 열린 트랜잭션. 트랜잭션이 열린 탭만 있다. */
   transactions: Record<string, TxInfo>;
-  /** tab id → 트랜잭션 모드. 없으면 auto다. */
-  modes: Record<string, TxMode>;
-  /** Commit이나 Rollback을 보내고 답을 기다리는 탭. */
-  ending: Record<string, true>;
+  /**
+   * Commit이나 Rollback을 보내고 답을 기다리는 탭 → 그 끝내기의 token. 늦게 끝난 끝내기는 token이
+   * 같을 때만 지우므로 release 뒤의 다른 끝내기를 지우지 않는다.
+   */
+  ending: Record<string, object>;
   /**
    * 그 접속을 쓰는 탭의 세션이 끊겼다(터널이 다시 시작됨). 다음 실행이 새 세션을 먼저 연 뒤 닫는다.
    * 열린 트랜잭션은 바로 잃은 것으로 알린다.
    */
   markStale(connection: string): void;
   dismissNotice(tabId: string): void;
-  /** 다음 실행부터 그 모드로 보낸다. 확인은 부르는 쪽이 한다. */
-  setMode(tabId: string, mode: TxMode): void;
   /**
    * 그 탭의 트랜잭션을 Commit이나 Rollback한다. 끝났으면 true. 끝내지 못했으면 이유를 결과 panel에
    * 두고(연결이 끊겼으면 Transaction lost를 알리고) false. 세션이나 트랜잭션이 없으면 보내지 않고
-   * true. 같은 탭의 끝내기가 답을 기다리는 중이면 보내지 않고 false.
+   * true. 같은 탭의 끝내기가 답을 기다리는 중이면 보내지 않고 false. 사용자가 누르는 Commit과
+   * Rollback이 지금 가능한지는 `endable`이 정한다.
    */
   endTransaction(tabId: string, end: TxEnd): Promise<boolean>;
   /**
@@ -148,13 +150,18 @@ interface RunsState {
    * 보내지 않는다. 실패는 무시한다. 끝은 `finished`로 온다.
    */
   fetchMore(tabId: string): Promise<void>;
-  /**
-   * 탭을 닫거나 접속을 바꿀 때. 상태, 트랜잭션, 모드와 결과 표의 view는 바로 지우고 세션을 닫는다.
-   * 접속을 바꿀 때는 `keepMode`로 모드를 남긴다(모드는 세션이 아니라 탭의 것이다).
-   */
-  release(tabId: string, options?: { keepMode?: boolean }): Promise<void>;
+  /** 탭을 닫거나 접속을 바꿀 때. 상태, 트랜잭션과 결과 표의 view는 바로 지우고 세션을 닫는다. */
+  release(tabId: string): Promise<void>;
   /** 모든 탭을 release한다. 프로젝트를 바꿀 때 */
   reset(): Promise<void>;
+}
+
+/** 탭마다 값을 하나씩 두는 record 가운데 `setEntry`로 바꾸는 것과 그 값 */
+interface Entries {
+  notices: RunNotice;
+  discardedByEnd: true;
+  transactions: TxInfo;
+  ending: object;
 }
 
 /** 탭의 세션. `opening`은 세션 id로 끝난다(이미 열렸으면 끝난 promise). */
@@ -172,6 +179,22 @@ interface SessionSlot {
 interface Execution {
   sessionId: number;
   queryId: Promise<number>;
+}
+
+/**
+ * 사용자가 그 탭의 트랜잭션을 지금 `end`로 끝낼 수 있는지(계획의 "가능한 때"). 트랜잭션이 있고,
+ * 끝내기가 답을 기다리는 중이 아니고, 쿼리를 읽는 중이 아니어야 한다. 실패한 트랜잭션은 Rollback만
+ * 된다. 단축키, toolbar 버튼, 결과 panel의 Rollback이 같이 쓴다.
+ */
+export function endable(
+  state: Pick<RunsState, "runs" | "transactions" | "ending">,
+  tabId: string,
+  end: TxEnd,
+): boolean {
+  const tx = state.transactions[tabId];
+  if (tx === undefined || state.ending[tabId] !== undefined) return false;
+  if (end === "commit" && tx.status === "failed") return false;
+  return canEndTransaction(state.runs[tabId]);
 }
 
 /** 세션이 열리면 닫는다. 열기와 닫기의 실패는 무시한다. */
@@ -196,8 +219,6 @@ export const useRuns = create<RunsState>()((set, get) => {
   const executions = new Map<string, Execution>();
   // 세션이 끊겨(connection_lost, unknown_session) 잊은 탭. 다음 세션이 열리면 Reconnected를 알린다.
   const lost = new Set<string>();
-  // 답을 기다리는 끝내기. 늦게 끝난 끝내기가 release 뒤의 다른 끝내기의 `ending`을 지우지 않게 한다.
-  const endCalls = new Map<string, object>();
 
   function bump(numbers: Map<string, number>, tabId: string): number {
     lastNumber += 1;
@@ -209,18 +230,25 @@ export const useRuns = create<RunsState>()((set, get) => {
     set((s) => ({ runs: { ...s.runs, [tabId]: state } }));
   }
 
-  function setNotice(tabId: string, notice: RunNotice | null): void {
+  /** 탭마다의 record에서 그 탭의 값을 바꾼다. `undefined`면 지운다. 바뀌지 않으면 state를 그대로 둔다. */
+  function setEntry<K extends keyof Entries>(
+    key: K,
+    tabId: string,
+    value: Entries[K] | undefined,
+  ): void {
     set((s) => {
-      const notices = withEntry(s.notices, tabId, notice ?? undefined);
-      return notices === s.notices ? s : { notices };
+      const record = s[key] as Record<string, Entries[K]>;
+      const next = withEntry(record, tabId, value);
+      return next === record ? s : ({ [key]: next } as Partial<RunsState>);
     });
   }
 
+  function setNotice(tabId: string, notice: RunNotice | null): void {
+    setEntry("notices", tabId, notice ?? undefined);
+  }
+
   function setTx(tabId: string, tx: TxInfo | undefined): void {
-    set((s) => {
-      const transactions = withEntry(s.transactions, tabId, tx);
-      return transactions === s.transactions ? s : { transactions };
-    });
+    setEntry("transactions", tabId, tx);
   }
 
   /** 세션이 끊겨 그 탭의 트랜잭션을 잃었다. 열려 있었으면 Transaction lost를 알린다. */
@@ -279,7 +307,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     return slot;
   }
 
-  /** 그 탭의 attempt, token, 세션, 실행, 끝내기를 잊는다. 잊은 세션을 돌려준다. */
+  /** 그 탭의 attempt, token, 세션, 실행을 잊는다. 잊은 세션을 돌려준다. */
   function drop(tabId: string): SessionSlot | undefined {
     const slot = sessions.get(tabId);
     attempts.delete(tabId);
@@ -287,7 +315,6 @@ export const useRuns = create<RunsState>()((set, get) => {
     sessions.delete(tabId);
     executions.delete(tabId);
     lost.delete(tabId);
-    endCalls.delete(tabId);
     return slot;
   }
 
@@ -296,7 +323,6 @@ export const useRuns = create<RunsState>()((set, get) => {
     notices: {},
     discardedByEnd: {},
     transactions: {},
-    modes: {},
     ending: {},
 
     markStale(connection) {
@@ -311,10 +337,6 @@ export const useRuns = create<RunsState>()((set, get) => {
 
     dismissNotice(tabId) {
       setNotice(tabId, null);
-    },
-
-    setMode(tabId, mode) {
-      set((s) => ({ modes: { ...s.modes, [tabId]: mode } }));
     },
 
     async run(tabId, prepare) {
@@ -334,10 +356,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       if (attempts.get(tabId) !== attempt) return;
       if (request === null) return;
       setNotice(tabId, null);
-      set((s) => {
-        const discardedByEnd = withEntry(s.discardedByEnd, tabId, undefined);
-        return discardedByEnd === s.discardedByEnd ? s : { discardedByEnd };
-      });
+      setEntry("discardedByEnd", tabId, undefined);
       if ("title" in request) {
         // 진행 중인 쿼리의 표시와 취소는 그대로 둔다.
         const status = get().runs[tabId]?.status;
@@ -375,8 +394,8 @@ export const useRuns = create<RunsState>()((set, get) => {
         setNotice(tabId, { kind: "reconnected" });
       }
 
-      // 문장 수는 보낸 모드로 센다. 실행 중에 모드가 바뀌어도 이 실행은 이 모드다.
-      const mode = get().modes[tabId] ?? "auto";
+      // 문장 수는 보낸 모드로 센다. 실행 중에 탭의 모드가 바뀌어도 이 실행은 이 모드다.
+      const mode = modeOf(useTabs.getState(), tabId);
       const startedAt = Date.now();
       const onEvent = (event: QueryEvent) => {
         // 세션이 죽었다. 늦은 event여도 그 세션이 아직 이 탭의 것이면 버린다.
@@ -409,10 +428,14 @@ export const useRuns = create<RunsState>()((set, get) => {
             mode,
             startedAt,
           );
-          return {
-            runs,
-            transactions: withEntry(s.transactions, tabId, tx ?? undefined),
-          };
+          const transactions = withEntry(
+            s.transactions,
+            tabId,
+            tx ?? undefined,
+          );
+          return runs === s.runs && transactions === s.transactions
+            ? s
+            : { runs, transactions };
         });
       };
 
@@ -464,15 +487,11 @@ export const useRuns = create<RunsState>()((set, get) => {
       if (slot === undefined || sessionId === null) return true;
       if (!(tabId in get().transactions)) return true;
       const call = {};
-      endCalls.set(tabId, call);
+      setEntry("ending", tabId, call);
       // 행을 받다 만 쿼리는 끝내기가 버린다. 그 discarded는 다음 쿼리가 아니라 끝내기 때문이다.
-      const discards = get().runs[tabId]?.status === "running";
-      set((s) => ({
-        ending: { ...s.ending, [tabId]: true },
-        discardedByEnd: discards
-          ? { ...s.discardedByEnd, [tabId]: true }
-          : s.discardedByEnd,
-      }));
+      if (get().runs[tabId]?.status === "running") {
+        setEntry("discardedByEnd", tabId, true);
+      }
       // 이 token이 그대로면 끝내기를 보낸 뒤 시작한 실행이 없다.
       const token = tokens.get(tabId);
       const owns = () => sessions.get(tabId) === slot;
@@ -488,16 +507,12 @@ export const useRuns = create<RunsState>()((set, get) => {
           rejection = { title: endFailedTitle(end), detail: messageOf(error) };
         }
       } finally {
-        if (endCalls.get(tabId) === call) {
-          endCalls.delete(tabId);
+        if (get().ending[tabId] === call) {
+          setEntry("ending", tabId, undefined);
           // 끝내지 못했으면 그 결과의 discarded는 끝내기 때문이 아니다.
-          const kept = result?.outcome === "ended";
-          set((s) => ({
-            ending: withEntry(s.ending, tabId, undefined),
-            discardedByEnd: kept
-              ? s.discardedByEnd
-              : withEntry(s.discardedByEnd, tabId, undefined),
-          }));
+          if (result?.outcome !== "ended") {
+            setEntry("discardedByEnd", tabId, undefined);
+          }
         }
       }
 
@@ -519,7 +534,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       return result?.outcome === "ended";
     },
 
-    async release(tabId, options) {
+    async release(tabId) {
       const slot = drop(tabId);
       dropGridView(tabId);
       set((s) => ({
@@ -527,9 +542,6 @@ export const useRuns = create<RunsState>()((set, get) => {
         notices: withEntry(s.notices, tabId, undefined),
         discardedByEnd: withEntry(s.discardedByEnd, tabId, undefined),
         transactions: withEntry(s.transactions, tabId, undefined),
-        modes: options?.keepMode
-          ? s.modes
-          : withEntry(s.modes, tabId, undefined),
         ending: withEntry(s.ending, tabId, undefined),
       }));
       if (slot !== undefined) await closeSlot(slot);
@@ -541,14 +553,11 @@ export const useRuns = create<RunsState>()((set, get) => {
         .map(drop)
         .filter((slot) => slot !== undefined);
       lost.clear();
-      endCalls.clear();
-      // 프로젝트가 바뀌면 탭이 새로 생기므로 모드도 지운다.
       set({
         runs: {},
         notices: {},
         discardedByEnd: {},
         transactions: {},
-        modes: {},
         ending: {},
       });
       clearGridViews();

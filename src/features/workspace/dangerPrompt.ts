@@ -4,6 +4,7 @@ import type { Danger } from "../../shared/api/types";
 import { bold, rt, sqlCode } from "../../shared/i18n/rich";
 import { t } from "../../shared/i18n/t";
 import { ask, type DialogSpec } from "../../shared/ui/dialogs";
+import { modeOf, useTabs } from "../editor/tabsStore";
 import type { RunRequest } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
 
@@ -26,13 +27,11 @@ function names(list: string[]): ReactNode {
 function titleOf(danger: Danger): ReactNode {
   switch (danger.kind) {
     case "delete_without_where":
-      return rt("dialog.danger.title.delete", {
-        delete: keyword("DELETE"),
-        where: keyword("WHERE"),
-      });
     case "update_without_where":
-      return rt("dialog.danger.title.update", {
-        update: keyword("UPDATE"),
+      return rt("dialog.danger.title.withoutWhere", {
+        verb: keyword(
+          danger.kind === "delete_without_where" ? "DELETE" : "UPDATE",
+        ),
         where: keyword("WHERE"),
       });
     case "drop":
@@ -50,8 +49,12 @@ function firstSentence(danger: Danger, connection: string): ReactNode {
   const on = bold(connection);
   switch (danger.kind) {
     case "delete_without_where":
+    case "truncate":
+      // TRUNCATE도 모든 행을 지운다는 같은 문장이다.
       return rt("dialog.danger.first.delete", {
-        tables: names([danger.table]),
+        tables: names(
+          danger.kind === "truncate" ? danger.tables : [danger.table],
+        ),
         connection: on,
       });
     case "update_without_where":
@@ -64,19 +67,14 @@ function firstSentence(danger: Danger, connection: string): ReactNode {
         names: names(danger.names),
         connection: on,
       });
-    case "truncate":
-      return rt("dialog.danger.first.truncate", {
-        tables: names(danger.tables),
-        connection: on,
-      });
   }
 }
 
 /** Manual이거나 트랜잭션이 열려 있으면 Rollback할 수 있고, Auto이고 트랜잭션 밖이면 바로 Commit된다. */
 function secondSentence(tabId: string): ReactNode {
-  const { modes, transactions } = useRuns.getState();
   const reversible =
-    modes[tabId] === "manual" || transactions[tabId] !== undefined;
+    modeOf(useTabs.getState(), tabId) === "manual" ||
+    useRuns.getState().transactions[tabId] !== undefined;
   return reversible
     ? t("dialog.danger.second.reversible")
     : rt("dialog.danger.second.final", {

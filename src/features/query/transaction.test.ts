@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emptyResult, type RunState } from "./runReducer";
-import { canEndTransaction, formatElapsed, nextTx } from "./transaction";
+import { canEndTransaction, formatClock, nextTx } from "./transaction";
 
 describe("nextTx", () => {
   it("counts completed statements while the transaction stays open", () => {
@@ -97,18 +97,18 @@ describe("canEndTransaction", () => {
   });
 });
 
-describe("formatElapsed", () => {
+describe("formatClock", () => {
   it("writes m:ss and h:mm:ss after an hour", () => {
-    expect(formatElapsed(0)).toBe("0:00");
-    expect(formatElapsed(999)).toBe("0:00");
-    expect(formatElapsed(42_000)).toBe("0:42");
-    expect(formatElapsed(192_000)).toBe("3:12");
-    expect(formatElapsed(3_599_999)).toBe("59:59");
-    expect(formatElapsed(3_600_000)).toBe("1:00:00");
-    expect(formatElapsed(3_725_000)).toBe("1:02:05");
+    expect(formatClock(0)).toBe("0:00");
+    expect(formatClock(999)).toBe("0:00");
+    expect(formatClock(42_000)).toBe("0:42");
+    expect(formatClock(192_000)).toBe("3:12");
+    expect(formatClock(3_599_999)).toBe("59:59");
+    expect(formatClock(3_600_000)).toBe("1:00:00");
+    expect(formatClock(3_725_000)).toBe("1:02:05");
   });
 
   it("treats a clock that went backwards as zero", () => {
-    expect(formatElapsed(-5_000)).toBe("0:00");
+    expect(formatClock(-5_000)).toBe("0:00");
   });
 });

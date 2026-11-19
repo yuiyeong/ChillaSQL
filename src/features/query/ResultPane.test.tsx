@@ -807,7 +807,7 @@ describe("트랜잭션", () => {
   });
 
   test("the_failed_view_disables_rollback_while_ending", () => {
-    useRuns.setState({ ending: { t: true } });
+    useRuns.setState({ ending: { t: {} } });
     failedIn("failed");
 
     expect(screen.getByRole("button", { name: /Rollback/ })).toBeDisabled();

@@ -14,8 +14,7 @@ import { lineColumn, statementAt } from "../editor/statementAt";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import type { Origin, Rejection, RunRequest } from "../query/runReducer";
-import { useRuns } from "../query/runsStore";
-import { canEndTransaction } from "../query/transaction";
+import { endable, useRuns } from "../query/runsStore";
 import { mono, rt } from "../../shared/i18n/rich";
 import { t, tc } from "../../shared/i18n/t";
 import { ask } from "../../shared/ui/dialogs";
@@ -146,16 +145,10 @@ export async function execute(command: CommandId): Promise<void> {
   }
 }
 
-/**
- * 탭의 트랜잭션을 Commit이나 Rollback한다. 트랜잭션이 없거나, 쿼리를 읽는 중이거나, 실패한
- * 트랜잭션의 Commit이면 아무것도 하지 않는다(Rollback은 실패한 트랜잭션도 할 수 있다).
- */
+/** 탭의 트랜잭션을 Commit이나 Rollback한다. 지금 그렇게 끝낼 수 없으면(`endable`) 아무것도 하지 않는다. */
 async function endActiveTransaction(tabId: string, end: TxEnd): Promise<void> {
-  const { transactions, runs, endTransaction } = useRuns.getState();
-  const tx = transactions[tabId];
-  if (tx === undefined || !canEndTransaction(runs[tabId])) return;
-  if (end === "commit" && tx.status === "failed") return;
-  await endTransaction(tabId, end);
+  const runs = useRuns.getState();
+  if (endable(runs, tabId, end)) await runs.endTransaction(tabId, end);
 }
 
 /**
@@ -205,7 +198,7 @@ export async function runAgain(tabId: string): Promise<void> {
  */
 export async function closeTab(tabId: string): Promise<void> {
   if (findTab(tabId) === undefined) return;
-  if (!(await settleTransactions([tabId], "close", {}))) return;
+  if (!(await settleTransactions([tabId], "close"))) return;
   const tab = findTab(tabId);
   if (tab === undefined) return;
   if (tab.dirty) {
@@ -250,7 +243,7 @@ export async function changeConnection(
     target: connection ?? undefined,
   });
   if (!settled) return;
-  const released = useRuns.getState().release(tabId, { keepMode: true });
+  const released = useRuns.getState().release(tabId);
   useTabs.getState().setConnection(tabId, connection);
   await released;
 }
@@ -274,7 +267,7 @@ export async function applySavedProject(project: Project): Promise<void> {
     .tabs.filter(
       (tab) => tab.connection !== null && changed.has(tab.connection),
     )
-    .map((tab) => useRuns.getState().release(tab.id, { keepMode: true }));
+    .map((tab) => useRuns.getState().release(tab.id));
   useProject.getState().applyProject(project);
   await Promise.all(released);
 }
@@ -287,7 +280,6 @@ export async function switchProject(): Promise<void> {
   const settlement = await chooseSettlement(
     useTabs.getState().tabs.map((tab) => tab.id),
     "switchProject",
-    {},
   );
   if (settlement === null) return;
   let dir: string | null;

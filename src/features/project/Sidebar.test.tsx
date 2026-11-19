@@ -179,6 +179,7 @@ test("활성 탭의 파일을 강조하고 dirty 파일에 Unsaved를 붙인다"
         stamp: "s",
         dirty: false,
         connection: null,
+        mode: "auto",
       },
       {
         id: "t2",
@@ -187,6 +188,7 @@ test("활성 탭의 파일을 강조하고 dirty 파일에 Unsaved를 붙인다"
         stamp: "s",
         dirty: true,
         connection: null,
+        mode: "auto",
       },
     ],
     activeId: "t1",

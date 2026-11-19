@@ -37,7 +37,7 @@ import {
 } from "./format";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData } from "./runReducer";
-import { useRuns } from "./runsStore";
+import { endable, useRuns } from "./runsStore";
 import {
   failedHintOf,
   TransactionFailedHeader,
@@ -79,7 +79,9 @@ export const ResultPane = memo(function ResultPane({
   const txFailed = useRuns((s) =>
     tabId === null ? false : s.transactions[tabId]?.status === "failed",
   );
-  const ending = useRuns((s) => tabId !== null && s.ending[tabId] === true);
+  const rollbackDisabled = useRuns(
+    (s) => tabId === null || !endable(s, tabId, "rollback"),
+  );
   const discardedByEnd = useRuns((s) =>
     tabId === null ? false : s.discardedByEnd[tabId] === true,
   );
@@ -211,7 +213,7 @@ export const ResultPane = memo(function ResultPane({
               failedTransaction={
                 txFailed && tabId !== null
                   ? {
-                      ending,
+                      disabled: rollbackDisabled,
                       onRollback: () =>
                         void useRuns
                           .getState()
@@ -484,7 +486,7 @@ function ServerError({
   outcome: Extract<Outcome, { outcome: "failed" }>;
   copy(text: string, message: string): Promise<void>;
   /** 이 오류로 트랜잭션이 실패한 상태면 제목과 Rollback, 안내를 더한다. */
-  failedTransaction?: { ending: boolean; onRollback(): void };
+  failedTransaction?: { disabled: boolean; onRollback(): void };
 }) {
   const { error } = outcome;
   const location =
