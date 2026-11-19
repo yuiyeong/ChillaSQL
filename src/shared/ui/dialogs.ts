@@ -11,6 +11,8 @@ export interface DialogAction {
 }
 
 export interface DialogItem {
+  /** 줄 맨 앞의 표시(접속 색 dot) */
+  marker?: ReactNode;
   primary: string;
   secondary: ReactNode;
 }
@@ -24,7 +26,8 @@ export interface DialogSpec {
   items?: DialogItem[];
   /** 목록 아래의 덧붙임 */
   note?: ReactNode;
-  icon?: "warning";
+  /** 제목 왼쪽의 32px icon. 위험 쿼리는 warning, 열린 트랜잭션은 clock */
+  icon?: "warning" | "clock";
   /** 왼쪽부터. "cancel"이 반드시 하나 있다 */
   actions: DialogAction[];
 }

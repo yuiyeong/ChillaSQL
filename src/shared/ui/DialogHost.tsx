@@ -7,7 +7,7 @@ import {
   type DialogItem,
   type DialogSpec,
 } from "./dialogs";
-import { WarningIcon } from "./icons";
+import { ClockIcon, WarningIcon } from "./icons";
 
 const FOCUSABLE = "button:not(:disabled)";
 
@@ -116,7 +116,11 @@ function Header({
         data-testid="dialog-icon"
         className="bg-bg-3 text-fg flex size-8 shrink-0 items-center justify-center rounded-lg"
       >
-        <WarningIcon size={16} />
+        {spec.icon === "clock" ? (
+          <ClockIcon size={16} />
+        ) : (
+          <WarningIcon size={16} />
+        )}
       </span>
       <div className="flex flex-col gap-1">
         {title}
@@ -135,6 +139,7 @@ function Items({ items }: { items: DialogItem[] }) {
           key={index}
           className="border-line-1 flex h-[34px] shrink-0 items-center gap-2.5 border-b px-3 last:border-b-0"
         >
+          {item.marker}
           <span className="text-fg truncate font-mono">{item.primary}</span>
           {item.secondary !== null && (
             <span className="text-fg-2 ml-auto shrink-0">{item.secondary}</span>

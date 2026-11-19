@@ -69,7 +69,30 @@ test("sql, 목록, note, icon을 그린다", () => {
   expect(screen.getByText("first.sql")).toBeInTheDocument();
   expect(screen.getByText("3 statements")).toBeInTheDocument();
   expect(screen.getByText("Rolled back on quit.")).toBeInTheDocument();
-  expect(within(dialog).getByTestId("dialog-icon")).toBeInTheDocument();
+  const icon = within(dialog).getByTestId("dialog-icon");
+  expect(icon.querySelector("circle")).toBeNull();
+});
+
+test("clock icon과 목록 줄 앞의 marker를 그린다", () => {
+  render(<DialogHost />);
+  void open({
+    title: "This tab has an open transaction",
+    icon: "clock",
+    items: [
+      {
+        marker: <span data-testid="marker" />,
+        primary: "first.sql",
+        secondary: "local · 1 statement · 0:42",
+      },
+    ],
+    actions: [{ id: "cancel", label: "Cancel" }],
+  });
+
+  const icon = screen.getByTestId("dialog-icon");
+  // 시계는 원, 경고는 삼각형 path다.
+  expect(icon.querySelector("circle")).not.toBeNull();
+  const row = screen.getByRole("listitem");
+  expect(row.firstElementChild).toBe(screen.getByTestId("marker"));
 });
 
 test("긴 목록은 그 안에서 scroll하고 버튼 줄을 밀어내지 않는다", () => {

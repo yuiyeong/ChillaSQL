@@ -9,9 +9,11 @@ vi.mock("../../shared/ui/dialogs", async (importOriginal) => ({
 import type { TxEnd } from "../../shared/api/types";
 import { ask, type DialogSpec } from "../../shared/ui/dialogs";
 import { useTabs } from "../editor/tabsStore";
+import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import type { TxInfo } from "../query/transaction";
 import { textOf } from "../../test/dialogs";
+import { connection } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 import { settleTransactions, switchMode } from "./transactionPrompts";
 
@@ -24,6 +26,17 @@ let endTransaction: ReturnType<
 beforeEach(async () => {
   await resetStores();
   vi.resetAllMocks();
+  useProject.setState({
+    status: "ready",
+    project: {
+      name: "demo",
+      dir: "/p",
+      connections: [
+        connection("staging", { color: "yellow" }),
+        connection("local"),
+      ],
+    },
+  });
   vi.spyOn(Date, "now").mockReturnValue(NOW);
   endTransaction = vi.fn(async () => true);
   useRuns.setState({ endTransaction });
@@ -137,6 +150,8 @@ test("a_transaction_without_statements_asks_about_the_open_transaction", async (
   expect(textOf(asked().body)).toBe(
     "Switching to local closes the staging session. What should happen to the open transaction?",
   );
+  // Safety D는 접속 바꾸기에 시계 icon을 둔다. Dialogs M6의 다른 확인에는 icon이 없다.
+  expect(asked().icon).toBe("clock");
   expect(actionsOf(asked())).toEqual([
     ["cancel", "Cancel", false],
     ["rollback", "Roll back and switch", true],
@@ -202,6 +217,9 @@ test("switch_mode_and_one_tab_wordings", async () => {
   await settleTransactions([id], "saveTarget", { connection: "staging" });
   await settleTransactions([id], "switchProject", {});
 
+  expect(asked(0).icon).toBeUndefined();
+  expect(asked(1).icon).toBeUndefined();
+  expect(asked(2).icon).toBeUndefined();
   expect(textOf(asked(0).title)).toBe(
     "End the transaction before switching to Auto",
   );
@@ -250,6 +268,12 @@ test("several_tabs_offer_only_roll_back_all", async () => {
   );
 
   const spec = asked();
+  expect(spec.icon).toBeUndefined();
+  // 앱 종료의 목록처럼 줄마다 그 접속의 색 dot을 둔다.
+  expect(spec.items?.map((item) => renderToStaticMarkup(item.marker))).toEqual([
+    expect.stringContaining("var(--color-conn-yellow)"),
+    expect.stringContaining("var(--color-line-2)"),
+  ]);
   expect(textOf(spec.title)).toBe("2 tabs have open transactions");
   expect(spec.body).toBeUndefined();
   expect(

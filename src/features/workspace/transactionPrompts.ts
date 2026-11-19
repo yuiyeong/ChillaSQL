@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
 import type { TxEnd, TxMode } from "../../shared/api/types";
 import { bold, monoText, rt } from "../../shared/i18n/rich";
 import { formatCount, t, tc } from "../../shared/i18n/t";
@@ -7,7 +7,9 @@ import {
   type DialogAction,
   type DialogSpec,
 } from "../../shared/ui/dialogs";
+import { ConnectionDot } from "../connections/ConnectionDot";
 import { useTabs } from "../editor/tabsStore";
+import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import {
   formatElapsed,
@@ -78,7 +80,7 @@ function oneTabText(
   tab: OpenTab,
   action: TxAction,
   context: TxContext,
-): Pick<DialogSpec, "title" | "body"> {
+): Pick<DialogSpec, "title" | "body" | "icon"> {
   const connection = bold(context.connection ?? tab.connection);
   const { statements } = tab.tx;
   switch (action) {
@@ -92,7 +94,9 @@ function oneTabText(
         }),
       };
     case "switchConnection":
+      // Safety D. Dialogs M6의 다른 확인에는 icon이 없다.
       return {
+        icon: "clock",
         title: t("dialog.tx.oneTab.title"),
         body: rt("dialog.tx.switchConnection.body", {
           target: bold(context.target ?? ""),
@@ -153,9 +157,14 @@ function oneTabSpec(
 function manyTabsSpec(tabs: OpenTab[], action: TxAction): DialogSpec {
   // 목록은 다시 그리지 않으므로 경과 시간은 물을 때 한 번 센다.
   const now = Date.now();
+  const connections = useProject.getState().project?.connections ?? [];
   return {
     title: t("dialog.tx.manyTabs.title", { count: formatCount(tabs.length) }),
     items: tabs.map((tab) => ({
+      // 앱 종료의 목록처럼 줄마다 그 접속의 색 dot을 둔다.
+      marker: createElement(ConnectionDot, {
+        color: connections.find((c) => c.name === tab.connection)?.color,
+      }),
       primary: tab.title,
       secondary: rt("dialog.tx.manyTabs.item", {
         connection: tab.connection,
