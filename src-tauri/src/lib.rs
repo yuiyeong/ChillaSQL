@@ -9,28 +9,37 @@ use chilla_core::infrastructure::{
     TomlProjectStore,
 };
 
-use commands::CoreApp;
-use tauri::{Manager, RunEvent};
+use commands::{CoreApp, TunnelEventDto};
+use tauri::{Emitter, Manager, RunEvent};
+
+/// 화면이 터널 상태를 받는 event 이름.
+const TUNNEL_EVENT: &str = "tunnel";
 
 pub fn run() {
-    // 여기서만 port 구현을 고른다. command는 `CoreApp`만 안다.
-    let passwords = KeychainPasswordStore::new().expect("키체인을 쓸 수 없습니다");
-    let app = CoreApp::new(
-        Arc::new(TomlProjectStore),
-        Arc::new(passwords),
-        Arc::new(PgQuerySplitter),
-        Arc::new(FsSqlFileStore),
-        PgConnector::new(),
-        ShellTunnelRunner::new(),
-        // 화면으로 보내는 event는 Task 6에서 단다.
-        Arc::new(|_| {}),
-    );
-
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
         .menu(menu::build)
-        .manage(app)
+        .setup(|app| {
+            // 여기서만 port 구현을 고른다. command는 `CoreApp`만 안다. 터널 상태를 화면으로
+            // 보내려면 AppHandle이 있어야 해서 setup에서 만든다.
+            let handle = app.handle().clone();
+            let passwords = KeychainPasswordStore::new().expect("키체인을 쓸 수 없습니다");
+            let core = CoreApp::new(
+                Arc::new(TomlProjectStore),
+                Arc::new(passwords),
+                Arc::new(PgQuerySplitter),
+                Arc::new(FsSqlFileStore),
+                PgConnector::new(),
+                ShellTunnelRunner::new(),
+                Arc::new(move |event| {
+                    // 화면이 없어 보내지 못해도 터널은 그대로 돈다.
+                    let _ = handle.emit(TUNNEL_EVENT, TunnelEventDto::from(event));
+                }),
+            );
+            app.manage(core);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::open_project,
             commands::create_project,
@@ -49,6 +58,8 @@ pub fn run() {
             commands::execute_query,
             commands::fetch_more,
             commands::cancel_query,
+            commands::cancel_tunnel,
+            commands::restart_tunnel,
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

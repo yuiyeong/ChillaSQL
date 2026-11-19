@@ -1,4 +1,5 @@
 use chilla_core::application::{AppError, ConnectError, FileError, ProjectError};
+use chilla_core::domain::TunnelFailure;
 use serde::Serialize;
 
 /// 화면으로 가는 오류. `kind`로 화면이 다음 행동을 고르고 `message`를 그대로 보여 준다.
@@ -6,6 +7,9 @@ use serde::Serialize;
 pub struct CommandError {
     pub kind: &'static str,
     pub message: String,
+    /// 터널 명령의 stderr. 명령이 실행된 터널 오류에만 있다.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub output: Option<String>,
 }
 
 impl From<AppError> for CommandError {
@@ -37,8 +41,12 @@ impl From<AppError> for CommandError {
                 FileError::Io { .. } => "file_io",
                 FileError::OutsideProject { .. } => "invalid_path",
             },
-            // Task 6에서 실패마다 나눈다.
-            AppError::Tunnel(_) => "tunnel",
+            AppError::Tunnel(tunnel) => match tunnel.failure {
+                TunnelFailure::Spawn { .. } => "tunnel_spawn",
+                TunnelFailure::Exited { .. } => "tunnel_exited",
+                TunnelFailure::Timeout { .. } => "tunnel_timeout",
+                TunnelFailure::Cancelled => "tunnel_cancelled",
+            },
             AppError::Connect(connect) => match connect {
                 ConnectError::Unreachable { .. } => "unreachable",
                 ConnectError::Timeout => "timeout",
@@ -50,9 +58,14 @@ impl From<AppError> for CommandError {
                 ConnectError::Other { .. } => "other",
             },
         };
+        let output = match &error {
+            AppError::Tunnel(tunnel) => tunnel.failure.output().map(str::to_string),
+            _ => None,
+        };
         Self {
             kind,
             message: error.to_string(),
+            output,
         }
     }
 }
@@ -64,8 +77,9 @@ mod tests {
 
     use chilla_core::application::{
         CancelError, ConnectError, FileError, PasswordStoreError, ProjectError, SplitError,
+        TunnelError,
     };
-    use chilla_core::domain::{ProfileError, QueryId, SessionId, SqlPathError};
+    use chilla_core::domain::{ProfileError, QueryId, SessionId, SqlPathError, TunnelFailure};
 
     use super::*;
 
@@ -258,9 +272,41 @@ mod tests {
                 ProfileError::EmptyField { field: "host" },
                 ProfileError::RootCertWithoutVerifyFull,
                 ProfileError::UnknownSslMode { value: "x".into() },
+                ProfileError::TunnelTimeoutWithoutTunnel,
+                ProfileError::TunnelTimeoutRange { secs: 0 },
             ]
             .map(|e| (AppError::from(e), "invalid_connection")),
         );
+        let tunnel = |failure| {
+            AppError::from(TunnelError {
+                host: "localhost".into(),
+                port: 25432,
+                failure,
+            })
+        };
+        errors.extend([
+            (
+                tunnel(TunnelFailure::Spawn {
+                    message: "m".into(),
+                }),
+                "tunnel_spawn",
+            ),
+            (
+                tunnel(TunnelFailure::Exited {
+                    code: Some(1),
+                    output: "e".into(),
+                }),
+                "tunnel_exited",
+            ),
+            (
+                tunnel(TunnelFailure::Timeout {
+                    secs: 20,
+                    output: "e".into(),
+                }),
+                "tunnel_timeout",
+            ),
+            (tunnel(TunnelFailure::Cancelled), "tunnel_cancelled"),
+        ]);
         errors.extend(
             [
                 SqlPathError::Absolute,
@@ -272,6 +318,32 @@ mod tests {
             .map(|e| (AppError::from(e), "invalid_path")),
         );
         errors
+    }
+
+    #[test]
+    fn tunnel_errors_carry_the_output() {
+        let timeout = CommandError::from(AppError::from(TunnelError {
+            host: "localhost".into(),
+            port: 25432,
+            failure: TunnelFailure::Timeout {
+                secs: 20,
+                output: "Unauthorized".into(),
+            },
+        }));
+        assert_eq!(timeout.output.as_deref(), Some("Unauthorized"));
+        assert_eq!(
+            timeout.message,
+            "localhost:25432 didn't open within 20 seconds"
+        );
+
+        let cancelled = CommandError::from(AppError::from(TunnelError {
+            host: "localhost".into(),
+            port: 25432,
+            failure: TunnelFailure::Cancelled,
+        }));
+        let json = serde_json::to_value(&cancelled).unwrap();
+        assert!(json.get("output").is_none(), "{json}");
+        assert_eq!(json["kind"], "tunnel_cancelled");
     }
 
     #[test]

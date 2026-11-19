@@ -11,7 +11,7 @@ use chilla_core::application::{App, AppError};
 use chilla_core::domain::{
     Column, ConnectionProfile, FileStamp, Password, ProfileError, Project, QueryEvent, QueryId,
     QueryOutcome, RowBatch, ServerError, SessionId, SessionInfo, SessionState, SqlFile,
-    StatementSpan, TxStatus, WriteMode,
+    StatementSpan, TunnelEvent, TunnelFailure, TunnelState, TxStatus, WriteMode,
 };
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
@@ -353,6 +353,81 @@ impl QueryEventDto {
     }
 }
 
+/// 터널이 실패한 이유. `reason`이 구분자다.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "reason", rename_all = "snake_case")]
+pub enum TunnelFailureDto {
+    Spawn { message: String },
+    Exited { code: Option<i32>, output: String },
+    Timeout { secs: u64, output: String },
+    Cancelled,
+}
+
+/// 터널 상태. `status`가 구분자다.
+#[derive(Debug, Clone, Serialize)]
+#[serde(
+    tag = "status",
+    rename_all = "snake_case",
+    rename_all_fields = "camelCase"
+)]
+pub enum TunnelStateDto {
+    Starting {
+        attempt: u8,
+        timeout_secs: u64,
+    },
+    Ready,
+    External,
+    Failed {
+        #[serde(flatten)]
+        failure: TunnelFailureDto,
+    },
+    Stopped,
+}
+
+/// 화면으로 가는 event `tunnel`.
+#[derive(Debug, Clone, Serialize)]
+pub struct TunnelEventDto {
+    pub connection: String,
+    pub state: TunnelStateDto,
+}
+
+impl From<TunnelFailure> for TunnelFailureDto {
+    fn from(failure: TunnelFailure) -> Self {
+        match failure {
+            TunnelFailure::Spawn { message } => Self::Spawn { message },
+            TunnelFailure::Exited { code, output } => Self::Exited { code, output },
+            TunnelFailure::Timeout { secs, output } => Self::Timeout { secs, output },
+            TunnelFailure::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+impl From<TunnelState> for TunnelStateDto {
+    fn from(state: TunnelState) -> Self {
+        match state {
+            TunnelState::Starting { attempt, timeout } => Self::Starting {
+                attempt,
+                timeout_secs: timeout.as_secs(),
+            },
+            TunnelState::Ready => Self::Ready,
+            TunnelState::External => Self::External,
+            TunnelState::Failed(failure) => Self::Failed {
+                failure: failure.into(),
+            },
+            TunnelState::Stopped => Self::Stopped,
+        }
+    }
+}
+
+impl From<TunnelEvent> for TunnelEventDto {
+    fn from(event: TunnelEvent) -> Self {
+        Self {
+            connection: event.connection,
+            state: event.state.into(),
+        }
+    }
+}
+
 #[tauri::command]
 pub async fn open_project(app: State<'_, CoreApp>, path: String) -> CommandResult<ProjectDto> {
     let project = app.open_project(Path::new(&path)).await?;
@@ -494,6 +569,18 @@ pub async fn fetch_more(
         .await?)
 }
 
+/// 그 접속의 터널이 시작 중이면 멈춘다.
+#[tauri::command]
+pub async fn cancel_tunnel(app: State<'_, CoreApp>, connection: String) -> CommandResult<()> {
+    Ok(app.cancel_tunnel(&connection).await?)
+}
+
+/// 다시 실행하다 멈춘 그 접속의 터널을 처음부터 다시 시작한다.
+#[tauri::command]
+pub async fn restart_tunnel(app: State<'_, CoreApp>, connection: String) -> CommandResult<()> {
+    Ok(app.restart_tunnel(&connection).await?)
+}
+
 #[tauri::command]
 pub async fn cancel_query(
     app: State<'_, CoreApp>,
@@ -509,7 +596,7 @@ pub async fn cancel_query(
 mod tests {
     use std::collections::BTreeSet;
 
-    use chilla_core::domain::SslMode;
+    use chilla_core::domain::{SslMode, TunnelEvent, TunnelFailure, TunnelState};
     use serde_json::json;
 
     use super::*;
@@ -527,6 +614,68 @@ mod tests {
             tunnel_timeout: Some(Duration::from_secs(30)),
             color: Some("red".into()),
         }
+    }
+
+    #[test]
+    fn tunnel_event_dto_shapes() {
+        let dto = |state| {
+            serde_json::to_value(TunnelEventDto::from(TunnelEvent {
+                connection: "staging".into(),
+                state,
+            }))
+            .unwrap()
+        };
+        assert_eq!(
+            dto(TunnelState::Starting {
+                attempt: 2,
+                timeout: Duration::from_secs(20)
+            }),
+            json!({ "connection": "staging", "state": { "status": "starting", "attempt": 2, "timeoutSecs": 20 } })
+        );
+        assert_eq!(
+            dto(TunnelState::Ready)["state"],
+            json!({ "status": "ready" })
+        );
+        assert_eq!(
+            dto(TunnelState::External)["state"],
+            json!({ "status": "external" })
+        );
+        assert_eq!(
+            dto(TunnelState::Stopped)["state"],
+            json!({ "status": "stopped" })
+        );
+        let failed = |failure| dto(TunnelState::Failed(failure))["state"].clone();
+        assert_eq!(
+            failed(TunnelFailure::Spawn {
+                message: "m".into()
+            }),
+            json!({ "status": "failed", "reason": "spawn", "message": "m" })
+        );
+        assert_eq!(
+            failed(TunnelFailure::Exited {
+                code: Some(1),
+                output: "e".into()
+            }),
+            json!({ "status": "failed", "reason": "exited", "code": 1, "output": "e" })
+        );
+        assert_eq!(
+            failed(TunnelFailure::Exited {
+                code: None,
+                output: "e".into()
+            }),
+            json!({ "status": "failed", "reason": "exited", "code": null, "output": "e" })
+        );
+        assert_eq!(
+            failed(TunnelFailure::Timeout {
+                secs: 20,
+                output: "e".into()
+            }),
+            json!({ "status": "failed", "reason": "timeout", "secs": 20, "output": "e" })
+        );
+        assert_eq!(
+            failed(TunnelFailure::Cancelled),
+            json!({ "status": "failed", "reason": "cancelled" })
+        );
     }
 
     #[test]

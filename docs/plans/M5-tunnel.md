@@ -556,25 +556,25 @@ git commit -m "feat: 세션 열기와 접속 테스트가 터널을 띄우고 �
   - command `cancel_tunnel(connection: String)`, `restart_tunnel(connection: String)`
   - `RunEvent::Exit`에서 `close_all_sessions` 대신 `shutdown`
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `commands.rs`: `tunnel_event_dto_shapes`가 다섯 상태와 네 실패의 JSON을 위 모양으로 단언한다(`serde_json::json!`과 비교). `error.rs`: `all_errors()`에 `AppError::Tunnel`의 네 실패를 kind와 함께 더하고, `tunnel_errors_carry_the_output`이 `Timeout`의 `output`이 `Some("Unauthorized")`, `Cancelled`의 JSON에 `output` key가 없음을 단언한다.
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `cargo test -p chillasql`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `TunnelStateDto`는 `#[serde(tag = "status", rename_all = "snake_case", rename_all_fields = "camelCase")]`, 실패는 `#[serde(flatten)]`한 `TunnelFailureDto`(`tag = "reason"`)다(`OutcomeDto`와 같은 방식). `generate_handler!`에 두 command를 더한다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `cargo test -p chillasql && pnpm lint:rust`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src-tauri
