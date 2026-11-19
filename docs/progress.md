@@ -4,10 +4,10 @@
 
 ## 지금
 
-- **진행 중**: M7 스키마 트리와 자동완성([M7](plans/M7-schema-autocomplete.md)). Task 1~10 끝(구현, simplify, code-review 반영), 다음은 Task 11 앱 확인
+- **진행 중**: 없음. M7 스키마 트리와 자동완성을 끝냄(2026-11-20, [M7](plans/M7-schema-autocomplete.md)). 다음은 M8 에디터·실행 편의(3단계의 마지막)
 - **작업 위치**: branch `m7-schema-autocomplete`(main `632cfba`에서). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M7 Task 11(앱에서 확인). 사용자에게 앱을 띄워도 되는지 묻는다. 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: branch `m7-schema-autocomplete`를 main에 합칠지 사용자에게 묻는다. 그 뒤 M8 계획(`superpowers:writing-plans`, `docs/plans/M8-<name>.md`). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -38,7 +38,7 @@
 | M4 결과 표 | 1 | 완료 | [M4](plans/M4-result-table.md) | 2026-11-18 | 2026-11-18 |
 | M5 터널 | 2 | 완료 | [M5](plans/M5-tunnel.md) | 2026-11-19 | 2026-11-19 |
 | M6 트랜잭션과 안전장치 | 2 | 완료 | [M6](plans/M6-transaction-safety.md) | 2026-11-19 | 2026-11-19 |
-| M7 스키마 트리와 자동완성 | 3 | 진행 중 | [M7](plans/M7-schema-autocomplete.md) | 2026-11-20 | |
+| M7 스키마 트리와 자동완성 | 3 | 완료 | [M7](plans/M7-schema-autocomplete.md) | 2026-11-20 | 2026-11-20 |
 | M8 에디터·실행 편의 | 3 | 대기 | | | |
 | M9 쿼리 도구 | 4 | 대기 | | | |
 | M10 결과 표 확장 | 4 | 대기 | | | |
@@ -248,13 +248,25 @@
 | 2026-11-20 | M7 | 새로고침은 catalog 전체를 다시 읽고 받아 둔 인덱스, 제약조건을 버린 뒤 펼쳐 있는 것만 다시 읽음. 읽는 동안 옛 트리를 보임 | 새 테이블이 트리와 자동완성 양쪽에 나타나게 |
 | 2026-11-20 | M7 | Select first rows(더블클릭 또는 menu)는 새 탭(같은 접속, Auto)에 `SELECT * FROM schema.name LIMIT 500`을 넣고 실행 | 지금 탭의 받다 만 결과와 트랜잭션을 건드리지 않음. 500은 batch 하나 |
 | 2026-11-20 | M7 | 트리 menu는 테이블과 뷰에 Select first rows, Copy name, 나머지에 Copy name. Show DDL은 M9. Copy name은 PostgreSQL `quote_ident` 규칙으로 감싼 이름을 복사하고 toast | 붙여 넣은 이름이 그대로 SQL로 쓰이게. DDL 보기는 M9 범위 |
-| 2026-11-20 | M7 | 자동완성은 입력하면 바로 뜸(`activateOnTypingDelay` 0). 직접 여는 key는 CodeMirror 기본(`Ctrl+Space`, `Opt+\``, `Opt+I`). keyword는 대문자, 함수는 이름만 넣음. kind 글자는 캔버스의 c, t, f, k에 schema `s`를 더함. 별칭은 lang-sql 6.10 기본 기능(FROM/JOIN)을 쓰고, 별칭 없는 컬럼과 함수 source는 직접 만듦. 대문자 unquoted 이름, `UPDATE … u SET u.`, subquery 별칭은 알아보지 않음 | 기본 지연 100ms로는 0.05초를 못 맞춤. lang-sql을 node로 돌려 확인함 |
+| 2026-11-20 | M7 | 자동완성은 입력하면 바로 뜸(`activateOnTypingDelay` 0). 직접 여는 key는 CodeMirror 기본(`Ctrl+Space`, `Opt+\``, `Opt+I`). keyword는 대문자, 함수는 이름만 넣음. kind 글자는 캔버스의 c, t, f, k에 schema `s`를 더함. 별칭은 lang-sql 6.10 기본 기능(FROM/JOIN)을 쓰고, 별칭 없는 컬럼과 함수 source는 직접 만듦. `UPDATE … u SET u.`, subquery 별칭, lang-sql이 맡는 `U.`처럼 대문자로 쓴 별칭과 schema 경로는 알아보지 않음(직접 만든 별칭 없는 컬럼 source는 따옴표 없는 이름을 소문자로 접음) | 기본 지연 100ms로는 0.05초를 못 맞춤. lang-sql을 node로 돌려 확인함 |
+| 2026-11-20 | M7 | 함수 자동완성은 keyword인 이름(`extract`, `substring` 등)도 따옴표로 감싸지 않음. 테이블과 컬럼 이름은 `quote_ident` 규칙대로 감쌈 | 감싸면 일반 함수 호출이 되어 `extract(year from ts)` 같은 특별한 문법이 깨짐(code-review) |
+| 2026-11-20 | M7 | 글자 크기 token `--text-tiny`(11px)를 더함. 스키마 트리 icon과 자동완성 kind 글자에 씀 | 캔버스(Sidebar, Tools)가 11px를 쓰고, 글자 크기는 token으로만 씀 |
+| 2026-11-20 | M7 | 자동완성 footer의 legend는 popup 너비(340px)를 넘으면 다음 줄로 내림. 스키마 트리 줄의 오른쪽 표시(type 등)는 줄 너비의 반까지만 쓰고 말줄임 | 앱 확인에서 legend가 popup 밖으로 넘치고 `timestamp with time zone`이 컬럼 이름을 가렸음 |
+| 2026-11-20 | M7 | 탭이 없으면 Schema 화면에 Choose connection 버튼을 두지 않음 | 접속을 정할 탭이 없어 menu가 아무것도 하지 않음(code-review) |
 
 ## 작업 로그
 
 최신 항목이 위에 온다.
 
 ### 2026-11-20
+
+- M7 완료(branch `m7-schema-autocomplete`, `cb28bfa`..). Task 1 결정 기록, Task 2 catalog SQL(`infrastructure/postgres/catalog.rs`, test DB integration test 3개. oid 0에서 domain 제약조건이 잡혀 `contypid = 0`을 더함), Task 3 App의 catalog connection(접속마다 slot 하나, 터널 lease 공유, 끊기면 한 번 다시 연결. 첫 구현에서 프로젝트 바꾸기가 여는 중인 slot을 기다려 test가 멈춰서 쓰는 중인 slot은 background에서 닫게 함), Task 4 command 셋, Task 5 화면 store와 불러오는 때, Task 6 Schema 화면, Task 7 menu·Copy name·Select first rows, Task 8 자동완성 source, Task 9 popup(kind 글자, footer)
+- M7 simplify: catalog 쿼리를 `try_join!`으로 함께 보내고 relation당 한 줄(`array_agg`), 자동완성 source를 `EditorState.languageData`로(keyword는 `sql({ upperCaseKeywords })`), `shared/sql/catalog.ts`의 색인(WeakMap), details 불러오기를 store `toggle` 하나로. 고치지 않은 것: catalog connection을 actor로 바꾸기(큰 재구성, 지금 구조가 test로 검증됨), generation 확인을 `connect()`로 옮기기(`open_session`의 확인은 insert와 같은 lock 안이어야 함), 트리 렌더 가상화(큰 schema에서 느리면 그때)
+- M7 code-review(high): 지적 9개 중 8개를 고침. 고친 것마다 실패하는 test를 먼저 씀(`afecdd3`): footer가 option이 바뀐 뒤 목록 위로 감, `close_catalog`와 겹친 load가 map에서 빠진 slot에 연결, 탭이 없을 때 Choose connection, keyword 함수 이름을 감쌈, 따옴표 없는 대문자 테이블 이름, FROM 목록의 `AS` 뒤 테이블, 우클릭 menu가 창 밖으로 나감, 11px literal. 고치지 않은 것: kind 글자(s/c/t/f/k)와 트리 icon, `↵`/`esc`를 `en.ts`로 옮기기(단축키 glyph처럼 언어와 관계없는 기호). 남은 것: `close_catalog`와 `load_catalog` IPC가 순서를 바꿔 실행되면 map 안의 연결이 다음 forget이나 프로젝트 바꾸기까지 남음(드묾, 화면이 순서를 알려 줘야 고칠 수 있음)
+- M7 앱 확인(`.app`, local test DB): 탭이 없을 때와 접속이 없는 탭의 Schema(Sidebar B), Choose connection이 toolbar menu를 엶, 비밀번호가 없을 때 `A password is required`와 Retry, 트리(Sidebar A: `public`과 Tables가 펼쳐짐, `PK id bigint`, Indexes `unique`, Constraints `PRIMARY KEY`), 우클릭 menu(Select first rows `Double-click`, Copy name), Copy name(clipboard와 toast), 더블클릭이 새 탭에서 `SELECT * FROM public.big_table LIMIT 500`(500행), 다른 탭에서 `CREATE SCHEMA m7_check CREATE TABLE t1 (a int)` 뒤 Refresh하면 트리에 `m7_check`(펼친 상태 유지)와 자동완성 `m7_check.` → `t1`, 별칭 `SELECT u.` + `FROM m7_check.t1 u` → `a`(`t1 · integer`), 그 접속의 탭을 모두 닫으면 서버 연결 0개. 확인 중 찾은 화면 문제 셋(긴 type이 이름을 가림, footer legend가 넘침, 우클릭이 글자를 고름)을 고치고 다시 빌드해 확인함. 자동완성 0.05초는 test(5,000 테이블 × 20 컬럼)로 확인
+- 관찰(고치지 않음): (1) 접속 form에서 비밀번호를 저장해도 실패한 catalog는 저절로 다시 읽지 않음(Retry를 눌러야 함, 결정대로). (2) debug `.app`에서 트리 밖의 빈 자리를 우클릭하면 WebKit 기본 menu(Reload, Inspect Element)가 뜸. (3) `cargo test`의 `first_500_rows_of_a_million_arrive_within_100ms`가 `pnpm check`에서 한 번 `wait_event` None으로 실패하고 다시 세 번 통과함(timing에 따라 흔들림)
+- 앱 확인 방법에 더할 것: process 이름은 `chillasql`(소문자)라 `pgrep -x ChillaSQL`는 비어 있음. 다시 빌드한 뒤 `tell application "ChillaSQL" to activate`가 멈출 때가 있어 `tell application "System Events" to set frontmost of process "chillasql" to true`를 씀. `security add-generic-password -T <app>`로 넣은 키체인 항목은 앱이 확인 창 없이 읽지 못하므로 비밀번호는 접속 form으로 저장함(password 칸은 System Events `keystroke`로 입력됨). 확인용 프로젝트(scratchpad의 `m7check`)와 앱이 만든 키체인 항목(`…/m7check::local`)은 지움
+
 
 - branch `m6-transactions`를 main에 fast-forward로 합치고 branch를 지움
 - M6 SAVEPOINT 방식 앱 확인(`.app`, `b6c2589`, local test DB, Manual 모드): (1) `INSERT` → 받다 만 `SELECT * FROM big_table` → 다음 `INSERT`가 약 0.9초에 끝나고(전에는 버리기에 약 4.3초) `Open · 2 statements`, (2) 받다 만 `UPDATE m6_t SET n = n + 1000000 RETURNING n`(2002행) 뒤 `SELECT max(n)`이 2000으로 되돌려졌고 앞 `INSERT`는 남음, (3) 실행 중 `pg_sleep(5)`를 Cancel하면 `Cancelled`이고 트랜잭션은 `Open`, 앞 문장 남음, (4) 받다 만 결과가 있는 채로 Commit(`Opt+Shift+Cmd+Enter`)하면 "Ending the transaction discarded…"가 보이고 밖에서 두 `INSERT`가 보이며 열린 트랜잭션 없음, (5) Manual 첫 문장이 문법 오류면 `Failed · 0 statements`

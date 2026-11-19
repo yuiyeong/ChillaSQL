@@ -607,7 +607,7 @@ CLAUDE.md 개발 순서 3~5다.
 
 앱을 띄우기 전에 사용자에게 해도 되는지 묻는다. 방법은 진행상황 "지금"의 "앱 동작 확인 방법"이다. test DB(54318)에 `CREATE SCHEMA m7_check`의 테이블 몇 개를 만들어 쓰고 끝나면 지운다.
 
-- [ ] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
+- [x] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
 
 | 확인 | 기준 |
 | --- | --- |
@@ -623,7 +623,7 @@ CLAUDE.md 개발 순서 3~5다.
 
 자동완성 0.05초는 Task 9의 test로 확인하고, 앱에서는 입력 뒤 popup이 늦게 뜨지 않는지 본다.
 
-- [ ] **Step 2: 기록하고 commit한다**
+- [x] **Step 2: 기록하고 commit한다**
 
 - 진행상황: M7을 `완료`(날짜), 작업 로그에 Task별 결과와 Step 1의 결과, "지금"의 다음 할 일(M8)을 쓴다.
 - 이 계획의 체크박스를 모두 체크한다.
