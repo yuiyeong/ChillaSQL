@@ -1,13 +1,13 @@
 # ChillaSQL 진행상황
 
-마지막 갱신: 2026-11-19
+마지막 갱신: 2026-11-20
 
 ## 지금
 
-- **진행 중**: 없음. M6 트랜잭션과 안전장치를 끝내고 main에 합침(2026-11-20, [M6](plans/M6-transaction-safety.md)). 다음은 M7 스키마 트리와 자동완성
-- **작업 위치**: main. branch `m6-transactions`를 2026-11-20에 fast-forward로 합치고 지움. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
+- **진행 중**: M7 스키마 트리와 자동완성([M7](plans/M7-schema-autocomplete.md)). Task 1 끝, 다음은 Task 2
+- **작업 위치**: branch `m7-schema-autocomplete`(main `632cfba`에서). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M7 계획(`superpowers:writing-plans`, `docs/plans/M7-<name>.md`). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: M7 Task 2(catalog 읽기). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -38,7 +38,7 @@
 | M4 결과 표 | 1 | 완료 | [M4](plans/M4-result-table.md) | 2026-11-18 | 2026-11-18 |
 | M5 터널 | 2 | 완료 | [M5](plans/M5-tunnel.md) | 2026-11-19 | 2026-11-19 |
 | M6 트랜잭션과 안전장치 | 2 | 완료 | [M6](plans/M6-transaction-safety.md) | 2026-11-19 | 2026-11-19 |
-| M7 스키마 트리와 자동완성 | 3 | 대기 | | | |
+| M7 스키마 트리와 자동완성 | 3 | 진행 중 | [M7](plans/M7-schema-autocomplete.md) | 2026-11-20 | |
 | M8 에디터·실행 편의 | 3 | 대기 | | | |
 | M9 쿼리 도구 | 4 | 대기 | | | |
 | M10 결과 표 확장 | 4 | 대기 | | | |
@@ -240,6 +240,15 @@
 | 2026-11-19 | M6 | simplify에서 고치지 않은 것: `runsStore`의 탭별 record를 하나(`TabRun`)로 합치기, `discardedByEnd`를 actor의 discard 이유(`DrainReason::Ended`)로 보내기, 접속 저장의 settle 경로를 한 command로, 확실하지 않은 `Finished.tx`를 `null`로 보내기, `IDLE_RESULT_MINUTES`를 core 값에서 받기, 실행 전 `inspect_statement`를 세션 열기와 병렬로 하거나 cache하기, Manual `BEGIN`을 pipeline하기, 탭마다 도는 1초 timer를 하나로 | 앞의 넷은 범위가 크거나 event 계약을 바꿈. `IDLE_RESULT_MINUTES`는 M8 설정과 함께. inspect 병렬은 확인을 Cancel해도 세션을 여는 동작 변경. `BEGIN` pipeline은 오류 순서 위험. timer는 탭이 적어 비용이 작음 |
 | 2026-11-19 | M6 | 서버에 보내지 않은 쿼리(대기 중에 취소되거나 밀려난 것)의 `Finished.tx`는 `null`. 화면은 `tx`가 `null`이면 앞의 트랜잭션 표시를 그대로 두고 `connection_lost`일 때만 지움. `null`이 아닌 `tx`는 문장이 끝난 뒤(버린 문장은 되돌린 뒤) 읽은 값이라 밀려난 실행의 것도 상태에 반영함(뒤 실행이 이미 알렸거나, stale 세션이거나, Commit/Rollback이 버린 것은 빼고) | actor의 마지막 값을 싣으면 Manual `BEGIN` 뒤에도 `idle`이 가서 화면이 열린 트랜잭션을 지웠음(code-review) |
 | 2026-11-19 | M6 | 접속 저장의 `Commit and save`에서 저장은 되고 Commit이 실패하면 탭은 놓지 않고 form을 연 채 "저장했지만 반영하지 못함"을 알림. 화면의 프로젝트는 저장한 값으로 바꾸고, 탭 세션이 아직 쓰는 앞 접속을 기억해(`unapplied`) 다시 Save하면 앞 대상과 비교해 다시 묻고 반영함 | 탭을 놓으면 Commit 오류가 지워지고 아직 열린 트랜잭션을 확인 없이 잃음. form을 다시 열었을 때 파일과 다른 값을 보이면 다음 저장이 키체인 비밀번호를 지울 수 있음(re-review) |
+| 2026-11-20 | M7 | 스키마는 탭 세션이 아니라 접속마다 하나인 catalog connection으로 읽음. 그 접속의 터널 lease를 함께 쥐고, 화면이 그 접속을 쓰는 탭이 없어지면 닫음. 연결이 끊겨 있으면 한 번 다시 연결해 다시 읽음 | 탭 세션에 catalog 쿼리를 끼우면 받다 만 결과를 버리고, 실패한 트랜잭션에서는 거절됨 |
+| 2026-11-20 | M7 | 활성 탭에 접속이 있으면(탭이나 탭의 접속을 바꾸면) 그 접속의 catalog를 뒤에서 불러옴. 터널 접속은 이때 터널이 뜸. 실패하면 Schema 화면에 오류와 Retry를 보이고 저절로 다시 시도하지 않음 | 첫 실행 전에도 자동완성을 쓰려고 |
+| 2026-11-20 | M7 | 스키마, 테이블, 뷰, 컬럼, 함수 이름, search_path, reserved keyword는 한 번에 읽어 메모리에 두고, 인덱스와 제약조건만 그 group을 처음 펼칠 때 relation OID로 읽음 | 자동완성이 0.05초 안에 떠야 함. 기획서 4.7의 "펼친 항목만 조회"를 고침 |
+| 2026-11-20 | M7 | system schema(`pg_catalog`, `information_schema`, `pg_toast`, temp)는 트리와 테이블 자동완성에서 뺌. 함수 자동완성은 `pg_catalog`도 넣되 연산자 구현, aggregate 보조 함수, `internal`·`cstring`·handler pseudo-type 함수는 뺌. partition은 빼고 부모만. 제약조건은 `p`, `f`, `u`, `c`, `x`만(PostgreSQL 18의 NOT NULL `n` 제외). catalog SQL은 PostgreSQL 11 이상 | 트리와 자동완성의 잡음을 줄임 |
+| 2026-11-20 | M7 | 트리: schema → Tables, Views(비면 없음) → 테이블/뷰 → Columns, Indexes, Constraints. 처음에는 search_path 첫 schema와 그 Tables만 펼침. 펼친 상태는 접속마다 남고 새로고침해도 이름으로 남음. 화살표 key 이동은 없음 | Sidebar A 캔버스. Files 목록과 같은 조작 |
+| 2026-11-20 | M7 | 새로고침은 catalog 전체를 다시 읽고 받아 둔 인덱스, 제약조건을 버린 뒤 펼쳐 있는 것만 다시 읽음. 읽는 동안 옛 트리를 보임 | 새 테이블이 트리와 자동완성 양쪽에 나타나게 |
+| 2026-11-20 | M7 | Select first rows(더블클릭 또는 menu)는 새 탭(같은 접속, Auto)에 `SELECT * FROM schema.name LIMIT 500`을 넣고 실행 | 지금 탭의 받다 만 결과와 트랜잭션을 건드리지 않음. 500은 batch 하나 |
+| 2026-11-20 | M7 | 트리 menu는 테이블과 뷰에 Select first rows, Copy name, 나머지에 Copy name. Show DDL은 M9. Copy name은 PostgreSQL `quote_ident` 규칙으로 감싼 이름을 복사하고 toast | 붙여 넣은 이름이 그대로 SQL로 쓰이게. DDL 보기는 M9 범위 |
+| 2026-11-20 | M7 | 자동완성은 입력하면 바로 뜸(`activateOnTypingDelay` 0). 직접 여는 key는 CodeMirror 기본(`Ctrl+Space`, `Opt+\``, `Opt+I`). keyword는 대문자, 함수는 이름만 넣음. kind 글자는 캔버스의 c, t, f, k에 schema `s`를 더함. 별칭은 lang-sql 6.10 기본 기능(FROM/JOIN)을 쓰고, 별칭 없는 컬럼과 함수 source는 직접 만듦. 대문자 unquoted 이름, `UPDATE … u SET u.`, subquery 별칭은 알아보지 않음 | 기본 지연 100ms로는 0.05초를 못 맞춤. lang-sql을 node로 돌려 확인함 |
 
 ## 작업 로그
 
