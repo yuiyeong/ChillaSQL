@@ -4,10 +4,10 @@
 
 ## 지금
 
-- **진행 중**: M6 트랜잭션과 안전장치([M6](plans/M6-transaction-safety.md))의 Task 1~15를 끝냄(2026-11-19). 남은 것은 simplify와 code-review(high). 진행 기록은 `.superpowers/sdd/M6-transaction-safety/`(git에 올리지 않음)
+- **진행 중**: M6 트랜잭션과 안전장치([M6](plans/M6-transaction-safety.md))의 Task 1~15와 simplify를 끝냄(2026-11-19). 남은 것은 code-review(high). 진행 기록은 `.superpowers/sdd/M6-transaction-safety/`(git에 올리지 않음)
 - **작업 위치**: branch `m6-transactions`(main에서 2026-11-19에 만듦). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M6 simplify → code-review(high) → 지적 검토 → main에 합치기 → M7 계획. 가끔 실패하는 test `discarding_a_paused_result_inside_a_transaction_keeps_it_open`도 이때 본다(작업 로그 2026-11-19 M6 Task 15). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: M6 code-review(high) → 지적 검토 → main에 합치기 → M7 계획. 가끔 실패하는 test `discarding_a_paused_result_inside_a_transaction_keeps_it_open`도 이때 본다(작업 로그 2026-11-19 M6 Task 15). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -235,6 +235,9 @@
 | 2026-11-19 | M6 | 접속 저장(`applySavedProject`)과 프로젝트 바꾸기(`switchProject`)는 열린 트랜잭션이 있으면 먼저 물음(M6 Task 11) | M3의 `applySavedProject`는 연결 대상이 바뀐 접속을 쓰는 탭을 묻지 않고 `release`하고 `switchProject`는 `reset`함. 둘 다 열린 트랜잭션을 잃을 수 있음 |
 | 2026-11-19 | M6 | 종료 경로 확인(M6 Task 1, tauri 2.12.5, tao 0.37.2, macOS): `ExitRequested`, `CloseRequested`, `Exit`에 probe를 달고 `prevent_exit`, `prevent_close`를 부르며 `.app`을 띄워 확인함. 창의 닫기 버튼은 `CloseRequested`만 오고 `prevent_close`로 막힘(창과 process가 남음). menu의 Quit(`Cmd+Q`, `PredefinedMenuItem::quit`), Dock의 Quit, `osascript -e 'quit app "ChillaSQL"'`는 모두 `ExitRequested` 없이 `RunEvent::Exit`만 오고 막히지 않음(`prevent_exit`이 불리지 않음) | 결정 규칙의 막히지 않는 쪽. 세 경로는 확인 없이 끝나고 `RunEvent::Exit`의 `shutdown`이 세션을 닫아 서버가 되돌림. `code: None`의 `ExitRequested`는 이 경로들에서 오지 않음 |
 | 2026-11-19 | M6 | Task 13은 menu의 Quit을 custom item으로 바꿔 `Cmd+Q`와 menu의 Quit을 확인에 태우고 창 닫기를 막음. Dock의 Quit과 `osascript` quit은 확인 없이 끝남(감수). `ExitRequested { code: None }` 막기는 안전망으로 두되 이 경로들에서는 오지 않음 | predefined Quit은 막을 수 없어 custom item이 필요함. Dock과 외부 quit 요청을 막는 방법은 찾지 못함(tao 0.37.2의 app delegate는 `applicationWillTerminate`만 구현하고 종료를 거절할 수 있는 `applicationShouldTerminate`는 없음). 열린 트랜잭션은 서버가 되돌리므로 데이터는 Commit되지 않은 채 사라짐 |
+| 2026-11-19 | M6 | Transaction 모드(Auto/Manual)는 `runsStore`가 아니라 `tabsStore`의 탭 field. 세션을 놓아도(`release`) 모드는 탭에 남고 탭을 닫으면 사라짐 | 모드는 세션이 아니라 탭의 것이라 `release(…, { keepMode })` flag를 caller마다 넘기던 것을 없앰(simplify) |
+| 2026-11-19 | M6 | Commit/Rollback 가능 조건은 `runsStore`의 selector `endable` 하나. toolbar, 단축키, 결과 panel의 Rollback이 이것을 씀. 닫기 전 확인의 끝내기는 이 조건을 거치지 않음 | 조건이 세 곳에 따로 있었음. 확인 dialog는 쿼리를 읽는 중에도 끝내기를 보내야 해서 store의 `endTransaction` 자체에는 넣지 않음(simplify) |
+| 2026-11-19 | M6 | simplify에서 고치지 않은 것: `runsStore`의 탭별 record를 하나(`TabRun`)로 합치기, `discardedByEnd`를 actor의 discard 이유(`DrainReason::Ended`)로 보내기, 접속 저장의 settle 경로를 한 command로, 확실하지 않은 `Finished.tx`를 `null`로 보내기, `IDLE_RESULT_MINUTES`를 core 값에서 받기, 실행 전 `inspect_statement`를 세션 열기와 병렬로 하거나 cache하기, Manual `BEGIN`을 pipeline하기, 탭마다 도는 1초 timer를 하나로 | 앞의 넷은 범위가 크거나 event 계약을 바꿈. `IDLE_RESULT_MINUTES`는 M8 설정과 함께. inspect 병렬은 확인을 Cancel해도 세션을 여는 동작 변경. `BEGIN` pipeline은 오류 순서 위험. timer는 탭이 적어 비용이 작음 |
 
 ## 작업 로그
 
@@ -242,6 +245,10 @@
 
 ### 2026-11-19
 
+- M6 simplify: 4개 관점(reuse, simplification, efficiency, altitude) 지적 35개를 합쳐 동작을 바꾸지 않는 것을 고침(`8295988`, `32673e7`). 고치지 않은 것은 결정 기록에 남김
+  - Rust: `ConnectionColor`를 `SslMode`처럼 `FromStr`로, 위험 쿼리 판별의 `SELECT` arm과 `UPDATE`/`DELETE` arm 중복을 helper로, session actor의 사용자 Cancel과 세션 닫기가 `discard` 한 경로로 cancel을 정함, `QueryError` → outcome 변환을 `From`으로, `simple_execute`와 `start_query`의 오류 분류를 `query_error` 하나로, `Quitting` flag를 지움(tauri 2.12.5 소스에서 `app.exit(0)`은 `ExitRequested { code: Some(0) }`만 보내는 것을 확인)
+  - 화면: 트랜잭션 모드를 탭 field로(결정 기록), Commit/Rollback 조건을 `endable` 하나로(결정 기록), `endCalls` Map을 `ending`의 token으로, store의 `setEntry` helper, `formatElapsed`(ms)를 `formatClock`으로, 단축키 억제를 `useShortcuts`가 dialog host 상태로, `connectionColor`의 이름 guard 제거와 접속 색 찾기 helper, `quit.ts`의 중복 filter, danger dialog의 같은 문구 key 합치기, `tc`가 0개에 `.none` key를 고름, `Banner`와 `Scrim`/`MODAL_PANEL` 공용, 탭의 TX badge가 자기 탭의 tx만 구독하고 `nextTx`가 바뀐 것이 없으면 이전 값을 돌려줌
+  - `pnpm check` 통과(vitest 583)
 - M6 Task 15: `.app`(`afcd47b`)으로 확인함
   - local test DB: 계획 표의 12항목이 모두 기준대로. Manual `INSERT`는 다른 탭에서 보이지 않고 Commit(`Opt+Shift+Cmd+Enter`) 뒤 보이고 Rollback(`Opt+Shift+Cmd+Z`) 뒤 사라짐. Auto의 `BEGIN`은 `Open · manual BEGIN`. 트랜잭션 안의 오류는 `Transaction failed`와 Rollback, Commit disabled. `DELETE FROM m6_t` 확인 문구가 Auto와 Manual에서 다르고 Cancel이면 실행하지 않음. 탭 닫기, 접속 바꾸기(시계 icon), Auto 전환, 연결 대상 저장, 프로젝트 바꾸기의 dialog가 캔버스와 같음. `Cmd+Q`와 창 닫기는 종료 확인을 띄우고 Cancel이면 남고 Roll back all and quit이면 끝나며 서버에 열린 트랜잭션이 없음. `osascript` quit과 Dock의 종료는 확인 없이 끝나고 서버가 되돌림. 저장하지 않은 탭 닫기는 캔버스 dialog. 받다 만 `big_table` 뒤 Manual 다음 문장은 Failed가 되지 않음
   - 실제 터널 접속(사용자가 알려 준 `<터널 명령>`, 확인용 프로젝트는 scratchpad): 앱이 터널을 띄우고 접속 Test가 `Connected`. Manual에서 `CREATE TEMP TABLE m6_check` → `INSERT 1` → Commit → `SELECT` 1행, `INSERT 2` → 2행 → Rollback → 1행. 트랜잭션이 열린 채 터널 프로세스와 ssh를 밖에서 끝내자 곧바로 `Transaction lost`("The 3 uncommitted statements were not applied"). 다음 실행에서 터널이 다시 뜨고 `Reconnected`. 앱을 끝내면 터널 프로세스와 포트가 남지 않음. 터널 CLI가 link된 디렉토리에서 실행해야 해서 `tunnel`에 `cd <디렉토리> && `를 붙임
