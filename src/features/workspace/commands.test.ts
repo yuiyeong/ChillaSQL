@@ -5,6 +5,7 @@ vi.mock("../../shared/api/dialog");
 
 import {
   cancelQuery,
+  cancelTunnel,
   closeSession,
   executeQuery,
   listSqlFiles,
@@ -29,9 +30,11 @@ import {
   changeConnection,
   closeTab,
   execute,
+  cancelRun,
   runAgain,
   switchProject,
 } from "./commands";
+import { useTunnels } from "../connections/tunnelsStore";
 import { deferred } from "../../test/deferred";
 import { connection } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
@@ -615,4 +618,48 @@ test("runAgain은 접속이 없으면 거절한다", async () => {
     status: "rejected",
     rejection: { title: "Choose a connection to run queries." },
   });
+});
+
+test("터널이 시작 중인 연결 중 탭의 취소는 터널 시작을 멈춘다", async () => {
+  const id = tabWith("SELECT 1", "staging");
+  const opening = deferred<Session>();
+  vi.mocked(openSession).mockReturnValue(opening.promise);
+  void useRuns.getState().run(id, () => ({
+    connection: "staging",
+    sql: "SELECT 1",
+    origin: { line: 1, column: 1 },
+  }));
+  expect(runOf(id)?.status).toBe("connecting");
+  useTunnels.getState().apply({
+    connection: "staging",
+    state: { status: "starting", attempt: 0, timeoutSecs: 20 },
+  });
+  const cancel = vi.spyOn(useRuns.getState(), "cancel");
+
+  await cancelRun(id);
+  expect(cancelTunnel).toHaveBeenCalledWith("staging");
+  expect(cancel).not.toHaveBeenCalled();
+
+  // 터널이 열렸으면 실행을 취소한다.
+  useTunnels
+    .getState()
+    .apply({ connection: "staging", state: { status: "ready" } });
+  await cancelRun(id);
+  expect(cancel).toHaveBeenCalledWith(id);
+  cancel.mockRestore();
+  opening.resolve(session(3));
+});
+
+test("프로젝트를 바꾸면 터널 상태를 비운다", async () => {
+  useTunnels
+    .getState()
+    .apply({ connection: "staging", state: { status: "ready" } });
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({
+    name: "q",
+    dir: "/q",
+    connections: [],
+  });
+  await switchProject();
+  expect(useTunnels.getState().tunnels).toEqual({});
 });

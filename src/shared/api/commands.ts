@@ -73,6 +73,16 @@ export function executeQuery(
   return call("execute_query", { sessionId, sql, onEvent: channel });
 }
 
+/** 그 접속의 터널이 시작 중이면 멈춘다. 기다리던 세션 열기는 `tunnel_cancelled`로 끝난다. */
+export function cancelTunnel(connection: string): Promise<void> {
+  return call("cancel_tunnel", { connection });
+}
+
+/** 다시 실행하다 멈춘 그 접속의 터널을 처음부터 다시 시작한다. */
+export function restartTunnel(connection: string): Promise<void> {
+  return call("restart_tunnel", { connection });
+}
+
 export function cancelQuery(sessionId: number, queryId: number): Promise<void> {
   return call("cancel_query", { sessionId, queryId });
 }

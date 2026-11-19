@@ -23,6 +23,8 @@ import {
   splitStatements,
   testConnection,
   writeSqlFile,
+  cancelTunnel,
+  restartTunnel,
 } from "./commands";
 import { CommandError } from "./errors";
 import type { Connection, QueryEvent } from "./types";
@@ -147,4 +149,30 @@ test("Rust의 오류 object는 CommandError가 된다", async () => {
   expect(other).toBeInstanceOf(CommandError);
   expect((other as CommandError).kind).toBe("internal");
   expect((other as CommandError).message).toContain("command not found");
+});
+
+test("터널 오류의 output은 CommandError에 남고 없으면 null이다", async () => {
+  invokeMock.mockRejectedValueOnce({
+    kind: "tunnel_timeout",
+    message: "localhost:25432 didn't open within 20 seconds",
+    output: "Unauthorized",
+  });
+  const tunnel = await openProject("/p").catch((e: unknown) => e);
+  expect((tunnel as CommandError).output).toBe("Unauthorized");
+
+  invokeMock.mockRejectedValueOnce({ kind: "unreachable", message: "m" });
+  const plain = await openProject("/p").catch((e: unknown) => e);
+  expect((plain as CommandError).output).toBeNull();
+});
+
+test("cancelTunnel과 restartTunnel은 접속 이름을 보낸다", async () => {
+  invokeMock.mockResolvedValue(undefined);
+  await cancelTunnel("staging");
+  expect(invokeMock).toHaveBeenLastCalledWith("cancel_tunnel", {
+    connection: "staging",
+  });
+  await restartTunnel("staging");
+  expect(invokeMock).toHaveBeenLastCalledWith("restart_tunnel", {
+    connection: "staging",
+  });
 });

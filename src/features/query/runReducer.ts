@@ -9,10 +9,21 @@ export interface Origin {
 /** 다음 batch를 요청할 수 있는지. rows가 오면 ready, 요청하면 fetching, 끝나면 none이다. */
 export type FetchState = "none" | "ready" | "fetching";
 
+/** 실행할 것. 탭의 접속, 보낼 SQL, 그 SQL이 문서에서 시작한 곳. */
+export interface RunRequest {
+  connection: string;
+  sql: string;
+  origin: Origin;
+}
+
 /** 실행하지 못한 이유. title은 한 줄, detail은 덧붙일 설명이다. */
 export interface Rejection {
   title: string;
   detail: string | null;
+  /** 터널 명령의 stderr. 터널을 열지 못했을 때만 있다. */
+  output?: string;
+  /** 같은 실행을 다시 할 수 있으면 그 요청(터널 오류의 Try again). */
+  retry?: RunRequest;
 }
 
 export interface ResultData {

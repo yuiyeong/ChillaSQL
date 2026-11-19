@@ -1,3 +1,4 @@
+import { useTunnels } from "../features/connections/tunnelsStore";
 import { useEditorStatus } from "../features/editor/editorStatus";
 import { useTabs } from "../features/editor/tabsStore";
 import { useProject } from "../features/project/projectStore";
@@ -14,4 +15,5 @@ export async function resetStores(): Promise<void> {
   useTabs.getState().reset();
   useProject.setState(useProject.getInitialState(), true);
   useEditorStatus.setState(useEditorStatus.getInitialState(), true);
+  useTunnels.setState(useTunnels.getInitialState(), true);
 }

@@ -688,3 +688,93 @@ test("거절은 title과 detail을 갖는다", async () => {
     rejection: { title: "Couldn't find", detail: "이유" },
   });
 });
+
+test("stale 세션은 새 세션을 먼저 연 뒤 닫고 Reconnected를 알린다", async () => {
+  vi.mocked(openSession)
+    .mockResolvedValueOnce(session(3, "staging"))
+    .mockResolvedValueOnce(session(4, "staging"));
+  await useRuns.getState().run("t", prepared("SELECT 1", "staging"));
+  expect(useRuns.getState().notices.t).toBeUndefined();
+
+  useRuns.getState().markStale("staging");
+  await useRuns.getState().run("t", prepared("SELECT 2", "staging"));
+
+  const opened = vi.mocked(openSession).mock.invocationCallOrder[1];
+  const closed = vi.mocked(closeSession).mock.invocationCallOrder[0];
+  expect(opened).toBeLessThan(closed);
+  expect(closeSession).toHaveBeenCalledWith(3);
+  expect(vi.mocked(executeQuery).mock.calls[1][0]).toBe(4);
+  expect(useRuns.getState().notices.t).toBe("reconnected");
+});
+
+test("stale은 그 접속의 탭만 바꾼다", async () => {
+  vi.mocked(openSession)
+    .mockResolvedValueOnce(session(3, "local"))
+    .mockResolvedValueOnce(session(4, "staging"));
+  await useRuns.getState().run("a", prepared("SELECT 1", "local"));
+  await useRuns.getState().run("b", prepared("SELECT 1", "staging"));
+
+  useRuns.getState().markStale("staging");
+  await useRuns.getState().run("a", prepared("SELECT 2", "local"));
+
+  expect(openSession).toHaveBeenCalledTimes(2);
+  expect(useRuns.getState().notices.a).toBeUndefined();
+});
+
+test("끊긴 세션을 다음 실행이 대신하면 Reconnected를 알리고 그다음 실행에서 지운다", async () => {
+  vi.mocked(openSession)
+    .mockResolvedValueOnce(session(3))
+    .mockResolvedValueOnce(session(4));
+  await useRuns.getState().run("t", prepared());
+  onEventOf(0)({
+    type: "finished",
+    outcome: "connection_lost",
+    message: "gone",
+    elapsedMicros: 1,
+  });
+
+  await useRuns.getState().run("t", prepared());
+  expect(openSession).toHaveBeenCalledTimes(2);
+  expect(useRuns.getState().notices.t).toBe("reconnected");
+
+  await useRuns.getState().run("t", prepared());
+  expect(useRuns.getState().notices.t).toBeUndefined();
+});
+
+test("dismissNotice는 알림을 지운다", async () => {
+  await useRuns.getState().run("t", prepared());
+  useRuns.getState().markStale("local");
+  vi.mocked(openSession).mockResolvedValueOnce(session(4));
+  await useRuns.getState().run("t", prepared());
+  expect(useRuns.getState().notices.t).toBe("reconnected");
+
+  useRuns.getState().dismissNotice("t");
+  expect(useRuns.getState().notices.t).toBeUndefined();
+});
+
+test("터널 시작을 멈추면 탭은 빈 상태로 돌아간다", async () => {
+  vi.mocked(openSession).mockRejectedValue(
+    new CommandError("tunnel_cancelled", "The tunnel start was cancelled"),
+  );
+  await useRuns.getState().run("t", prepared());
+  expect(runOf("t")).toEqual({ status: "idle" });
+});
+
+test("터널 오류는 output과 다시 실행할 요청을 남긴다", async () => {
+  vi.mocked(openSession).mockRejectedValue(
+    new CommandError(
+      "tunnel_timeout",
+      "localhost:25432 didn't open within 20 seconds",
+      "Unauthorized",
+    ),
+  );
+  await useRuns.getState().run("t", prepared("SELECT 1", "staging"));
+
+  const expected: Rejection = {
+    title: "localhost:25432 didn't open within 20 seconds",
+    detail: null,
+    output: "Unauthorized",
+    retry: { connection: "staging", sql: "SELECT 1", origin },
+  };
+  expect(runOf("t")).toEqual({ status: "rejected", rejection: expected });
+});

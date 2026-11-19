@@ -8,6 +8,9 @@ import { connection, openProjectWith } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
+vi.mock("../../shared/api/events", () => ({
+  onTunnelEvent: vi.fn(() => Promise.resolve(() => {})),
+}));
 vi.mock("../../shared/api/dialog");
 vi.mock("../../shared/api/path");
 

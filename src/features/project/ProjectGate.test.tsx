@@ -5,6 +5,9 @@ import { click } from "../../test/click";
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
+vi.mock("../../shared/api/events", () => ({
+  onTunnelEvent: vi.fn(() => Promise.resolve(() => {})),
+}));
 vi.mock("../../shared/api/dialog");
 
 import {

@@ -681,7 +681,7 @@ export async function cancelRun(tabId: string): Promise<void>;
 
 `RunRequest`는 `runsStore.ts`에서 `runReducer.ts`로 옮겨 순환 import를 피한다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `tunnelsStore.test.ts`:
 - `apply_keeps_the_latest_state_and_when_it_started`: `starting`(now 1000) → `since 1000`, 같은 attempt의 `starting`이 다시 와도 `since`는 그대로, `ready` → `since`가 새 now. `stopped` → key가 없어짐. `reset` → 비었음.
@@ -701,21 +701,21 @@ export async function cancelRun(tabId: string): Promise<void>;
 - `cancel_during_tunnel_start_cancels_the_tunnel`: 탭이 `connecting`이고 `useTunnels`의 `staging`이 `starting` → `cancelRun`이 `cancelTunnel("staging")`을 부르고 `useRuns.cancel`은 부르지 않음. 터널이 `ready`면 `useRuns.cancel`.
 - 프로젝트를 바꾸면 `useTunnels.reset`이 불림.
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/connections src/features/query/runsStore.test.ts src/features/workspace`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `SessionSlot`에 `stale: boolean`, 탭별로 "끊긴 세션을 대신해야 함" 표시(`lost: Set<string>`)를 둔다. `slotFor`는 같은 접속이고 stale이 아니면 그 slot, stale이면 새 세션을 연 *뒤* 옛 slot을 닫는다. 접속이 다르면 지금처럼 닫은 뒤 연다. `forget`이 `connection_lost`나 `unknown_session` 때문에 불리면 `lost`에 넣는다. 새 세션이 열렸을 때 stale을 대신했거나 `lost`에 있었으면 notice를 둔다. `execute("cancel")`은 `cancelRun(tabId)`을 부른다. `Workspace`가 mount될 때 `subscribeTunnelEvents()`를 부르고 unmount 때 해제한다. `switchProject`가 탭을 비울 때 `useTunnels.reset()`도 부른다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm vitest run && pnpm typecheck && pnpm lint`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src

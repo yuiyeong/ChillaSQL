@@ -2,6 +2,9 @@ import { render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("./shared/api/commands");
+vi.mock("./shared/api/events", () => ({
+  onTunnelEvent: vi.fn(() => Promise.resolve(() => {})),
+}));
 vi.mock("./shared/api/dialog");
 vi.mock("./shared/api/path");
 

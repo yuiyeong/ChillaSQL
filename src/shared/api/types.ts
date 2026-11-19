@@ -75,3 +75,24 @@ export type WriteMode =
   | { mode: "create" }
   | { mode: "replace"; stamp: string }
   | { mode: "overwrite" };
+
+/** 터널이 실패한 이유. `reason`이 구분자다. */
+export type TunnelFailure =
+  | { reason: "spawn"; message: string }
+  | { reason: "exited"; code: number | null; output: string }
+  | { reason: "timeout"; secs: number; output: string }
+  | { reason: "cancelled" };
+
+/** 접속 하나의 터널 상태. `status`가 구분자다. `attempt`는 처음 시작이 0, 다시 실행이 1~3이다. */
+export type TunnelState =
+  | { status: "starting"; attempt: number; timeoutSecs: number }
+  | { status: "ready" }
+  | { status: "external" }
+  | ({ status: "failed" } & TunnelFailure)
+  | { status: "stopped" };
+
+/** Rust가 보내는 event `tunnel`. */
+export interface TunnelEvent {
+  connection: string;
+  state: TunnelState;
+}

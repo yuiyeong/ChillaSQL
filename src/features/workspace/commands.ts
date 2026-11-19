@@ -1,15 +1,17 @@
-import { splitStatements } from "../../shared/api/commands";
+import { cancelTunnel, splitStatements } from "../../shared/api/commands";
 import { confirm, pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import type { Project } from "../../shared/api/types";
 import { targetChanged } from "../connections/connectionValues";
+import { useTunnels } from "../connections/tunnelsStore";
 import { documentSelection, documentText } from "../editor/documents";
 import { saveTab } from "../editor/saveTab";
 import { lineColumn, statementAt } from "../editor/statementAt";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import type { Origin, Rejection } from "../query/runReducer";
-import { useRuns, type RunRequest } from "../query/runsStore";
+import type { RunRequest } from "../query/runReducer";
+import { useRuns } from "../query/runsStore";
 import { t, tc } from "../../shared/i18n/t";
 
 export type CommandId =
@@ -101,13 +103,37 @@ export async function execute(command: CommandId): Promise<void> {
       // 문장을 나누는 동안 탭을 닫거나 접속을 바꾸면 release가 이 실행을 버린다.
       return useRuns.getState().run(tabId, () => prepareRun(tabId));
     case "cancel":
-      return useRuns.getState().cancel(tabId);
+      return cancelRun(tabId);
     case "save":
       await saveTab(tabId);
       return;
     case "closeTab":
       return closeTab(tabId);
   }
+}
+
+/**
+ * 탭의 실행을 멈춘다. 연결 중이고 그 접속의 터널이 시작 중이면 터널 시작을 멈춘다(같은 터널을
+ * 기다리던 다른 탭의 실행도 멈춘다).
+ */
+export async function cancelRun(tabId: string): Promise<void> {
+  const connection = findTab(tabId)?.connection ?? null;
+  const connecting = useRuns.getState().runs[tabId]?.status === "connecting";
+  const tunnel =
+    connection === null ? undefined : useTunnels.getState().tunnels[connection];
+  if (
+    connecting &&
+    connection !== null &&
+    tunnel?.state.status === "starting"
+  ) {
+    try {
+      await cancelTunnel(connection);
+    } catch {
+      // 그 사이 터널이 열렸거나 프로젝트가 바뀌었다. 실행의 결과가 상태를 정한다.
+    }
+    return;
+  }
+  return useRuns.getState().cancel(tabId);
 }
 
 /** 그 탭의 결과에 쓴 SQL을 탭의 지금 접속으로 다시 실행한다. 결과가 없으면 아무것도 하지 않는다. */
@@ -189,6 +215,7 @@ export async function switchProject(): Promise<void> {
   // 바꾸는 동안 실행이 새로 연 세션은 여기서 닫힌다.
   const closing = useRuns.getState().reset();
   useTabs.getState().reset();
+  useTunnels.getState().reset();
   await closing;
 }
 
