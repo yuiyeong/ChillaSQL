@@ -1,6 +1,7 @@
 //! `application`의 단위 test가 쓰는 가짜 port 구현.
 
 mod connection;
+mod tunnel;
 
 use std::collections::HashMap;
 use std::ops::Range;
@@ -13,6 +14,7 @@ use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio::time::timeout;
 
 pub(crate) use connection::{FakeConnection, FakeLink, server_error};
+pub(crate) use tunnel::{FakeRun, FakeRunner, events_sink};
 
 use super::{
     ConnectError, Connector, FileError, PasswordKey, PasswordStore, PasswordStoreError,

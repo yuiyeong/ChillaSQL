@@ -443,7 +443,7 @@ Ready: process.mark_ready()를 부른 뒤 process.wait()가 끝나면 → proces
 
 acquire는 entry가 없거나 Failed면 attempt 0으로 시작시키고, External이면 포트를 다시 확인해 닫혔으면 attempt 0으로 시작시킨다. 같은 이름의 entry가 다른 target이거나 끄는 중이면 그 entry가 지워질 때까지 기다린다. acquire가 Failed로 끝나면 받았던 lease를 돌려놓는다(그 entry에 lease가 0이면 entry를 지운다).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `tunnels.rs`의 `#[cfg(test)] mod tests`. 모두 `#[tokio::test(start_paused = true)]`. target은 `staging`(`command "tunnel"`, `localhost:25432`, 20초)이다.
 
@@ -464,21 +464,21 @@ acquire는 entry가 없거나 Failed면 attempt 0으로 시작시키고, Externa
 | `stop_all_stops_starting_restarting_and_private_tunnels` | Starting 하나, 재실행 중(1초 대기 중) 하나, `start_private` 하나 → `stop_all` 뒤 `running() == 0`, 기다리던 acquire는 `Cancelled`. 그 뒤 acquire는 다시 spawn한다 |
 | `private_tunnel_is_not_shared` | `start_private` 두 번 → `spawned().len() == 2`. 포트가 열려 있으면 spawn 없음. `stop` 뒤 `running() == 0`이고 sink에 event가 없다 |
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `cargo test -p chilla-core --lib tunnels`
 Expected: FAIL (compile error)
 
-- [ ] **Step 3: `FakeRunner`와 `Tunnels`를 구현한다**
+- [x] **Step 3: `FakeRunner`와 `Tunnels`를 구현한다**
 
 `FakeProcess::wait`는 script대로 `tokio::time::sleep` 뒤 끝난다. 포트 상태는 `FakeRunner` 안의 `HashMap<(String, u16), bool>`이다. `Tunnels`의 entry 표는 `tokio::sync::Mutex<HashMap<String, Entry>>`이고 `Entry`는 target, lease 수, entry 번호, `watch::Receiver<TunnelState>`, supervisor에 명령을 보내는 `mpsc::Sender`, 끝을 기다리는 `JoinHandle`을 갖는다. lock을 쥔 채 기다리지 않는다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `cargo test -p chilla-core --lib tunnels`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add crates/chilla-core/src/application
