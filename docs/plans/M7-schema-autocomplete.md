@@ -84,13 +84,13 @@ test가 없으면 사용자가 가장 먼저 부딪힐 입력과 상황이다. �
 **Files:**
 - Modify: `docs/progress.md`, `docs/spec.md`, `docs/milestones.md`
 
-- [ ] **Step 1: 문서를 고친다**
+- [x] **Step 1: 문서를 고친다**
 
 - 진행상황: M7을 `진행 중`(시작 2026-11-20, 계획 링크), "지금"을 M7 Task 2로. 결정 기록에 "이 계획에서 정한 것"의 줄마다 한 줄(날짜 2026-11-20, M7).
 - 기획서 4.2 "접속 종료": 스키마를 읽는 연결도 그 접속을 쓰는 탭이 없어지면 닫는다고 덧붙인다. 4.4 "자동완성": 입력하면 바로 뜨고 keyword는 대문자. 4.7 "지연 로딩": 위 결정의 문장으로. "빠른 조회": 새 탭에서 앞 500행. 마지막 수정 날짜.
 - 마일스톤 M7 "먼저 확인할 것": 위 표의 첫 줄 결과를 `→ 정함:` 꼴로 적는다.
 
-- [ ] **Step 2: commit**
+- [x] **Step 2: commit**
 
 ```bash
 git add docs
@@ -138,7 +138,7 @@ git commit -m "docs: M7 계획과 스키마 catalog connection, 자동완성 결
   ```
 - Produces (fake): `FakeConnector::set_catalog(Catalog)`, `set_details(u32, TableDetails)`, `fail_next_catalog(QueryError)`, `catalog_reads() -> usize`(그 connector가 만든 연결 전체의 `read_catalog` 호출 수). 끊긴 link(`FakeLink::lose`)의 두 method는 `ConnectionLost`다.
 
-- [ ] **Step 1: integration test를 쓴다** (`tests/catalog.rs`)
+- [x] **Step 1: integration test를 쓴다** (`tests/catalog.rs`)
 
 test마다 따로 schema를 `support::admin()`으로 `DROP SCHEMA IF EXISTS … CASCADE` 뒤 만든다. `support::connect()`로 연 `PgConnection`을 쓴다.
 
@@ -152,12 +152,12 @@ test마다 따로 schema를 `support::admin()`으로 `DROP SCHEMA IF EXISTS … 
   - `constraints`의 kind는 `child_amount_check` Check, `child_email_key` Unique, `child_parent_id_fkey` ForeignKey, `child_pkey` PrimaryKey이고 NOT NULL 제약조건은 없다. FK definition은 `FOREIGN KEY (parent_id) REFERENCES m7_cat_b.parent(id)`.
 - `table_details_of_an_unknown_oid_are_empty`: `read_table_details(0)`이 빈 두 목록.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core --test catalog`
 Expected: FAIL (`read_catalog`가 없음)
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - 쿼리는 `self.client.query(sql, &[…])`(extended protocol, typed 값)로 보낸다. relkind와 contype은 SQL에서 `::text`로 바꿔 받는다. OID는 `u32`(`oid`)다.
 - relation과 컬럼은 한 쿼리다: `pg_class` ⋈ `pg_namespace`, `LEFT JOIN pg_attribute`(`attnum > 0 AND NOT attisdropped`, 컬럼 없는 테이블도 남게), `LEFT JOIN pg_index`(`indisprimary`)로 `attnum = ANY(indkey)`면 pk. Rust에서 (schema, name)이 같은 줄을 묶는다.
@@ -167,12 +167,12 @@ Expected: FAIL (`read_catalog`가 없음)
 - 쿼리 오류는 `QueryError`로 바꾼다(`postgres/mod.rs`의 `query_error`).
 - fake: `FakeConnector`가 가진 catalog를 새 link가 함께 본다. 기본값은 빈 `Catalog`다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `cargo test -p chilla-core`
 Expected: PASS (`layer_deps` 포함)
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates
@@ -199,7 +199,7 @@ git commit -m "feat: 연결에서 스키마 catalog와 테이블의 인덱스, �
   `AppError::Catalog(QueryError)` — message `Could not read the schema: {0}`.
 - 접속마다 slot 하나(`Arc<tokio::sync::Mutex<Option<…>>>`)를 둬 한 연결의 읽기를 차례로 하고, 같은 접속을 동시에 두 번 열지 않는다. 여는 사이 프로젝트가 바뀌면(`project_generation`) `open_session`처럼 닫고 `ProjectChanged`다. `switch_project`와 `shutdown`이 catalog connection을 모두 닫는다.
 
-- [ ] **Step 1: test를 쓴다** (`app.rs`의 `mod tests`, 기존 `fixture()`)
+- [x] **Step 1: test를 쓴다** (`app.rs`의 `mod tests`, 기존 `fixture()`)
 
 - `load_catalog_opens_one_connection_and_reuses_it`: `load_catalog` 둘과 `load_table_details` 하나 → `connector.requests().len() == 1`, `catalog_reads() == 2`, 돌려준 값이 `set_catalog`의 값.
 - `catalog_connection_shares_the_tunnel_with_sessions`: 터널 접속(`set_tunnel`)으로 `open_session` 뒤 `load_catalog` → `runner.spawned().len() == 1`. `close_session` 뒤에도 `runner.running() == 1`.
@@ -210,21 +210,21 @@ git commit -m "feat: 연결에서 스키마 catalog와 테이블의 인덱스, �
 - `switching_projects_closes_catalog_connections`와 `shutdown_closes_catalog_connections`: link가 `closed()`.
 - `close_catalog_without_a_connection_is_ok`, `load_catalog_of_an_unknown_connection_fails`(`UnknownConnection`).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core --lib app::tests`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 여는 순서와 비밀번호, 터널 lease는 `open_session`의 것을 같이 쓰도록 꺼낸다(`connect_profile` 같은 private 함수). 읽다 `ConnectionLost`가 오면 그 연결을 닫고 lease를 놓은 뒤 한 번만 새로 열어 다시 읽는다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `cargo test -p chilla-core`
 Expected: PASS
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates
@@ -255,25 +255,25 @@ git commit -m "feat: 접속마다 catalog connection을 열어 터널을 함께 
   ```
 - Produces (`commands.ts`): `loadCatalog(connection: string): Promise<Catalog>`, `loadTableDetails(connection: string, relation: number): Promise<TableDetails>`, `closeCatalog(connection: string): Promise<void>`.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `commands.rs`: `catalog_dto_uses_camel_case_and_snake_case_kinds`(`CatalogColumn.type_name` → `"type"`, `primary_key` → `"primaryKey"`, `MaterializedView` → `"materialized_view"`), `table_details_dto_kinds`.
 - `error.rs`: 기존 kind 표 test에 `catalog_failed`를 더한다.
 - `commands.test.ts`: 세 호출의 command 이름과 인자(`{ connection }`, `{ connection, relation }`).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chillasql && pnpm vitest run src/shared/api`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다** — command는 use case만 부르고 `lib.rs`의 `generate_handler!`에 셋을 더한다.
+- [x] **Step 3: 구현한다** — command는 use case만 부르고 `lib.rs`의 `generate_handler!`에 셋을 더한다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src-tauri src/shared/api
@@ -324,7 +324,7 @@ git commit -m "feat: catalog를 읽고 닫는 command를 화면에 열어 줌"
 - 응답은 그 접속에 마지막으로 보낸 요청의 것만 반영한다(접속별 요청 번호). `forget`이나 `reset` 뒤에 온 응답은 버린다.
 - 처음 `ready`가 되면 `expanded`에 `[searchPath[0]]`과 `[searchPath[0], "tables"]`를 넣는다(이미 entry가 있던 새로고침에서는 그대로).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `schemaStore.test.ts`(`shared/api/commands` mock):
 - `ensure_loads_once`: 두 번 불러도 `loadCatalog` 한 번. `ready` 뒤 `catalog`가 그 값.
@@ -342,22 +342,22 @@ git commit -m "feat: catalog를 읽고 닫는 command를 화면에 열어 줌"
 - `saving_a_changed_target_reloads_its_catalog`: `applySavedProject`로 대상이 바뀐 접속은 `closeCatalog` 뒤 그 접속을 쓰는 탭이 있으면 `loadCatalog`.
 - `switching_projects_resets_schemas`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/schema src/features/workspace/commands.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `useSchemaLifecycle`은 `Workspace`에서 부른다. effect 둘: 활성 탭의 접속이 바뀌면 `ensure`, 탭들의 접속 집합에 없는 entry는 `forget`.
 - `applySavedProject`는 바뀐 접속마다 `forget` 뒤, 그 접속을 쓰는 탭이 있으면 `ensure`한다. `switchProject`는 `useSchema.getState().reset()`을 다른 reset과 함께 부른다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -391,7 +391,7 @@ git commit -m "feat: 활성 탭 접속의 catalog를 뒤에서 불러와 접속�
 - Toolbar: 접속 menu의 열림을 `Workspace`로 올린다 — `Toolbar`에 `connectionMenuOpen: boolean`, `onConnectionMenuChange(open: boolean): void`. Sidebar의 Choose connection이 `onConnectionMenuChange(true)`를 부른다.
 - 문구(`en.ts`): `schema.label` "Schema", `schema.refresh` "Refresh schema", `schema.noConnection` "No connection in this tab", `schema.chooseConnection` "Choose connection", `schema.loading` "Loading", `schema.retry` "Retry", `schema.empty` "None", `schema.group.tables` "Tables", `schema.group.views` "Views", `schema.group.columns` "Columns", `schema.group.indexes` "Indexes", `schema.group.constraints` "Constraints", `schema.unique` "unique", `schema.materialized` "materialized".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `schemaRows.test.ts`:
 - `collapsed_schema_hides_its_children`, `empty_groups_are_left_out`(뷰가 없는 schema는 Views group이 없음), `a_schema_without_relations_shows_empty`.
@@ -408,23 +408,23 @@ git commit -m "feat: 활성 탭 접속의 catalog를 뒤에서 불러와 접속�
 
 `Sidebar.test.tsx`: `schema_segment_switches_the_view`(Files ↔ Schema, History는 계속 disabled). `Toolbar.test.tsx`: `connection_menu_open_is_controlled`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/schema src/features/project src/features/workspace/Toolbar.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `docs/design/canvas/Sidebar.dc.html`의 A, B를 따른다: 머리 줄(`.ctx`: dot 8px, 이름 weight 500, database mono 12px fg-2, Refresh 22px icon button), 줄(`.tr`: 높이 24px, text-small, chevron 11px, icon mono 11px fg-3 너비 14px, 오른쪽 mono label fg-3), 고른 줄 `bg-accent/14`, loading 줄은 `SpinnerIcon`과 `schema.loading`. failed 줄과 화면 전체의 실패는 `ErrorIcon`, fg-2 message, Retry 버튼이다.
 - Files와 Schema의 전환은 `Sidebar`의 `useState`다. Schema일 때 SQL Files section 자리에 `SchemaView`를 그린다.
 - 펼칠 수 있는 줄을 누르면 `toggle`하고, 펼친 Indexes와 Constraints는 `loadDetails`를 부른다. 고른 줄은 `SchemaView`의 state다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -456,7 +456,7 @@ git commit -m "feat: sidebar의 Schema 화면에 활성 탭 접속의 스키마 
   ```
 - 문구: `schema.menu.label` "{name}", `schema.menu.selectFirstRows` "Select first rows", `schema.menu.doubleClick` "Double-click", `schema.menu.copyName` "Copy name", `schema.copied` "Copied {name}".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `identifiers.test.ts` `quote_ident_matches_postgres`: `users` → `users`, `Order Items` → `"Order Items"`, `user`(reserved) → `"user"`, `a"b` → `"a""b"`, `1abc` → `"1abc"`, `col$1` → `col$1`, `Users` → `"Users"`.
 - `Menu.test.tsx` `opens_at_a_point`: `at={{ x: 40, y: 60 }}`이면 style의 left 40px, top 60px.
@@ -464,22 +464,22 @@ git commit -m "feat: sidebar의 Schema 화면에 활성 탭 접속의 스키마 
 - `commands.test.ts` `select_first_rows_quotes_names`: 활성 탭 접속 `local`에서 `selectFirstRows({ schema: "public", name: "Order Items", … })` → 새 탭이 활성이고 접속 `local`, 모드 auto, text `SELECT * FROM public."Order Items" LIMIT 500`, 그 text로 `executeQuery`.
 - `SchemaView.test.tsx`: `double_clicking_a_table_selects_first_rows`, `context_menu_of_a_table`(항목 Select first rows와 오른쪽 `Double-click`, Copy name), `context_menu_of_a_column_only_copies`, `copy_name_copies_the_quoted_name_and_toasts`(`copyText('"Order Items"')`, status `Copied "Order Items"`).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/shared src/features/schema src/features/editor/tabsStore.test.ts src/features/workspace/commands.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `selectFirstRows`는 `newTab({ text })` 뒤 그 탭으로 `useRuns.getState().run(id, () => confirmed(id, requestFor(id, sql, { line: 1, column: 1 })))`을 부른다(`runAgain`과 같은 길).
 - menu는 `onContextMenu`의 `clientX`, `clientY`로 연다. menu의 `aria-label`은 그 항목 이름이다. toast는 `useToast`이고 `Toast`를 Schema 화면의 `relative` 틀 안에 둔다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -513,7 +513,7 @@ git commit -m "feat: 트리 menu에서 이름을 복사하고 테이블의 앞 5
   - 별칭 없는 컬럼: 커서가 `.` 뒤가 아니면, 그 문장(lezer `Statement`)에서 `FROM`, `JOIN`, `UPDATE`, `INTO` 뒤의 이름(schema가 붙을 수 있음)을 모아 그 테이블들의 컬럼을 준다. 이름만 쓴 테이블은 `searchPath`의 앞 schema부터 찾는다. `validFor: /^\w*$/`.
   - 함수: 커서가 `.` 뒤가 아니면 이름 중복 없이 `{ label, type: "function", detail: schema }`. 같은 이름이 여러 schema에 있으면 `searchPath`에 있는 schema, 그다음 `pg_catalog`의 것을 detail로 쓴다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 fixture catalog: `public.users(id int8 pk, email text, email_verified_at timestamptz)`, `public.orders(id int8, user_id int8)`, `billing.invoices(id int8, amount numeric)`, `public."Order Items"(id int8)`, 함수 `pg_catalog.date_trunc`, `public.add_one`, `searchPath ["public"]`. `EditorState.create({ doc, extensions: [sql({ dialect: PostgreSQL }), catalogField] })`에 `setCatalog`를 dispatch하고, `ensureSyntaxTree` 뒤 각 source를 `new CompletionContext(state, pos, explicit)`로 부른 결과의 label을 합쳐 본다.
 
@@ -526,19 +526,19 @@ fixture catalog: `public.users(id int8 pk, email text, email_verified_at timesta
 - `sources_are_built_once_per_catalog`: `catalogSources(c) === catalogSources(c)`. `setCatalog`를 같은 값으로 두 번 dispatch해도 field의 `sources`가 같다.
 - `kind_letters`: 위 kind 표.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/editor/completion.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다** — keyword source는 `keywordCompletionSource(PostgreSQL, true)`다.
+- [x] **Step 3: 구현한다** — keyword source는 `keywordCompletionSource(PostgreSQL, true)`다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm vitest run src/features/editor`
 Expected: PASS
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -556,7 +556,7 @@ git commit -m "feat: catalog로 스키마, 테이블, 별칭과 별칭 없는 �
 - Consumes: Task 8의 `catalogField`, `setCatalog`, `sqlCompletionSources`, `kindLetter`, Task 5의 `useSchema`
 - Produces: `SqlEditor`의 새 prop `catalog: Catalog | null`. `Workspace`가 활성 탭 접속의 `entries[conn]?.catalog ?? null`을 넘긴다. 문구: `completion.insert` "Insert", `completion.close` "Close", `completion.legend` "s schema · c column · t table · f function · k keyword".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `extensions.test.ts` `autocompletion_is_on_without_typing_delay`: `editorExtensions()`로 만든 state의 `completionConfig`(state facet)에서 `activateOnTypingDelay === 0`, `icons === false`.
 - `SqlEditor.test.tsx`:
@@ -564,24 +564,24 @@ git commit -m "feat: catalog로 스키마, 테이블, 별칭과 별칭 없는 �
   - `popup_has_kind_letters_and_footer`: `users` catalog로 `SELECT u.em` 끝에 커서를 두고 `startCompletion(view)` → `.cm-tooltip-autocomplete`에 `c`, `email`, `users · text`와 footer의 `Insert`, `Close`, legend가 있다.
 - `completion.test.ts` `completes_within_50ms_on_a_large_catalog`: schema 3개, 테이블 5,000개, 테이블마다 컬럼 20개. `catalogSources`를 한 번 만든 뒤(이 시간은 재지 않는다), `SELECT t.| FROM s1.t4999 t`, `SELECT c1| FROM s2.t10`, `SELECT * FROM t49|` 세 context에서 모든 source를 부르는 시간이 각각 `performance.now()`로 50ms 미만.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/editor`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `extensions.ts`: `catalogField`와 `autocompletion({ override: [...sqlCompletionSources()], activateOnTypingDelay: 0, icons: false, addToOptions: [{ render: kind 글자 span, position: 20 }] })`를 더한다. 주석 "자동 완성은 넣지 않는다"를 지운다.
 - popup 모양은 `Tools.dc.html`의 `.pop`, `.ac`를 따른다: 너비 340px, padding 4px, `bg-3`, border `line-2`, radius 8px, `shadow-popover`, 줄 높이 26px, radius 5px, text-small, 고른 줄 `accent` 16%, kind 글자 너비 16px 11px fg-3, detail은 오른쪽 끝 12px fg-2, 맞은 글자(`.cm-completionMatchedText`)는 굵게 밑줄 없이.
 - footer는 ViewPlugin이 popup이 열려 있을 때(`completionStatus(state) === "active"`) `.cm-tooltip-autocomplete` 끝에 한 번 붙인다: `↵ Insert`, `esc Close`, 오른쪽 legend(12px fg-2, 위 border `line-2`).
 - `SqlEditor`: `catalog`나 `tabId`가 바뀌면 `view.dispatch({ effects: setCatalog.of(catalog) })`. 탭을 바꿀 때는 `setState` 뒤에 넣는다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -594,9 +594,9 @@ git commit -m "feat: 에디터에서 입력하면 바로 스키마 자동완성 
 
 CLAUDE.md 개발 순서 3~5다.
 
-- [ ] **Step 1:** `simplify`로 M7에서 바꾼 코드를 정리하고 `pnpm check`를 통과시킨 뒤 commit한다(`chore:`).
-- [ ] **Step 2:** `code-review`를 high로 돌린다.
-- [ ] **Step 3:** 지적마다 `superpowers:receiving-code-review`로 다시 검토해 맞는 것만 고친다. 고친 것은 `pnpm check` 뒤 commit(`fix:`)하고, 고치지 않은 지적과 이유는 작업 로그에 남긴다.
+- [x] **Step 1:** `simplify`로 M7에서 바꾼 코드를 정리하고 `pnpm check`를 통과시킨 뒤 commit한다(`chore:`).
+- [x] **Step 2:** `code-review`를 high로 돌린다.
+- [x] **Step 3:** 지적마다 `superpowers:receiving-code-review`로 다시 검토해 맞는 것만 고친다. 고친 것은 `pnpm check` 뒤 commit(`fix:`)하고, 고치지 않은 지적과 이유는 작업 로그에 남긴다.
 
 ---
 
