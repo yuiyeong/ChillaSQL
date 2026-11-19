@@ -9,6 +9,7 @@ import {
   closeSession,
   endTransaction,
   executeQuery,
+  inspectStatement,
   listSqlFiles,
   openProject,
   openSession,
@@ -92,6 +93,7 @@ beforeEach(async () => {
   vi.mocked(closeSession).mockResolvedValue();
   vi.mocked(cancelQuery).mockResolvedValue();
   vi.mocked(listSqlFiles).mockResolvedValue([]);
+  vi.mocked(inspectStatement).mockResolvedValue(null);
 });
 
 test("접속이 없으면 Choose a connection으로 거절한다", async () => {
@@ -998,4 +1000,58 @@ test("choosing the same connection keeps the session and its transaction", async
   expect(useDialogs.getState().current).toBeNull();
   expect(closeSession).not.toHaveBeenCalled();
   expect(useRuns.getState().transactions[id]).toBeDefined();
+});
+
+const deleteAll = {
+  kind: "delete_without_where",
+  table: "sessions",
+} as const;
+
+test("run_asks_before_a_dangerous_statement_and_does_nothing_on_cancel", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 21 }]);
+  vi.mocked(inspectStatement).mockResolvedValue(deleteAll);
+  const id = tabWith("DELETE FROM sessions;");
+  useRuns.getState().setMode(id, "manual");
+
+  const running = execute("run");
+  const spec = await answerDialog("cancel");
+  await running;
+
+  expect(inspectStatement).toHaveBeenCalledWith("DELETE FROM sessions;");
+  expect(textOf(spec.title)).toBe("Run DELETE without WHERE?");
+  expect(openSession).not.toHaveBeenCalled();
+  expect(executeQuery).not.toHaveBeenCalled();
+  expect(runOf(id)).toBeUndefined();
+
+  // Run을 고르면 실행한다.
+  const again = execute("run");
+  await answerDialog("run");
+  await again;
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "DELETE FROM sessions;",
+    "manual",
+    expect.any(Function),
+  );
+});
+
+test("run_again_asks_too", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
+  const id = tabWith("SELECT 1");
+  await execute("run");
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+  onEventOf(0)({
+    type: "finished",
+    outcome: "completed",
+    elapsedMicros: 1,
+    tx: null,
+  } as QueryEvent);
+
+  vi.mocked(inspectStatement).mockResolvedValue(deleteAll);
+  const again = runAgain(id);
+  await answerDialog("cancel");
+  await again;
+
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+  expect(runOf(id)).toMatchObject({ status: "finished" });
 });

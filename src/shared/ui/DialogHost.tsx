@@ -52,8 +52,10 @@ function Dialog({ spec }: { spec: DialogSpec }) {
   return (
     <div
       className="bg-scrim fixed inset-0 z-50 flex items-start justify-center pt-[84px]"
-      // 막을 눌러도 focus가 dialog를 떠나지 않는다.
-      onMouseDown={(event) => event.preventDefault()}
+      // 막을 눌러도 focus가 dialog를 떠나지 않는다. dialog 안은 SQL을 선택하고 scrollbar를 끌 수 있어야 하므로 막지 않는다.
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) event.preventDefault();
+      }}
     >
       <div
         ref={dialog}

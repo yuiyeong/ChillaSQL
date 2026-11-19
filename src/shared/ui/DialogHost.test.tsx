@@ -205,3 +205,17 @@ test("닫으면 focus를 열기 전의 자리로 돌려 준다", async () => {
     before.remove();
   }
 });
+
+test("막을 누르면 focus를 지키려고 막지만 dialog 안을 누르는 것은 막지 않는다", () => {
+  render(<DialogHost />);
+  void open({ ...spec, sql: "DELETE FROM sessions;" });
+
+  const dialog = screen.getByRole("alertdialog");
+  // SQL을 선택하거나 scrollbar를 끌 수 있어야 한다.
+  expect(fireEvent.mouseDown(screen.getByText("DELETE FROM sessions;"))).toBe(
+    true,
+  );
+  expect(fireEvent.mouseDown(dialog)).toBe(true);
+  // 막(dialog 밖)은 focus가 dialog를 떠나지 않게 막는다.
+  expect(fireEvent.mouseDown(dialog.parentElement as HTMLElement)).toBe(false);
+});

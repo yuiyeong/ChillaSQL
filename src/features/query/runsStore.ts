@@ -31,9 +31,12 @@ import {
 } from "./runReducer";
 import { nextTx, type TxInfo } from "./transaction";
 
-/** 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 Rejection을 돌려준다. */
+/**
+ * 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 Rejection을, 사용자가 그만두게 했으면(위험 쿼리
+ * 확인에서 Cancel) null을 돌려준다. null이면 실행하지 않고 상태도 바꾸지 않는다.
+ */
 export type Prepare = () =>
-  Promise<RunRequest | Rejection> | RunRequest | Rejection;
+  Promise<RunRequest | Rejection | null> | RunRequest | Rejection | null;
 
 function rejectionOf(error: unknown): Rejection {
   return { title: messageOf(error), detail: null };
@@ -136,6 +139,7 @@ interface RunsState {
    * 그 탭의 끝내기가 답을 기다리는 중이면 아무것도 하지 않는다. `prepare`가 끝나기 전에 같은 탭의
    * 다음 동작이 오면 실행하지 않는다. `prepare`가 Rejection을
    * 돌려주면 rejected로 두는데, 그 탭이 연결 중이거나 실행 중이면 아무것도 바꾸지 않는다.
+   * null이면 아무것도 바꾸지 않는다.
    */
   run(tabId: string, prepare: Prepare): Promise<void>;
   cancel(tabId: string): Promise<void>;
@@ -317,13 +321,8 @@ export const useRuns = create<RunsState>()((set, get) => {
       // Commit이나 Rollback의 답을 기다리는 동안은 그 세션에 쿼리를 보내지 않는다.
       if (get().ending[tabId]) return;
       const attempt = bump(attempts, tabId);
-      setNotice(tabId, null);
-      set((s) => {
-        const discardedByEnd = withEntry(s.discardedByEnd, tabId, undefined);
-        return discardedByEnd === s.discardedByEnd ? s : { discardedByEnd };
-      });
 
-      let request: RunRequest | Rejection;
+      let request: RunRequest | Rejection | null;
       try {
         // 바로 정해지면 기다리지 않는다. 같은 tick에 connecting이 보인다.
         const prepared = prepare();
@@ -333,6 +332,12 @@ export const useRuns = create<RunsState>()((set, get) => {
       }
       // 그 사이 같은 탭에서 다시 실행했거나 release했다.
       if (attempts.get(tabId) !== attempt) return;
+      if (request === null) return;
+      setNotice(tabId, null);
+      set((s) => {
+        const discardedByEnd = withEntry(s.discardedByEnd, tabId, undefined);
+        return discardedByEnd === s.discardedByEnd ? s : { discardedByEnd };
+      });
       if ("title" in request) {
         // 진행 중인 쿼리의 표시와 취소는 그대로 둔다.
         const status = get().runs[tabId]?.status;

@@ -96,6 +96,24 @@ export const en = {
   "dialog.tx.rollbackAll.close": "Roll back all and close",
   "dialog.tx.rollbackAll.switch": "Roll back all and switch",
   "dialog.tx.rollbackAll.save": "Roll back all and save",
+  "dialog.danger.title.delete": "Run {delete} without {where}?",
+  "dialog.danger.title.update": "Run {update} without {where}?",
+  "dialog.danger.title.drop": "Run {drop}?",
+  "dialog.danger.title.truncate": "Run {truncate}?",
+  "dialog.danger.first.delete":
+    "This deletes every row in {tables} on {connection}.",
+  "dialog.danger.first.update":
+    "This updates every row in {tables} on {connection}.",
+  "dialog.danger.first.drop": "This drops {names} on {connection}.",
+  "dialog.danger.first.truncate":
+    "This deletes every row in {tables} on {connection}.",
+  "dialog.danger.second.reversible":
+    "You're inside an open transaction, so you can roll it back until you commit.",
+  "dialog.danger.second.final":
+    "Auto mode commits it immediately, and {emphasis}.",
+  "dialog.danger.second.final.emphasis": "it can't be undone",
+  "dialog.danger.body": "{first} {second}",
+  "dialog.danger.run": "Run",
   "dialog.fileChanged.title": "{path} changed on disk",
   "dialog.fileChanged.body":
     "Another program edited this file after you opened it. Overwriting discards those changes.",

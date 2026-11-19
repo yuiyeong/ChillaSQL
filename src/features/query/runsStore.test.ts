@@ -1321,3 +1321,17 @@ test("an_end_that_did_not_end_clears_the_discard_mark", async () => {
 
   expect(useRuns.getState().discardedByEnd.t1).toBeUndefined();
 });
+
+test("a_null_prepare_changes_nothing", async () => {
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+  const before = useRuns.getState().runs.t;
+  useRuns.setState({ notices: { t: { kind: "reconnected" } } });
+  const state = useRuns.getState();
+
+  await useRuns.getState().run("t", () => null);
+
+  expect(useRuns.getState().runs.t).toBe(before);
+  expect(useRuns.getState().notices).toBe(state.notices);
+  expect(openSession).toHaveBeenCalledTimes(1);
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+});

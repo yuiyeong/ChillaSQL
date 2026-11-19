@@ -806,7 +806,7 @@ git commit -m "feat: 열린 트랜잭션을 잃는 동작 앞에서 Commit 또�
 
   둘째 문장: Manual이거나 트랜잭션이 열려 있으면 `You're inside an open transaction, so you can roll it back until you commit.`, 아니면 `Auto mode commits it immediately, and it can't be undone.`(`can't be undone`은 fg 굵게). SQL keyword는 `sqlCode(…, { keyword: true })`, table 이름은 `sqlCode`, 접속 이름은 `bold`. 여러 이름은 `, `로 잇는다. `sql`에 문장 전체, `icon: "warning"`, action은 `Cancel`, `Run`(danger).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `dangerPrompt.test.ts`:
 
@@ -818,21 +818,21 @@ git commit -m "feat: 열린 트랜잭션을 잃는 동작 앞에서 Commit 또�
 
 `commands.test.ts`: `run_asks_before_a_dangerous_statement_and_does_nothing_on_cancel`(run 상태가 바뀌지 않음), `run_again_asks_too`. `runsStore.test.ts`: `a_null_prepare_changes_nothing`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/workspace src/features/query`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `prepareRun`과 `runAgain`의 prepare가 요청을 만든 뒤 `confirmDanger`를 부른다. 터널 오류의 retry는 부르지 않는다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

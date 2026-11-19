@@ -19,6 +19,7 @@ import { canEndTransaction } from "../query/transaction";
 import { mono, rt } from "../../shared/i18n/rich";
 import { t, tc } from "../../shared/i18n/t";
 import { ask } from "../../shared/ui/dialogs";
+import { confirmDanger } from "./dangerPrompt";
 import {
   applySettlement,
   chooseSettlement,
@@ -90,14 +91,24 @@ function requestFor(
   return connection === null ? noConnection() : { connection, sql, origin };
 }
 
-/** 탭에서 실행할 것을 정한다. store를 바꾸지 않는다. */
-async function prepareRun(tabId: string): Promise<RunRequest | Rejection> {
+/** 요청이 위험한 문장이면 묻는다. 그만두게 했으면 null이다. Rejection은 그대로 돌려준다. */
+async function confirmed(
+  tabId: string,
+  request: RunRequest | Rejection,
+): Promise<RunRequest | Rejection | null> {
+  if ("title" in request) return request;
+  return (await confirmDanger(tabId, request)) ? request : null;
+}
+
+/** 탭에서 실행할 것을 정한다. 위험한 문장이면 묻는다. store를 바꾸지 않는다. */
+async function prepareRun(
+  tabId: string,
+): Promise<RunRequest | Rejection | null> {
   // 접속이 없으면 문장을 나누지 않는다.
   if (findTab(tabId)?.connection == null) return noConnection();
   const statement = await statementToRun(tabId);
-  return "title" in statement
-    ? statement
-    : requestFor(tabId, statement.sql, statement.origin);
+  if ("title" in statement) return statement;
+  return confirmed(tabId, requestFor(tabId, statement.sql, statement.origin));
 }
 
 /** 활성 탭에 대해 command를 실행한다. */
@@ -183,7 +194,9 @@ export async function runAgain(tabId: string): Promise<void> {
   const state = useRuns.getState().runs[tabId];
   if (state?.status !== "running" && state?.status !== "finished") return;
   const { sql, origin } = state.result;
-  return useRuns.getState().run(tabId, () => requestFor(tabId, sql, origin));
+  return useRuns
+    .getState()
+    .run(tabId, () => confirmed(tabId, requestFor(tabId, sql, origin)));
 }
 
 /**
