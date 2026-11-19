@@ -5,9 +5,9 @@
 ## 지금
 
 - **진행 중**: 없음. M5 터널을 끝냄(2026-11-19). 계획은 [M5](plans/M5-tunnel.md), 진행 기록은 `.superpowers/sdd/M5-tunnel/progress.md`(git에 올리지 않음)
-- **작업 위치**: branch `m5-tunnel`. main은 `12ae9da`이고 origin/main(`d2be9bf`) 뒤의 commit은 push하지 않았다
+- **작업 위치**: main. 2026-11-19에 branch `m5-tunnel`을 main에 fast-forward로 합치고 branch를 지웠다. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: branch `m5-tunnel`을 main에 합칠지 사용자에게 묻는다. 그다음 M6(트랜잭션과 안전장치)
+- **다음 할 일**: M6(트랜잭션과 안전장치). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -220,6 +220,7 @@
 
 ### 2026-11-19
 
+- branch `m5-tunnel`을 main에 fast-forward로 합치고 branch를 지움
 - M5 code-review(high): 지적 9개를 `superpowers:receiving-code-review`로 검토해 6개를 고치고 3개를 고치지 않음. 고친 것마다 실패하는 test를 먼저 씀
 - M5 simplify: 4개 관점(reuse, simplification, efficiency, altitude) 검토의 지적 가운데 동작을 바꾸지 않는 것을 고침. Rust는 `wait_settled`가 `Result`를 돌려주고, `last_published`를 지우고, `PrivateTunnel`이 끝날 때 표에서 빠지고, `cancel`/`restart`를 동기 함수로 바꿈. 화면은 `useNow`, `MessageBlock`, `CommandOutput`/`Pre`, `useConnection`, `useTunnel`, `isTunnelStarting`을 함께 쓰게 하고, 같은 상태 event에서 store를 바꾸지 않고, 다시 실행 중에는 초를 세는 timer를 띄우지 않음. 고치지 않은 것은 결정 기록에 남김
 - M5 Task 2~10: `tunnel_timeout`, `ShellTunnelRunner`(login shell, process group과 자손 tree 끄기, 기억한 자손의 종료를 끊김으로 봄), `Tunnels`(공유, 재실행 3회, 취소, 모두 끄기, 접속 테스트용 private 터널), 세션·접속 테스트·앱 종료와 연결, Tauri event `tunnel`과 `cancel_tunnel`/`restart_tunnel`, forwarder로 실제 프로세스 통합 test, 화면의 터널 store와 stale 세션 바꾸기, 캔버스 배치의 접속 sheet, toolbar·탭·결과 panel의 터널 상태와 Reconnected banner
