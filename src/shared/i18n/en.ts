@@ -187,6 +187,8 @@ export const en = {
   "tx.failedTitle": "Transaction failed",
   "tx.failedHint":
     "An earlier error left the transaction failed. Roll back, then run again.",
+  "tx.failedHintThis":
+    "This error left the transaction failed. Roll back, then run again.",
   "tx.lostTitle": "Transaction lost",
   "tx.lostBody.one":
     "The connection dropped while a transaction was open. The 1 uncommitted statement was not applied. The next run opens a new session.",

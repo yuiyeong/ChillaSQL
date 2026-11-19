@@ -38,7 +38,11 @@ import {
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
-import { TransactionFailed, TransactionLostBanner } from "./TransactionPanels";
+import {
+  failedHintOf,
+  TransactionFailedHeader,
+  TransactionLostBanner,
+} from "./TransactionPanels";
 import {
   ReconnectedBanner,
   TunnelFailed,
@@ -199,18 +203,24 @@ export const ResultPane = memo(function ResultPane({
           break;
         case "failed": {
           header = name;
-          body =
-            txFailed && tabId !== null ? (
-              <TransactionFailed
-                error={outcome.error}
-                ending={ending}
-                onRollback={() =>
-                  void useRuns.getState().endTransaction(tabId, "rollback")
-                }
-              />
-            ) : (
-              <ServerError result={result} outcome={outcome} copy={copy} />
-            );
+          body = (
+            <ServerError
+              result={result}
+              outcome={outcome}
+              copy={copy}
+              failedTransaction={
+                txFailed && tabId !== null
+                  ? {
+                      ending,
+                      onRollback: () =>
+                        void useRuns
+                          .getState()
+                          .endTransaction(tabId, "rollback"),
+                    }
+                  : undefined
+              }
+            />
+          );
           break;
         }
         case "cancelled":
@@ -468,17 +478,23 @@ function ServerError({
   result,
   outcome,
   copy,
+  failedTransaction,
 }: {
   result: ResultData;
   outcome: Extract<Outcome, { outcome: "failed" }>;
   copy(text: string, message: string): Promise<void>;
+  /** 이 오류로 트랜잭션이 실패한 상태면 제목과 Rollback, 안내를 더한다. */
+  failedTransaction?: { ending: boolean; onRollback(): void };
 }) {
   const { error } = outcome;
   const location =
     error.position === null ? null : errorLocation(result, error.position);
   return (
-    <MessageBlock icon={ErrorIcon}>
+    <MessageBlock icon={failedTransaction ? WarningIcon : ErrorIcon}>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
+        {failedTransaction && (
+          <TransactionFailedHeader {...failedTransaction} />
+        )}
         <p className="text-body font-mono break-words">{error.message}</p>
         {error.detail !== null && (
           <p className="text-small text-fg">{error.detail}</p>
@@ -500,6 +516,9 @@ function ServerError({
             {formatElapsed(result.elapsedMicros ?? 0)}
           </span>
         </div>
+        {failedTransaction && (
+          <p className="text-small text-fg-2">{failedHintOf(error.code)}</p>
+        )}
         <div>
           <Button
             variant="ghost"

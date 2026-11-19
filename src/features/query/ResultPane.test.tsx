@@ -735,10 +735,13 @@ describe("트랜잭션", () => {
     },
   };
 
-  function failedIn(status: "open" | "failed" | null) {
+  function failedIn(
+    status: "open" | "failed" | null,
+    outcome: Outcome = failedOutcome,
+  ) {
     useRuns.setState({
       runs: {
-        t: { status: "finished", result: result(), outcome: failedOutcome },
+        t: { status: "finished", result: result(), outcome },
       },
       transactions:
         status === null ? {} : { t: { status, statements: 2, openedAt: 0 } },
@@ -750,26 +753,57 @@ describe("트랜잭션", () => {
     const end = vi
       .spyOn(useRuns.getState(), "endTransaction")
       .mockResolvedValue(true);
-    failedIn("failed");
+    try {
+      failedIn("failed", failedOutcome);
+
+      expect(screen.getByText("Transaction failed")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "current transaction is aborted, commands ignored until end of transaction block",
+        ),
+      ).toBeInTheDocument();
+      expect(screen.getByText("SQLSTATE 25P02")).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          "An earlier error left the transaction failed. Roll back, then run again.",
+        ),
+      ).toBeInTheDocument();
+      const rollback = screen.getByRole("button", { name: /Rollback/ });
+      expect(
+        within(rollback).getByText(shortcutLabel("rollback")),
+      ).toBeVisible();
+
+      fireEvent.click(rollback);
+      expect(end).toHaveBeenCalledWith("t", "rollback");
+    } finally {
+      end.mockRestore();
+    }
+  });
+
+  test("the_statement_that_failed_the_transaction_keeps_the_error_details", () => {
+    failedIn("failed", {
+      outcome: "failed",
+      error: {
+        code: "42P01",
+        message: 'relation "nope" does not exist',
+        detail: null,
+        hint: null,
+        position: 15,
+      },
+    });
 
     expect(screen.getByText("Transaction failed")).toBeInTheDocument();
+    expect(screen.getByText("Ln 1, Col 16")).toBeInTheDocument();
+    expect(screen.getByText("1.23 s")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Copy message" }),
+    ).toBeInTheDocument();
     expect(
       screen.getByText(
-        "current transaction is aborted, commands ignored until end of transaction block",
+        "This error left the transaction failed. Roll back, then run again.",
       ),
     ).toBeInTheDocument();
-    expect(screen.getByText("SQLSTATE 25P02")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "An earlier error left the transaction failed. Roll back, then run again.",
-      ),
-    ).toBeInTheDocument();
-    const rollback = screen.getByRole("button", { name: /Rollback/ });
-    expect(within(rollback).getByText(shortcutLabel("rollback"))).toBeVisible();
-
-    fireEvent.click(rollback);
-    expect(end).toHaveBeenCalledWith("t", "rollback");
-    end.mockRestore();
+    expect(screen.queryByText(/An earlier error/)).toBeNull();
   });
 
   test("the_failed_view_disables_rollback_while_ending", () => {

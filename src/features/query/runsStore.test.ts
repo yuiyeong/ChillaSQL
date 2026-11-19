@@ -1302,3 +1302,22 @@ test("release_and_reset_forget_the_discard_mark", async () => {
   await useRuns.getState().reset();
   expect(useRuns.getState().discardedByEnd).toEqual({});
 });
+
+test("an_end_that_did_not_end_clears_the_discard_mark", async () => {
+  await pausedSelect();
+  vi.mocked(endTransaction).mockResolvedValue({
+    outcome: "server_error",
+    tx: "idle",
+    error: {
+      code: "23503",
+      message: "violates foreign key constraint",
+      detail: null,
+      hint: null,
+      position: null,
+    },
+  });
+
+  await useRuns.getState().endTransaction("t1", "commit");
+
+  expect(useRuns.getState().discardedByEnd.t1).toBeUndefined();
+});

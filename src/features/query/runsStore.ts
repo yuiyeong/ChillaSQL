@@ -485,7 +485,14 @@ export const useRuns = create<RunsState>()((set, get) => {
       } finally {
         if (endCalls.get(tabId) === call) {
           endCalls.delete(tabId);
-          set((s) => ({ ending: withEntry(s.ending, tabId, undefined) }));
+          // 끝내지 못했으면 그 결과의 discarded는 끝내기 때문이 아니다.
+          const kept = result?.outcome === "ended";
+          set((s) => ({
+            ending: withEntry(s.ending, tabId, undefined),
+            discardedByEnd: kept
+              ? s.discardedByEnd
+              : withEntry(s.discardedByEnd, tabId, undefined),
+          }));
         }
       }
 
