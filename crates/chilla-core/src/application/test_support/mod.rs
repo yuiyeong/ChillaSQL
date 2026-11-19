@@ -13,7 +13,7 @@ use std::time::Duration;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use tokio::time::timeout;
 
-pub(crate) use connection::{FakeConnection, FakeLink, server_error};
+pub(crate) use connection::{FakeConnection, FakeFeed, FakeLink, server_error};
 pub(crate) use tunnel::{FakeRun, FakeRunner, events_sink};
 
 use super::{

@@ -3,11 +3,15 @@
 
 mod support;
 
+use std::time::Duration;
+
+use tokio::time::timeout;
+
 use chilla_core::domain::{
     EndOutcome, EndResult, QueryEvent, QueryOutcome, SessionId, SessionInfo, TxEnd, TxMode,
     TxStatus,
 };
-use support::{TestApp, admin, app_with_project, next, sink, store_password};
+use support::{TestApp, admin, app_with_project, finished, next, sink, store_password};
 
 /// 비밀번호를 저장하고 세션 하나를 연다.
 async fn open_session(app: &TestApp) -> SessionInfo {
@@ -191,5 +195,52 @@ async fn a_failed_statement_leaves_the_transaction_failed() {
         Ok(ended())
     );
 
+    app.close_session(session.id).await.unwrap();
+}
+
+/// 받다 만 결과를 cancel로 버리면 트랜잭션이 failed가 되어 다음 문장이 `25P02`로 거부된다.
+/// 트랜잭션 안에서는 남은 행을 읽어 버리므로 트랜잭션이 열린 채다.
+#[tokio::test]
+async fn discarding_a_paused_result_inside_a_transaction_keeps_it_open() {
+    let (app, _dir) = app_with_project().await;
+    let session = open_session(&app).await;
+
+    let (big, mut first) = sink();
+    app.execute(
+        session.id,
+        // 행 하나가 작아야 debug build에서도 남은 행을 `tx_drain_limit`(5초)보다 훨씬 빨리 읽는다.
+        // 그래도 socket buffer보다 훨씬 커서 첫 batch 뒤에 서버는 문장을 끝내지 못하고 기다린다.
+        "SELECT id FROM big_table".into(),
+        TxMode::Manual,
+        big,
+    )
+    .await
+    .unwrap();
+    assert!(matches!(next(&mut first).await, QueryEvent::Columns(_)));
+    assert!(matches!(next(&mut first).await, QueryEvent::Rows(_)));
+
+    let (sink, mut second) = sink();
+    app.execute(session.id, "SELECT 1".into(), TxMode::Manual, sink)
+        .await
+        .unwrap();
+    // 100만 행을 다 읽어 버린 뒤에 시작한다.
+    let (outcome, tx) = timeout(Duration::from_secs(30), async {
+        loop {
+            let event = second.recv().await.expect("sink가 이벤트 없이 drop됐다");
+            if let QueryEvent::Finished { outcome, tx, .. } = event {
+                return (outcome, tx);
+            }
+        }
+    })
+    .await
+    .expect("SELECT 1이 30초 안에 끝나지 않았다");
+    assert_eq!(outcome, QueryOutcome::Completed { rows: 1 });
+    assert_eq!(tx, Some(TxStatus::InTransaction));
+    assert_eq!(finished(&mut first).await, QueryOutcome::Discarded);
+
+    assert_eq!(
+        app.end_transaction(session.id, TxEnd::Rollback).await,
+        Ok(ended())
+    );
     app.close_session(session.id).await.unwrap();
 }

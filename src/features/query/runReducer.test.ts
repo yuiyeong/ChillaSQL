@@ -137,6 +137,26 @@ test("끝나면 가져오는 중이었어도 fetch가 none이다", () => {
   expect(state.status === "finished" && state.result.fetch).toBe("none");
 });
 
+test("expired면 받은 행을 남기고 더 가져오지 않는다", () => {
+  const state = reduce(reduce(running(), rowsEvent), {
+    type: "finished",
+    tx: "in_transaction",
+    elapsedMicros: 2,
+    outcome: "expired",
+  });
+
+  expect(state).toEqual({
+    status: "finished",
+    result: {
+      ...emptyResult("SELECT 1", origin, 1000),
+      rows: [["a"]],
+      elapsedMicros: 2,
+      fetch: "none",
+    },
+    outcome: { outcome: "expired" },
+  });
+});
+
 test("running이 아닌 상태는 event를 무시한다", () => {
   const idle: RunState = { status: "idle" };
   const finished: RunState = {

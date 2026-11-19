@@ -294,6 +294,22 @@ test("discarded면 버렸다고 보여 준다", () => {
   expect(screen.queryByRole("grid")).toBeNull();
 });
 
+test("expired면 받은 행을 남기고 끝 줄에 닫았다고 알린다", () => {
+  finished(
+    { outcome: "expired" },
+    { columns: ["id", "name"], rows: someRows, elapsedMicros: 41_000 },
+  );
+
+  expect(screen.getByText("3 rows · 41 ms")).toBeInTheDocument();
+  expect(screen.getByRole("columnheader", { name: /id/ })).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "Closed after 10 minutes without fetching more. Run again to see the rest.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByText(/^End/)).toBeNull();
+});
+
 test("connection_lost면 끊긴 이유와 다음 실행의 안내를 보여 준다", () => {
   finished({ outcome: "connection_lost", message: "server closed" });
 

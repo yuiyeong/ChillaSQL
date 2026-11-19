@@ -269,6 +269,7 @@ pub enum OutcomeDto {
     Failed { error: ServerErrorDto },
     Cancelled,
     Discarded,
+    Expired,
     ConnectionLost { message: String },
     ClientError { message: String },
 }
@@ -334,6 +335,7 @@ impl OutcomeDto {
             },
             QueryOutcome::Cancelled => Self::Cancelled,
             QueryOutcome::Discarded => Self::Discarded,
+            QueryOutcome::Expired => Self::Expired,
             QueryOutcome::ConnectionLost { message } => Self::ConnectionLost { message },
             QueryOutcome::ClientError { message } => Self::ClientError { message },
         }
@@ -1097,6 +1099,7 @@ mod tests {
         for (outcome, name) in [
             (QueryOutcome::Cancelled, "cancelled"),
             (QueryOutcome::Discarded, "discarded"),
+            (QueryOutcome::Expired, "expired"),
         ] {
             let json = finished(outcome, 5300);
             assert_eq!(

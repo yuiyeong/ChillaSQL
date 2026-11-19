@@ -164,8 +164,8 @@ impl FakeFeed {
         }
     }
 
-    /// 항목을 넣는다. 끝난 결과에는 넣지 않는다(서버도 끝낸 결과에 더 보내지 않는다).
-    fn put(&self, item: Result<RowItem, QueryError>, end: bool) {
+    /// 항목을 넣는다. 끝난 결과에는 넣지 않는다(서버도 끝낸 결과에 더 보내지 않는다). 넣었으면 true다.
+    fn put(&self, item: Result<RowItem, QueryError>, end: bool) -> bool {
         self.state.send_if_modified(|state| {
             if state.ended {
                 return false;
@@ -173,7 +173,7 @@ impl FakeFeed {
             state.items.push_back(item);
             state.ended = end;
             true
-        });
+        })
     }
 
     fn is_finished(&self) -> bool {
@@ -229,6 +229,11 @@ impl FakeFeed {
         self.put(Ok(RowItem::Complete { rows }), true);
     }
 
+    /// 끝나지 않은 결과면 "57014"(query_canceled)를 넣고 끝낸다. 문장이 돌던 중이었으면 true다.
+    fn interrupt(&self) -> bool {
+        self.put(Err(QueryError::Server(server_error("57014"))), true)
+    }
+
     /// 항목 하나를 그대로 넣는다. 결과를 끝내지 않는다.
     pub(crate) fn push(&self, item: Result<RowItem, QueryError>) {
         self.put(item, false);
@@ -261,7 +266,8 @@ impl RowSource for FakeRows {
     }
 }
 
-/// 서버처럼 끝나지 않은 결과에 "57014"(query_canceled)를 넣고 끝낸다.
+/// 서버처럼 끝나지 않은 결과에 "57014"(query_canceled)를 넣고 끝낸다. 트랜잭션 안에서 문장을
+/// 멈추면 서버처럼 트랜잭션을 failed로 만든다.
 pub(crate) struct FakeCancel(FakeLink);
 
 impl QueryCancel for FakeCancel {
@@ -286,8 +292,12 @@ impl FakeCancel {
             queries.ignore_cancels -= 1;
             return Ok(());
         }
+        let mut interrupted = false;
         for feed in &queries.started {
-            feed.fail("57014");
+            interrupted |= feed.interrupt();
+        }
+        if interrupted && queries.tx == TxStatus::InTransaction {
+            queries.tx = TxStatus::Failed;
         }
         Ok(())
     }

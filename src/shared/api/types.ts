@@ -74,6 +74,8 @@ export type Outcome =
   | { outcome: "failed"; error: ServerError }
   | { outcome: "cancelled" }
   | { outcome: "discarded" }
+  /** batch를 보낸 뒤 10분 동안 더 가져오지 않아 닫았다. */
+  | { outcome: "expired" }
   | { outcome: "connection_lost"; message: string }
   | { outcome: "client_error"; message: string };
 

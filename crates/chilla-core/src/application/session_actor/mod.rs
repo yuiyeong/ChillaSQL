@@ -2,7 +2,10 @@
 //!
 //! 연결을 task 하나가 가지므로 한 세션의 명령은 순서대로 처리된다. 쿼리는 한 번에 하나이고,
 //! 받다 만 결과도 이 task가 갖는다. 결과는 batch 하나를 보낸 뒤 `fetch_more`가 올 때까지
-//! 읽지 않는다(backpressure).
+//! 읽지 않는다(backpressure). `fetch_more`가 `idle_result_timeout` 동안 오지 않으면 결과를 닫는다.
+//!
+//! 결과를 버릴 때는 cancel한다. 다만 트랜잭션 안의 쿼리는 cancel하면 트랜잭션이 failed가 되므로
+//! 사용자가 취소할 때 말고는 남은 행을 읽어 버리고, `tx_drain_limit` 안에 끝나지 않을 때만 cancel한다.
 
 mod query;
 
@@ -15,7 +18,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio::time::{Instant, sleep_until, timeout};
 
-use self::query::{DrainReason, Pending, Query};
+use self::query::{Drain, DrainReason, Pending, Query};
 use super::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
 use crate::domain::{
     EndOutcome, EndResult, QueryEvent, QueryId, QueryLimits, QueryOutcome, SessionState, TxEnd,
@@ -73,7 +76,7 @@ pub(crate) fn spawn<D: DbConnection>(connection: D, limits: QueryLimits) -> Sess
         pending: None,
         ends: VecDeque::new(),
         cancel: None,
-        resend_at: None,
+        cancel_at: None,
     };
     tokio::spawn(actor.run(receiver));
     SessionHandle { commands }
@@ -87,8 +90,10 @@ enum Event {
     Item(Option<Result<RowItem, QueryError>>),
     /// spawn한 cancel이 끝났다.
     CancelDone,
-    /// cancel을 다시 보낼 때가 됐다.
-    Resend,
+    /// cancel을 보낼 때가 됐다.
+    CancelDue,
+    /// 받다 만 결과를 닫을 때가 됐다.
+    Expired,
 }
 
 struct Actor<D: DbConnection> {
@@ -105,8 +110,9 @@ struct Actor<D: DbConnection> {
     ends: VecDeque<(TxEnd, oneshot::Sender<EndResult>)>,
     /// spawn한 cancel. 한 번에 하나만 있다.
     cancel: Option<JoinHandle<()>>,
-    /// cancel을 다시 보낼 시각. `Draining`에서 cancel이 끝나고 결과는 끝나지 않았을 때만 있다.
-    resend_at: Option<Instant>,
+    /// cancel을 보낼 시각. `Draining`이고 cancel이 없을 때만 있다: cancel이 끝났는데 결과는 끝나지
+    /// 않았거나(다시 보낸다), 트랜잭션 안의 결과를 cancel 없이 버리기 시작했을 때다.
+    cancel_at: Option<Instant>,
 }
 
 impl<D: DbConnection> Actor<D> {
@@ -130,28 +136,28 @@ impl<D: DbConnection> Actor<D> {
                 Event::CancelDone => {
                     self.cancel = None;
                     if self.query.as_ref().is_some_and(|query| !query.is_over()) {
-                        self.resend_at = Some(Instant::now() + CANCEL_RESEND);
+                        self.cancel_at = Some(Instant::now() + CANCEL_RESEND);
                     }
                     self.settle().await;
                 }
-                Event::Resend => {
-                    self.resend_at = None;
-                    self.send_cancel(None);
-                }
+                Event::CancelDue => self.send_cancel(None),
+                Event::Expired => self.discard(DrainReason::Expired),
             }
         }
     }
 
-    /// 명령, cancel, 다시 보낼 시각, 결과의 다음 항목 가운데 먼저 온 것을 기다린다.
+    /// 명령, cancel, cancel을 보낼 시각, 결과를 닫을 시각, 결과의 다음 항목 가운데 먼저 온 것을 기다린다.
     ///
     /// 각 future는 기다리기만 하고 상태를 바꾸지 않으므로 다른 쪽이 먼저 와서 drop돼도 된다.
     async fn next_event(&mut self, commands: &mut mpsc::Receiver<SessionCommand>) -> Event {
+        let expires_at = self.query.as_ref().and_then(Query::expires_at);
         let rows = self.query.as_mut().and_then(Query::rows_to_read);
         tokio::select! {
             biased;
             command = commands.recv() => Event::Command(command),
             () = finished(&mut self.cancel) => Event::CancelDone,
-            () = at(self.resend_at) => Event::Resend,
+            () = at(self.cancel_at) => Event::CancelDue,
+            () = at(expires_at) => Event::Expired,
             item = next_item(rows) => Event::Item(item),
         }
     }
@@ -180,18 +186,15 @@ impl<D: DbConnection> Actor<D> {
                 })
                 .await;
             }
-            SessionCommand::End { end, reply } => match &mut self.query {
-                None => {
+            SessionCommand::End { end, reply } => {
+                if self.query.is_none() {
                     let result = self.end_transaction(end).await;
                     let _ = reply.send(result);
-                }
-                Some(query) => {
-                    if query.drain(DrainReason::Discarded) {
-                        self.send_cancel(None);
-                    }
+                } else {
+                    self.discard(DrainReason::Discarded);
                     self.ends.push_back((end, reply));
                 }
-            },
+            }
             SessionCommand::FetchMore { query, reply } => {
                 if let Some(current) = self.query.as_mut().filter(|q| q.id == query) {
                     current.fetch_more();
@@ -206,8 +209,14 @@ impl<D: DbConnection> Actor<D> {
                     // 아직 서버에 보내지 않았으므로 cancel 요청 없이 빼기만 한다.
                     waiting.finish(QueryOutcome::Cancelled, Some(self.tx));
                     let _ = reply.send(Ok(()));
-                } else if current.is_some_and(|q| q.drain(DrainReason::Cancelled)) {
-                    self.send_cancel(Some(reply));
+                } else if let Some(query) = current {
+                    query.drain(DrainReason::Cancelled);
+                    // 트랜잭션 안에서 cancel 없이 버리던 중이어도 사용자의 취소는 바로 cancel한다.
+                    if self.cancel.is_none() && !query.is_over() {
+                        self.send_cancel(Some(reply));
+                    } else {
+                        let _ = reply.send(Ok(()));
+                    }
                 } else {
                     let _ = reply.send(Ok(()));
                 }
@@ -232,12 +241,10 @@ impl<D: DbConnection> Actor<D> {
     }
 
     async fn execute(&mut self, next: Pending) {
-        let Some(query) = &mut self.query else {
+        if self.query.is_none() {
             return self.start(next).await;
-        };
-        if query.drain(DrainReason::Discarded) {
-            self.send_cancel(None);
         }
+        self.discard(DrainReason::Discarded);
         if let Some(replaced) = self.pending.replace(next) {
             replaced.finish(QueryOutcome::Discarded, Some(self.tx));
         }
@@ -247,7 +254,8 @@ impl<D: DbConnection> Actor<D> {
     /// `BEGIN`이 실패하면 쿼리를 보내지 않고 그 오류로 마친다.
     async fn start(&mut self, mut next: Pending) {
         let started = Instant::now();
-        let begin = if next.mode == TxMode::Manual && self.tx == TxStatus::Idle {
+        let begins = next.mode == TxMode::Manual && self.tx == TxStatus::Idle;
+        let begin = if begins {
             self.connection.simple_execute("BEGIN").await
         } else {
             Ok(())
@@ -257,7 +265,12 @@ impl<D: DbConnection> Actor<D> {
             Err(error) => Err(error),
         };
         match rows {
-            Ok(rows) => self.query = Some(Query::new(next, rows, started, self.limits)),
+            Ok(rows) => {
+                // 실패한 트랜잭션의 문장은 바로 25P02로 끝나므로 cancel해도 잃을 것이 없다.
+                let in_transaction = begins || self.tx == TxStatus::InTransaction;
+                let query = Query::new(next, rows, started, self.limits, in_transaction);
+                self.query = Some(query);
+            }
             Err(error) => {
                 let outcome = match error {
                     QueryError::ConnectionLost { message } => {
@@ -290,7 +303,7 @@ impl<D: DbConnection> Actor<D> {
         let Some(query) = self.query.take_if(|query| query.is_over()) else {
             return;
         };
-        self.resend_at = None;
+        self.cancel_at = None;
         // `Finished`에 싣기 전에 읽는다. 결과를 다 읽은 뒤라 서버의 ReadyForQuery가 온다.
         let tx = if query.is_lost() {
             None
@@ -309,8 +322,11 @@ impl<D: DbConnection> Actor<D> {
 
     /// 쿼리가 없을 때 트랜잭션을 끝낸다. 실패한 트랜잭션의 Commit은 보내지 않는다. 서버는 그
     /// `COMMIT`을 `ROLLBACK`으로 처리하므로 보내면 Commit이 된 것처럼 보인다.
+    ///
+    /// 끊긴 연결이면 마지막으로 읽은 상태는 죽은 연결의 것이므로 보지 않는다. 연결이 그 문장을
+    /// 보내지 못하고 `ConnectionLost`로 답한다.
     async fn end_transaction(&mut self, end: TxEnd) -> EndResult {
-        if end == TxEnd::Commit && self.tx == TxStatus::Failed {
+        if end == TxEnd::Commit && self.tx == TxStatus::Failed && !self.connection.is_closed() {
             return EndResult {
                 outcome: EndOutcome::TransactionFailed,
                 tx: Some(self.tx),
@@ -340,11 +356,26 @@ impl<D: DbConnection> Actor<D> {
         Some(tx)
     }
 
+    /// 지금 쿼리를 버리기 시작한다. 트랜잭션 안의 쿼리는 cancel 없이 남은 행을 읽어 버리고,
+    /// `tx_drain_limit` 안에 끝나지 않으면 그때 cancel한다(트랜잭션은 failed가 된다).
+    fn discard(&mut self, reason: DrainReason) {
+        let Some(query) = &mut self.query else {
+            return;
+        };
+        match query.drain(reason) {
+            Drain::Cancel => self.send_cancel(None),
+            Drain::ReadOut => {
+                self.cancel_at = Some(Instant::now() + self.limits.tx_drain_limit);
+            }
+            Drain::Already => {}
+        }
+    }
+
     /// cancel을 spawn한다. `reply`가 있으면 그 결과를 답한다.
     fn send_cancel(&mut self, reply: Option<oneshot::Sender<Result<(), CancelError>>>) {
         debug_assert!(self.cancel.is_none(), "cancel은 한 번에 하나다");
         let cancel = self.connection.cancel_handle();
-        self.resend_at = None;
+        self.cancel_at = None;
         self.cancel = Some(tokio::spawn(async move {
             let result = cancel.cancel().await;
             if let Some(reply) = reply {
@@ -353,10 +384,12 @@ impl<D: DbConnection> Actor<D> {
         }));
     }
 
-    /// 쿼리를 멈추고 결과가 끝나기를 잠깐 기다린 뒤 연결을 닫는다.
+    /// 쿼리를 멈추고 결과가 끝나기를 잠깐 기다린 뒤 연결을 닫는다. 연결을 닫으면 트랜잭션은
+    /// 어차피 되돌아가므로 트랜잭션 안이어도 cancel한다(cancel 없이 버리던 중이었어도).
     async fn close(mut self) {
         if let Some(mut query) = self.query.take() {
-            if query.drain(DrainReason::Discarded) {
+            query.drain(DrainReason::Discarded);
+            if self.cancel.is_none() && !query.is_over() {
                 self.send_cancel(None);
             }
             // cancel이 듣지 않으면 결과를 버려 둔 채 닫는다. 그 뒤로 이 연결에 `tx_status`를 부르지 않는다.

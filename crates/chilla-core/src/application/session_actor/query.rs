@@ -18,6 +18,7 @@ const QUERY_CANCELED: &str = "57014";
 pub(super) enum DrainReason {
     Cancelled,
     Discarded,
+    Expired,
 }
 
 impl DrainReason {
@@ -25,8 +26,20 @@ impl DrainReason {
         match self {
             Self::Cancelled => QueryOutcome::Cancelled,
             Self::Discarded => QueryOutcome::Discarded,
+            Self::Expired => QueryOutcome::Expired,
         }
     }
+}
+
+/// 버리기 시작할 때 세션이 할 일.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Drain {
+    /// 이미 버리는 중이다.
+    Already,
+    /// cancel해서 문장을 멈춘다.
+    Cancel,
+    /// cancel 없이 남은 행을 읽어 버린다. 트랜잭션 안의 문장을 cancel하면 트랜잭션이 failed가 된다.
+    ReadOut,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +47,7 @@ enum Phase {
     /// 행을 읽는 중.
     Reading,
     /// batch를 보내고 `fetch_more`를 기다린다. 결과를 읽지 않으므로 서버가 기다린다.
+    /// `expires_at`까지 `fetch_more`가 없으면 세션이 결과를 닫는다.
     Paused,
     /// 남은 결과를 버리는 중.
     Draining(DrainReason),
@@ -140,11 +154,21 @@ pub(super) struct Query<R> {
     /// 버리는 중에 화면에 보내지 않고 버린 행이 있다(보내지 않은 batch와 look-ahead 행 포함).
     discarded: bool,
     end: Option<End>,
+    /// 시작할 때 트랜잭션 안이었다. 다음 쿼리나 끝내기, 자동 닫기로 버릴 때 cancel하지 않는다.
+    in_transaction: bool,
+    /// `Paused`일 때만 있다. 이 시각까지 `fetch_more`가 없으면 결과를 닫는다(`Expired`).
+    expires_at: Option<Instant>,
 }
 
 impl<R: RowSource> Query<R> {
-    /// `started`는 문장을 보내기 직전의 시각이다.
-    pub(super) fn new(pending: Pending, rows: R, started: Instant, limits: QueryLimits) -> Self {
+    /// `started`는 문장을 보내기 직전의 시각이다. `in_transaction`은 그 문장을 트랜잭션 안에서 보냈는지다.
+    pub(super) fn new(
+        pending: Pending,
+        rows: R,
+        started: Instant,
+        limits: QueryLimits,
+        in_transaction: bool,
+    ) -> Self {
         Self {
             id: pending.id,
             sink: pending.sink,
@@ -160,6 +184,8 @@ impl<R: RowSource> Query<R> {
             error: None,
             discarded: false,
             end: None,
+            in_transaction,
+            expires_at: None,
         }
     }
 
@@ -177,6 +203,11 @@ impl<R: RowSource> Query<R> {
 
     fn is_draining(&self) -> bool {
         matches!(self.phase, Phase::Draining(_))
+    }
+
+    /// 받다 만 결과를 닫을 시각. `Paused`일 때만 있다.
+    pub(super) fn expires_at(&self) -> Option<Instant> {
+        self.expires_at
     }
 
     /// 결과에서 읽은 항목 하나를 처리한다.
@@ -209,6 +240,7 @@ impl<R: RowSource> Query<R> {
             self.look_ahead = false;
             self.phase = Phase::Paused;
             self.clock.pause();
+            self.expires_at = Some(Instant::now() + self.limits.idle_result_timeout);
         } else if self.batch_is_full() {
             self.send_batch();
             self.look_ahead = true;
@@ -238,6 +270,7 @@ impl<R: RowSource> Query<R> {
         match self.phase {
             Phase::Paused => {
                 self.phase = Phase::Reading;
+                self.expires_at = None;
                 self.clock.resume();
                 // look-ahead 행 하나로 batch가 찼으면 더 읽지 않고 보낸다.
                 if self.batch_is_full() {
@@ -253,18 +286,24 @@ impl<R: RowSource> Query<R> {
         }
     }
 
-    /// 남은 결과를 버리기 시작한다. 이미 버리는 중이면 아무것도 하지 않고 false다.
-    pub(super) fn drain(&mut self, reason: DrainReason) -> bool {
+    /// 남은 결과를 버리기 시작하고 세션이 할 일을 돌려준다. 이미 버리는 중이면 아무것도 하지 않는다.
+    /// 트랜잭션 안의 쿼리는 사용자가 취소할 때만 cancel한다.
+    pub(super) fn drain(&mut self, reason: DrainReason) -> Drain {
         if self.is_draining() {
-            return false;
+            return Drain::Already;
         }
         self.phase = Phase::Draining(reason);
+        self.expires_at = None;
         self.clock.resume();
         self.discarded |= !self.batch.is_empty();
         self.batch = Vec::new();
         self.batch_bytes = 0;
         self.look_ahead = false;
-        true
+        if self.in_transaction && reason != DrainReason::Cancelled {
+            Drain::ReadOut
+        } else {
+            Drain::Cancel
+        }
     }
 
     /// 결과가 끝날 때까지 버린다.

@@ -63,8 +63,8 @@ interface ResultGridProps {
   tabId: string;
   /** columns가 null이 아니다 */
   result: ResultData;
-  /** 결과가 끝났으면 서버가 알려 준 전체 행 수 */
-  endRows: number | null;
+  /** 결과가 끝났으면 표 아래 끝 줄의 문구 */
+  end: string | null;
   onFetchMore(): void;
   onRunAgain(): void;
   onCopied(message: string): void;
@@ -109,7 +109,7 @@ function Grid({
   tabId,
   runKey,
   result,
-  endRows,
+  end,
   onFetchMore,
   onRunAgain,
   onCopied,
@@ -412,7 +412,7 @@ function Grid({
         <Footer
           top={totalSize - FOOTER_HEIGHT}
           fetching={fetch === "fetching"}
-          endRows={endRows}
+          end={end}
         />
       </div>
     </div>
@@ -543,15 +543,15 @@ const Row = memo(function Row({
 function Footer({
   top,
   fetching,
-  endRows,
+  end,
 }: {
   top: number;
   fetching: boolean;
-  endRows: number | null;
+  end: string | null;
 }) {
   const content =
-    endRows !== null ? (
-      tc("result.end", endRows)
+    end !== null ? (
+      end
     ) : fetching ? (
       <>
         <SpinnerIcon />

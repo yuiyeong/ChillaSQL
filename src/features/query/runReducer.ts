@@ -131,6 +131,7 @@ function outcomeOf(event: Extract<QueryEvent, { type: "finished" }>): Outcome {
       return { outcome: "failed", error: event.error };
     case "cancelled":
     case "discarded":
+    case "expired":
       return { outcome: event.outcome };
     case "connection_lost":
     case "client_error":

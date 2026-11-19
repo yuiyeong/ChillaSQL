@@ -311,7 +311,7 @@ git commit -m "feat: Manual 모드의 BEGIN과 Commit, Rollback command를 만�
   - `QueryLimits.idle_result_timeout: Duration`(기본 600초), `QueryLimits.tx_drain_limit: Duration`(기본 5초)
 - Produces (DTO, 화면): outcome `"expired"`. 결과 표 아래 끝 줄 문구 `result.expired`: `"Closed after 10 minutes without fetching more. Run again to see the rest."`
 
-- [ ] **Step 1: actor test를 쓴다** (`tokio::time::pause`)
+- [x] **Step 1: actor test를 쓴다** (`tokio::time::pause`)
 
 - `a_paused_result_expires_after_the_idle_timeout`: batch 뒤 600초가 지나면 cancel을 보내고 `Finished { outcome: Expired }`. 599초에는 아직 아니다.
 - `fetch_more_restarts_the_idle_timer`: 500초에 `fetch_more`, 다음 batch 뒤 500초가 지나도 끝나지 않는다.
@@ -320,27 +320,27 @@ git commit -m "feat: Manual 모드의 BEGIN과 Commit, Rollback command를 만�
 - `user_cancel_inside_a_transaction_still_cancels`: `cancel`은 트랜잭션 안에서도 바로 cancel한다.
 - `expiry_inside_a_transaction_does_not_cancel`: 자동 닫기도 트랜잭션 안이면 cancel 없이 읽는다.
 
-- [ ] **Step 2: test DB test를 쓴다**
+- [x] **Step 2: test DB test를 쓴다**
 
 `tests/transactions.rs`의 `discarding_a_paused_result_inside_a_transaction_keeps_it_open`: Manual로 seed table 100만 행을 `SELECT`해 첫 batch만 받고, 다음 문장 `SELECT 1`을 실행하면 그 `Finished`가 `Completed`, `tx: Some(InTransaction)`.
 
-- [ ] **Step 3: 실패를 확인한다**
+- [x] **Step 3: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core session_actor && cargo test -p chilla-core --test transactions`
 Expected: FAIL
 
-- [ ] **Step 4: 구현한다**
+- [x] **Step 4: 구현한다**
 
 - `Query`는 시작할 때 트랜잭션 안이었는지(`in_transaction: bool`)를 갖는다. 버리기(`Discarded`, `Expired`)는 그 값이 true면 cancel 없이 `Draining`에 들어가고 `tx_drain_limit` 뒤에 cancel한다. `DrainReason`에 `Expired`를 더한다.
 - `Paused`에 들어갈 때 `idle_result_timeout`의 시각을 두고 `next_event`의 `select!`가 기다린다.
 - 화면: `runReducer`가 `expired`를 끝난 결과로 다룬다(`fetch: "none"`). `ResultPane`의 결과 끝 줄이 `result.expired`를 쓴다. `runReducer.test.ts`에 `expired_keeps_the_rows_and_stops_fetching`.
 
-- [ ] **Step 5: 통과를 확인한다**
+- [x] **Step 5: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 6: commit**
+- [x] **Step 6: commit**
 
 ```bash
 git add crates src-tauri src

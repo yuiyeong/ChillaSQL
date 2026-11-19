@@ -143,6 +143,8 @@ export const en = {
   "result.discarded": "Results discarded",
   "result.discardedDetail":
     "Running the next query discarded the rows not yet fetched. Run again to see them.",
+  "result.expired":
+    "Closed after 10 minutes without fetching more. Run again to see the rest.",
   "result.connectionLost": "Connection lost",
   "result.nextRunNewSession":
     "The next run opens a new session. SET values and temp tables are gone.",

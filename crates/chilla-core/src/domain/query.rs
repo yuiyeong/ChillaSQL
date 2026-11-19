@@ -67,6 +67,8 @@ pub enum QueryOutcome {
     Cancelled,
     /// 다음 쿼리나 세션 닫기에 밀려 버려졌다.
     Discarded,
+    /// batch를 보낸 뒤 `QueryLimits::idle_result_timeout` 동안 `fetch_more`가 없어 닫았다.
+    Expired,
     ConnectionLost {
         message: String,
     },
@@ -85,6 +87,10 @@ pub struct QueryLimits {
     pub batch_bytes: usize,
     /// 화면이 보관하는 최대 행 수.
     pub retained_rows: u64,
+    /// batch를 보낸 뒤 `fetch_more`를 이만큼 받지 못하면 결과를 닫는다(`Expired`).
+    pub idle_result_timeout: Duration,
+    /// 트랜잭션 안의 결과는 cancel 없이 남은 행을 읽어 버린다. 이만큼 지나도 끝나지 않으면 cancel한다.
+    pub tx_drain_limit: Duration,
 }
 
 impl Default for QueryLimits {
@@ -93,6 +99,8 @@ impl Default for QueryLimits {
             batch_rows: 500,
             batch_bytes: 4 * 1024 * 1024,
             retained_rows: 100_000,
+            idle_result_timeout: Duration::from_secs(600),
+            tx_drain_limit: Duration::from_secs(5),
         }
     }
 }
@@ -114,6 +122,8 @@ mod tests {
         assert_eq!(limits.batch_rows, 500);
         assert_eq!(limits.batch_bytes, 4 * 1024 * 1024);
         assert_eq!(limits.retained_rows, 100_000);
+        assert_eq!(limits.idle_result_timeout, Duration::from_secs(600));
+        assert_eq!(limits.tx_drain_limit, Duration::from_secs(5));
         assert_eq!(limits.retained_from(0), 0);
         assert_eq!(limits.retained_from(100_000), 0);
         assert_eq!(limits.retained_from(100_500), 500);

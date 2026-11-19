@@ -98,12 +98,12 @@ export const ResultPane = memo(function ResultPane({
   let grid: ReactNode = null;
   let body: ReactNode = null;
 
-  const gridOf = (result: ResultData, endRows: number | null) => (
+  const gridOf = (result: ResultData, end: string | null) => (
     <ResultGrid
       // 실행 상태가 있으면 tabId는 null이 아니다.
       tabId={tabId!}
       result={result}
-      endRows={endRows}
+      end={end}
       onFetchMore={onFetchMore}
       onRunAgain={onRunAgain}
       onCopied={show}
@@ -182,7 +182,7 @@ export const ResultPane = memo(function ResultPane({
                 <Meta>{tc("result.rows", outcome.rows, { elapsed })}</Meta>
               </Header>
             );
-            grid = gridOf(result, outcome.rows);
+            grid = gridOf(result, tc("result.end", outcome.rows));
           }
           break;
         case "failed": {
@@ -210,6 +210,17 @@ export const ResultPane = memo(function ResultPane({
           if (retained > 0) grid = gridOf(result, null);
           break;
         }
+        case "expired":
+          // 더 가져오지 않아 닫았다. 받은 행은 그대로 두고 끝 줄이 알린다.
+          header = (
+            <Header sql={result.sql}>
+              <Meta>
+                {tc("result.rows", receivedRows(result), { elapsed })}
+              </Meta>
+            </Header>
+          );
+          grid = gridOf(result, t("result.expired"));
+          break;
         case "discarded":
           header = name;
           body = (
