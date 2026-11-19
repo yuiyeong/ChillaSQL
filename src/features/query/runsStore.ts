@@ -192,8 +192,11 @@ export const useRuns = create<RunsState>()((set, get) => {
     notices: {},
 
     markStale(connection) {
+      // 여는 중인 세션은 다시 시작된 터널로 붙으므로 그대로 둔다.
       for (const slot of sessions.values()) {
-        if (slot.connection === connection) slot.stale = true;
+        if (slot.connection === connection && slot.id !== null) {
+          slot.stale = true;
+        }
       }
     },
 

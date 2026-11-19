@@ -20,6 +20,16 @@ pub struct TunnelTarget {
     pub timeout: Duration,
 }
 
+impl TunnelTarget {
+    /// 같은 터널을 띄우는가. 기다리는 시간은 터널을 바꾸지 않으므로 보지 않는다.
+    pub fn same_tunnel(&self, other: &TunnelTarget) -> bool {
+        self.command == other.command
+            && self.dir == other.dir
+            && self.host == other.host
+            && self.port == other.port
+    }
+}
+
 /// 접속 하나의 터널 상태.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TunnelState {

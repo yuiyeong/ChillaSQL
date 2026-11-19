@@ -273,8 +273,16 @@ fn children(parent: i32) -> Vec<i32> {
     buf
 }
 
-/// 프로세스가 있고 zombie가 아닌가.
+/// 프로세스가 있고 zombie가 아닌가. 다른 사용자의 프로세스(sudo로 띄운 자손 등)도 본다.
 fn is_running(pid: i32) -> bool {
+    // signal 0은 보내지 않고 있는지만 본다. 권한이 없다(EPERM)는 것은 있다는 뜻이다.
+    let exists = unsafe { libc::kill(pid, 0) } == 0
+        || std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
+    if !exists {
+        return false;
+    }
+    // 거두지 않은 zombie도 kill(pid, 0)에는 있다고 나온다. zombie는 정보를 읽지 못하고, 다른
+    // 사용자의 프로세스는 권한(EPERM) 때문에 읽지 못한다.
     let mut info = std::mem::MaybeUninit::<libc::proc_bsdinfo>::zeroed();
     let size = i32::try_from(size_of::<libc::proc_bsdinfo>()).unwrap_or(i32::MAX);
     let read = unsafe {
@@ -287,7 +295,7 @@ fn is_running(pid: i32) -> bool {
         )
     };
     if read != size {
-        return false;
+        return std::io::Error::last_os_error().raw_os_error() == Some(libc::EPERM);
     }
     let info = unsafe { info.assume_init() };
     info.pbi_status != libc::SZOMB
@@ -305,6 +313,14 @@ mod tests {
         );
         assert_eq!(login_shell(Some("bash".into())), PathBuf::from("/bin/zsh"));
         assert_eq!(login_shell(None), PathBuf::from("/bin/zsh"));
+    }
+
+    /// sudo로 띄운 자손처럼 다른 사용자의 프로세스도 살아 있으면 살아 있다.
+    #[test]
+    fn is_running_sees_processes_of_other_users() {
+        assert!(is_running(1), "launchd(pid 1, root)");
+        assert!(is_running(std::process::id() as i32));
+        assert!(!is_running(i32::MAX));
     }
 
     #[test]

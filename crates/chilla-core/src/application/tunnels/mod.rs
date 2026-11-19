@@ -143,12 +143,17 @@ pub(crate) struct Tunnels<R: TunnelRunner> {
     table: Arc<Mutex<Table>>,
 }
 
-/// 기다림을 끝내도 되는 상태인가.
+/// 기다림이 끝나는 상태면 그 결과다. 열렸으면(Ready, External) `Ok`, 멈췄으면 그 이유다.
+fn outcome(state: &TunnelState) -> Option<Result<(), TunnelFailure>> {
+    match state {
+        TunnelState::Ready | TunnelState::External => Some(Ok(())),
+        TunnelState::Failed(failure) => Some(Err(failure.clone())),
+        TunnelState::Starting { .. } | TunnelState::Stopped => None,
+    }
+}
+
 fn settled(state: &TunnelState) -> bool {
-    matches!(
-        state,
-        TunnelState::Ready | TunnelState::External | TunnelState::Failed(_)
-    )
+    outcome(state).is_some()
 }
 
 impl<R: TunnelRunner> Clone for Tunnels<R> {
@@ -183,7 +188,7 @@ impl<R: TunnelRunner> Tunnels<R> {
             let joined = {
                 let mut table = self.table.lock().unwrap();
                 match table.entries.get_mut(connection) {
-                    Some(entry) if entry.stopping || entry.target != *target => {
+                    Some(entry) if entry.stopping || !entry.target.same_tunnel(target) => {
                         Err(entry.handle.clone())
                     }
                     Some(entry) => {
@@ -355,6 +360,7 @@ impl<R: TunnelRunner> Tunnels<R> {
             }),
             state: state_tx,
             commands: receiver,
+            announced: false,
         };
         tokio::spawn(async move {
             supervisor.run().await;
@@ -382,11 +388,6 @@ async fn wait_settled(
     state: &mut watch::Receiver<TunnelState>,
     fresh: bool,
 ) -> Result<(), TunnelFailure> {
-    let outcome = |state: &TunnelState| match state {
-        TunnelState::Ready | TunnelState::External => Some(Ok(())),
-        TunnelState::Failed(failure) => Some(Err(failure.clone())),
-        _ => None,
-    };
     if !fresh && let Some(result) = outcome(&state.borrow_and_update()) {
         return result;
     }
@@ -414,6 +415,8 @@ struct Supervisor<R: TunnelRunner> {
     shared: Option<Shared>,
     state: watch::Sender<TunnelState>,
     commands: mpsc::UnboundedReceiver<Command>,
+    /// 한 번이라도 상태를 알렸는가. channel의 처음 값은 알린 것이 아니다.
+    announced: bool,
 }
 
 /// 시작 한 번의 결과.
@@ -443,13 +446,21 @@ impl<R: TunnelRunner> Supervisor<R> {
                         process.stop().await;
                         return self.finish();
                     }
-                    // 끊겼다. 남은 자손을 정리하고 다시 실행한다.
-                    process.stop().await;
-                    if self.shared.is_none() {
-                        self.publish(TunnelState::Failed(TunnelFailure::Exited {
+                    // 끊겼다. 남은 자손을 끄는 데 2초까지 걸리므로, 그동안 새 세션이 끊긴 터널을
+                    // 열린 것으로 보지 않게 상태부터 바꾼다. 그 뒤 정리하고 다시 실행한다.
+                    let next = match self.shared {
+                        Some(_) => TunnelState::Starting {
+                            attempt: 1,
+                            timeout: self.target.timeout,
+                        },
+                        None => TunnelState::Failed(TunnelFailure::Exited {
                             code: None,
                             output: String::new(),
-                        }));
+                        }),
+                    };
+                    self.publish(next);
+                    process.stop().await;
+                    if self.shared.is_none() {
                         return self.wait_stop().await;
                     }
                     attempt = 1;
@@ -585,7 +596,12 @@ impl<R: TunnelRunner> Supervisor<R> {
         self.finish();
     }
 
+    /// 상태를 바꾸고 알린다. 이미 알린 상태와 같으면 아무것도 하지 않는다.
     fn publish(&mut self, state: TunnelState) {
+        if self.announced && *self.state.borrow() == state {
+            return;
+        }
+        self.announced = true;
         if let Some(shared) = &self.shared {
             (shared.sink)(TunnelEvent {
                 connection: shared.connection.clone(),
@@ -595,14 +611,8 @@ impl<R: TunnelRunner> Supervisor<R> {
         self.state.send_replace(state);
     }
 
-    /// 프로세스를 다 정리한 뒤 부른다. 표에서 이 터널을 지우고 Stopped를 알린다. 실패로 멈춘
-    /// 터널이면 그 실패를 화면에 남기려고 Stopped를 보내지 않는다.
+    /// 프로세스를 다 정리한 뒤 부른다. 표에서 이 터널을 지우고 Stopped를 알린다.
     fn finish(mut self) {
-        // 마지막으로 알린 상태가 취소가 아닌 실패였는가.
-        let failed = matches!(
-            &*self.state.borrow(),
-            TunnelState::Failed(failure) if *failure != TunnelFailure::Cancelled
-        );
         if !settled(&self.state.borrow()) {
             self.state
                 .send_replace(TunnelState::Failed(TunnelFailure::Cancelled));
@@ -618,12 +628,10 @@ impl<R: TunnelRunner> Supervisor<R> {
                     table.entries.remove(&shared.connection);
                 }
             }
-            if !failed {
-                (shared.sink)(TunnelEvent {
-                    connection: shared.connection,
-                    state: TunnelState::Stopped,
-                });
-            }
+            (shared.sink)(TunnelEvent {
+                connection: shared.connection,
+                state: TunnelState::Stopped,
+            });
         }
     }
 }

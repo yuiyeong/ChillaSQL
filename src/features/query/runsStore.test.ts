@@ -778,3 +778,18 @@ test("터널 오류는 output과 다시 실행할 요청을 남긴다", async ()
   };
   expect(runOf("t")).toEqual({ status: "rejected", rejection: expected });
 });
+
+test("여는 중인 세션은 stale로 두지 않는다", async () => {
+  const opening = deferred<Session>();
+  vi.mocked(openSession).mockReturnValueOnce(opening.promise);
+  const first = useRuns.getState().run("t", prepared("SELECT 1", "staging"));
+
+  useRuns.getState().markStale("staging");
+  opening.resolve(session(3, "staging"));
+  await first;
+  await useRuns.getState().run("t", prepared("SELECT 2", "staging"));
+
+  expect(openSession).toHaveBeenCalledTimes(1);
+  expect(closeSession).not.toHaveBeenCalled();
+  expect(useRuns.getState().notices.t).toBeUndefined();
+});

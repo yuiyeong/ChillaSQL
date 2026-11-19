@@ -448,3 +448,56 @@ async fn private_tunnel_failure_is_an_error() {
     );
     assert_eq!(f.runner.running(), 0);
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_different_timeout_joins_the_running_tunnel() {
+    let f = fixture();
+    let first = f.tunnels.acquire(NAME, &target("tunnel")).await.unwrap();
+    let slower = TunnelTarget {
+        timeout: Duration::from_secs(45),
+        ..target("tunnel")
+    };
+
+    let second = tokio::time::timeout(Duration::from_secs(5), f.tunnels.acquire(NAME, &slower))
+        .await
+        .expect("tunnel_timeout만 다른 접속은 열린 터널을 같이 써야 한다")
+        .unwrap();
+
+    assert_eq!(f.runner.spawned().len(), 1);
+    f.tunnels.release(first).await;
+    f.tunnels.release(second).await;
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_failed_tunnel_that_goes_away_says_stopped() {
+    let f = fixture();
+    // 다시 실행을 멈춘 터널의 마지막 세션이 닫힌다.
+    let lease = gave_up(&f).await;
+    f.tunnels.release(lease).await;
+    assert_eq!(f.states().last(), Some(&TunnelState::Stopped));
+
+    // 처음 시작에서 실패한 터널도 표에서 빠지면 Stopped다.
+    f.runner.script(
+        "tunnel",
+        vec![FakeRun::ExitsAfter(Duration::ZERO, Some(1), "no")],
+    );
+    assert!(f.tunnels.acquire(NAME, &target("tunnel")).await.is_err());
+    assert_eq!(f.states().last(), Some(&TunnelState::Stopped));
+}
+
+#[tokio::test(start_paused = true)]
+async fn a_dropped_tunnel_is_not_ready_while_it_is_being_stopped() {
+    let f = fixture();
+    f.runner.set_stop_delay(Duration::from_millis(1500));
+    let first = f.tunnels.acquire(NAME, &target("tunnel")).await.unwrap();
+    f.runner.kill("tunnel");
+    sleep(Duration::from_millis(100)).await;
+
+    // 옛 프로세스를 끄는 동안 받은 lease는 새 터널이 열린 뒤에야 돌아온다.
+    let second = f.tunnels.acquire(NAME, &target("tunnel")).await.unwrap();
+
+    assert_eq!(f.runner.spawned().len(), 2);
+    assert_eq!(f.states()[2..], [starting(1), TunnelState::Ready]);
+    f.tunnels.release(first).await;
+    f.tunnels.release(second).await;
+}
