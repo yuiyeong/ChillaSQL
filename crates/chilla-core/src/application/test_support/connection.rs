@@ -280,6 +280,8 @@ impl FakeCancel {
 pub(crate) struct FakeConnection {
     pub(crate) pid: i32,
     pub(crate) link: FakeLink,
+    /// 닫힐 때 `"db close"`를 남길 곳.
+    pub(crate) log: Option<Arc<Mutex<Vec<&'static str>>>>,
 }
 
 impl DbConnection for FakeConnection {
@@ -343,5 +345,8 @@ impl DbConnection for FakeConnection {
 
     async fn close(self) {
         self.link.closed.store(true, Ordering::SeqCst);
+        if let Some(log) = &self.log {
+            log.lock().unwrap().push("db close");
+        }
     }
 }

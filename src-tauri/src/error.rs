@@ -37,6 +37,8 @@ impl From<AppError> for CommandError {
                 FileError::Io { .. } => "file_io",
                 FileError::OutsideProject { .. } => "invalid_path",
             },
+            // Task 6에서 실패마다 나눈다.
+            AppError::Tunnel(_) => "tunnel",
             AppError::Connect(connect) => match connect {
                 ConnectError::Unreachable { .. } => "unreachable",
                 ConnectError::Timeout => "timeout",

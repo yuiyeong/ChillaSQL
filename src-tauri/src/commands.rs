@@ -13,14 +13,14 @@ use chilla_core::domain::{
     QueryOutcome, RowBatch, ServerError, SessionId, SessionInfo, SessionState, SqlFile,
     StatementSpan, TxStatus, WriteMode,
 };
-use chilla_core::infrastructure::PgConnector;
+use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tauri::ipc::Channel;
 
 use crate::error::CommandError;
 
-pub type CoreApp = App<PgConnector>;
+pub type CoreApp = App<PgConnector, ShellTunnelRunner>;
 
 type CommandResult<T> = Result<T, CommandError>;
 

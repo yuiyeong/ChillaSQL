@@ -503,7 +503,7 @@ git commit -m "feat: 접속마다 터널 하나를 공유하고 끊기면 다시
 
 세션 표의 값은 `SessionEntry { handle: SessionHandle, tunnel: Option<TunnelLease> }`다. `open_session`은 비밀번호를 읽은 뒤 `tunnel_target()`이 있으면 acquire하고 연결한다. 연결이 실패하거나 그 사이 프로젝트가 바뀌면 lease를 풀고 돌아간다. 세션을 닫을 때는 DB 연결을 닫은 *뒤* lease를 푼다(기획서 4.2의 순서). 프로젝트를 바꿀 때(`switch_project`)는 세션을 모두 닫은 뒤 `stop_all`을 불러, 세션이 생기기 전이라 lease를 쥔 쪽이 없는 시작 중 터널과 접속 테스트의 터널도 끈다. `stop_all`은 그 뒤의 acquire를 막지 않는다. `test_connection`은 `start_private`로 띄우고 연결한 뒤 연결을 닫고 터널을 끈다(연결이 실패해도 끈다).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `app.rs`의 test fixture에 `FakeRunner`와 event sink를 더하고 `staging`(`FakeProjects`의 접속)에 `tunnel = "tunnel"`을 준다. `FakeConnector`와 `FakeRunner`가 같은 `Arc<Mutex<Vec<&'static str>>>` log에 `"db close"`, `"tunnel stop"`을 남기게 한다.
 
@@ -519,21 +519,21 @@ git commit -m "feat: 접속마다 터널 하나를 공유하고 끊기면 다시
 | `cancel_tunnel_stops_a_starting_tunnel` | `Hangs`로 `open_session` 시작, `cancel_tunnel("staging")` → `Err(Tunnel(Cancelled))` |
 | `shutdown_closes_sessions_and_tunnels` | 세션 하나, Starting 하나 → `shutdown` 뒤 `running() == 0`, `session_state`는 `UnknownSession` |
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `cargo test -p chilla-core --lib app`
 Expected: FAIL (compile error)
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `close_all`은 `SessionEntry`마다 "닫고 lease 풀기"를 `JoinSet`으로 돌린다. `tests/support/mod.rs`의 `app_with_project()`가 `ShellTunnelRunner::new()`와 아무것도 하지 않는 sink로 App을 만들게 고친다(반환 type `App<PgConnector, ShellTunnelRunner>`).
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `cargo test -p chilla-core`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add crates

@@ -44,6 +44,18 @@ impl FakeProjects {
         self.projects.lock().unwrap().insert(dir.into(), project);
     }
 
+    /// `dir` 프로젝트의 접속 `name`에 터널 명령을 단다.
+    pub(crate) fn set_tunnel(&self, dir: &str, name: &str, command: &str) {
+        let mut projects = self.projects.lock().unwrap();
+        let project = projects.get_mut(Path::new(dir)).expect("등록한 프로젝트");
+        let connection = project
+            .connections
+            .iter_mut()
+            .find(|c| c.name == name)
+            .expect("등록한 접속");
+        connection.tunnel = Some(command.to_string());
+    }
+
     /// 받은 저장 요청. 받은 순서다.
     pub(crate) fn saved(&self) -> Vec<(PathBuf, ConnectionProfile)> {
         self.saved.lock().unwrap().clone()
@@ -257,6 +269,10 @@ struct ConnectLog {
     /// 연결 요청마다 받은 (접속 정보, 비밀번호).
     requests: Vec<(ConnectionProfile, Option<String>)>,
     links: Vec<FakeLink>,
+    /// 다음 연결 요청이 돌려줄 오류.
+    fail_next: Option<ConnectError>,
+    /// 연결이 닫힐 때 `"db close"`를 남길 곳.
+    close_log: Option<Arc<Mutex<Vec<&'static str>>>>,
 }
 
 /// 항상 연결에 성공하고, 받은 요청과 만든 연결을 기록한다.
@@ -289,6 +305,16 @@ impl FakeConnector {
     pub(crate) async fn block(&self) -> tokio::sync::OwnedRwLockWriteGuard<()> {
         self.gate.clone().write_owned().await
     }
+
+    /// 다음 연결 요청 하나가 `error`로 실패한다.
+    pub(crate) fn fail_next(&self, error: ConnectError) {
+        self.log.lock().unwrap().fail_next = Some(error);
+    }
+
+    /// 만든 연결이 닫힐 때 `"db close"`를 `log`에 남긴다.
+    pub(crate) fn log_to(&self, log: Arc<Mutex<Vec<&'static str>>>) {
+        self.log.lock().unwrap().close_log = Some(log);
+    }
 }
 
 impl Connector for FakeConnector {
@@ -308,11 +334,15 @@ impl Connector for FakeConnector {
         let _open = self.gate.read().await;
 
         let mut log = self.log.lock().unwrap();
+        if let Some(error) = log.fail_next.take() {
+            return Err(error);
+        }
         let link = FakeLink::default();
         log.links.push(link.clone());
         Ok(FakeConnection {
             pid: 1000 + log.links.len() as i32,
             link,
+            log: log.close_log.clone(),
         })
     }
 }

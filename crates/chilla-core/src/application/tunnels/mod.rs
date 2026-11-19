@@ -150,6 +150,16 @@ fn settled(state: &TunnelState) -> bool {
     )
 }
 
+impl<R: TunnelRunner> Clone for Tunnels<R> {
+    fn clone(&self) -> Self {
+        Self {
+            runner: self.runner.clone(),
+            sink: self.sink.clone(),
+            table: self.table.clone(),
+        }
+    }
+}
+
 impl<R: TunnelRunner> Tunnels<R> {
     pub(crate) fn new(runner: R, sink: TunnelSink) -> Self {
         Self {

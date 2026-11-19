@@ -5,7 +5,8 @@ mod menu;
 use std::sync::Arc;
 
 use chilla_core::infrastructure::{
-    FsSqlFileStore, KeychainPasswordStore, PgConnector, PgQuerySplitter, TomlProjectStore,
+    FsSqlFileStore, KeychainPasswordStore, PgConnector, PgQuerySplitter, ShellTunnelRunner,
+    TomlProjectStore,
 };
 
 use commands::CoreApp;
@@ -20,6 +21,9 @@ pub fn run() {
         Arc::new(PgQuerySplitter),
         Arc::new(FsSqlFileStore),
         PgConnector::new(),
+        ShellTunnelRunner::new(),
+        // 화면으로 보내는 event는 Task 6에서 단다.
+        Arc::new(|_| {}),
     );
 
     let app = tauri::Builder::default()
@@ -51,7 +55,7 @@ pub fn run() {
 
     app.run(|handle, event| {
         if let RunEvent::Exit = event {
-            tauri::async_runtime::block_on(handle.state::<CoreApp>().close_all_sessions());
+            tauri::async_runtime::block_on(handle.state::<CoreApp>().shutdown());
         }
     });
 }

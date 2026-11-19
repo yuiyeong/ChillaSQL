@@ -5,14 +5,13 @@ mod support;
 
 use std::time::{Duration, Instant};
 
-use chilla_core::application::{App, AppError};
+use chilla_core::application::AppError;
 use chilla_core::domain::{
     QueryEvent, QueryId, QueryOutcome, RowBatch, SessionId, SessionInfo, SessionState,
     StatementSpan, TxStatus,
 };
-use chilla_core::infrastructure::PgConnector;
 use support::{
-    activity, admin, app_with_project, backend_exists, eventually, finished, next, sink,
+    TestApp, activity, admin, app_with_project, backend_exists, eventually, finished, next, sink,
     store_password, terminate_backend, wait_until_running,
 };
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -23,20 +22,20 @@ type Events = UnboundedReceiver<QueryEvent>;
 const OPEN: SessionState = SessionState::Open { tx: TxStatus::Idle };
 
 /// 비밀번호를 저장하고 세션 하나를 연다.
-async fn open_session(app: &App<PgConnector>) -> SessionInfo {
+async fn open_session(app: &TestApp) -> SessionInfo {
     store_password(app).await;
     app.open_session("local").await.unwrap()
 }
 
 /// 쿼리를 실행하고 그 이벤트를 받는 쪽을 돌려준다.
-async fn start(app: &App<PgConnector>, session: SessionId, sql: &str) -> (QueryId, Events) {
+async fn start(app: &TestApp, session: SessionId, sql: &str) -> (QueryId, Events) {
     let (sink, events) = sink();
     let query = app.execute(session, sql.into(), sink).await.unwrap();
     (query, events)
 }
 
 /// 쿼리를 실행하고 `Finished`까지의 이벤트를 모두 돌려준다.
-async fn run(app: &App<PgConnector>, session: SessionId, sql: &str) -> Vec<QueryEvent> {
+async fn run(app: &TestApp, session: SessionId, sql: &str) -> Vec<QueryEvent> {
     let (_, mut events) = start(app, session, sql).await;
     let mut all = Vec::new();
     loop {

@@ -8,9 +8,11 @@ use tokio::sync::Mutex;
 use tokio::task::JoinSet;
 
 use super::session_actor::{self, QuerySink, SessionHandle};
+use super::tunnels::{TunnelError, TunnelLease, TunnelSink, Tunnels};
 use super::{
     CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey, PasswordStore,
     PasswordStoreError, ProjectError, ProjectStore, SplitError, SqlFileStore, StatementSplitter,
+    TunnelRunner,
 };
 use crate::domain::{
     ConnectionProfile, FileStamp, Password, ProfileError, Project, QueryId, QueryLimits, SessionId,
@@ -36,6 +38,8 @@ pub enum AppError {
     #[error(transparent)]
     Connect(#[from] ConnectError),
     #[error(transparent)]
+    Tunnel(#[from] TunnelError),
+    #[error(transparent)]
     Split(#[from] SplitError),
     #[error("There is no statement to run")]
     EmptyStatement,
@@ -51,33 +55,42 @@ pub enum AppError {
     InvalidPath(#[from] SqlPathError),
 }
 
-pub struct App<C: Connector> {
+pub struct App<C: Connector, T: TunnelRunner> {
     projects: Arc<dyn ProjectStore>,
     passwords: Arc<dyn PasswordStore>,
     splitter: Arc<dyn StatementSplitter>,
     files: Arc<dyn SqlFileStore>,
     connector: C,
+    tunnels: Tunnels<T>,
     state: Mutex<State>,
     /// `save_connection`을 하나씩 돌린다. 한 번의 저장이 키체인과 파일에 걸쳐 있어서다.
     save_lock: Mutex<()>,
 }
 
+/// 열린 세션 하나. 터널을 쓰는 접속이면 그 lease를 함께 갖는다.
+struct SessionEntry {
+    handle: SessionHandle,
+    tunnel: Option<TunnelLease>,
+}
+
 #[derive(Default)]
 struct State {
     project: Option<Project>,
-    sessions: HashMap<SessionId, SessionHandle>,
+    sessions: HashMap<SessionId, SessionEntry>,
     last_session_id: u64,
     /// 프로젝트를 새로 열 때마다(`open_project`, `create_project`) 오른다. 같은 디렉토리를 다시 연 것도 구분한다.
     project_generation: u64,
 }
 
-impl<C: Connector> App<C> {
+impl<C: Connector, T: TunnelRunner> App<C, T> {
     pub fn new(
         projects: Arc<dyn ProjectStore>,
         passwords: Arc<dyn PasswordStore>,
         splitter: Arc<dyn StatementSplitter>,
         files: Arc<dyn SqlFileStore>,
         connector: C,
+        runner: T,
+        on_tunnel: TunnelSink,
     ) -> Self {
         Self {
             projects,
@@ -85,6 +98,7 @@ impl<C: Connector> App<C> {
             splitter,
             files,
             connector,
+            tunnels: Tunnels::new(runner, on_tunnel),
             state: Mutex::new(State::default()),
             save_lock: Mutex::new(()),
         }
@@ -110,7 +124,8 @@ impl<C: Connector> App<C> {
         Ok(project)
     }
 
-    /// 열려 있던 프로젝트의 세션을 모두 닫고 `project`로 바꾼다.
+    /// 열려 있던 프로젝트의 세션을 모두 닫고 `project`로 바꾼다. 세션이 생기기 전이라 lease를 쥔
+    /// 쪽이 없는 시작 중 터널과 접속 테스트의 터널도 끈다.
     async fn switch_project(&self, project: Project) {
         let previous = {
             let mut state = self.state.lock().await;
@@ -118,7 +133,8 @@ impl<C: Connector> App<C> {
             state.project_generation += 1;
             std::mem::take(&mut state.sessions)
         };
-        close_all(previous).await;
+        self.close_all(previous).await;
+        self.tunnels.stop_all().await;
     }
 
     /// 접속을 `chilla.toml`에 쓰고 열려 있는 프로젝트에 반영한다. 세션은 그대로 둔다(열려
@@ -250,7 +266,7 @@ impl<C: Connector> App<C> {
         profile: ConnectionProfile,
         password: Option<Password>,
     ) -> Result<(), AppError> {
-        let (profile, stored_key) = {
+        let (profile, stored_key, dir) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
             let profile = profile.resolved_under(&project.dir);
@@ -258,7 +274,7 @@ impl<C: Connector> App<C> {
                 .connection(&profile.name)
                 .filter(|saved| saved.same_target(&profile))
                 .map(|saved| password_key(project, &saved.name));
-            (profile, stored_key)
+            (profile, stored_key, project.dir.clone())
         };
         profile.validate()?;
         let password = match (password, stored_key) {
@@ -266,13 +282,26 @@ impl<C: Connector> App<C> {
             (None, Some(key)) => self.stored_password(key).await?,
             (None, None) => None,
         };
-        let connection = self.connector.connect(&profile, password.as_ref()).await?;
-        connection.close().await;
-        Ok(())
+        let tunnel = match profile.tunnel_target(&dir) {
+            Some(target) => Some(self.tunnels.start_private(&target).await?),
+            None => None,
+        };
+        let connected = self.connector.connect(&profile, password.as_ref()).await;
+        let result = match connected {
+            Ok(connection) => {
+                connection.close().await;
+                Ok(())
+            }
+            Err(error) => Err(error.into()),
+        };
+        if let Some(tunnel) = tunnel {
+            tunnel.stop().await;
+        }
+        result
     }
 
     pub async fn open_session(&self, connection: &str) -> Result<SessionInfo, AppError> {
-        let (profile, key, generation) = {
+        let (profile, key, generation, target) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
             let profile =
@@ -285,12 +314,23 @@ impl<C: Connector> App<C> {
                 profile.clone(),
                 password_key(project, &profile.name),
                 state.project_generation,
+                profile.tunnel_target(&project.dir),
             )
         };
         let password = self.stored_password(key).await?;
 
-        // 연결은 오래 걸릴 수 있다. 그동안 lock을 잡지 않는다.
-        let db = self.connector.connect(&profile, password.as_ref()).await?;
+        // 터널과 연결은 오래 걸릴 수 있다. 그동안 lock을 잡지 않는다.
+        let tunnel = match target {
+            Some(target) => Some(self.tunnels.acquire(&profile.name, &target).await?),
+            None => None,
+        };
+        let db = match self.connector.connect(&profile, password.as_ref()).await {
+            Ok(db) => db,
+            Err(error) => {
+                self.release(tunnel).await;
+                return Err(error.into());
+            }
+        };
 
         let mut state = self.state.lock().await;
         if state.project_generation != generation {
@@ -298,6 +338,7 @@ impl<C: Connector> App<C> {
             // 접속 정보로 붙은 이 연결을 세션으로 남기지 않는다.
             drop(state);
             db.close().await;
+            self.release(tunnel).await;
             return Err(AppError::ProjectChanged);
         }
         state.last_session_id += 1;
@@ -306,10 +347,37 @@ impl<C: Connector> App<C> {
             connection: profile.name,
             backend_pid: db.backend_pid(),
         };
+        let handle = session_actor::spawn(db, QueryLimits::default());
         state
             .sessions
-            .insert(info.id, session_actor::spawn(db, QueryLimits::default()));
+            .insert(info.id, SessionEntry { handle, tunnel });
         Ok(info)
+    }
+
+    async fn release(&self, tunnel: Option<TunnelLease>) {
+        if let Some(lease) = tunnel {
+            self.tunnels.release(lease).await;
+        }
+    }
+
+    /// 그 접속의 터널이 시작 중이면 멈춘다. 기다리던 세션 열기는 `Tunnel(Cancelled)`로 끝난다.
+    pub async fn cancel_tunnel(&self, connection: &str) -> Result<(), AppError> {
+        self.project_dir().await?;
+        self.tunnels.cancel(connection).await;
+        Ok(())
+    }
+
+    /// 다시 실행하다 멈춘 그 접속의 터널을 처음부터 다시 시작한다.
+    pub async fn restart_tunnel(&self, connection: &str) -> Result<(), AppError> {
+        self.project_dir().await?;
+        self.tunnels.restart(connection).await;
+        Ok(())
+    }
+
+    /// 앱을 끝낼 때. 세션을 모두 닫고 앱이 띄운 터널을 모두 끈다.
+    pub async fn shutdown(&self) {
+        self.close_all_sessions().await;
+        self.tunnels.stop_all().await;
     }
 
     pub async fn session_state(&self, id: SessionId) -> Result<SessionState, AppError> {
@@ -371,20 +439,34 @@ impl<C: Connector> App<C> {
         state
             .sessions
             .get(&id)
-            .cloned()
+            .map(|entry| entry.handle.clone())
             .ok_or(AppError::UnknownSession { id })
     }
 
-    /// 연결이 이미 끊긴(`Lost`) 세션도 정상으로 닫힌다.
+    /// 연결이 이미 끊긴(`Lost`) 세션도 정상으로 닫힌다. DB 연결을 닫은 뒤 터널을 놓는다.
     pub async fn close_session(&self, id: SessionId) -> Result<(), AppError> {
-        let handle = self.state.lock().await.sessions.remove(&id);
-        handle.ok_or(AppError::UnknownSession { id })?.close().await;
+        let entry = self.state.lock().await.sessions.remove(&id);
+        self.close_entry(entry.ok_or(AppError::UnknownSession { id })?)
+            .await;
         Ok(())
     }
 
     pub async fn close_all_sessions(&self) {
         let sessions = std::mem::take(&mut self.state.lock().await.sessions);
-        close_all(sessions).await;
+        self.close_all(sessions).await;
+    }
+
+    async fn close_entry(&self, entry: SessionEntry) {
+        close_entry(entry, self.tunnels.clone()).await;
+    }
+
+    /// 세션들을 한꺼번에 닫는다. 하나가 오래 걸려도 나머지가 기다리지 않는다.
+    async fn close_all(&self, sessions: HashMap<SessionId, SessionEntry>) {
+        let mut closing: JoinSet<()> = sessions
+            .into_values()
+            .map(|entry| close_entry(entry, self.tunnels.clone()))
+            .collect();
+        while closing.join_next().await.is_some() {}
     }
 
     /// 프로젝트에 있는 접속의 키체인 항목. 없는 이름으로는 항목을 만들지 않는다.
@@ -408,17 +490,19 @@ impl<C: Connector> App<C> {
     }
 }
 
+/// DB 연결을 닫은 뒤 터널을 놓는다(기획서 4.2의 순서).
+async fn close_entry<T: TunnelRunner>(entry: SessionEntry, tunnels: Tunnels<T>) {
+    entry.handle.close().await;
+    if let Some(lease) = entry.tunnel {
+        tunnels.release(lease).await;
+    }
+}
+
 fn password_key(project: &Project, connection: &str) -> PasswordKey {
     PasswordKey {
         project_dir: project.dir.clone(),
         connection: connection.to_string(),
     }
-}
-
-/// 세션들을 한꺼번에 닫는다. 하나가 오래 걸려도 나머지가 기다리지 않는다.
-async fn close_all(sessions: HashMap<SessionId, SessionHandle>) {
-    let mut closing: JoinSet<()> = sessions.into_values().map(SessionHandle::close).collect();
-    while closing.join_next().await.is_some() {}
 }
 
 /// 파일과 키체인 호출은 blocking이다 (키체인은 확인 창이 떠 있는 동안 돌아오지 않는다).
@@ -439,25 +523,31 @@ where
 mod tests {
     use std::path::Path;
     use std::sync::Arc;
+    use std::time::Duration;
 
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
+    use crate::application::TunnelError;
     use crate::application::test_support::{
-        FakeConnector, FakeFiles, FakePasswords, FakeProjects, FakeSplitter, next, profile, sink,
+        FakeConnector, FakeFiles, FakePasswords, FakeProjects, FakeRun, FakeRunner, FakeSplitter,
+        events_sink, next, profile, sink,
     };
     use crate::application::{CancelError, PasswordKey, PasswordStore, ProjectError, SplitError};
     use crate::domain::{
         FileStamp, ProfileError, QueryEvent, QueryOutcome, SessionState, SslMode, StatementSpan,
         TxStatus, WriteMode,
     };
+    use crate::domain::{TunnelEvent, TunnelFailure};
 
     struct Fixture {
-        app: App<FakeConnector>,
+        app: App<FakeConnector, FakeRunner>,
         connector: FakeConnector,
         projects: Arc<FakeProjects>,
         passwords: Arc<FakePasswords>,
         files: Arc<FakeFiles>,
+        runner: FakeRunner,
+        tunnel_events: Arc<std::sync::Mutex<Vec<TunnelEvent>>>,
     }
 
     /// `/p`(접속 local, staging)와 `/q`(접속 local)가 프로젝트다.
@@ -468,6 +558,8 @@ mod tests {
         let passwords = Arc::new(FakePasswords::default());
         let files = Arc::new(FakeFiles::default());
         let connector = FakeConnector::default();
+        let runner = FakeRunner::default();
+        let (tunnel_sink, tunnel_events) = events_sink();
         Fixture {
             app: App::new(
                 projects.clone(),
@@ -475,11 +567,30 @@ mod tests {
                 Arc::new(FakeSplitter),
                 files.clone(),
                 connector.clone(),
+                runner.clone(),
+                tunnel_sink,
             ),
             connector,
             projects,
             passwords,
             files,
+            runner,
+            tunnel_events,
+        }
+    }
+
+    /// `/p`의 `staging`에 터널 명령 `tunnel`(포트 5432)을 단 뒤 연다.
+    async fn tunneled() -> Fixture {
+        let f = fixture();
+        f.projects.set_tunnel("/p", "staging", "tunnel");
+        f.app.open_project(Path::new("/p")).await.unwrap();
+        f
+    }
+
+    fn tunnel_failure(result: Result<SessionInfo, AppError>) -> TunnelFailure {
+        match result {
+            Err(AppError::Tunnel(TunnelError { failure, .. })) => failure,
+            other => panic!("터널 오류가 아니다: {other:?}"),
         }
     }
 
@@ -1254,6 +1365,224 @@ mod tests {
                 ("/p".into(), "queries/a.sql".to_string()),
                 ("/p".into(), "b.sql".to_string())
             ]
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn open_session_starts_the_tunnel_first() {
+        let f = tunneled().await;
+        f.runner.script_at(
+            "tunnel",
+            "localhost",
+            5432,
+            vec![FakeRun::OpensAfter(Duration::from_secs(1))],
+        );
+
+        f.app.open_session("staging").await.unwrap();
+        assert_eq!(f.runner.spawned(), ["tunnel"]);
+        assert_eq!(f.connector.requests().len(), 1);
+
+        f.app.open_session("local").await.unwrap();
+        assert_eq!(f.runner.spawned(), ["tunnel"]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn close_session_closes_the_database_before_the_tunnel() {
+        let f = tunneled().await;
+        let log = Arc::new(std::sync::Mutex::new(Vec::new()));
+        f.connector.log_to(log.clone());
+        f.runner.log_to(log.clone());
+        let session = f.app.open_session("staging").await.unwrap();
+
+        f.app.close_session(session.id).await.unwrap();
+
+        assert_eq!(*log.lock().unwrap(), ["db close", "tunnel stop"]);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn sessions_of_one_connection_share_the_tunnel() {
+        let f = tunneled().await;
+        let a = f.app.open_session("staging").await.unwrap();
+        let b = f.app.open_session("staging").await.unwrap();
+        assert_eq!(f.runner.spawned().len(), 1);
+
+        f.app.close_session(a.id).await.unwrap();
+        assert_eq!(f.runner.running(), 1);
+        f.app.close_session(b.id).await.unwrap();
+        assert_eq!(f.runner.running(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn tunnel_failure_is_an_app_error_and_opens_no_connection() {
+        let f = tunneled().await;
+        f.runner.script_at(
+            "tunnel",
+            "localhost",
+            5432,
+            vec![FakeRun::ExitsAfter(Duration::ZERO, Some(1), "nope")],
+        );
+
+        let failure = tunnel_failure(f.app.open_session("staging").await);
+
+        assert_eq!(
+            failure,
+            TunnelFailure::Exited {
+                code: Some(1),
+                output: "nope".into()
+            }
+        );
+        assert!(f.connector.requests().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn connect_failure_releases_the_tunnel() {
+        let f = tunneled().await;
+        f.connector.fail_next(ConnectError::AuthFailed {
+            message: "no".into(),
+        });
+
+        let result = f.app.open_session("staging").await;
+
+        assert!(
+            matches!(
+                result,
+                Err(AppError::Connect(ConnectError::AuthFailed { .. }))
+            ),
+            "{result:?}"
+        );
+        assert_eq!(f.runner.running(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn switching_project_while_the_tunnel_starts_stops_it() {
+        let f = Arc::new(tunneled().await);
+        f.runner
+            .script_at("tunnel", "localhost", 5432, vec![FakeRun::Hangs("")]);
+        let opening = {
+            let f = f.clone();
+            tokio::spawn(async move { f.app.open_session("staging").await })
+        };
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert_eq!(f.runner.running(), 1);
+
+        f.app.open_project(Path::new("/q")).await.unwrap();
+
+        let result = opening.await.unwrap();
+        assert!(
+            matches!(result, Err(AppError::ProjectChanged | AppError::Tunnel(_))),
+            "{result:?}"
+        );
+        assert_eq!(f.runner.running(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_connection_runs_a_private_tunnel_and_stops_it() {
+        let f = opened().await;
+        let unsaved = ConnectionProfile {
+            tunnel: Some("tunnel-test".into()),
+            ..profile("new")
+        };
+
+        f.app.test_connection(unsaved.clone(), None).await.unwrap();
+        assert_eq!(f.runner.spawned(), ["tunnel-test"]);
+        assert_eq!(f.runner.running(), 0);
+        assert!(f.tunnel_events.lock().unwrap().is_empty());
+
+        f.connector.fail_next(ConnectError::Timeout);
+        let result = f.app.test_connection(unsaved, None).await;
+        assert_eq!(result, Err(AppError::Connect(ConnectError::Timeout)));
+        assert_eq!(f.runner.running(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_connection_reports_a_tunnel_failure() {
+        let f = opened().await;
+        f.runner.script_at(
+            "tunnel-test",
+            "localhost",
+            5432,
+            vec![FakeRun::Hangs("Unauthorized")],
+        );
+        let unsaved = ConnectionProfile {
+            tunnel: Some("tunnel-test".into()),
+            tunnel_timeout: Some(Duration::from_secs(5)),
+            ..profile("new")
+        };
+
+        let result = f.app.test_connection(unsaved, None).await;
+
+        assert!(
+            matches!(
+                &result,
+                Err(AppError::Tunnel(TunnelError {
+                    failure: TunnelFailure::Timeout { secs: 5, .. },
+                    ..
+                }))
+            ),
+            "{result:?}"
+        );
+        assert!(f.connector.requests().is_empty());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn cancel_tunnel_stops_a_starting_tunnel() {
+        let f = Arc::new(tunneled().await);
+        f.runner
+            .script_at("tunnel", "localhost", 5432, vec![FakeRun::Hangs("")]);
+        let opening = {
+            let f = f.clone();
+            tokio::spawn(async move { f.app.open_session("staging").await })
+        };
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        f.app.cancel_tunnel("staging").await.unwrap();
+
+        assert_eq!(
+            tunnel_failure(opening.await.unwrap()),
+            TunnelFailure::Cancelled
+        );
+        assert_eq!(f.runner.running(), 0);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn restart_tunnel_without_a_project_is_no_project() {
+        let f = fixture();
+        assert_eq!(
+            f.app.restart_tunnel("staging").await,
+            Err(AppError::NoProject)
+        );
+        assert_eq!(
+            f.app.cancel_tunnel("staging").await,
+            Err(AppError::NoProject)
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn shutdown_closes_sessions_and_tunnels() {
+        let f = Arc::new(tunneled().await);
+        f.projects.set_tunnel("/p", "local", "hang");
+        f.app.open_project(Path::new("/p")).await.unwrap();
+        f.runner
+            .script_at("hang", "localhost", 5432, vec![FakeRun::Hangs("")]);
+        f.runner.script_at("tunnel", "localhost", 5432, vec![]);
+        let session = f.app.open_session("staging").await.unwrap();
+        // staging 터널이 5432를 열었으므로 local은 그 포트를 쓰는 External이 된다. 시작 중인 터널을
+        // 만들려고 포트를 닫는다.
+        f.runner.set_open("localhost", 5432, false);
+        let hanging = {
+            let f = f.clone();
+            tokio::spawn(async move { f.app.open_session("local").await })
+        };
+        tokio::time::sleep(Duration::from_secs(1)).await;
+        assert_eq!(f.runner.running(), 2);
+
+        f.app.shutdown().await;
+
+        assert_eq!(f.runner.running(), 0);
+        assert!(hanging.await.unwrap().is_err());
+        assert_eq!(
+            f.app.session_state(session.id).await,
+            Err(AppError::UnknownSession { id: session.id })
         );
     }
 }

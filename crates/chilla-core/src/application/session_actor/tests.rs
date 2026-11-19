@@ -16,6 +16,7 @@ fn session_with(limits: QueryLimits) -> (SessionHandle, FakeLink) {
     let connection = FakeConnection {
         pid: 42,
         link: link.clone(),
+        log: None,
     };
     (spawn(connection, limits), link)
 }

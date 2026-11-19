@@ -12,7 +12,7 @@ use chilla_core::application::{
 use chilla_core::domain::{ConnectionProfile, Password, QueryEvent, QueryOutcome, SslMode};
 use chilla_core::infrastructure::{
     FsSqlFileStore, MemoryPasswordStore, PgConnection, PgConnector, PgQuerySplitter,
-    TomlProjectStore,
+    ShellTunnelRunner, TomlProjectStore,
 };
 use tempfile::TempDir;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
@@ -175,7 +175,10 @@ pub async fn eventually(mut check: impl AsyncFnMut() -> bool) -> bool {
 }
 
 /// 실제 구성에서 키체인만 메모리로 바꾼 App과, test DB를 가리키는 접속 `local`이 있는 프로젝트.
-pub async fn app_with_project() -> (App<PgConnector>, TempDir) {
+/// test에 쓰는 실제 구성의 App.
+pub type TestApp = App<PgConnector, ShellTunnelRunner>;
+
+pub async fn app_with_project() -> (TestApp, TempDir) {
     let dir = tempfile::tempdir().unwrap();
     let toml = format!(
         "[connections.local]\nhost = \"127.0.0.1\"\nport = {TEST_DB_PORT}\ndatabase = \"{DATABASE}\"\nuser = \"{USER}\"\n"
@@ -187,12 +190,14 @@ pub async fn app_with_project() -> (App<PgConnector>, TempDir) {
         Arc::new(PgQuerySplitter),
         Arc::new(FsSqlFileStore),
         PgConnector::new(),
+        ShellTunnelRunner::new(),
+        Arc::new(|_| {}),
     );
     app.open_project(dir.path()).await.unwrap();
     (app, dir)
 }
 
-pub async fn store_password(app: &App<PgConnector>) {
+pub async fn store_password(app: &TestApp) {
     app.set_password("local", password()).await.unwrap();
 }
 

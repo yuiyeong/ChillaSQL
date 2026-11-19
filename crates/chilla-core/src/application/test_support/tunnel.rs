@@ -36,6 +36,9 @@ struct State {
     live: Vec<Arc<Shared>>,
     stop_delay: Duration,
     log: Option<Arc<Mutex<Vec<&'static str>>>>,
+    /// 마지막으로 확인한 포트. `script_at`으로 정하지 않은 명령은 이 포트를 연다(터널은 실행하기
+    /// 직전에 그 포트를 확인한다).
+    last_probe: Option<(String, u16)>,
 }
 
 #[derive(Clone, Default)]
@@ -60,7 +63,7 @@ impl FakeRunner {
     }
 
     /// `command`를 실행할 때마다 앞에서부터 하나씩 쓴다. 다 쓰면 바로 포트를 연다.
-    /// 포트는 `localhost:25432`다.
+    /// 포트는 `localhost:25432`다. script가 없는 명령은 실행 직전에 확인한 포트를 연다.
     pub(crate) fn script(&self, command: &str, runs: Vec<FakeRun>) {
         self.script_at(command, DEFAULT_ADDR.0, DEFAULT_ADDR.1, runs);
     }
@@ -76,6 +79,11 @@ impl FakeRunner {
     /// `stop`이 끝나기까지 걸리는 시간. 그동안 포트는 열려 있다.
     pub(crate) fn set_stop_delay(&self, delay: Duration) {
         self.state.lock().unwrap().stop_delay = delay;
+    }
+
+    /// `stop`이 끝날 때 `"tunnel stop"`을 남길 곳.
+    pub(crate) fn log_to(&self, log: Arc<Mutex<Vec<&'static str>>>) {
+        self.state.lock().unwrap().log = Some(log);
     }
 
     pub(crate) fn spawned(&self) -> Vec<String> {
@@ -125,7 +133,8 @@ impl TunnelRunner for FakeRunner {
     type Process = FakeProcess;
 
     async fn is_open(&self, host: &str, port: u16) -> bool {
-        let state = self.state.lock().unwrap();
+        let mut state = self.state.lock().unwrap();
+        state.last_probe = Some((host.to_string(), port));
         state
             .open
             .get(&(host.to_string(), port))
@@ -148,6 +157,7 @@ impl TunnelRunner for FakeRunner {
         let addr = state
             .addrs
             .get(command)
+            .or(state.last_probe.as_ref())
             .cloned()
             .unwrap_or((DEFAULT_ADDR.0.to_string(), DEFAULT_ADDR.1));
         let shared = Arc::new(Shared {
