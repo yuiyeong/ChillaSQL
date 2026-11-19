@@ -91,46 +91,57 @@ function ColorField({
   inline: boolean;
   onChange(color: ConnectionColor | null): void;
 }) {
-  return (
-    <fieldset
-      className={
-        inline ? "m-0 flex items-center gap-3 border-0 p-0" : "m-0 border-0 p-0"
-      }
+  const labelId = useId();
+  const swatches = (
+    <div
+      role="radiogroup"
+      aria-label="color"
+      className={["flex items-center gap-1.5", inline ? "" : "h-8"].join(" ")}
     >
-      <legend
-        className={[
-          "text-small text-fg-2 p-0 font-mono",
-          inline ? "float-left w-16" : "mb-1.5",
-        ].join(" ")}
+      {CONNECTION_COLORS.map((color) => {
+        const checked = value === color;
+        return (
+          <button
+            key={color}
+            type="button"
+            role="radio"
+            aria-checked={checked}
+            aria-label={color}
+            className="border-bg-2 focus-visible:outline-accent size-[22px] cursor-pointer rounded-full border-2 p-0 focus-visible:outline-2"
+            style={{
+              background: connectionColor(color),
+              boxShadow: checked
+                ? `0 0 0 2px ${connectionColor(color)}`
+                : undefined,
+            }}
+            onClick={() => onChange(checked ? null : color)}
+          />
+        );
+      })}
+    </div>
+  );
+  // WebKit은 fieldset의 legend에 float을 적용하지 않아서, 한 줄 배치는 legend 대신
+  // group과 이름표 span으로 만든다.
+  if (inline) {
+    return (
+      <div
+        role="group"
+        aria-labelledby={labelId}
+        className="flex items-center gap-3"
       >
+        <span id={labelId} className="text-small text-fg-2 w-16 font-mono">
+          color
+        </span>
+        {swatches}
+      </div>
+    );
+  }
+  return (
+    <fieldset className="m-0 border-0 p-0">
+      <legend className="text-small text-fg-2 mb-1.5 p-0 font-mono">
         color
       </legend>
-      <div
-        role="radiogroup"
-        aria-label="color"
-        className={["flex items-center gap-1.5", inline ? "" : "h-8"].join(" ")}
-      >
-        {CONNECTION_COLORS.map((color) => {
-          const checked = value === color;
-          return (
-            <button
-              key={color}
-              type="button"
-              role="radio"
-              aria-checked={checked}
-              aria-label={color}
-              className="border-bg-2 focus-visible:outline-accent size-[22px] cursor-pointer rounded-full border-2 p-0 focus-visible:outline-2"
-              style={{
-                background: connectionColor(color),
-                boxShadow: checked
-                  ? `0 0 0 2px ${connectionColor(color)}`
-                  : undefined,
-              }}
-              onClick={() => onChange(checked ? null : color)}
-            />
-          );
-        })}
-      </div>
+      {swatches}
     </fieldset>
   );
 }

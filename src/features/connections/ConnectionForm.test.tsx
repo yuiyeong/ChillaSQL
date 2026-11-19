@@ -176,6 +176,22 @@ test("color_is_a_radiogroup_of_five", () => {
   ).toEqual([swatch("red")]);
 });
 
+test("the_edit_sheet_labels_the_color_row_without_a_legend", () => {
+  renderForm(original);
+
+  const group = screen.getByRole("group", { name: "color" });
+  expect(group.tagName).toBe("DIV");
+  expect(document.querySelector("legend")).toBeNull();
+});
+
+test("the_new_sheet_keeps_the_color_fieldset_and_legend", () => {
+  renderForm();
+
+  expect(document.querySelector("fieldset > legend")).toHaveTextContent(
+    "color",
+  );
+});
+
 test("clicking_an_unchecked_swatch_picks_it", async () => {
   renderForm(original);
 
