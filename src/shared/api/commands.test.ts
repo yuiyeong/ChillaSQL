@@ -12,6 +12,7 @@ import {
   cancelQuery,
   closeSession,
   createProject,
+  endTransaction,
   executeQuery,
   fetchMore,
   hasPassword,
@@ -27,7 +28,7 @@ import {
   restartTunnel,
 } from "./commands";
 import { CommandError } from "./errors";
-import type { Connection, QueryEvent } from "./types";
+import type { Connection, EndResult, QueryEvent } from "./types";
 
 const invokeMock = vi.mocked(invoke);
 
@@ -120,7 +121,7 @@ test("executeQuery는 Channel의 message를 onEvent로 넘긴다", async () => {
   invokeMock.mockResolvedValue(7);
   const onEvent = vi.fn();
 
-  const queryId = await executeQuery(3, "SELECT 1", onEvent);
+  const queryId = await executeQuery(3, "SELECT 1", "manual", onEvent);
 
   expect(invokeMock).toHaveBeenCalledTimes(1);
   const [name, args] = invokeMock.mock.calls[0]!;
@@ -128,6 +129,7 @@ test("executeQuery는 Channel의 message를 onEvent로 넘긴다", async () => {
   expect(args).toEqual({
     sessionId: 3,
     sql: "SELECT 1",
+    mode: "manual",
     onEvent: expect.any(Channel),
   });
   const channel = (args as { onEvent: Channel<QueryEvent> }).onEvent;
@@ -135,6 +137,17 @@ test("executeQuery는 Channel의 message를 onEvent로 넘긴다", async () => {
   channel.onmessage(event);
   expect(onEvent).toHaveBeenCalledWith(event);
   expect(queryId).toBe(7);
+});
+
+test("endTransaction은 끝내는 방법을 넘기고 결과를 그대로 돌려준다", async () => {
+  const result: EndResult = { outcome: "ended", tx: "idle" };
+  invokeMock.mockResolvedValue(result);
+
+  await expect(endTransaction(3, "commit")).resolves.toEqual(result);
+  expect(invokeMock).toHaveBeenCalledWith("end_transaction", {
+    sessionId: 3,
+    end: "commit",
+  });
 });
 
 test("Rust의 오류 object는 CommandError가 된다", async () => {

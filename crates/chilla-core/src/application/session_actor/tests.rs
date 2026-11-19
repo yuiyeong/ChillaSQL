@@ -5,7 +5,10 @@ use super::*;
 use crate::application::test_support::{
     FakeConnection, FakeLink, next, numbered, server_error, sink,
 };
-use crate::domain::{Column, QueryEvent, QueryId, QueryLimits, QueryOutcome, RowBatch, TxStatus};
+use crate::domain::{
+    Column, EndOutcome, EndResult, QueryEvent, QueryId, QueryLimits, QueryOutcome, RowBatch, TxEnd,
+    TxMode, TxStatus,
+};
 
 fn session() -> (SessionHandle, FakeLink) {
     session_with(QueryLimits::default())
@@ -104,7 +107,7 @@ async fn small_result_arrives_as_one_batch_then_finishes() {
     feed.rows(0..3);
     feed.complete(3);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT 1".into(), sink).await;
+    let query = handle.execute("SELECT 1".into(), TxMode::Auto, sink).await;
     assert_eq!(query, Some(QueryId(1)));
 
     let id = Column { name: "id".into() };
@@ -119,7 +122,7 @@ async fn small_result_arrives_as_one_batch_then_finishes() {
     assert_eq!(finished, QueryOutcome::Completed { rows: 3 });
 
     let (sink, _events) = self::sink();
-    let query = handle.execute("SELECT 2".into(), sink).await;
+    let query = handle.execute("SELECT 2".into(), TxMode::Auto, sink).await;
     assert_eq!(query, Some(QueryId(2)));
 }
 
@@ -128,7 +131,9 @@ async fn statement_without_rows_finishes_with_the_count() {
     let (handle, link) = session();
     link.expect_query().complete(3);
     let (sink, mut events) = sink();
-    handle.execute("DELETE FROM t".into(), sink).await;
+    handle
+        .execute("DELETE FROM t".into(), TxMode::Auto, sink)
+        .await;
     let finished = outcome(next(&mut events).await);
     assert_eq!(finished, QueryOutcome::Completed { rows: 3 });
     // 끝난 쿼리의 sink는 drop된다. 그 사이 다른 이벤트는 없다.
@@ -144,7 +149,10 @@ async fn rows_arrive_500_at_a_time_and_wait_for_fetch_more() {
     feed.rows(0..1200);
     feed.complete(1200);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     assert!(matches!(next(&mut events).await, QueryEvent::Columns(_)));
     let rows = batch(next(&mut events).await);
@@ -173,7 +181,7 @@ async fn result_of_exactly_500_rows_finishes_without_fetch_more() {
     feed.rows(0..500);
     feed.complete(500);
     let (sink, mut events) = sink();
-    handle.execute("SELECT n".into(), sink).await;
+    handle.execute("SELECT n".into(), TxMode::Auto, sink).await;
 
     let rows = batch(next(&mut events).await);
     assert_eq!((rows.first_row, rows.rows.len()), (0, 500));
@@ -189,7 +197,10 @@ async fn fetch_more_during_the_look_ahead_is_not_lost() {
     let feed = link.expect_query();
     feed.rows(0..500);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     assert_eq!(batch(next(&mut events).await).rows.len(), 500);
     // 501개째 항목이 아직 없어 look-ahead가 끝나지 않았다.
@@ -216,7 +227,10 @@ async fn wide_rows_end_a_batch_early() {
     }
     feed.complete(5);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT wide".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT wide".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     let rows = batch(next(&mut events).await);
     assert_eq!((rows.first_row, rows.rows.len()), (0, 3));
@@ -240,7 +254,10 @@ async fn retained_from_moves_once_the_cap_is_passed() {
     feed.rows(0..7);
     feed.complete(7);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     let mut seen = Vec::new();
     let finished = loop {
@@ -264,7 +281,10 @@ async fn fetch_more_for_another_query_is_refused() {
     feed.rows(0..600);
     feed.complete(600);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     batch(next(&mut events).await);
     assert_eq!(handle.fetch_more(QueryId(99)).await, Some(false));
@@ -283,8 +303,14 @@ async fn fetch_more_is_accepted_for_every_query_this_session_issued() {
     link.expect_query();
     let (sink_a, _events_a) = sink();
     let (sink_b, _events_b) = sink();
-    let a = handle.execute("A".into(), sink_a).await.unwrap();
-    let b = handle.execute("B".into(), sink_b).await.unwrap();
+    let a = handle
+        .execute("A".into(), TxMode::Auto, sink_a)
+        .await
+        .unwrap();
+    let b = handle
+        .execute("B".into(), TxMode::Auto, sink_b)
+        .await
+        .unwrap();
 
     // A는 버리는 중이고 B는 기다린다.
     assert_eq!(handle.fetch_more(a).await, Some(true));
@@ -301,7 +327,9 @@ async fn server_error_keeps_the_rows_received_before_it() {
     feed.rows(0..3);
     feed.fail("22012");
     let (sink, mut events) = sink();
-    handle.execute("SELECT 1/(n-3)".into(), sink).await;
+    handle
+        .execute("SELECT 1/(n-3)".into(), TxMode::Auto, sink)
+        .await;
 
     assert!(matches!(next(&mut events).await, QueryEvent::Columns(_)));
     assert_eq!(batch(next(&mut events).await).rows, numbered(0..3));
@@ -321,7 +349,7 @@ async fn client_error_keeps_the_rows_received_before_it() {
     }));
     feed.complete(4);
     let (sink, mut events) = sink();
-    handle.execute("SELECT n".into(), sink).await;
+    handle.execute("SELECT n".into(), TxMode::Auto, sink).await;
 
     assert!(matches!(next(&mut events).await, QueryEvent::Columns(_)));
     assert_eq!(batch(next(&mut events).await).rows, numbered(0..3));
@@ -343,7 +371,9 @@ async fn client_error_keeps_the_rows_received_before_it() {
 async fn client_error_from_start_query_finishes_the_query() {
     let (handle, link) = session();
     let (sink, mut events) = sink();
-    handle.execute("SELECT 1\0".into(), sink).await;
+    handle
+        .execute("SELECT 1\0".into(), TxMode::Auto, sink)
+        .await;
 
     let finished = outcome(next(&mut events).await);
     assert!(
@@ -355,7 +385,7 @@ async fn client_error_from_start_query_finishes_the_query() {
         SessionState::Open { tx: TxStatus::Idle }
     );
     let (sink, mut events) = self::sink();
-    handle.execute("SELECT 1".into(), sink).await;
+    handle.execute("SELECT 1".into(), TxMode::Auto, sink).await;
     assert_eq!(
         outcome(next(&mut events).await),
         QueryOutcome::Completed { rows: 0 }
@@ -373,9 +403,12 @@ async fn next_execute_discards_the_previous_result() {
     let (sink_a, mut events_a) = sink();
     let (sink_b, mut events_b) = sink();
 
-    handle.execute("A".into(), sink_a).await;
+    handle.execute("A".into(), TxMode::Auto, sink_a).await;
     assert_eq!(batch(next(&mut events_a).await).rows.len(), 500);
-    assert_eq!(handle.execute("B".into(), sink_b).await, Some(QueryId(2)));
+    assert_eq!(
+        handle.execute("B".into(), TxMode::Auto, sink_b).await,
+        Some(QueryId(2))
+    );
 
     assert_eq!(outcome(next(&mut events_a).await), QueryOutcome::Discarded);
     assert_eq!(link.cancels(), 1);
@@ -392,10 +425,10 @@ async fn next_query_waits_for_the_cancel_in_flight() {
     let feed_a = link.expect_query();
     let (sink_a, mut events_a) = sink();
     let (sink_b, mut events_b) = sink();
-    handle.execute("A".into(), sink_a).await;
+    handle.execute("A".into(), TxMode::Auto, sink_a).await;
     let gate = link.hold_cancels().await;
 
-    handle.execute("B".into(), sink_b).await;
+    handle.execute("B".into(), TxMode::Auto, sink_b).await;
     // A의 결과는 57014로 끝났지만 cancel은 아직 끝나지 않았다.
     assert!(eventually(|| link.cancels() == 1).await);
     quiet(&mut events_a).await;
@@ -417,9 +450,9 @@ async fn execute_while_draining_replaces_the_waiting_query() {
     let (sink_b, mut events_b) = sink();
     let (sink_c, mut events_c) = sink();
 
-    handle.execute("A".into(), sink_a).await;
-    handle.execute("B".into(), sink_b).await;
-    handle.execute("C".into(), sink_c).await;
+    handle.execute("A".into(), TxMode::Auto, sink_a).await;
+    handle.execute("B".into(), TxMode::Auto, sink_b).await;
+    handle.execute("C".into(), TxMode::Auto, sink_c).await;
     assert_eq!(outcome(next(&mut events_b).await), QueryOutcome::Discarded);
     assert_eq!(link.sent(), ["A"]);
     // C는 이미 버리는 중인 A에 cancel을 더 보내지 않는다.
@@ -445,7 +478,7 @@ async fn cancel_ends_a_running_query_as_cancelled() {
     link.expect_query();
     let (sink, mut events) = sink();
     let query = handle
-        .execute("SELECT pg_sleep(10)".into(), sink)
+        .execute("SELECT pg_sleep(10)".into(), TxMode::Auto, sink)
         .await
         .unwrap();
     quiet(&mut events).await;
@@ -460,7 +493,10 @@ async fn cancel_of_a_half_read_result_drops_the_rest() {
     let (handle, link) = session();
     link.expect_query().rows(0..1200);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     assert_eq!(batch(next(&mut events).await).rows.len(), 500);
     assert_eq!(handle.cancel(query).await, Some(Ok(())));
@@ -475,8 +511,11 @@ async fn cancel_of_a_waiting_query_removes_it() {
     let feed_a = link.expect_query();
     let (sink_a, mut events_a) = sink();
     let (sink_b, mut events_b) = sink();
-    handle.execute("A".into(), sink_a).await;
-    let b = handle.execute("B".into(), sink_b).await.unwrap();
+    handle.execute("A".into(), TxMode::Auto, sink_a).await;
+    let b = handle
+        .execute("B".into(), TxMode::Auto, sink_b)
+        .await
+        .unwrap();
 
     assert_eq!(handle.cancel(b).await, Some(Ok(())));
     assert_eq!(
@@ -501,7 +540,10 @@ async fn cancel_of_a_waiting_query_removes_it() {
 async fn cancel_of_a_finished_or_unknown_query_does_nothing() {
     let (handle, link) = session();
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT 1".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT 1".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
     outcome(next(&mut events).await);
 
     assert_eq!(handle.cancel(query).await, Some(Ok(())));
@@ -516,7 +558,7 @@ async fn failed_cancel_reports_the_error() {
     let feed = link.expect_query();
     let (sink, mut events) = sink();
     let query = handle
-        .execute("SELECT pg_sleep(10)".into(), sink)
+        .execute("SELECT pg_sleep(10)".into(), TxMode::Auto, sink)
         .await
         .unwrap();
 
@@ -539,7 +581,10 @@ async fn statement_that_completed_despite_cancel_is_completed() {
     link.ignore_cancels(1);
     let feed = link.expect_query();
     let (sink, mut events) = sink();
-    let query = handle.execute("DELETE FROM t".into(), sink).await.unwrap();
+    let query = handle
+        .execute("DELETE FROM t".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     assert_eq!(handle.cancel(query).await, Some(Ok(())));
     feed.complete(3);
@@ -557,7 +602,10 @@ async fn cancelled_select_with_dropped_rows_stays_cancelled() {
     feed.rows(0..1200);
     feed.complete(1200);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     assert_eq!(batch(next(&mut events).await).rows.len(), 500);
     assert_eq!(handle.cancel(query).await, Some(Ok(())));
@@ -571,7 +619,10 @@ async fn rows_that_arrive_after_cancel_keep_the_query_cancelled() {
     link.ignore_cancels(1);
     let feed = link.expect_query();
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     assert_eq!(handle.cancel(query).await, Some(Ok(())));
     feed.rows(0..3);
@@ -588,7 +639,10 @@ async fn look_ahead_row_dropped_by_cancel_keeps_the_query_cancelled() {
     let feed = link.expect_query();
     feed.rows(0..501);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     assert_eq!(batch(next(&mut events).await).rows.len(), 500);
     // 501번째 행(look-ahead)을 읽고 Paused가 됐다.
@@ -608,7 +662,10 @@ async fn real_error_during_drain_is_reported() {
     link.ignore_cancels(1);
     let feed = link.expect_query();
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT 1/0".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT 1/0".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     assert_eq!(handle.cancel(query).await, Some(Ok(())));
     feed.fail("22012");
@@ -625,7 +682,7 @@ async fn cancel_is_sent_again_when_the_query_outlives_it() {
     link.expect_query();
     let (sink, mut events) = sink();
     let query = handle
-        .execute("SELECT pg_sleep(10)".into(), sink)
+        .execute("SELECT pg_sleep(10)".into(), TxMode::Auto, sink)
         .await
         .unwrap();
 
@@ -650,7 +707,7 @@ async fn state_answers_while_a_query_is_running() {
     let (handle, link) = session();
     link.set_tx(TxStatus::InTransaction);
     let (sink, mut events) = sink();
-    handle.execute("BEGIN".into(), sink).await;
+    handle.execute("BEGIN".into(), TxMode::Auto, sink).await;
     outcome(next(&mut events).await);
     let in_transaction = SessionState::Open {
         tx: TxStatus::InTransaction,
@@ -660,7 +717,9 @@ async fn state_answers_while_a_query_is_running() {
     // 가짜의 tx_status는 끝나지 않은 결과가 있으면 영영 끝나지 않는다. actor가 기다리면 timeout난다.
     link.expect_query();
     let (sink, _events) = self::sink();
-    handle.execute("SELECT pg_sleep(10)".into(), sink).await;
+    handle
+        .execute("SELECT pg_sleep(10)".into(), TxMode::Auto, sink)
+        .await;
     let state = timeout(Duration::from_secs(1), handle.state()).await;
     assert_eq!(state.expect("state가 쿼리를 기다렸다"), in_transaction);
 }
@@ -671,7 +730,7 @@ async fn start_query_on_a_lost_connection_finishes_the_query() {
     link.lose();
     let (sink, mut events) = sink();
     assert_eq!(
-        handle.execute("SELECT 1".into(), sink).await,
+        handle.execute("SELECT 1".into(), TxMode::Auto, sink).await,
         Some(QueryId(1))
     );
     let finished = outcome(next(&mut events).await);
@@ -685,7 +744,7 @@ async fn connection_lost_mid_query_finishes_and_reports_lost() {
     let feed = link.expect_query();
     feed.rows(0..3);
     let (sink, mut events) = sink();
-    handle.execute("SELECT n".into(), sink).await;
+    handle.execute("SELECT n".into(), TxMode::Auto, sink).await;
     // 연결은 쿼리를 보낸 뒤에 끊는다. 먼저 끊으면 `start_query`가 실패한다.
     assert!(eventually(|| link.sent().len() == 1).await);
     feed.lose();
@@ -702,7 +761,7 @@ async fn server_error_before_the_connection_dies_is_the_outcome() {
     let feed = link.expect_query();
     feed.push(Err(QueryError::Server(server_error("57P01"))));
     let (sink, mut events) = sink();
-    handle.execute("SELECT n".into(), sink).await;
+    handle.execute("SELECT n".into(), TxMode::Auto, sink).await;
     // 연결은 쿼리를 보낸 뒤에 끊는다. 먼저 끊으면 `start_query`가 실패한다.
     assert!(eventually(|| link.sent().len() == 1).await);
     feed.lose();
@@ -717,7 +776,9 @@ async fn close_with_a_running_query_cancels_it_first() {
     let (handle, link) = session();
     link.expect_query();
     let (sink, mut events) = sink();
-    handle.execute("SELECT pg_sleep(10)".into(), sink).await;
+    handle
+        .execute("SELECT pg_sleep(10)".into(), TxMode::Auto, sink)
+        .await;
 
     handle.close().await;
     assert_eq!(link.cancels(), 1);
@@ -732,7 +793,9 @@ async fn close_does_not_wait_for_a_query_that_cannot_be_cancelled() {
     link.fail_cancels();
     link.expect_query();
     let (sink, mut events) = sink();
-    handle.execute("SELECT pg_sleep(10)".into(), sink).await;
+    handle
+        .execute("SELECT pg_sleep(10)".into(), TxMode::Auto, sink)
+        .await;
 
     let start = Instant::now();
     timeout(Duration::from_secs(2), handle.close())
@@ -750,7 +813,10 @@ async fn elapsed_does_not_count_the_time_spent_paused() {
     feed.rows(0..1200);
     feed.complete(1200);
     let (sink, mut events) = sink();
-    let query = handle.execute("SELECT n".into(), sink).await.unwrap();
+    let query = handle
+        .execute("SELECT n".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
 
     batch(next(&mut events).await);
     // actor가 look-ahead를 마치고 Paused가 되게 한다.
@@ -767,7 +833,7 @@ async fn finished_carries_the_tx_status_read_after_the_query() {
     link.set_tx(TxStatus::InTransaction);
     link.expect_query().complete(0);
     let (sink, mut events) = sink();
-    handle.execute("BEGIN".into(), sink).await;
+    handle.execute("BEGIN".into(), TxMode::Auto, sink).await;
     assert_eq!(
         finished_tx(next(&mut events).await),
         Some(TxStatus::InTransaction)
@@ -780,7 +846,7 @@ async fn a_query_failing_at_start_reads_the_tx_status() {
     link.set_tx(TxStatus::Failed);
     link.fail_next_start(QueryError::Server(server_error("25P02")));
     let (sink, mut events) = sink();
-    handle.execute("SELECT 1".into(), sink).await;
+    handle.execute("SELECT 1".into(), TxMode::Auto, sink).await;
     let event = next(&mut events).await;
     assert!(matches!(
         &event,
@@ -798,7 +864,7 @@ async fn a_lost_connection_has_no_tx_status() {
     // 쿼리를 시작하지 못한 경우.
     link.lose();
     let (sink, mut events) = self::sink();
-    handle.execute("SELECT 1".into(), sink).await;
+    handle.execute("SELECT 1".into(), TxMode::Auto, sink).await;
     assert_eq!(finished_tx(next(&mut events).await), None);
 
     // 결과 도중에 끊긴 경우.
@@ -807,7 +873,7 @@ async fn a_lost_connection_has_no_tx_status() {
     let feed = link.expect_query();
     feed.rows(0..3);
     let (sink, mut events) = self::sink();
-    handle.execute("SELECT n".into(), sink).await;
+    handle.execute("SELECT n".into(), TxMode::Auto, sink).await;
     assert!(eventually(|| link.sent().len() == 1).await);
     feed.lose();
     assert_eq!(batch(next(&mut events).await).rows.len(), 3);
@@ -820,7 +886,9 @@ async fn closing_the_session_reports_no_tx_status() {
     link.set_tx(TxStatus::InTransaction);
     link.expect_query();
     let (sink, mut events) = sink();
-    handle.execute("SELECT pg_sleep(10)".into(), sink).await;
+    handle
+        .execute("SELECT pg_sleep(10)".into(), TxMode::Auto, sink)
+        .await;
     handle.close().await;
     assert_eq!(finished_tx(next(&mut events).await), None);
 }
@@ -831,7 +899,7 @@ async fn a_discarded_pending_query_reports_the_last_tx_status() {
     let (handle, link) = session();
     link.set_tx(TxStatus::InTransaction);
     let (sink, mut events) = sink();
-    handle.execute("BEGIN".into(), sink).await;
+    handle.execute("BEGIN".into(), TxMode::Auto, sink).await;
     assert_eq!(
         finished_tx(next(&mut events).await),
         Some(TxStatus::InTransaction)
@@ -842,9 +910,9 @@ async fn a_discarded_pending_query_reports_the_last_tx_status() {
     let (sink_a, mut events_a) = self::sink();
     let (sink_b, mut events_b) = self::sink();
     let (sink_c, _events_c) = self::sink();
-    handle.execute("A".into(), sink_a).await;
-    handle.execute("B".into(), sink_b).await;
-    handle.execute("C".into(), sink_c).await;
+    handle.execute("A".into(), TxMode::Auto, sink_a).await;
+    handle.execute("B".into(), TxMode::Auto, sink_b).await;
+    handle.execute("C".into(), TxMode::Auto, sink_c).await;
     // 서버의 상태가 바뀌어도 아직 읽지 않았으므로 마지막으로 읽은 값이 간다.
     link.set_tx(TxStatus::Failed);
     let discarded = next(&mut events_b).await;
@@ -861,4 +929,272 @@ async fn a_discarded_pending_query_reports_the_last_tx_status() {
         finished_tx(next(&mut events_a).await),
         Some(TxStatus::Failed)
     );
+}
+
+/// fake의 트랜잭션 상태를 바꾸고 actor가 읽게 한다. 실제 서버의 상태는 actor가 보낸 문장으로만
+/// 바뀌므로 actor는 쿼리가 끝날 때와 `State`에서만 읽는다.
+async fn set_tx(handle: &SessionHandle, link: &FakeLink, tx: TxStatus) {
+    link.set_tx(tx);
+    assert_eq!(handle.state().await, SessionState::Open { tx });
+}
+
+fn ended(tx: TxStatus) -> Option<EndResult> {
+    Some(EndResult {
+        outcome: EndOutcome::Ended,
+        tx: Some(tx),
+    })
+}
+
+/// 끝내기의 답. 2초 안에 오지 않으면 panic한다.
+async fn answer<F: Future<Output = Option<EndResult>>>(ending: F) -> Option<EndResult> {
+    timeout(Duration::from_secs(2), ending)
+        .await
+        .expect("2초 안에 끝내기가 답하지 않았다")
+}
+
+/// `Finished`까지 읽고 그 이벤트를 돌려준다.
+async fn finished_event(events: &mut UnboundedReceiver<QueryEvent>) -> QueryEvent {
+    loop {
+        let event = next(events).await;
+        if matches!(event, QueryEvent::Finished { .. }) {
+            return event;
+        }
+    }
+}
+
+#[tokio::test]
+async fn manual_execute_outside_a_transaction_sends_begin_first() {
+    let (handle, link) = session();
+    let (sink, mut events) = sink();
+    handle
+        .execute("UPDATE t SET a = 1".into(), TxMode::Manual, sink)
+        .await;
+    let event = next(&mut events).await;
+    assert!(matches!(
+        event,
+        QueryEvent::Finished {
+            outcome: QueryOutcome::Completed { rows: 0 },
+            tx: Some(TxStatus::InTransaction),
+            ..
+        }
+    ));
+    assert_eq!(link.sent(), ["BEGIN", "UPDATE t SET a = 1"]);
+}
+
+#[tokio::test]
+async fn manual_execute_inside_a_transaction_does_not_begin_again() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let (sink, mut events) = sink();
+    handle
+        .execute("UPDATE t SET a = 1".into(), TxMode::Manual, sink)
+        .await;
+    assert_eq!(
+        outcome(next(&mut events).await),
+        QueryOutcome::Completed { rows: 0 }
+    );
+    assert_eq!(link.sent(), ["UPDATE t SET a = 1"]);
+}
+
+#[tokio::test]
+async fn auto_execute_never_begins() {
+    let (handle, link) = session();
+    let (sink, mut events) = sink();
+    handle
+        .execute("UPDATE t SET a = 1".into(), TxMode::Auto, sink)
+        .await;
+    assert_eq!(finished_tx(next(&mut events).await), Some(TxStatus::Idle));
+    assert_eq!(link.sent(), ["UPDATE t SET a = 1"]);
+}
+
+#[tokio::test]
+async fn a_failed_begin_finishes_the_query_with_that_error() {
+    let (handle, link) = session();
+    link.fail_next_simple("53300");
+    let (sink, mut events) = sink();
+    handle
+        .execute("UPDATE t SET a = 1".into(), TxMode::Manual, sink)
+        .await;
+    let event = next(&mut events).await;
+    assert!(
+        matches!(
+            &event,
+            QueryEvent::Finished {
+                outcome: QueryOutcome::Failed(error),
+                tx: Some(TxStatus::Idle),
+                ..
+            } if *error == server_error("53300")
+        ),
+        "{event:?}"
+    );
+    assert_eq!(link.sent(), ["BEGIN"]);
+}
+
+#[tokio::test]
+async fn end_transaction_commits_and_reports_idle() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    assert_eq!(
+        handle.end_transaction(TxEnd::Commit).await,
+        ended(TxStatus::Idle)
+    );
+    assert_eq!(link.sent().last().map(String::as_str), Some("COMMIT"));
+}
+
+/// 서버는 실패한 트랜잭션의 `COMMIT`을 `ROLLBACK`으로 처리한다. 보내면 Commit이 된 것처럼 보인다.
+#[tokio::test]
+async fn commit_in_a_failed_transaction_is_refused() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::Failed).await;
+    assert_eq!(
+        handle.end_transaction(TxEnd::Commit).await,
+        Some(EndResult {
+            outcome: EndOutcome::TransactionFailed,
+            tx: Some(TxStatus::Failed),
+        })
+    );
+    assert!(link.sent().is_empty());
+
+    assert_eq!(
+        handle.end_transaction(TxEnd::Rollback).await,
+        ended(TxStatus::Idle)
+    );
+    assert_eq!(link.sent(), ["ROLLBACK"]);
+}
+
+#[tokio::test]
+async fn a_failed_commit_reports_the_server_error() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    link.fail_next_simple("23503");
+    // 서버는 실패한 COMMIT 뒤에 트랜잭션을 끝낸다.
+    link.set_tx(TxStatus::Idle);
+    assert_eq!(
+        handle.end_transaction(TxEnd::Commit).await,
+        Some(EndResult {
+            outcome: EndOutcome::Server(server_error("23503")),
+            tx: Some(TxStatus::Idle),
+        })
+    );
+}
+
+#[tokio::test]
+async fn end_transaction_on_a_lost_connection_has_no_tx_status() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    link.lose();
+    let result = handle.end_transaction(TxEnd::Rollback).await.unwrap();
+    assert!(
+        matches!(result.outcome, EndOutcome::ConnectionLost { .. }),
+        "{result:?}"
+    );
+    assert_eq!(result.tx, None);
+}
+
+#[tokio::test]
+async fn end_transaction_discards_a_paused_query_first() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let feed = link.expect_query();
+    feed.rows(0..1200);
+    // `Finished`를 보내는 때까지 연결이 받은 문장을 함께 남긴다.
+    let (sender, mut events) = tokio::sync::mpsc::unbounded_channel();
+    let sink: QuerySink = Box::new({
+        let link = link.clone();
+        move |event| {
+            let _ = sender.send((event, link.sent()));
+        }
+    });
+    handle.execute("A".into(), TxMode::Manual, sink).await;
+    let (first, _) = timeout(Duration::from_secs(2), events.recv())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(batch(first).rows.len(), 500);
+
+    let ending = tokio::spawn({
+        let handle = handle.clone();
+        async move { handle.end_transaction(TxEnd::Commit).await }
+    });
+    // 남은 결과의 끝. 버리는 방법과 관계없이 A가 끝날 수 있게 한다.
+    feed.complete(1200);
+    assert_eq!(
+        answer(async { ending.await.unwrap() }).await,
+        ended(TxStatus::Idle)
+    );
+
+    let (event, sent_then) = events.recv().await.unwrap();
+    assert_eq!(outcome(event), QueryOutcome::Discarded);
+    assert_eq!(sent_then, ["A"]);
+    assert_eq!(link.sent(), ["A", "COMMIT"]);
+}
+
+#[tokio::test]
+async fn a_query_sent_after_end_runs_after_it() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let feed_a = link.expect_query();
+    feed_a.rows(0..1200);
+    let (sink_a, mut events_a) = sink();
+    handle.execute("A".into(), TxMode::Manual, sink_a).await;
+    assert_eq!(batch(next(&mut events_a).await).rows.len(), 500);
+
+    // A를 버리는 동안 끝내기가 기다리게 한다.
+    let gate = link.hold_cancels().await;
+    let ending = handle.end_transaction(TxEnd::Commit);
+    tokio::pin!(ending);
+    // poll해서 명령을 보낸다. A가 끝나지 않았으므로 답은 아직 없다.
+    assert!(
+        timeout(Duration::from_millis(50), &mut ending)
+            .await
+            .is_err()
+    );
+    let (sink_b, mut events_b) = sink();
+    handle.execute("B".into(), TxMode::Manual, sink_b).await;
+    drop(gate);
+    feed_a.complete(1200);
+
+    assert_eq!(answer(ending).await, ended(TxStatus::Idle));
+    assert_eq!(
+        outcome(finished_event(&mut events_a).await),
+        QueryOutcome::Discarded
+    );
+    assert_eq!(
+        outcome(next(&mut events_b).await),
+        QueryOutcome::Completed { rows: 0 }
+    );
+    // 끝내기 뒤에는 트랜잭션 밖이므로 B 앞에 BEGIN이 간다.
+    assert_eq!(link.sent(), ["A", "COMMIT", "BEGIN", "B"]);
+}
+
+#[tokio::test]
+async fn ends_waiting_for_a_query_run_in_order() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let feed_a = link.expect_query();
+    feed_a.rows(0..1200);
+    let (sink_a, mut events_a) = sink();
+    handle.execute("A".into(), TxMode::Manual, sink_a).await;
+    assert_eq!(batch(next(&mut events_a).await).rows.len(), 500);
+
+    let gate = link.hold_cancels().await;
+    let commit = handle.end_transaction(TxEnd::Commit);
+    let rollback = handle.end_transaction(TxEnd::Rollback);
+    tokio::pin!(commit, rollback);
+    assert!(
+        timeout(Duration::from_millis(50), &mut commit)
+            .await
+            .is_err()
+    );
+    assert!(
+        timeout(Duration::from_millis(50), &mut rollback)
+            .await
+            .is_err()
+    );
+    drop(gate);
+    feed_a.complete(1200);
+
+    assert_eq!(answer(commit).await, ended(TxStatus::Idle));
+    assert_eq!(answer(rollback).await, ended(TxStatus::Idle));
+    assert_eq!(link.sent(), ["A", "COMMIT", "ROLLBACK"]);
 }

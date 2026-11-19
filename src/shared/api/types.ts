@@ -52,6 +52,23 @@ export type Cell = string | null;
 /** 서버가 ReadyForQuery로 알려 주는 트랜잭션 상태. */
 export type TxStatus = "idle" | "in_transaction" | "failed";
 
+/** 실행의 트랜잭션 모드. `manual`이면 트랜잭션 밖일 때 Rust가 그 문장 전에 `BEGIN`을 보낸다. */
+export type TxMode = "auto" | "manual";
+
+export type TxEnd = "commit" | "rollback";
+
+/** `endTransaction`의 결과. `tx`는 끝낸 뒤의 상태이고 연결이 끊겼으면 null. */
+export type EndResult = {
+  tx: TxStatus | null;
+} & (
+  | { outcome: "ended" }
+  /** 실패한 트랜잭션의 Commit이라 보내지 않았다. */
+  | { outcome: "transaction_failed" }
+  | { outcome: "server_error"; error: ServerError }
+  | { outcome: "connection_lost"; message: string }
+  | { outcome: "client_error"; message: string }
+);
+
 export type Outcome =
   | { outcome: "completed"; rows: number }
   | { outcome: "failed"; error: ServerError }

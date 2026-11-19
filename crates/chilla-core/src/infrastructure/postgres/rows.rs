@@ -96,7 +96,7 @@ fn cells(row: &SimpleQueryRow) -> Option<Row> {
         .collect()
 }
 
-fn server_error(db: &DbError) -> ServerError {
+pub(super) fn server_error(db: &DbError) -> ServerError {
     ServerError {
         code: db.code().code().to_owned(),
         message: db.message().to_owned(),

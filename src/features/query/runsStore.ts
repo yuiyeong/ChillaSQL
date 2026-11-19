@@ -279,7 +279,7 @@ export const useRuns = create<RunsState>()((set, get) => {
         status: "running",
         result: emptyResult(sql, origin, Date.now()),
       });
-      const queryId = executeQuery(sessionId, sql, onEvent);
+      const queryId = executeQuery(sessionId, sql, "auto", onEvent);
       executions.set(tabId, { sessionId, queryId });
       try {
         await queryId;

@@ -248,7 +248,7 @@ git commit -m "feat: 쿼리가 끝날 때 트랜잭션 상태를 함께 보냄"
 - Produces (command): `execute_query(session_id, sql, mode: "auto" | "manual", on_event)`, `end_transaction(session_id, end: "commit" | "rollback") -> EndResultDto`. `EndResultDto`는 `{ outcome: "ended" | "transaction_failed" | "server_error" | "connection_lost" | "client_error", tx: TxStatus | null, error?: ServerErrorDto, message?: string }`
 - Produces (화면 api): `executeQuery(sessionId, sql, mode: TxMode, onEvent)`, `endTransaction(sessionId: number, end: TxEnd): Promise<EndResult>`, type `TxMode = "auto" | "manual"`, `TxEnd = "commit" | "rollback"`, `EndResult`(DTO와 같은 모양)
 
-- [ ] **Step 1: actor test를 쓴다**
+- [x] **Step 1: actor test를 쓴다**
 
 fake connection에 `simple_execute`를 더한다: 보낸 sql을 `sent()`에 남기고, `fail_next_simple(code)`이면 그 서버 오류를 한 번 돌려주고, `BEGIN` 성공 뒤에는 tx를 `InTransaction`, `COMMIT`/`ROLLBACK` 성공 뒤에는 `Idle`로 바꾼다.
 
@@ -261,7 +261,7 @@ fake connection에 `simple_execute`를 더한다: 보낸 sql을 `sent()`에 남�
 - `end_transaction_discards_a_paused_query_first`: batch를 보내고 멈춘 쿼리가 있으면 그 쿼리가 `Discarded`로 끝난 *뒤* `COMMIT`을 보낸다.
 - `a_query_sent_after_end_runs_after_it`: 끝내기가 앞 쿼리를 기다리는 동안 온 쿼리는 끝내기가 끝난 뒤 시작하고, 끝내기는 `Ended`다(밀려 사라지지 않음).
 
-- [ ] **Step 2: test DB test를 쓴다**
+- [x] **Step 2: test DB test를 쓴다**
 
 `tests/transactions.rs`(test DB 54318, 다른 test와 겹치지 않게 `m6_` 이름의 임시 table을 쓴다):
 
@@ -270,27 +270,27 @@ fake connection에 `simple_execute`를 더한다: 보낸 sql을 `sent()`에 남�
 - `commit_reports_a_deferred_constraint_error`: `DEFERRABLE INITIALLY DEFERRED` 외래 키를 어기는 `INSERT` 뒤 `Commit`은 `EndOutcome::Server(code "23503")`, `tx: Some(Idle)`.
 - `a_failed_statement_leaves_the_transaction_failed`: Manual에서 없는 table을 읽으면 `Finished.tx == Some(Failed)`, 다음 문장은 `25P02`, `Rollback` 뒤 `Idle`.
 
-- [ ] **Step 3: 실패를 확인한다**
+- [x] **Step 3: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core --test transactions && cargo test -p chilla-core session_actor`
 Expected: FAIL(compile error)
 
-- [ ] **Step 4: 구현한다**
+- [x] **Step 4: 구현한다**
 
 - actor: `SessionCommand::Execute`에 `mode`, 새 `SessionCommand::End { end, reply }`. 끝내기는 쿼리가 없으면 바로, 있으면 그 쿼리를 버리고(`DrainReason::Discarded`) `settle`에서 기다리던 다음 쿼리보다 *먼저* 실행한다. 끝내기 여러 개는 온 순서대로다(`VecDeque`).
 - `PgConnection::simple_execute`는 `Client::batch_execute`이고 오류는 `start_query`와 같은 방법으로 `QueryError`로 바꾼다.
 - `BEGIN`은 `start` 안에서 `self.tx == Idle && mode == Manual`일 때 보낸다.
 
-- [ ] **Step 5: 화면 api를 바꾼다**
+- [x] **Step 5: 화면 api를 바꾼다**
 
 `commands.test.ts`: `executeQuery`가 `mode`를 command 인자로 넘기고, `endTransaction(3, "commit")`이 `invoke("end_transaction", { sessionId: 3, end: "commit" })`을 부르는지. `runsStore`의 호출은 이 Task에서 `"auto"`를 넘긴다(Task 8이 바꾼다).
 
-- [ ] **Step 6: 통과를 확인한다**
+- [x] **Step 6: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 7: commit**
+- [x] **Step 7: commit**
 
 ```bash
 git add crates src-tauri src

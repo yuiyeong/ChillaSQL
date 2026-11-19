@@ -226,6 +226,21 @@ impl DbConnection for PgConnection {
         }
     }
 
+    async fn simple_execute(&self, sql: &str) -> Result<(), QueryError> {
+        self.client
+            .batch_execute(sql)
+            .await
+            .map_err(|error| match error.as_db_error() {
+                Some(db) => QueryError::Server(rows::server_error(db)),
+                None if error.is_closed() => QueryError::ConnectionLost {
+                    message: error_message(&error),
+                },
+                None => QueryError::Client {
+                    message: error_message(&error),
+                },
+            })
+    }
+
     fn cancel_handle(&self) -> PgCancel {
         PgCancel {
             token: self.client.cancel_token(),

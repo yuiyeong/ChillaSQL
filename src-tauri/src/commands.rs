@@ -9,9 +9,10 @@ use std::time::Duration;
 
 use chilla_core::application::{App, AppError};
 use chilla_core::domain::{
-    Column, ConnectionColor, ConnectionProfile, FileStamp, Password, ProfileError, Project,
-    QueryEvent, QueryId, QueryOutcome, RowBatch, ServerError, SessionId, SessionInfo, SessionState,
-    SqlFile, StatementSpan, TunnelEvent, TunnelFailure, TunnelState, TxStatus, WriteMode,
+    Column, ConnectionColor, ConnectionProfile, EndOutcome, EndResult, FileStamp, Password,
+    ProfileError, Project, QueryEvent, QueryId, QueryOutcome, RowBatch, ServerError, SessionId,
+    SessionInfo, SessionState, SqlFile, StatementSpan, TunnelEvent, TunnelFailure, TunnelState,
+    TxEnd, TxMode, TxStatus, WriteMode,
 };
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
@@ -370,6 +371,81 @@ impl QueryEventDto {
     }
 }
 
+/// 실행의 트랜잭션 모드. 화면은 `"auto"` 또는 `"manual"`을 보낸다.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TxModeDto {
+    Auto,
+    Manual,
+}
+
+impl From<TxModeDto> for TxMode {
+    fn from(mode: TxModeDto) -> Self {
+        match mode {
+            TxModeDto::Auto => Self::Auto,
+            TxModeDto::Manual => Self::Manual,
+        }
+    }
+}
+
+/// 트랜잭션을 끝내는 방법. 화면은 `"commit"` 또는 `"rollback"`을 보낸다.
+#[derive(Debug, Clone, Copy, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TxEndDto {
+    Commit,
+    Rollback,
+}
+
+impl From<TxEndDto> for TxEnd {
+    fn from(end: TxEndDto) -> Self {
+        match end {
+            TxEndDto::Commit => Self::Commit,
+            TxEndDto::Rollback => Self::Rollback,
+        }
+    }
+}
+
+/// `end_transaction`의 결과에서 `tx` 옆에 펼쳐지는 부분. `outcome`이 구분자다.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum EndOutcomeDto {
+    Ended,
+    TransactionFailed,
+    ServerError { error: ServerErrorDto },
+    ConnectionLost { message: String },
+    ClientError { message: String },
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EndResultDto {
+    #[serde(flatten)]
+    pub outcome: EndOutcomeDto,
+    /// 끝낸 뒤의 `"idle"`, `"in_transaction"`, `"failed"`. 연결이 끊겼으면 `null`이다.
+    pub tx: Option<&'static str>,
+}
+
+impl From<EndResult> for EndResultDto {
+    fn from(result: EndResult) -> Self {
+        let outcome = match result.outcome {
+            EndOutcome::Ended => EndOutcomeDto::Ended,
+            EndOutcome::TransactionFailed => EndOutcomeDto::TransactionFailed,
+            // COMMIT, ROLLBACK의 오류에는 화면 editor의 위치가 없다.
+            EndOutcome::Server(error) => EndOutcomeDto::ServerError {
+                error: ServerErrorDto {
+                    position: None,
+                    ..ServerErrorDto::new(error, "")
+                },
+            },
+            EndOutcome::ConnectionLost { message } => EndOutcomeDto::ConnectionLost { message },
+            EndOutcome::Client { message } => EndOutcomeDto::ClientError { message },
+        };
+        Self {
+            outcome,
+            tx: result.tx.map(tx_name),
+        }
+    }
+}
+
 /// 터널이 실패한 이유. `reason`이 구분자다.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "reason", rename_all = "snake_case")]
@@ -562,6 +638,7 @@ pub async fn execute_query(
     app: State<'_, CoreApp>,
     session_id: u64,
     sql: String,
+    mode: TxModeDto,
     on_event: Channel<QueryEventDto>,
 ) -> CommandResult<u64> {
     // 화면이 사라져 send가 실패해도 무시한다. 그 쿼리는 다음 execute나 close_session에서 정리된다.
@@ -571,8 +648,23 @@ pub async fn execute_query(
     let sink = Box::new(move |event| {
         let _ = on_event.send(QueryEventDto::new(event, &sent));
     });
-    let query = app.execute(SessionId(session_id), sql, sink).await?;
+    let query = app
+        .execute(SessionId(session_id), sql, mode.into(), sink)
+        .await?;
     Ok(query.0)
+}
+
+/// 트랜잭션을 Commit하거나 Rollback한다. 실행 중인 쿼리가 있으면 버린 뒤에 끝낸다.
+#[tauri::command]
+pub async fn end_transaction(
+    app: State<'_, CoreApp>,
+    session_id: u64,
+    end: TxEndDto,
+) -> CommandResult<EndResultDto> {
+    Ok(app
+        .end_transaction(SessionId(session_id), end.into())
+        .await?
+        .into())
 }
 
 #[tauri::command]
@@ -1070,5 +1162,69 @@ mod tests {
         let unknown = finished_with(completed, 1, None);
         assert_eq!(unknown["tx"], serde_json::Value::Null);
         assert!(keys(&unknown).contains("tx"));
+    }
+
+    #[test]
+    fn mode_and_end_take_the_screen_names() {
+        let mode = |value| serde_json::from_value::<TxModeDto>(json!(value)).map(TxMode::from);
+        assert_eq!(mode("auto").unwrap(), TxMode::Auto);
+        assert_eq!(mode("manual").unwrap(), TxMode::Manual);
+        assert!(mode("Manual").is_err());
+
+        let end = |value| serde_json::from_value::<TxEndDto>(json!(value)).map(TxEnd::from);
+        assert_eq!(end("commit").unwrap(), TxEnd::Commit);
+        assert_eq!(end("rollback").unwrap(), TxEnd::Rollback);
+        assert!(end("abort").is_err());
+    }
+
+    #[test]
+    fn end_result_dto_shapes() {
+        let shape = |outcome, tx| {
+            serde_json::to_value(EndResultDto::from(EndResult { outcome, tx })).unwrap()
+        };
+        assert_eq!(
+            shape(EndOutcome::Ended, Some(TxStatus::Idle)),
+            json!({ "outcome": "ended", "tx": "idle" })
+        );
+        assert_eq!(
+            shape(EndOutcome::TransactionFailed, Some(TxStatus::Failed)),
+            json!({ "outcome": "transaction_failed", "tx": "failed" })
+        );
+        let error = ServerError {
+            code: "23503".into(),
+            message: "m".into(),
+            detail: Some("d".into()),
+            hint: None,
+            position: None,
+        };
+        assert_eq!(
+            shape(EndOutcome::Server(error), Some(TxStatus::Idle)),
+            json!({
+                "outcome": "server_error",
+                "error": {
+                    "code": "23503", "message": "m", "detail": "d", "hint": null,
+                    "position": null
+                },
+                "tx": "idle"
+            })
+        );
+        assert_eq!(
+            shape(
+                EndOutcome::ConnectionLost {
+                    message: "x".into()
+                },
+                None
+            ),
+            json!({ "outcome": "connection_lost", "message": "x", "tx": null })
+        );
+        assert_eq!(
+            shape(
+                EndOutcome::Client {
+                    message: "y".into()
+                },
+                Some(TxStatus::InTransaction)
+            ),
+            json!({ "outcome": "client_error", "message": "y", "tx": "in_transaction" })
+        );
     }
 }

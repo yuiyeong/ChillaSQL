@@ -66,7 +66,7 @@ function tabOf(id: string) {
 
 /** n번째(0부터) executeQuery 호출에 넘긴 onEvent. */
 function onEventOf(call: number): (event: QueryEvent) => void {
-  return vi.mocked(executeQuery).mock.calls[call][2];
+  return vi.mocked(executeQuery).mock.calls[call][3];
 }
 
 function runOf(tabId: string) {
@@ -108,6 +108,7 @@ test("선택 영역은 고른 그대로 실행한다", async () => {
   expect(executeQuery).toHaveBeenCalledWith(
     3,
     " SELECT 2 ",
+    "auto",
     expect.any(Function),
   );
   expect(runOf(id)).toMatchObject({
@@ -145,6 +146,7 @@ test("선택이 없으면 커서 문장을 실행한다", async () => {
   expect(executeQuery).toHaveBeenCalledWith(
     3,
     "SELECT 2",
+    "auto",
     expect.any(Function),
   );
   expect(runOf(id)).toMatchObject({
@@ -566,6 +568,7 @@ test("runAgain은 같은 SQL을 지금 접속으로 다시 실행한다", async 
   expect(executeQuery).toHaveBeenLastCalledWith(
     3,
     "SELECT 2",
+    "auto",
     expect.any(Function),
   );
 
@@ -583,6 +586,7 @@ test("runAgain은 같은 SQL을 지금 접속으로 다시 실행한다", async 
   expect(executeQuery).toHaveBeenLastCalledWith(
     4,
     "SELECT 2",
+    "auto",
     expect.any(Function),
   );
   expect(runOf(id)).toMatchObject({

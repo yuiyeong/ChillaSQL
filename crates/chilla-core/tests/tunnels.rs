@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use chilla_core::application::{AppError, TunnelError};
-use chilla_core::domain::{QueryOutcome, SessionId, SessionState, TunnelFailure, TunnelState};
+use chilla_core::domain::{
+    QueryOutcome, SessionId, SessionState, TunnelFailure, TunnelState, TxMode,
+};
 use support::{
     DATABASE, TEST_DB_PORT, TestApp, TunnelEvents, USER, app_with_toml, eventually, finished,
     password, sink,
@@ -77,7 +79,9 @@ async fn port_open(port: u16) -> bool {
 
 async fn select_one(app: &TestApp, session: SessionId) -> QueryOutcome {
     let (sink, mut events) = sink();
-    app.execute(session, "SELECT 1".into(), sink).await.unwrap();
+    app.execute(session, "SELECT 1".into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
     finished(&mut events).await
 }
 

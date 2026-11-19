@@ -7,7 +7,7 @@ use tokio::time::Instant;
 use super::QuerySink;
 use crate::application::{QueryError, RowItem, RowSource};
 use crate::domain::{
-    QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, ServerError, TxStatus,
+    QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, ServerError, TxMode, TxStatus,
 };
 
 /// SQLSTATE query_canceled. cancel 요청이 멈춘 문장의 오류다. 버리는 중에 오면 버린 이유로 알린다.
@@ -71,6 +71,7 @@ enum End {
 pub(super) struct Pending {
     pub(super) id: QueryId,
     pub(super) sql: String,
+    pub(super) mode: TxMode,
     pub(super) sink: QuerySink,
 }
 

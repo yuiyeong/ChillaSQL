@@ -2,11 +2,14 @@ import { Channel, invoke } from "@tauri-apps/api/core";
 import { toCommandError } from "./errors";
 import type {
   Connection,
+  EndResult,
   Project,
   QueryEvent,
   Session,
   SqlFile,
   StatementSpan,
+  TxEnd,
+  TxMode,
   WriteMode,
 } from "./types";
 
@@ -66,11 +69,20 @@ export function splitStatements(sql: string): Promise<StatementSpan[]> {
 export function executeQuery(
   sessionId: number,
   sql: string,
+  mode: TxMode,
   onEvent: (event: QueryEvent) => void,
 ): Promise<number> {
   const channel = new Channel<QueryEvent>();
   channel.onmessage = onEvent;
-  return call("execute_query", { sessionId, sql, onEvent: channel });
+  return call("execute_query", { sessionId, sql, mode, onEvent: channel });
+}
+
+/** 트랜잭션을 Commit하거나 Rollback한다. 실행 중인 쿼리가 있으면 Rust가 버린 뒤에 끝낸다. */
+export function endTransaction(
+  sessionId: number,
+  end: TxEnd,
+): Promise<EndResult> {
+  return call("end_transaction", { sessionId, end });
 }
 
 /** 그 접속의 터널이 시작 중이면 멈춘다. 기다리던 세션 열기는 `tunnel_cancelled`로 끝난다. */

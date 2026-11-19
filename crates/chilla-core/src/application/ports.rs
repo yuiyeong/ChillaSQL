@@ -123,6 +123,9 @@ pub trait DbConnection: Send + 'static {
     /// 없는 text(NUL이 든 text 등)면 `Client`다.
     fn start_query(&self, sql: &str)
     -> impl Future<Output = Result<Self::Rows, QueryError>> + Send;
+    /// 결과 행이 없는 문장(`BEGIN`, `COMMIT`, `ROLLBACK`)을 simple query로 보내고 서버가 끝낼 때까지
+    /// 기다린다. 서버가 거절하면 `Server`다. 연결이 끊겨 있으면 `ConnectionLost`다.
+    fn simple_execute(&self, sql: &str) -> impl Future<Output = Result<(), QueryError>> + Send;
     /// 이 연결에서 실행 중인 쿼리를 멈추는 요청. 연결과 따로 살아서 다른 task에서 쓸 수 있다.
     fn cancel_handle(&self) -> Self::Cancel;
     /// 서버가 세션을 끝낼 때까지 기다린다. 실행 중인 쿼리가 있으면 끝날 때까지 기다리지 않는다.

@@ -34,6 +34,8 @@ struct FakeQueries {
     tx: TxStatus,
     /// 다음 `start_query`가 돌려줄 오류.
     start_error: Option<QueryError>,
+    /// 다음 `simple_execute`가 돌려줄 서버 오류의 code.
+    simple_error: Option<String>,
 }
 
 impl Default for FakeQueries {
@@ -47,6 +49,7 @@ impl Default for FakeQueries {
             ignore_cancels: 0,
             tx: TxStatus::Idle,
             start_error: None,
+            simple_error: None,
         }
     }
 }
@@ -82,7 +85,7 @@ impl FakeLink {
         feed
     }
 
-    /// `start_query`가 받은 SQL, 받은 순서대로.
+    /// `start_query`와 `simple_execute`가 받은 SQL, 받은 순서대로.
     pub(crate) fn sent(&self) -> Vec<String> {
         self.queries().sent.clone()
     }
@@ -111,6 +114,11 @@ impl FakeLink {
     /// 다음 `start_query` 한 번이 `error`로 실패하게 한다.
     pub(crate) fn fail_next_start(&self, error: QueryError) {
         self.queries().start_error = Some(error);
+    }
+
+    /// 다음 `simple_execute` 한 번이 `code`의 서버 오류로 실패하게 한다. 트랜잭션 상태는 바꾸지 않는다.
+    pub(crate) fn fail_next_simple(&self, code: &str) {
+        self.queries().simple_error = Some(code.into());
     }
 
     /// `tx_status`가 돌려줄 값. 처음에는 `Idle`이다.
@@ -348,6 +356,27 @@ impl DbConnection for FakeConnection {
         queries.started.retain(|feed| !feed.is_finished());
         queries.started.push(feed.clone());
         Ok(FakeRows(feed))
+    }
+
+    /// 성공하면 서버처럼 트랜잭션 상태를 바꾼다: `BEGIN` 뒤에는 `InTransaction`, `COMMIT`과
+    /// `ROLLBACK` 뒤에는 `Idle`이다.
+    async fn simple_execute(&self, sql: &str) -> Result<(), QueryError> {
+        let mut queries = self.link.queries();
+        queries.sent.push(sql.to_string());
+        if self.is_closed() {
+            return Err(QueryError::ConnectionLost {
+                message: "가짜 연결이 끊겼다".into(),
+            });
+        }
+        if let Some(code) = queries.simple_error.take() {
+            return Err(QueryError::Server(server_error(&code)));
+        }
+        match sql {
+            "BEGIN" => queries.tx = TxStatus::InTransaction,
+            "COMMIT" | "ROLLBACK" => queries.tx = TxStatus::Idle,
+            _ => {}
+        }
+        Ok(())
     }
 
     fn cancel_handle(&self) -> FakeCancel {

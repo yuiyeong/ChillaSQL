@@ -56,6 +56,7 @@ pub fn run() {
             commands::close_session,
             commands::split_statements,
             commands::execute_query,
+            commands::end_transaction,
             commands::fetch_more,
             commands::cancel_query,
             commands::cancel_tunnel,

@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 use chilla_core::application::AppError;
 use chilla_core::domain::{
     QueryEvent, QueryId, QueryOutcome, RowBatch, SessionId, SessionInfo, SessionState,
-    StatementSpan, TxStatus,
+    StatementSpan, TxMode, TxStatus,
 };
 use support::{
     TestApp, activity, admin, app_with_project, backend_exists, eventually, finished, next, sink,
@@ -30,7 +30,10 @@ async fn open_session(app: &TestApp) -> SessionInfo {
 /// 쿼리를 실행하고 그 이벤트를 받는 쪽을 돌려준다.
 async fn start(app: &TestApp, session: SessionId, sql: &str) -> (QueryId, Events) {
     let (sink, events) = sink();
-    let query = app.execute(session, sql.into(), sink).await.unwrap();
+    let query = app
+        .execute(session, sql.into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
     (query, events)
 }
 
@@ -257,14 +260,20 @@ async fn only_one_statement_runs_at_a_time() {
     let session = open_session(&app).await;
 
     assert_eq!(
-        app.execute(session.id, "SELECT 1; SELECT 2".into(), sink().0)
-            .await,
+        app.execute(
+            session.id,
+            "SELECT 1; SELECT 2".into(),
+            TxMode::Auto,
+            sink().0
+        )
+        .await,
         Err(AppError::MultipleStatements { count: 2 })
     );
     let events = run(&app, session.id, "DO $$ BEGIN PERFORM 1; END $$").await;
     assert_eq!(outcome(events.last().unwrap()), &completed(0));
     assert_eq!(
-        app.execute(session.id, "-- nothing".into(), sink().0).await,
+        app.execute(session.id, "-- nothing".into(), TxMode::Auto, sink().0)
+            .await,
         Err(AppError::EmptyStatement)
     );
 

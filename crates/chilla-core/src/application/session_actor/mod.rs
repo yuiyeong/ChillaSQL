@@ -6,6 +6,7 @@
 
 mod query;
 
+use std::collections::VecDeque;
 use std::future::pending;
 use std::ops::ControlFlow;
 use std::time::Duration;
@@ -16,7 +17,10 @@ use tokio::time::{Instant, sleep_until, timeout};
 
 use self::query::{DrainReason, Pending, Query};
 use super::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
-use crate::domain::{QueryEvent, QueryId, QueryLimits, QueryOutcome, SessionState, TxStatus};
+use crate::domain::{
+    EndOutcome, EndResult, QueryEvent, QueryId, QueryLimits, QueryOutcome, SessionState, TxEnd,
+    TxMode, TxStatus,
+};
 
 const COMMAND_BUFFER: usize = 8;
 
@@ -33,8 +37,13 @@ enum SessionCommand {
     State(oneshot::Sender<SessionState>),
     Execute {
         sql: String,
+        mode: TxMode,
         sink: QuerySink,
         reply: oneshot::Sender<QueryId>,
+    },
+    End {
+        end: TxEnd,
+        reply: oneshot::Sender<EndResult>,
     },
     FetchMore {
         query: QueryId,
@@ -62,6 +71,7 @@ pub(crate) fn spawn<D: DbConnection>(connection: D, limits: QueryLimits) -> Sess
         tx: TxStatus::Idle,
         query: None,
         pending: None,
+        ends: VecDeque::new(),
         cancel: None,
         resend_at: None,
     };
@@ -90,6 +100,9 @@ struct Actor<D: DbConnection> {
     query: Option<Query<D::Rows>>,
     /// 지금 쿼리를 버리는 동안 기다리는 다음 쿼리. `query`가 `Draining`일 때만 있다.
     pending: Option<Pending>,
+    /// 지금 쿼리를 버리는 동안 기다리는 끝내기. 온 순서대로 `pending`보다 먼저 실행한다.
+    /// `query`가 `Draining`일 때만 있다.
+    ends: VecDeque<(TxEnd, oneshot::Sender<EndResult>)>,
     /// spawn한 cancel. 한 번에 하나만 있다.
     cancel: Option<JoinHandle<()>>,
     /// cancel을 다시 보낼 시각. `Draining`에서 cancel이 끝나고 결과는 끝나지 않았을 때만 있다.
@@ -150,12 +163,35 @@ impl<D: DbConnection> Actor<D> {
                 let state = self.state().await;
                 let _ = reply.send(state);
             }
-            SessionCommand::Execute { sql, sink, reply } => {
+            SessionCommand::Execute {
+                sql,
+                mode,
+                sink,
+                reply,
+            } => {
                 self.last_id += 1;
                 let id = QueryId(self.last_id);
                 let _ = reply.send(id);
-                self.execute(Pending { id, sql, sink }).await;
+                self.execute(Pending {
+                    id,
+                    sql,
+                    mode,
+                    sink,
+                })
+                .await;
             }
+            SessionCommand::End { end, reply } => match &mut self.query {
+                None => {
+                    let result = self.end_transaction(end).await;
+                    let _ = reply.send(result);
+                }
+                Some(query) => {
+                    if query.drain(DrainReason::Discarded) {
+                        self.send_cancel(None);
+                    }
+                    self.ends.push_back((end, reply));
+                }
+            },
             SessionCommand::FetchMore { query, reply } => {
                 if let Some(current) = self.query.as_mut().filter(|q| q.id == query) {
                     current.fetch_more();
@@ -207,10 +243,20 @@ impl<D: DbConnection> Actor<D> {
         }
     }
 
-    /// 쿼리가 없을 때 다음 쿼리를 시작한다.
+    /// 쿼리가 없을 때 다음 쿼리를 시작한다. Manual이고 트랜잭션 밖이면 먼저 `BEGIN`을 보내고,
+    /// `BEGIN`이 실패하면 쿼리를 보내지 않고 그 오류로 마친다.
     async fn start(&mut self, mut next: Pending) {
         let started = Instant::now();
-        match self.connection.start_query(&next.sql).await {
+        let begin = if next.mode == TxMode::Manual && self.tx == TxStatus::Idle {
+            self.connection.simple_execute("BEGIN").await
+        } else {
+            Ok(())
+        };
+        let rows = match begin {
+            Ok(()) => self.connection.start_query(&next.sql).await,
+            Err(error) => Err(error),
+        };
+        match rows {
             Ok(rows) => self.query = Some(Query::new(next, rows, started, self.limits)),
             Err(error) => {
                 let outcome = match error {
@@ -252,9 +298,35 @@ impl<D: DbConnection> Actor<D> {
             self.read_tx().await
         };
         query.finish(tx);
+        while let Some((end, reply)) = self.ends.pop_front() {
+            let result = self.end_transaction(end).await;
+            let _ = reply.send(result);
+        }
         if let Some(next) = self.pending.take() {
             self.start(next).await;
         }
+    }
+
+    /// 쿼리가 없을 때 트랜잭션을 끝낸다. 실패한 트랜잭션의 Commit은 보내지 않는다. 서버는 그
+    /// `COMMIT`을 `ROLLBACK`으로 처리하므로 보내면 Commit이 된 것처럼 보인다.
+    async fn end_transaction(&mut self, end: TxEnd) -> EndResult {
+        if end == TxEnd::Commit && self.tx == TxStatus::Failed {
+            return EndResult {
+                outcome: EndOutcome::TransactionFailed,
+                tx: Some(self.tx),
+            };
+        }
+        let outcome = match self.connection.simple_execute(end.sql()).await {
+            Ok(()) => EndOutcome::Ended,
+            Err(QueryError::Server(error)) => EndOutcome::Server(error),
+            Err(QueryError::ConnectionLost { message }) => EndOutcome::ConnectionLost { message },
+            Err(QueryError::Client { message }) => EndOutcome::Client { message },
+        };
+        let tx = match outcome {
+            EndOutcome::ConnectionLost { .. } => None,
+            _ => self.read_tx().await,
+        };
+        EndResult { outcome, tx }
     }
 
     /// 서버가 알려 주는 트랜잭션 상태를 읽고 `self.tx`에 남긴다. 쿼리가 없을 때만 부른다.
@@ -348,8 +420,25 @@ impl SessionHandle {
     }
 
     /// 쿼리를 맡기고 바로 돌아온다. 결과는 `sink`로 간다. task가 끝났으면 `None`이다.
-    pub(crate) async fn execute(&self, sql: String, sink: QuerySink) -> Option<QueryId> {
-        self.request(|reply| SessionCommand::Execute { sql, sink, reply })
+    pub(crate) async fn execute(
+        &self,
+        sql: String,
+        mode: TxMode,
+        sink: QuerySink,
+    ) -> Option<QueryId> {
+        self.request(|reply| SessionCommand::Execute {
+            sql,
+            mode,
+            sink,
+            reply,
+        })
+        .await
+    }
+
+    /// 트랜잭션을 끝내고 그 결과를 돌려준다. 지금 쿼리가 있으면 버리고 그 쿼리가 끝난 뒤, 기다리던
+    /// 다음 쿼리보다 먼저 실행한다. task가 끝났으면(세션을 닫는 중 포함) `None`이다.
+    pub(crate) async fn end_transaction(&self, end: TxEnd) -> Option<EndResult> {
+        self.request(|reply| SessionCommand::End { end, reply })
             .await
     }
 

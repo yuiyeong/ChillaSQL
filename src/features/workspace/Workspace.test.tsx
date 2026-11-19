@@ -115,13 +115,14 @@ test("실행 중에는 실행 버튼이 취소 버튼으로 바뀐다", async ()
   expect(executeQuery).toHaveBeenCalledWith(
     3,
     "SELECT 1",
+    "auto",
     expect.any(Function),
   );
 
   await click(toolbarButton("Cancel"));
   expect(cancelQuery).toHaveBeenCalledWith(3, 7);
 
-  const onEvent = vi.mocked(executeQuery).mock.calls[0][2];
+  const onEvent = vi.mocked(executeQuery).mock.calls[0][3];
   const finished: QueryEvent = {
     type: "finished",
     tx: "idle",

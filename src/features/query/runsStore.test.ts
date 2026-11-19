@@ -32,7 +32,7 @@ function runOf(tabId: string) {
 
 /** n번째(0부터) executeQuery 호출에 넘긴 onEvent. */
 function onEventOf(call: number): (event: QueryEvent) => void {
-  return vi.mocked(executeQuery).mock.calls[call][2];
+  return vi.mocked(executeQuery).mock.calls[call][3];
 }
 
 const rowsEvent: QueryEvent = {
@@ -62,6 +62,7 @@ test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () =>
   expect(executeQuery).toHaveBeenCalledWith(
     3,
     "SELECT 1",
+    "auto",
     expect.any(Function),
   );
   expect(runOf("t")).toEqual({
@@ -88,6 +89,7 @@ test("같은 탭의 다음 실행은 세션을 다시 쓴다", async () => {
   expect(executeQuery).toHaveBeenLastCalledWith(
     3,
     "SELECT 2",
+    "auto",
     expect.any(Function),
   );
 });
@@ -110,6 +112,7 @@ test("연결 중에 한 번 더 실행해도 세션은 하나다", async () => {
   expect(executeQuery).toHaveBeenCalledWith(
     3,
     "SELECT 2",
+    "auto",
     expect.any(Function),
   );
   const state = runOf("t");
@@ -291,6 +294,7 @@ test("첫 세션이 여는 중일 때 접속을 바꾸면 앞 세션을 닫은 �
   expect(executeQuery).toHaveBeenCalledWith(
     4,
     "SELECT 2",
+    "auto",
     expect.any(Function),
   );
 });
@@ -316,6 +320,7 @@ test("늦은 unknown_session은 새 세션을 건드리지 않는다", async () 
   expect(executeQuery).toHaveBeenLastCalledWith(
     4,
     "SELECT 3",
+    "auto",
     expect.any(Function),
   );
 });
@@ -382,6 +387,7 @@ test("접속이 바뀐 탭은 앞 세션을 닫고 새로 연다", async () => {
   expect(executeQuery).toHaveBeenLastCalledWith(
     4,
     "SELECT 2",
+    "auto",
     expect.any(Function),
   );
 });
@@ -448,6 +454,7 @@ test("reset은 열린 세션을 모두 닫는다", async () => {
   expect(executeQuery).toHaveBeenLastCalledWith(
     5,
     "SELECT 1",
+    "auto",
     expect.any(Function),
   );
 });
@@ -465,12 +472,14 @@ test("탭마다 세션이 따로다", async () => {
     1,
     3,
     "SELECT 1",
+    "auto",
     expect.any(Function),
   );
   expect(executeQuery).toHaveBeenNthCalledWith(
     2,
     4,
     "SELECT 2",
+    "auto",
     expect.any(Function),
   );
   expect(runOf("a").status).toBe("running");
@@ -536,6 +545,7 @@ test("prepare가 늦게 끝난 앞 실행은 뒤 실행을 덮지 않는다", as
   expect(executeQuery).toHaveBeenCalledWith(
     3,
     "SELECT B",
+    "auto",
     expect.any(Function),
   );
   expect(runOf("t")).toBe(stateB);
@@ -588,6 +598,7 @@ test("prepare를 기다리는 동안에도 앞 쿼리의 event가 반영된다",
   expect(executeQuery).toHaveBeenLastCalledWith(
     3,
     "SELECT B",
+    "auto",
     expect.any(Function),
   );
   const stateB = runOf("t");

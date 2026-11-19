@@ -15,8 +15,9 @@ use super::{
     TunnelRunner,
 };
 use crate::domain::{
-    ConnectionProfile, FileStamp, Password, ProfileError, Project, QueryId, QueryLimits, SessionId,
-    SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError, StatementSpan, WriteMode,
+    ConnectionProfile, EndResult, FileStamp, Password, ProfileError, Project, QueryId, QueryLimits,
+    SessionId, SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError, StatementSpan, TxEnd,
+    TxMode, WriteMode,
 };
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -393,10 +394,12 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     ///
     /// 문장이 하나로 나뉘거나 나눌 수 없을 때(따옴표가 닫히지 않은 경우 등) 받은 `sql`을
     /// 그대로 보낸다. 나눌 수 없는 text의 오류는 서버가 위치와 함께 알려 준다.
+    /// `Manual`이고 트랜잭션 밖이면 세션이 그 문장 전에 `BEGIN`을 보낸다.
     pub async fn execute(
         &self,
         session: SessionId,
         sql: String,
+        mode: TxMode,
         sink: QuerySink,
     ) -> Result<QueryId, AppError> {
         let handle = self.session_handle(session).await?;
@@ -408,7 +411,20 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             }
         }
         handle
-            .execute(sql, sink)
+            .execute(sql, mode, sink)
+            .await
+            .ok_or(AppError::UnknownSession { id: session })
+    }
+
+    /// 트랜잭션을 Commit하거나 Rollback한다. 실행 중인 쿼리가 있으면 버린 뒤에 끝낸다.
+    pub async fn end_transaction(
+        &self,
+        session: SessionId,
+        end: TxEnd,
+    ) -> Result<EndResult, AppError> {
+        let handle = self.session_handle(session).await?;
+        handle
+            .end_transaction(end)
             .await
             .ok_or(AppError::UnknownSession { id: session })
     }
@@ -531,8 +547,8 @@ mod tests {
     };
     use crate::application::{CancelError, PasswordKey, PasswordStore, ProjectError, SplitError};
     use crate::domain::{
-        ConnectionColor, FileStamp, ProfileError, QueryEvent, QueryOutcome, SessionState, SslMode,
-        StatementSpan, TxStatus, WriteMode,
+        ConnectionColor, EndOutcome, EndResult, FileStamp, ProfileError, QueryEvent, QueryOutcome,
+        SessionState, SslMode, StatementSpan, TxEnd, TxStatus, WriteMode,
     };
     use crate::domain::{TunnelEvent, TunnelFailure};
 
@@ -939,12 +955,14 @@ mod tests {
         let session = session_of(&f).await;
 
         assert_eq!(
-            f.app.execute(session, "  ".into(), sink().0).await,
+            f.app
+                .execute(session, "  ".into(), TxMode::Auto, sink().0)
+                .await,
             Err(AppError::EmptyStatement)
         );
         assert_eq!(
             f.app
-                .execute(session, "SELECT 1; SELECT 2".into(), sink().0)
+                .execute(session, "SELECT 1; SELECT 2".into(), TxMode::Auto, sink().0)
                 .await,
             Err(AppError::MultipleStatements { count: 2 })
         );
@@ -957,7 +975,10 @@ mod tests {
         let session = session_of(&f).await;
         let (sink, mut events) = sink();
 
-        let id = f.app.execute(session, " SELECT 1 ;\n".into(), sink).await;
+        let id = f
+            .app
+            .execute(session, " SELECT 1 ;\n".into(), TxMode::Auto, sink)
+            .await;
 
         assert_eq!(id, Ok(QueryId(1)));
         finished(&mut events).await;
@@ -970,7 +991,10 @@ mod tests {
         let session = session_of(&f).await;
         let (sink, mut events) = sink();
 
-        let id = f.app.execute(session, "SELECT 'open".into(), sink).await;
+        let id = f
+            .app
+            .execute(session, "SELECT 'open".into(), TxMode::Auto, sink)
+            .await;
 
         assert!(id.is_ok());
         finished(&mut events).await;
@@ -984,11 +1008,43 @@ mod tests {
         let error = || AppError::UnknownSession { id: unknown };
 
         assert_eq!(
-            f.app.execute(unknown, "SELECT 1".into(), sink().0).await,
+            f.app
+                .execute(unknown, "SELECT 1".into(), TxMode::Auto, sink().0)
+                .await,
             Err(error())
         );
         assert_eq!(f.app.fetch_more(unknown, QueryId(1)).await, Err(error()));
         assert_eq!(f.app.cancel_query(unknown, QueryId(1)).await, Err(error()));
+        assert_eq!(
+            f.app.end_transaction(unknown, TxEnd::Rollback).await,
+            Err(error())
+        );
+    }
+
+    #[tokio::test]
+    async fn manual_execute_and_end_transaction_reach_the_session() {
+        let f = opened().await;
+        let session = session_of(&f).await;
+        let (sink, mut events) = sink();
+
+        f.app
+            .execute(session, "SELECT 1".into(), TxMode::Manual, sink)
+            .await
+            .unwrap();
+        finished(&mut events).await;
+        let ended = f.app.end_transaction(session, TxEnd::Commit).await;
+
+        assert_eq!(
+            ended,
+            Ok(EndResult {
+                outcome: EndOutcome::Ended,
+                tx: Some(TxStatus::Idle),
+            })
+        );
+        assert_eq!(
+            f.connector.links()[0].sent(),
+            ["BEGIN", "SELECT 1", "COMMIT"]
+        );
     }
 
     #[tokio::test]
@@ -998,7 +1054,7 @@ mod tests {
         let (sink, mut events) = sink();
         let query = f
             .app
-            .execute(session, "SELECT 1".into(), sink)
+            .execute(session, "SELECT 1".into(), TxMode::Auto, sink)
             .await
             .unwrap();
         finished(&mut events).await;
@@ -1019,7 +1075,12 @@ mod tests {
         link.expect_query();
         let query = f
             .app
-            .execute(session, "SELECT pg_sleep(10)".into(), sink().0)
+            .execute(
+                session,
+                "SELECT pg_sleep(10)".into(),
+                TxMode::Auto,
+                sink().0,
+            )
             .await
             .unwrap();
 
