@@ -1,5 +1,8 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
+use std::time::Duration;
+
+use super::tunnel::{DEFAULT_TUNNEL_TIMEOUT, MAX_TUNNEL_TIMEOUT_SECS, TunnelTarget};
 
 /// `chilla.toml`의 `sslmode`. 조용히 평문으로 내려가는 `prefer`는 두지 않는다.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -49,6 +52,8 @@ pub struct ConnectionProfile {
     /// `verify-full`에서 신뢰할 CA의 PEM 파일. 절대 경로.
     pub sslrootcert: Option<PathBuf>,
     pub tunnel: Option<String>,
+    /// 터널의 포트가 열리기를 기다리는 시간. 없으면 [`DEFAULT_TUNNEL_TIMEOUT`]이다. `tunnel`이 있을 때만 쓴다.
+    pub tunnel_timeout: Option<Duration>,
     pub color: Option<String>,
 }
 
@@ -73,7 +78,35 @@ impl ConnectionProfile {
         if self.sslrootcert.is_some() && self.sslmode != SslMode::VerifyFull {
             return Err(ProfileError::RootCertWithoutVerifyFull);
         }
+        if self
+            .tunnel
+            .as_ref()
+            .is_some_and(|tunnel| tunnel.trim().is_empty())
+        {
+            return Err(ProfileError::EmptyField { field: "tunnel" });
+        }
+        if let Some(timeout) = self.tunnel_timeout {
+            if self.tunnel.is_none() {
+                return Err(ProfileError::TunnelTimeoutWithoutTunnel);
+            }
+            let secs = timeout.as_secs();
+            if !(1..=MAX_TUNNEL_TIMEOUT_SECS).contains(&secs) {
+                return Err(ProfileError::TunnelTimeoutRange { secs });
+            }
+        }
         Ok(())
+    }
+
+    /// 터널 명령이 있으면 그 터널을 띄우는 데 필요한 것. 명령은 `project_dir`에서 실행한다.
+    pub fn tunnel_target(&self, project_dir: &Path) -> Option<TunnelTarget> {
+        let command = self.tunnel.clone()?;
+        Some(TunnelTarget {
+            command,
+            dir: project_dir.to_path_buf(),
+            host: self.host.clone(),
+            port: self.port,
+            timeout: self.tunnel_timeout.unwrap_or(DEFAULT_TUNNEL_TIMEOUT),
+        })
     }
 
     /// 상대 경로인 `sslrootcert`를 프로젝트 디렉토리 기준의 절대 경로로 바꾼다. `chilla.toml`에
@@ -85,7 +118,7 @@ impl ConnectionProfile {
     }
 
     /// 같은 서버에 같은 방법으로 같은 사용자로 붙는가. 저장된 비밀번호를 이 접속 정보에
-    /// 써도 되는지 가릴 때 쓴다. 색처럼 연결과 무관한 항목은 보지 않는다.
+    /// 써도 되는지 가릴 때 쓴다. 색과 터널 대기 시간처럼 연결 대상과 무관한 항목은 보지 않는다.
     pub fn same_target(&self, other: &ConnectionProfile) -> bool {
         let ConnectionProfile {
             name,
@@ -96,6 +129,7 @@ impl ConnectionProfile {
             sslmode,
             sslrootcert,
             tunnel,
+            tunnel_timeout: _,
             color: _,
         } = self;
         *name == other.name
@@ -119,6 +153,10 @@ pub enum ProfileError {
     RootCertWithoutVerifyFull,
     #[error("sslmode '{value}' is not supported. Use disable, require or verify-full")]
     UnknownSslMode { value: String },
+    #[error("tunnel_timeout can only be used with tunnel")]
+    TunnelTimeoutWithoutTunnel,
+    #[error("tunnel_timeout must be 1 to 300 seconds, not {secs}")]
+    TunnelTimeoutRange { secs: u64 },
 }
 
 #[cfg(test)]
@@ -134,6 +172,7 @@ impl ConnectionProfile {
             sslmode: SslMode::Disable,
             sslrootcert: None,
             tunnel: None,
+            tunnel_timeout: None,
             color: None,
         }
     }
@@ -141,7 +180,10 @@ impl ConnectionProfile {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
+
     use super::*;
+    use crate::domain::TunnelTarget;
 
     type Setter = fn(&mut ConnectionProfile, String);
 
@@ -205,10 +247,79 @@ mod tests {
     }
 
     #[test]
-    fn same_target_ignores_only_the_color() {
+    fn validate_checks_the_tunnel_fields() {
+        let tunneled = |timeout: Option<u64>| ConnectionProfile {
+            tunnel: Some("ssh -N -L 25432:db.internal:5432 bastion".into()),
+            tunnel_timeout: timeout.map(Duration::from_secs),
+            ..local()
+        };
+        assert_eq!(tunneled(None).validate(), Ok(()));
+        assert_eq!(tunneled(Some(1)).validate(), Ok(()));
+        assert_eq!(tunneled(Some(300)).validate(), Ok(()));
+        assert_eq!(
+            tunneled(Some(0)).validate(),
+            Err(ProfileError::TunnelTimeoutRange { secs: 0 })
+        );
+        assert_eq!(
+            tunneled(Some(301)).validate(),
+            Err(ProfileError::TunnelTimeoutRange { secs: 301 })
+        );
+        let blank = ConnectionProfile {
+            tunnel: Some("  ".into()),
+            ..local()
+        };
+        assert_eq!(
+            blank.validate(),
+            Err(ProfileError::EmptyField { field: "tunnel" })
+        );
+        let orphan = ConnectionProfile {
+            tunnel_timeout: Some(Duration::from_secs(5)),
+            ..local()
+        };
+        assert_eq!(
+            orphan.validate(),
+            Err(ProfileError::TunnelTimeoutWithoutTunnel)
+        );
+    }
+
+    #[test]
+    fn tunnel_target_uses_the_project_dir_and_the_default_timeout() {
+        let dir = Path::new("/p");
+        assert_eq!(local().tunnel_target(dir), None);
+        let profile = ConnectionProfile {
+            tunnel: Some("ssh -L".into()),
+            port: 25432,
+            ..local()
+        };
+        assert_eq!(
+            profile.tunnel_target(dir),
+            Some(TunnelTarget {
+                command: "ssh -L".into(),
+                dir: PathBuf::from("/p"),
+                host: "localhost".into(),
+                port: 25432,
+                timeout: Duration::from_secs(20),
+            })
+        );
+        let slow = ConnectionProfile {
+            tunnel_timeout: Some(Duration::from_secs(45)),
+            ..profile
+        };
+        assert_eq!(
+            slow.tunnel_target(dir).map(|t| t.timeout),
+            Some(Duration::from_secs(45))
+        );
+    }
+
+    #[test]
+    fn same_target_ignores_the_color_and_tunnel_timeout() {
         let saved = local();
         assert!(saved.same_target(&ConnectionProfile {
             color: Some("red".into()),
+            ..local()
+        }));
+        assert!(saved.same_target(&ConnectionProfile {
+            tunnel_timeout: Some(Duration::from_secs(30)),
             ..local()
         }));
         let different: [ConnectionProfile; 8] = [

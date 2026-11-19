@@ -79,6 +79,7 @@ export function toConnection(
           ? sslrootcert
           : null,
       tunnel: original?.tunnel ?? null,
+      tunnelTimeout: original?.tunnelTimeout ?? null,
       color: original?.color ?? null,
     },
   };

@@ -55,6 +55,9 @@ pub struct ConnectionDto {
     pub sslrootcert: Option<String>,
     #[serde(default)]
     pub tunnel: Option<String>,
+    /// 초 단위.
+    #[serde(default)]
+    pub tunnel_timeout: Option<u64>,
     #[serde(default)]
     pub color: Option<String>,
 }
@@ -73,6 +76,7 @@ impl From<&ConnectionProfile> for ConnectionDto {
                 .as_ref()
                 .map(|path| path.display().to_string()),
             tunnel: profile.tunnel.clone(),
+            tunnel_timeout: profile.tunnel_timeout.map(|timeout| timeout.as_secs()),
             color: profile.color.clone(),
         }
     }
@@ -91,6 +95,7 @@ impl TryFrom<ConnectionDto> for ConnectionProfile {
             sslmode: dto.sslmode.parse()?,
             sslrootcert: dto.sslrootcert.map(PathBuf::from),
             tunnel: dto.tunnel,
+            tunnel_timeout: dto.tunnel_timeout.map(Duration::from_secs),
             color: dto.color,
         })
     }
@@ -519,6 +524,7 @@ mod tests {
             sslmode,
             sslrootcert: Some(PathBuf::from("/p/certs/ca.pem")),
             tunnel: Some("railway connect".into()),
+            tunnel_timeout: Some(Duration::from_secs(30)),
             color: Some("red".into()),
         }
     }
@@ -538,11 +544,13 @@ mod tests {
                 "sslmode",
                 "sslrootcert",
                 "tunnel",
+                "tunnelTimeout",
                 "color"
             ])
         );
         assert_eq!(json["sslmode"], "verify-full");
         assert_eq!(json["sslrootcert"], "/p/certs/ca.pem");
+        assert_eq!(json["tunnelTimeout"], 30);
     }
 
     #[test]
@@ -583,6 +591,7 @@ mod tests {
         let profile = ConnectionProfile::try_from(dto).unwrap();
         assert_eq!(profile.sslrootcert, None);
         assert_eq!(profile.tunnel, None);
+        assert_eq!(profile.tunnel_timeout, None);
         assert_eq!(profile.color, None);
     }
 

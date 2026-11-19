@@ -1,6 +1,7 @@
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use serde::Deserialize;
 use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
@@ -39,6 +40,8 @@ struct RawConnection {
     sslmode: Option<String>,
     sslrootcert: Option<PathBuf>,
     tunnel: Option<String>,
+    /// 초 단위 정수. 다른 type이면 key 이름이 든 오류를 내려고 값 그대로 받는다.
+    tunnel_timeout: Option<toml::Value>,
     color: Option<String>,
 }
 
@@ -189,6 +192,12 @@ fn write_fields(
         ),
         ("sslrootcert", sslrootcert.map(Value::from)),
         ("tunnel", profile.tunnel.as_deref().map(Value::from)),
+        (
+            "tunnel_timeout",
+            profile
+                .tunnel_timeout
+                .map(|timeout| Value::from(i64::try_from(timeout.as_secs()).unwrap_or(i64::MAX))),
+        ),
         ("color", profile.color.as_deref().map(Value::from)),
     ];
     for (key, value) in fields {
@@ -312,6 +321,26 @@ fn connection(
         None => SslMode::default(),
         Some(value) => value.parse().map_err(invalid)?,
     };
+    let tunnel_timeout = match raw.tunnel_timeout {
+        None => None,
+        Some(toml::Value::Integer(secs)) if secs >= 0 => {
+            Some(Duration::from_secs(secs.unsigned_abs()))
+        }
+        Some(toml::Value::Integer(secs)) => {
+            return Err(ProjectError::Parse {
+                message: format!(
+                    "Connection '{name}': tunnel_timeout must be 1 to 300 seconds, not {secs}"
+                ),
+            });
+        }
+        Some(_) => {
+            return Err(ProjectError::Parse {
+                message: format!(
+                    "Connection '{name}': tunnel_timeout must be a whole number of seconds"
+                ),
+            });
+        }
+    };
     let profile = ConnectionProfile {
         name: name.clone(),
         host: raw.host,
@@ -321,6 +350,7 @@ fn connection(
         sslmode,
         sslrootcert: raw.sslrootcert,
         tunnel: raw.tunnel,
+        tunnel_timeout,
         color: raw.color,
     }
     .resolved_under(dir);

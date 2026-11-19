@@ -156,7 +156,7 @@ git commit -m "docs: M5 Task 1 터널 프로세스와 Finder 환경을 확인하
   - `ProfileError::TunnelTimeoutWithoutTunnel`(`"tunnel_timeout can only be used with tunnel"`), `ProfileError::TunnelTimeoutRange { secs: u64 }`(`"tunnel_timeout must be 1 to 300 seconds, not {secs}"`). 빈 `tunnel`은 `EmptyField { field: "tunnel" }`
 - Produces (화면): `Connection.tunnelTimeout: number | null`(초). DTO key는 `tunnelTimeout`, `chilla.toml` key는 `tunnel_timeout`
 
-- [ ] **Step 1: domain test를 쓴다**
+- [x] **Step 1: domain test를 쓴다**
 
 `connection.rs`의 test에 더한다.
 
@@ -191,7 +191,7 @@ fn tunnel_target_uses_the_default_timeout() {
 
 `same_target_ignores_only_the_color`는 `same_target_ignores_the_color_and_tunnel_timeout`으로 바꾸고 `tunnel_timeout`만 다른 접속도 같은 대상이라고 단언한다.
 
-- [ ] **Step 2: `chilla.toml` test를 쓴다**
+- [x] **Step 2: `chilla.toml` test를 쓴다**
 
 `tests/project_file.rs`에 더한다.
 
@@ -201,21 +201,21 @@ fn tunnel_target_uses_the_default_timeout() {
 
 `src-tauri/src/commands.rs`의 `connection_dto_has_no_password_key`가 기대하는 key에 `tunnelTimeout`을 더하고, `connection_dto_round_trips`의 profile에 `tunnel_timeout: Some(30초)`를 넣는다.
 
-- [ ] **Step 3: test가 실패하는지 확인한다**
+- [x] **Step 3: test가 실패하는지 확인한다**
 
 Run: `cargo test -p chilla-core --lib connection && cargo test -p chilla-core --test project_file`
 Expected: FAIL (compile error: `tunnel_timeout`, `TunnelTarget` 없음)
 
-- [ ] **Step 4: 구현한다**
+- [x] **Step 4: 구현한다**
 
 `domain/tunnel.rs`에 위 type을 쓴다. `ConnectionProfile`에 `tunnel_timeout`을 더하고 `validate`가 빈 `tunnel`, 범위, `tunnel` 없는 `tunnel_timeout`을 검사한다. `project_file.rs`의 `RawConnection`에 `tunnel_timeout: Option<u64>`, `write_fields`의 `tunnel` 다음에 `("tunnel_timeout", …)`를 더한다. `ConnectionDto`에 `#[serde(default)] tunnel_timeout: Option<u64>`를 더한다. `ConnectionProfile`을 만드는 모든 곳(fixture, test support, 화면 fixture의 `connection()`)에 `tunnel_timeout: None` / `tunnelTimeout: null`을 넣는다.
 
-- [ ] **Step 5: test가 통과하는지 확인한다**
+- [x] **Step 5: test가 통과하는지 확인한다**
 
 Run: `cargo test && pnpm typecheck`
 Expected: PASS
 
-- [ ] **Step 6: commit한다**
+- [x] **Step 6: commit한다**
 
 ```bash
 git add crates src-tauri src

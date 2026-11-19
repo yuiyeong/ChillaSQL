@@ -1,5 +1,6 @@
 use std::fs;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use chilla_core::application::{ProjectError, ProjectStore};
 use chilla_core::domain::{ConnectionProfile, ProfileError, Project, SslMode};
@@ -187,6 +188,62 @@ fn rejects_invalid_connections() {
 }
 
 #[test]
+fn tunnel_timeout_round_trips() {
+    let toml = "[connections.local]\nhost = \"localhost\"\ndatabase = \"app\"\nuser = \"postgres\"\ntunnel = \"ssh -N -L 25432:db.internal:5432 bastion\"\ntunnel_timeout = 30\n";
+    let (dir, result) = load(toml);
+    let local = result.unwrap().connection("local").unwrap().clone();
+    assert_eq!(local.tunnel_timeout, Some(Duration::from_secs(30)));
+
+    let cleared = ConnectionProfile {
+        tunnel_timeout: None,
+        ..local.clone()
+    };
+    TomlProjectStore
+        .save_connection(dir.path(), &cleared)
+        .unwrap();
+    let text = fs::read_to_string(dir.path().join("chilla.toml")).unwrap();
+    assert!(!text.contains("tunnel_timeout"), "{text}");
+
+    let set = ConnectionProfile {
+        tunnel_timeout: Some(Duration::from_secs(45)),
+        ..local
+    };
+    let project = TomlProjectStore.save_connection(dir.path(), &set).unwrap();
+    let text = fs::read_to_string(dir.path().join("chilla.toml")).unwrap();
+    assert!(text.contains("tunnel_timeout = 45\n"), "{text}");
+    assert_eq!(
+        project.connection("local").unwrap().tunnel_timeout,
+        Some(Duration::from_secs(45))
+    );
+}
+
+#[test]
+fn tunnel_timeout_must_be_whole_seconds_in_range() {
+    let message = parse_message(load_local("tunnel = \"ssh\"\ntunnel_timeout = \"20s\""));
+    assert!(message.contains("tunnel_timeout"), "{message}");
+    let message = parse_message(load_local("tunnel = \"ssh\"\ntunnel_timeout = -5"));
+    assert!(message.contains("tunnel_timeout"), "{message}");
+    assert_eq!(
+        load_local("tunnel = \"ssh\"\ntunnel_timeout = 0"),
+        Err(ProjectError::InvalidConnection {
+            connection: "local".into(),
+            source: ProfileError::TunnelTimeoutRange { secs: 0 }
+        })
+    );
+}
+
+#[test]
+fn tunnel_timeout_without_tunnel_is_rejected() {
+    assert_eq!(
+        load_local("tunnel_timeout = 30"),
+        Err(ProjectError::InvalidConnection {
+            connection: "local".into(),
+            source: ProfileError::TunnelTimeoutWithoutTunnel
+        })
+    );
+}
+
+#[test]
 fn resolves_sslrootcert_against_the_project_dir() {
     let (dir, result) = load(
         "[connections.a]\nhost = \"h\"\ndatabase = \"d\"\nuser = \"u\"\nsslmode = \"verify-full\"\nsslrootcert = \"certs/ca.pem\"\n\
@@ -233,6 +290,7 @@ fn production() -> ConnectionProfile {
         sslmode: SslMode::Require,
         sslrootcert: None,
         tunnel: None,
+        tunnel_timeout: None,
         color: Some("red".into()),
     }
 }
@@ -247,6 +305,7 @@ fn analytics() -> ConnectionProfile {
         sslmode: SslMode::Require,
         sslrootcert: None,
         tunnel: None,
+        tunnel_timeout: None,
         color: None,
     }
 }
@@ -381,6 +440,7 @@ fn save_connection_removes_optional_keys_that_are_unset() {
         sslmode: SslMode::Disable,
         sslrootcert: None,
         tunnel: None,
+        tunnel_timeout: None,
         color: None,
     };
     let (dir, _result, text) = saved(SPEC_EXAMPLE, staging);
@@ -433,6 +493,7 @@ fn save_connection_keeps_comments_above_removed_keys() {
         sslmode: SslMode::Disable,
         sslrootcert: None,
         tunnel: None,
+        tunnel_timeout: None,
         color: Some("green".into()),
     };
     let (_dir, result, text) = saved(toml, local);

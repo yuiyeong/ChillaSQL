@@ -7,6 +7,7 @@ mod query;
 mod session;
 mod sql_file;
 mod statement;
+mod tunnel;
 
 pub use connection::{ConnectionProfile, ProfileError, SslMode};
 pub use password::Password;
@@ -17,3 +18,7 @@ pub use query::{
 pub use session::{SessionId, SessionInfo, SessionState, TxStatus};
 pub use sql_file::{FileStamp, SqlFile, SqlPath, SqlPathError, WriteMode};
 pub use statement::StatementSpan;
+pub use tunnel::{
+    DEFAULT_TUNNEL_TIMEOUT, MAX_TUNNEL_TIMEOUT_SECS, TunnelEvent, TunnelFailure, TunnelState,
+    TunnelTarget,
+};

@@ -12,6 +12,8 @@ export interface Connection {
   sslmode: SslMode;
   sslrootcert: string | null;
   tunnel: string | null;
+  /** 터널의 포트를 기다리는 초. 없으면 20초다. */
+  tunnelTimeout: number | null;
   color: string | null;
 }
 

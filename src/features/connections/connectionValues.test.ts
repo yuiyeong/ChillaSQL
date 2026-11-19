@@ -76,6 +76,7 @@ test("값의 앞뒤 공백을 빼고 port를 숫자로 바꾼다", () => {
       sslmode: "disable",
       sslrootcert: null,
       tunnel: null,
+      tunnelTimeout: null,
       color: null,
     },
   });
@@ -160,6 +161,7 @@ test("수정은 이름, tunnel, color를 original에서 가져온다", () => {
       sslmode: "disable",
       sslrootcert: null,
       tunnel: "bastion",
+      tunnelTimeout: null,
       color: "#ff0000",
     },
   });

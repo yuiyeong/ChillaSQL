@@ -36,6 +36,7 @@ pub fn local_profile() -> ConnectionProfile {
         sslmode: SslMode::Disable,
         sslrootcert: None,
         tunnel: None,
+        tunnel_timeout: None,
         color: None,
     }
 }

@@ -38,6 +38,7 @@ const conn: Connection = {
   sslmode: "disable",
   sslrootcert: null,
   tunnel: null,
+  tunnelTimeout: null,
   color: null,
 };
 

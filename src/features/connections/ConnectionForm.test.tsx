@@ -89,6 +89,7 @@ test("새 접속을 저장하면 saveConnection에 입력한 비밀번호를 넘
       sslmode: "disable",
       sslrootcert: null,
       tunnel: null,
+      tunnelTimeout: null,
       color: null,
     },
     "secret",

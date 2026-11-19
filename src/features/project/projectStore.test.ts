@@ -252,6 +252,7 @@ test("applyProject는 project만 바꾸고 파일 목록 요청을 버리지 않
         sslmode: "disable",
         sslrootcert: null,
         tunnel: null,
+        tunnelTimeout: null,
         color: null,
       },
     ],

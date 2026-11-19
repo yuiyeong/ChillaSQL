@@ -15,6 +15,7 @@ export function connection(
     sslmode: "disable",
     sslrootcert: null,
     tunnel: null,
+    tunnelTimeout: null,
     color: null,
     ...patch,
   };
