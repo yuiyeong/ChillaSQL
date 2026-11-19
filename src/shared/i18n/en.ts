@@ -167,6 +167,7 @@ export const en = {
   "schema.menu.doubleClick": "Double-click",
   "schema.menu.copyName": "Copy name",
   "schema.copied": "Copied {name}",
+  "completion.view": "view",
 
   "connectionForm.titleNew": "New Connection",
   "connectionForm.titleEdit": "Edit {name}",
