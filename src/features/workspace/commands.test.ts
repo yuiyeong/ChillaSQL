@@ -290,6 +290,22 @@ test("dirty가 아닌 탭은 묻지 않고 닫는다", async () => {
   expect(tabOf(id)).toBeUndefined();
 });
 
+test("활성이 아닌 이름 없는 탭의 Save는 그 탭을 활성으로 하고 이름을 묻는다", async () => {
+  const untitled = tabWith("SELECT 1");
+  useTabs.getState().markDirty(untitled);
+  const other = tabWith("SELECT 2");
+  expect(useTabs.getState().activeId).toBe(other);
+
+  const closing = closeTab(untitled);
+  await answerDialog("save");
+  await closing;
+
+  // 이름 dialog는 활성 탭에만 그려지므로 그 탭이 활성이어야 보인다.
+  expect(useTabs.getState().activeId).toBe(untitled);
+  expect(useTabs.getState().naming).toBe(untitled);
+  expect(tabOf(untitled)).toBeDefined();
+});
+
 test("dirty 탭의 Save는 저장에 성공했을 때만 닫는다", async () => {
   // 이름이 없는 탭은 이름을 물으러 가므로 닫지 않는다.
   const untitled = tabWith("SELECT 1");

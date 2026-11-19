@@ -175,8 +175,12 @@ export async function closeTab(tabId: string): Promise<void> {
       ],
     });
     if (choice === "cancel") return;
-    // 저장하지 못했으면(이름을 묻거나 실패했으면) 닫지 않는다.
-    if (choice === "save" && (await saveTab(tabId)) !== "saved") return;
+    if (choice === "save") {
+      // 이름 dialog는 활성 탭에만 그려지므로 저장하기 전에 이 탭을 활성으로 한다.
+      useTabs.getState().activate(tabId);
+      // 저장하지 못했으면(이름을 묻거나 실패했으면) 닫지 않는다.
+      if ((await saveTab(tabId)) !== "saved") return;
+    }
   }
   // release는 store에서 세션을 바로 떼어 낸다. 세션을 닫는 응답은 탭을 닫은 뒤에 기다린다.
   const released = useRuns.getState().release(tabId);
