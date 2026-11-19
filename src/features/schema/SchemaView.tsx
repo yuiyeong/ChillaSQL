@@ -15,10 +15,11 @@ import {
   SpinnerIcon,
 } from "../../shared/ui/icons";
 import { ConnectionDot } from "../connections/ConnectionDot";
-import { useTabs } from "../editor/tabsStore";
-import { useProject } from "../project/projectStore";
+import { selectActiveConnection, useTabs } from "../editor/tabsStore";
+import { useConnection } from "../project/projectStore";
 import { selectFirstRows } from "../workspace/commands";
-import { relationGroup, schemaRows, type SchemaRow } from "./schemaRows";
+import { isView } from "../../shared/sql/catalog";
+import { schemaRows, type SchemaRow } from "./schemaRows";
 import { useSchema } from "./schemaStore";
 
 /** 제약조건 줄의 오른쪽. SQL keyword라 번역하지 않는다. */
@@ -44,7 +45,7 @@ function iconOf(row: SchemaRow): string {
     case "schema":
       return "S";
     case "relation":
-      return relationGroup(row.relation) === "views" ? "V" : "T";
+      return isView(row.relation) ? "V" : "T";
     case "column":
       return row.column.primaryKey ? "PK" : "c";
     case "index":
@@ -105,12 +106,8 @@ export function SchemaView({
 }: {
   onChooseConnection(): void;
 }) {
-  const connection = useTabs(
-    (s) => s.tabs.find((tab) => tab.id === s.activeId)?.connection ?? null,
-  );
-  const profile = useProject((s) =>
-    s.project?.connections.find((c) => c.name === connection),
-  );
+  const connection = useTabs(selectActiveConnection);
+  const profile = useConnection(connection);
   const entry = useSchema((s) =>
     connection === null ? undefined : s.entries[connection],
   );
@@ -138,54 +135,43 @@ export function SchemaView({
   }
 
   const schema = useSchema.getState();
+  const catalog = entry?.catalog ?? null;
+  // 줄은 catalog가 있을 때만 있으므로 아래 handler는 catalog가 있을 때만 불린다.
+  const reserved = catalog === null ? new Set<string>() : reservedSet(catalog);
 
-  function press(row: SchemaRow) {
-    if (connection === null) return;
+  const press = (row: SchemaRow) => {
     setSelected(row.key);
     if (
-      row.kind !== "schema" &&
-      row.kind !== "group" &&
-      row.kind !== "relation"
+      row.kind === "schema" ||
+      row.kind === "group" ||
+      row.kind === "relation"
     ) {
-      return;
+      schema.toggle(connection, row.key);
     }
-    schema.toggle(connection, row.key);
-    if (
-      row.kind === "group" &&
-      !row.expanded &&
-      row.relation !== null &&
-      (row.group === "indexes" || row.group === "constraints")
-    ) {
-      void schema.loadDetails(connection, row.relation.oid);
-    }
-  }
+  };
 
-  const catalog = entry?.catalog ?? null;
-
-  function openMenu(row: SchemaRow, event: MouseEvent<HTMLElement>) {
+  const openMenu = (row: SchemaRow, event: MouseEvent<HTMLElement>) => {
     // group과 상태 줄은 이름이 있는 object가 아니다.
-    if (row.kind === "group" || catalog === null) return;
+    if (row.kind === "group") return;
     event.preventDefault();
     menuAnchor.current = event.currentTarget;
     setSelected(row.key);
     setMenu({ row, at: { x: event.clientX, y: event.clientY } });
-  }
+  };
 
-  function firstRows(row: SchemaRow) {
-    if (row.kind !== "relation" || catalog === null) return;
-    void selectFirstRows(row.relation, reservedSet(catalog));
-  }
+  const firstRows = (row: SchemaRow) => {
+    if (row.kind === "relation") void selectFirstRows(row.relation, reserved);
+  };
 
-  async function copyName(row: SchemaRow) {
-    if (catalog === null) return;
-    const name = quoteIdent(nameOf(row), reservedSet(catalog));
+  const copyName = async (row: SchemaRow) => {
+    const name = quoteIdent(nameOf(row), reserved);
     try {
       await copyText(name);
     } catch {
       return;
     }
     toast.show(t("schema.copied", { name }));
-  }
+  };
 
   const loadingFirst =
     entry === undefined ||
@@ -312,7 +298,6 @@ function TreeRow({
   return (
     <button
       type="button"
-      aria-label={label === null ? nameOf(row) : `${nameOf(row)} ${label}`}
       aria-expanded={expanded}
       title={titleOf(row)}
       className={[
@@ -339,6 +324,7 @@ function TreeRow({
       <span className={`truncate ${row.kind === "group" ? "" : "font-mono"}`}>
         {nameOf(row)}
       </span>
+      {label !== null && " "}
       {label !== null && (
         <span className="text-label text-fg-3 ml-auto shrink-0 pl-2 font-mono">
           {label}

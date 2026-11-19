@@ -146,12 +146,12 @@ test("the_catalog_reaches_the_document", () => {
   const { rerender } = render(
     <SqlEditor tabId="a" catalog={catalog} onDocChange={vi.fn()} />,
   );
-  expect(documentState("a").field(catalogField)?.catalog).toBe(catalog);
+  expect(documentState("a").field(catalogField)).toBe(catalog);
 
   const other = catalogFixture({ schemas: ["public"] });
   rerender(<SqlEditor tabId="b" catalog={other} onDocChange={vi.fn()} />);
-  expect(documentState("b").field(catalogField)?.catalog).toBe(other);
-  expect(documentState("a").field(catalogField)?.catalog).toBe(catalog);
+  expect(documentState("b").field(catalogField)).toBe(other);
+  expect(documentState("a").field(catalogField)).toBe(catalog);
 });
 
 test("popup_has_kind_letters_and_footer", async () => {

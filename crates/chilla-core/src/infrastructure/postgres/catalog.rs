@@ -1,6 +1,7 @@
 //! 스키마 트리와 자동완성의 catalog를 읽는 SQL. PostgreSQL 11 이상을 가정한다(`prokind`).
 
 use tokio_postgres::Client;
+use tokio_postgres::types::ToSql;
 
 use super::query_error;
 use crate::application::QueryError;
@@ -18,17 +19,24 @@ fn user_schema(alias: &str) -> String {
     )
 }
 
-/// relation과 컬럼. 컬럼이 없는 테이블도 한 줄(`attname`이 NULL)로 남는다. partition은 뺀다.
+/// relation마다 한 줄, 컬럼은 정의 순서의 배열 셋(이름, type, pk)이다. 컬럼이 없는 테이블은 빈
+/// 배열이다. partition은 뺀다.
 fn relations_sql() -> String {
     format!(
-        "SELECT c.oid, n.nspname::text, c.relname::text, c.relkind::text, a.attname::text, \
-                format_type(a.atttypid, a.atttypmod), COALESCE(a.attnum = ANY (i.indkey), false) \
+        "SELECT c.oid, n.nspname::text, c.relname::text, c.relkind::text, \
+                COALESCE(array_agg(a.attname::text ORDER BY a.attnum) \
+                    FILTER (WHERE a.attname IS NOT NULL), '{{}}'), \
+                COALESCE(array_agg(format_type(a.atttypid, a.atttypmod) ORDER BY a.attnum) \
+                    FILTER (WHERE a.attname IS NOT NULL), '{{}}'), \
+                COALESCE(array_agg(COALESCE(a.attnum = ANY (i.indkey), false) ORDER BY a.attnum) \
+                    FILTER (WHERE a.attname IS NOT NULL), '{{}}') \
          FROM pg_class c \
          JOIN pg_namespace n ON n.oid = c.relnamespace \
          LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped \
          LEFT JOIN pg_index i ON i.indrelid = c.oid AND i.indisprimary \
          WHERE c.relkind IN ('r', 'p', 'f', 'v', 'm') AND NOT c.relispartition AND {} \
-         ORDER BY n.nspname, c.relname, a.attnum",
+         GROUP BY c.oid, n.nspname, c.relname, c.relkind \
+         ORDER BY n.nspname, c.relname",
         user_schema("n")
     )
 }
@@ -78,60 +86,68 @@ const CONSTRAINTS_SQL: &str = "\
     FROM pg_constraint \
     WHERE conrelid = $1 AND contypid = 0 AND contype IN ('p', 'f', 'u', 'c', 'x') ORDER BY conname";
 
+/// 쿼리는 한 연결에 함께 보낸다(tokio-postgres가 pipeline으로 보낸다). 터널 너머에서 왕복이 준다.
 pub(super) async fn read_catalog(client: &Client) -> Result<Catalog, QueryError> {
+    let schemas_sql = schemas_sql();
+    let relations_sql = relations_sql();
+    let (schemas, search_path, reserved_words, functions, relations) = tokio::try_join!(
+        query(client, &schemas_sql, &[]),
+        query(client, SEARCH_PATH_SQL, &[]),
+        query(client, RESERVED_SQL, &[]),
+        query(client, FUNCTIONS_SQL, &[]),
+        query(client, &relations_sql, &[]),
+    )?;
     let strings = |rows: Vec<tokio_postgres::Row>| -> Vec<String> {
         rows.iter().map(|row| row.get(0)).collect()
     };
-    let schemas = strings(query(client, &schemas_sql(), &[]).await?);
-    let search_path = strings(query(client, SEARCH_PATH_SQL, &[]).await?);
-    let reserved_words = strings(query(client, RESERVED_SQL, &[]).await?);
-    let functions = query(client, FUNCTIONS_SQL, &[])
-        .await?
-        .iter()
-        .map(|row| FunctionName {
-            schema: row.get(0),
-            name: row.get(1),
-        })
-        .collect();
-
-    let mut relations: Vec<Relation> = Vec::new();
-    for row in query(client, &relations_sql(), &[]).await? {
-        let oid: u32 = row.get(0);
-        if relations.last().is_none_or(|last| last.oid != oid) {
-            let kind: String = row.get(3);
-            relations.push(Relation {
-                oid,
-                schema: row.get(1),
-                name: row.get(2),
-                kind: relation_kind(&kind),
-                columns: Vec::new(),
-            });
-        }
-        let name: Option<String> = row.get(4);
-        if let (Some(name), Some(relation)) = (name, relations.last_mut()) {
-            relation.columns.push(CatalogColumn {
-                name,
-                type_name: row.get(5),
-                primary_key: row.get(6),
-            });
-        }
-    }
-
     Ok(Catalog {
-        search_path,
-        schemas,
-        relations,
-        functions,
-        reserved_words,
+        search_path: strings(search_path),
+        schemas: strings(schemas),
+        relations: relations.iter().map(relation).collect(),
+        functions: functions
+            .iter()
+            .map(|row| FunctionName {
+                schema: row.get(0),
+                name: row.get(1),
+            })
+            .collect(),
+        reserved_words: strings(reserved_words),
     })
+}
+
+fn relation(row: &tokio_postgres::Row) -> Relation {
+    let kind: String = row.get(3);
+    let names: Vec<String> = row.get(4);
+    let types: Vec<String> = row.get(5);
+    let keys: Vec<bool> = row.get(6);
+    Relation {
+        oid: row.get(0),
+        schema: row.get(1),
+        name: row.get(2),
+        kind: relation_kind(&kind),
+        columns: names
+            .into_iter()
+            .zip(types)
+            .zip(keys)
+            .map(|((name, type_name), primary_key)| CatalogColumn {
+                name,
+                type_name,
+                primary_key,
+            })
+            .collect(),
+    }
 }
 
 pub(super) async fn read_table_details(
     client: &Client,
     relation: u32,
 ) -> Result<TableDetails, QueryError> {
-    let indexes = query(client, INDEXES_SQL, &[&relation])
-        .await?
+    let params: [&(dyn ToSql + Sync); 1] = [&relation];
+    let (indexes, constraints) = tokio::try_join!(
+        query(client, INDEXES_SQL, &params),
+        query(client, CONSTRAINTS_SQL, &params),
+    )?;
+    let indexes = indexes
         .iter()
         .map(|row| IndexInfo {
             name: row.get(0),
@@ -140,8 +156,7 @@ pub(super) async fn read_table_details(
             primary: row.get(3),
         })
         .collect();
-    let constraints = query(client, CONSTRAINTS_SQL, &[&relation])
-        .await?
+    let constraints = constraints
         .iter()
         .filter_map(|row| {
             let kind: String = row.get(1);
@@ -161,7 +176,7 @@ pub(super) async fn read_table_details(
 async fn query(
     client: &Client,
     sql: &str,
-    params: &[&(dyn tokio_postgres::types::ToSql + Sync)],
+    params: &[&(dyn ToSql + Sync)],
 ) -> Result<Vec<tokio_postgres::Row>, QueryError> {
     client.query(sql, params).await.map_err(query_error)
 }

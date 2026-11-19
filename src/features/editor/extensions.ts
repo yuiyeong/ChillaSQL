@@ -29,7 +29,7 @@ import {
 } from "@codemirror/view";
 import { tags } from "@lezer/highlight";
 import { t } from "../../shared/i18n/t";
-import { catalogField, kindLetter, sqlCompletionSources } from "./completion";
+import { catalogCompletion, kindLetter } from "./completion";
 
 const color = (name: string) => `var(--color-${name})`;
 
@@ -174,7 +174,6 @@ type CompletionConfig = NonNullable<Parameters<typeof autocompletion>[0]>;
 
 /** 자동완성 설정. 입력하면 바로 뜬다(기본 지연 100ms로는 0.05초를 못 맞춘다). */
 export const AUTOCOMPLETION: CompletionConfig = {
-  override: [...sqlCompletionSources()],
   activateOnTypingDelay: 0,
   icons: false,
   addToOptions: [
@@ -213,11 +212,16 @@ function completionFooter(): HTMLElement {
   return footer;
 }
 
-/** popup이 열리면 끝에 안내 줄을 한 번 붙인다. popup은 tooltip이 그린 뒤에 있으므로 measure의 write에서 본다. */
+/** popup이 열릴 때 끝에 안내 줄을 붙인다. popup은 tooltip이 그린 뒤에 있으므로 measure의 write에서 본다. */
 const footerPlugin = ViewPlugin.fromClass(
   class {
     update(update: ViewUpdate) {
-      if (completionStatus(update.state) !== "active") return;
+      if (
+        completionStatus(update.state) !== "active" ||
+        completionStatus(update.startState) === "active"
+      ) {
+        return;
+      }
       update.view.requestMeasure({
         key: footerPlugin,
         read: () => null,
@@ -249,8 +253,9 @@ const extensions: Extension = [
     ...searchKeymap,
     indentWithTab,
   ]),
-  sql({ dialect: PostgreSQL }),
-  catalogField,
+  // keyword는 대문자로 넣는다. catalog의 source는 catalogCompletion이 더한다.
+  sql({ dialect: PostgreSQL, upperCaseKeywords: true }),
+  catalogCompletion,
   autocompletion(AUTOCOMPLETION),
   footerPlugin,
   editorTheme,

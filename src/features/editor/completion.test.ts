@@ -2,6 +2,7 @@ import {
   CompletionContext,
   type Completion,
   type CompletionResult,
+  type CompletionSource,
 } from "@codemirror/autocomplete";
 import { PostgreSQL, sql } from "@codemirror/lang-sql";
 import { ensureSyntaxTree } from "@codemirror/language";
@@ -10,11 +11,11 @@ import { expect, test } from "vitest";
 import type { Catalog } from "../../shared/api/types";
 import { catalogFixture, relation } from "../../test/fixtures";
 import {
+  catalogCompletion,
   catalogField,
   catalogSources,
   kindLetter,
   setCatalog,
-  sqlCompletionSources,
 } from "./completion";
 
 const catalog = catalogFixture({
@@ -31,7 +32,10 @@ function stateFor(doc: string, withCatalog: Catalog | null = catalog) {
   const text = doc.replace("|", "");
   let state = EditorState.create({
     doc: text,
-    extensions: [sql({ dialect: PostgreSQL }), catalogField],
+    extensions: [
+      sql({ dialect: PostgreSQL, upperCaseKeywords: true }),
+      catalogCompletion,
+    ],
   });
   if (withCatalog !== null) {
     state = state.update({ effects: setCatalog.of(withCatalog) }).state;
@@ -47,9 +51,8 @@ async function complete(
 ): Promise<Completion[]> {
   const { state, pos } = stateFor(doc, withCatalog);
   const context = new CompletionContext(state, pos, explicit);
-  const results = await Promise.all(
-    sqlCompletionSources().map((source) => source(context)),
-  );
+  const sources = state.languageDataAt<CompletionSource>("autocomplete", pos);
+  const results = await Promise.all(sources.map((source) => source(context)));
   return results
     .filter((r): r is CompletionResult => r !== null)
     .flatMap((r) => [...r.options]);
@@ -129,9 +132,7 @@ test("sources_are_built_once_per_catalog", () => {
   expect(catalogSources(catalog)).toBe(catalogSources(catalog));
   let state = EditorState.create({ extensions: [catalogField] });
   state = state.update({ effects: setCatalog.of(catalog) }).state;
-  const first = state.field(catalogField)?.sources;
-  state = state.update({ effects: setCatalog.of(catalog) }).state;
-  expect(state.field(catalogField)?.sources).toBe(first);
+  expect(state.field(catalogField)).toBe(catalog);
   state = state.update({ effects: setCatalog.of(null) }).state;
   expect(state.field(catalogField)).toBeNull();
 });

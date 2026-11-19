@@ -3,7 +3,6 @@ import { highlightingFor } from "@codemirror/language";
 import { EditorState } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
 import { expect, test } from "vitest";
-import { sqlCompletionSources } from "./completion";
 import { AUTOCOMPLETION, editorExtensions, syntaxStyle } from "./extensions";
 
 interface ParsedNode {
@@ -102,5 +101,6 @@ test("문법 색에 hex literal이 없다(oneDark 등 외부 theme을 쓰지 않
 test("autocompletion_is_on_without_typing_delay", () => {
   expect(AUTOCOMPLETION.activateOnTypingDelay).toBe(0);
   expect(AUTOCOMPLETION.icons).toBe(false);
-  expect(AUTOCOMPLETION.override).toEqual([...sqlCompletionSources()]);
+  // source는 language data(sql()의 keyword, catalogCompletion)에서 온다.
+  expect(AUTOCOMPLETION.override).toBeUndefined();
 });

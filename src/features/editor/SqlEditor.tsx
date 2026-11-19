@@ -64,8 +64,7 @@ export function SqlEditor({ tabId, catalog, onDocChange }: SqlEditorProps) {
   useEffect(() => {
     const view = viewRef.current;
     if (view === null) return;
-    const current = view.state.field(catalogField, false)?.catalog ?? null;
-    if (current === catalog) return;
+    if (view.state.field(catalogField, false) === catalog) return;
     view.dispatch({ effects: setCatalog.of(catalog) });
   }, [catalog, tabId]);
 

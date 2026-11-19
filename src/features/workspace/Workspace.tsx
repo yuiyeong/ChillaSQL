@@ -11,7 +11,7 @@ import { ConnectionForm } from "../connections/ConnectionForm";
 import { saveTab } from "../editor/saveTab";
 import { SqlEditor } from "../editor/SqlEditor";
 import { TabBar } from "../editor/TabBar";
-import { useTabs } from "../editor/tabsStore";
+import { selectActiveConnection, useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { Sidebar } from "../project/Sidebar";
 import { Hints, ResultPane } from "../query/ResultPane";
@@ -46,9 +46,7 @@ const MIN_PANE = 120;
 /** 프로젝트가 열린 뒤의 화면. 왼쪽 sidebar, 오른쪽에 탭, toolbar, 에디터, 결과. */
 export function Workspace() {
   const activeId = useTabs((s) => s.activeId);
-  const connectionName = useTabs(
-    (s) => s.tabs.find((tab) => tab.id === s.activeId)?.connection ?? null,
-  );
+  const connectionName = useTabs(selectActiveConnection);
   const catalog = useSchema((s) =>
     connectionName === null
       ? null

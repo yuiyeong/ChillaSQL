@@ -1,48 +1,54 @@
 import type {
   Completion,
   CompletionContext,
-  CompletionResult,
   CompletionSource,
 } from "@codemirror/autocomplete";
 import {
-  keywordCompletionSource,
   PostgreSQL,
   schemaCompletionSource,
   type SQLNamespace,
 } from "@codemirror/lang-sql";
 import { syntaxTree } from "@codemirror/language";
-import { StateEffect, StateField, type EditorState } from "@codemirror/state";
+import {
+  EditorState,
+  StateEffect,
+  StateField,
+  type Extension,
+} from "@codemirror/state";
 import type { Catalog, Relation } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
+import { isView, relationNamed, relationsOf } from "../../shared/sql/catalog";
 import { quoteIdent, reservedSet } from "../../shared/sql/identifiers";
 
 /** 문서의 catalog를 바꾼다. 활성 탭 접속의 catalog를 SqlEditor가 넣는다. null이면 뺀다. */
 export const setCatalog = StateEffect.define<Catalog | null>();
 
-interface CatalogCompletion {
-  catalog: Catalog;
-  sources: readonly CompletionSource[];
-}
-
-/** 문서의 catalog와 그것으로 만든 source. 없으면 null이다. */
-export const catalogField = StateField.define<CatalogCompletion | null>({
+/** 문서의 catalog. 없으면 null이다. */
+export const catalogField = StateField.define<Catalog | null>({
   create: () => null,
   update(value, tr) {
     for (const effect of tr.effects) {
-      if (!effect.is(setCatalog)) continue;
-      const catalog = effect.value;
-      if (catalog === null) value = null;
-      else if (value?.catalog !== catalog) {
-        value = { catalog, sources: catalogSources(catalog) };
-      }
+      if (effect.is(setCatalog)) value = effect.value;
     }
     return value;
   },
 });
 
-type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>["resolveInner"]>;
+/**
+ * 문서 catalog의 자동완성. source는 language data로 내놓아 keyword(`sql()`의 것)와 함께 쓰인다.
+ * catalog가 없으면 아무것도 내놓지 않는다.
+ */
+export const catalogCompletion: Extension = [
+  catalogField,
+  EditorState.languageData.of((state) => {
+    const catalog = state.field(catalogField);
+    return catalog === null
+      ? []
+      : catalogSources(catalog).map((autocomplete) => ({ autocomplete }));
+  }),
+];
 
-const VIEW_KINDS = new Set(["view", "materialized_view"]);
+type SyntaxNode = ReturnType<ReturnType<typeof syntaxTree>["resolveInner"]>;
 
 /** 이름에 든 `.`은 lang-sql이 경로로 나누므로 escape한다. */
 function namespaceKey(name: string): string {
@@ -61,29 +67,43 @@ function named(
     : { label, apply: quoted, ...rest };
 }
 
-function columnCompletions(relation: Relation, reserved: ReadonlySet<string>) {
-  return relation.columns.map((column) =>
-    named(column.name, reserved, {
-      type: "column",
-      detail: `${relation.name} · ${column.type}`,
-    }),
-  );
+/** relation별 컬럼 completion. namespace와 별칭 없는 컬럼 source가 같은 배열을 쓴다. */
+type ColumnCompletions = (relation: Relation) => Completion[];
+
+function columnCompletions(catalog: Catalog): ColumnCompletions {
+  const reserved = reservedSet(catalog);
+  const built = new Map<Relation, Completion[]>();
+  return (relation) => {
+    let columns = built.get(relation);
+    if (columns === undefined) {
+      columns = relation.columns.map((column) =>
+        named(column.name, reserved, {
+          type: "column",
+          detail: `${relation.name} · ${column.type}`,
+        }),
+      );
+      built.set(relation, columns);
+    }
+    return columns;
+  };
 }
 
-function namespaceOf(catalog: Catalog): SQLNamespace {
+function namespaceOf(
+  catalog: Catalog,
+  columns: ColumnCompletions,
+): SQLNamespace {
   const reserved = reservedSet(catalog);
   const namespace: Record<string, SQLNamespace> = {};
   for (const schema of catalog.schemas) {
     const tables: Record<string, SQLNamespace> = {};
-    for (const relation of catalog.relations) {
-      if (relation.schema !== schema) continue;
-      const view = VIEW_KINDS.has(relation.kind);
+    for (const relation of relationsOf(catalog, schema)) {
+      const view = isView(relation);
       tables[namespaceKey(relation.name)] = {
         self: named(relation.name, reserved, {
           type: view ? "view" : "table",
           detail: view ? `${schema} · ${t("completion.view")}` : schema,
         }),
-        children: columnCompletions(relation, reserved),
+        children: columns(relation),
       };
     }
     namespace[namespaceKey(schema)] = {
@@ -153,17 +173,11 @@ function statementTables(state: EditorState, pos: number): string[][] {
 
 /** 이름만 쓴 테이블은 search_path의 앞 schema부터 찾는다. */
 function findRelation(catalog: Catalog, path: string[]): Relation | undefined {
-  if (path.length === 2) {
-    const [schema, name] = path;
-    return catalog.relations.find(
-      (r) => r.schema === schema && r.name === name,
-    );
-  }
-  if (path.length !== 1) return undefined;
-  for (const schema of catalog.searchPath) {
-    const found = catalog.relations.find(
-      (r) => r.schema === schema && r.name === path[0],
-    );
+  const name = path[path.length - 1];
+  const schemas =
+    path.length === 2 ? [path[0]] : path.length === 1 ? catalog.searchPath : [];
+  for (const schema of schemas) {
+    const found = relationNamed(catalog, schema, name);
     if (found !== undefined) return found;
   }
   return undefined;
@@ -172,17 +186,17 @@ function findRelation(catalog: Catalog, path: string[]): Relation | undefined {
 const PLAIN_WORD = /^[\w$]*$/;
 
 /** 별칭 없이 쓰는 컬럼: 그 문장의 테이블들의 컬럼이다. */
-function columnSource(catalog: Catalog): CompletionSource {
-  const reserved = reservedSet(catalog);
+function columnSource(
+  catalog: Catalog,
+  columns: ColumnCompletions,
+): CompletionSource {
   return (context) => {
     const at = plainWord(context);
     if (at === null) return null;
     const options = statementTables(context.state, context.pos).flatMap(
       (path) => {
         const relation = findRelation(catalog, path);
-        return relation === undefined
-          ? []
-          : columnCompletions(relation, reserved);
+        return relation === undefined ? [] : columns(relation);
       },
     );
     if (options.length === 0) return null;
@@ -220,42 +234,18 @@ const sourcesByCatalog = new WeakMap<Catalog, readonly CompletionSource[]>();
 export function catalogSources(catalog: Catalog): readonly CompletionSource[] {
   let sources = sourcesByCatalog.get(catalog);
   if (sources === undefined) {
+    const columns = columnCompletions(catalog);
     sources = [
       schemaCompletionSource({
         dialect: PostgreSQL,
-        schema: namespaceOf(catalog),
+        schema: namespaceOf(catalog, columns),
         defaultSchema: catalog.searchPath[0],
       }),
-      columnSource(catalog),
+      columnSource(catalog, columns),
       functionSource(catalog),
     ];
     sourcesByCatalog.set(catalog, sources);
   }
-  return sources;
-}
-
-const CATALOG_SOURCE_COUNT = 3;
-
-const keywordSource = keywordCompletionSource(PostgreSQL, true);
-
-/** 문서 catalog의 i번째 source를 부른다. catalog가 없으면 null이다. */
-function fromDocument(index: number): CompletionSource {
-  return (context) => {
-    const source = context.state.field(catalogField, false)?.sources[index];
-    return source === undefined
-      ? null
-      : (source(context) as
-          CompletionResult | null | Promise<CompletionResult | null>);
-  };
-}
-
-const sources: readonly CompletionSource[] = [
-  keywordSource,
-  ...Array.from({ length: CATALOG_SOURCE_COUNT }, (_, i) => fromDocument(i)),
-];
-
-/** keyword(대문자)와 문서 catalog의 source. autocompletion의 override에 넣는다. */
-export function sqlCompletionSources(): readonly CompletionSource[] {
   return sources;
 }
 

@@ -6,6 +6,7 @@ import {
 } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
 import type { Catalog, TableDetails } from "../../shared/api/types";
+import { relationNamed } from "../../shared/sql/catalog";
 
 export interface DetailsEntry {
   status: "loading" | "ready" | "failed";
@@ -51,19 +52,11 @@ export function nodeKey(path: readonly string[]): string {
 
 const DETAIL_GROUPS = new Set(["indexes", "constraints"]);
 
-/** 펼쳐 있는 Indexes, Constraints group의 relation OID. 지금 catalog에 없는 이름은 뺀다. */
-function expandedDetails(entry: SchemaEntry, catalog: Catalog): Set<number> {
-  const oids = new Set<number>();
-  for (const key of entry.expanded) {
-    const path = JSON.parse(key) as string[];
-    if (path.length !== 4 || !DETAIL_GROUPS.has(path[3])) continue;
-    const [schema, , name] = path;
-    const found = catalog.relations.find(
-      (r) => r.schema === schema && r.name === name,
-    );
-    if (found !== undefined) oids.add(found.oid);
-  }
-  return oids;
+/** key가 Indexes나 Constraints group이면 그 relation의 OID. 지금 catalog에 없는 이름이면 undefined다. */
+function detailsRelation(catalog: Catalog, key: string): number | undefined {
+  const path = JSON.parse(key) as string[];
+  if (path.length !== 4 || !DETAIL_GROUPS.has(path[3])) return undefined;
+  return relationNamed(catalog, path[0], path[2])?.oid;
 }
 
 function emptyEntry(): SchemaEntry {
@@ -127,10 +120,12 @@ export const useSchema = create<SchemaState>()((set, get) => {
 
     const before = get().entries[connection];
     if (before === undefined) return;
-    const reload =
-      before.catalog === null
-        ? new Set<number>()
-        : expandedDetails(before, catalog);
+    // 새로고침이면 펼쳐 있던 Indexes, Constraints를 새 catalog의 OID로 다시 읽는다.
+    const reload = new Set<number>();
+    for (const key of before.expanded) {
+      const oid = detailsRelation(catalog, key);
+      if (oid !== undefined) reload.add(oid);
+    }
     const first = before.catalog === null && before.expanded.size === 0;
     const schema = catalog.searchPath[0];
     update(connection, () => ({
@@ -181,11 +176,18 @@ export const useSchema = create<SchemaState>()((set, get) => {
     },
 
     toggle(connection, key) {
-      update(connection, (entry) => {
-        const expanded = new Set(entry.expanded);
-        if (!expanded.delete(key)) expanded.add(key);
-        return { expanded };
-      });
+      const entry = get().entries[connection];
+      if (entry === undefined) return;
+      const expanded = new Set(entry.expanded);
+      const opening = !expanded.delete(key);
+      if (opening) expanded.add(key);
+      update(connection, () => ({ expanded }));
+      // 펼친 Indexes, Constraints는 처음 펼칠 때 읽는다(이미 있으면 loadDetails가 건너뛴다).
+      const oid =
+        opening && entry.catalog !== null
+          ? detailsRelation(entry.catalog, key)
+          : undefined;
+      if (oid !== undefined) void get().loadDetails(connection, oid);
     },
 
     async forget(connection) {

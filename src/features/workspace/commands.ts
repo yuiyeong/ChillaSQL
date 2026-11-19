@@ -189,14 +189,19 @@ export async function retryTunnel(connection: string): Promise<void> {
   }
 }
 
+/** 탭의 지금 접속으로 `sql`을 실행한다. 위험한 문장이면 묻는다. */
+function runSql(tabId: string, sql: string, origin: Origin): Promise<void> {
+  return useRuns
+    .getState()
+    .run(tabId, () => confirmed(tabId, requestFor(tabId, sql, origin)));
+}
+
 /** 그 탭의 결과에 쓴 SQL을 탭의 지금 접속으로 다시 실행한다. 결과가 없으면 아무것도 하지 않는다. */
 export async function runAgain(tabId: string): Promise<void> {
   const state = useRuns.getState().runs[tabId];
   if (state?.status !== "running" && state?.status !== "finished") return;
   const { sql, origin } = state.result;
-  return useRuns
-    .getState()
-    .run(tabId, () => confirmed(tabId, requestFor(tabId, sql, origin)));
+  return runSql(tabId, sql, origin);
 }
 
 /** Select first rows가 읽는 행 수. batch 하나다. */
@@ -213,10 +218,7 @@ export async function selectFirstRows(
   const name = `${quoteIdent(relation.schema, reservedWords)}.${quoteIdent(relation.name, reservedWords)}`;
   const sql = `SELECT * FROM ${name} LIMIT ${FIRST_ROWS}`;
   const tabId = useTabs.getState().newTab({ text: sql });
-  const origin = { line: 1, column: 1 };
-  return useRuns
-    .getState()
-    .run(tabId, () => confirmed(tabId, requestFor(tabId, sql, origin)));
+  return runSql(tabId, sql, { line: 1, column: 1 });
 }
 
 /**

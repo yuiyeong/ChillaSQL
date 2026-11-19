@@ -46,6 +46,15 @@ function lastComponent(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
 }
 
+/** 활성 탭의 접속. 탭이 없거나 접속이 없으면 null이다. store selector로 쓴다. */
+export function selectActiveConnection(
+  state: Pick<TabsState, "tabs" | "activeId">,
+): string | null {
+  return (
+    state.tabs.find((tab) => tab.id === state.activeId)?.connection ?? null
+  );
+}
+
 /** 그 탭의 트랜잭션 모드. 탭이 없으면 auto다. */
 export function modeOf(state: Pick<TabsState, "tabs">, id: string): TxMode {
   return state.tabs.find((tab) => tab.id === id)?.mode ?? "auto";
@@ -65,10 +74,7 @@ export const useTabs = create<TabsState>()((set, get) => {
     set((state) => ({ tabs: [...state.tabs, tab], activeId: tab.id }));
   }
 
-  function activeConnection(): string | null {
-    const { tabs, activeId } = get();
-    return tabs.find((tab) => tab.id === activeId)?.connection ?? null;
-  }
+  const activeConnection = () => selectActiveConnection(get());
 
   /** `path`를 연 탭이 있으면 활성으로 한다. 있었으면 true. */
   function activatePath(path: string): boolean {

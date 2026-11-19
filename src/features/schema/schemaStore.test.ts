@@ -192,3 +192,22 @@ test("a_close_failure_is_ignored", async () => {
   );
   await expect(useSchema.getState().forget("local")).resolves.toBeUndefined();
 });
+
+test("expanding_a_details_group_loads_it", async () => {
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  vi.mocked(loadTableDetails).mockResolvedValue(details);
+  await useSchema.getState().ensure("local");
+
+  useSchema.getState().toggle("local", nodeKey(["public", "tables", "users"]));
+  expect(loadTableDetails).not.toHaveBeenCalled();
+  useSchema
+    .getState()
+    .toggle("local", nodeKey(["public", "tables", "users", "indexes"]));
+  expect(loadTableDetails).toHaveBeenCalledWith("local", 1);
+
+  // 접을 때는 불러오지 않는다.
+  useSchema
+    .getState()
+    .toggle("local", nodeKey(["public", "tables", "users", "indexes"]));
+  expect(loadTableDetails).toHaveBeenCalledTimes(1);
+});

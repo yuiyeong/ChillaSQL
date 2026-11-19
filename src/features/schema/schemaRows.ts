@@ -1,13 +1,10 @@
 import type {
   CatalogColumn,
   Relation,
-  RelationKind,
   TableDetails,
 } from "../../shared/api/types";
+import { isView, relationsOf } from "../../shared/sql/catalog";
 import { nodeKey, type SchemaEntry } from "./schemaStore";
-
-export type RelationGroup = "tables" | "views";
-export type DetailGroup = "columns" | "indexes" | "constraints";
 
 export type SchemaRow =
   | { kind: "schema"; key: string; depth: 0; name: string; expanded: boolean }
@@ -15,10 +12,8 @@ export type SchemaRow =
       kind: "group";
       key: string;
       depth: number;
-      group: RelationGroup | DetailGroup;
+      group: "tables" | "views" | "columns" | "indexes" | "constraints";
       expanded: boolean;
-      /** Columns, Indexes, Constraints의 relation. Tables, Views는 null */
-      relation: Relation | null;
     }
   | {
       kind: "relation";
@@ -44,22 +39,15 @@ export type SchemaRow =
       kind: "loading" | "empty" | "failed";
       key: string;
       depth: number;
-      relation: Relation | null;
       error: string | null;
     };
 
-const VIEW_KINDS: ReadonlySet<RelationKind> = new Set([
-  "view",
-  "materialized_view",
-]);
-
-export function relationGroup(relation: Relation): RelationGroup {
-  return VIEW_KINDS.has(relation.kind) ? "views" : "tables";
-}
-
 /** 접힌 node 안은 건너뛰고 보이는 줄만 순서대로 편다. */
-export function schemaRows(entry: SchemaEntry): SchemaRow[] {
-  const { catalog, expanded } = entry;
+export function schemaRows({
+  catalog,
+  expanded,
+  details,
+}: SchemaEntry): SchemaRow[] {
   if (catalog === null) return [];
   const rows: SchemaRow[] = [];
   const open = (path: string[]) => expanded.has(nodeKey(path));
@@ -67,16 +55,22 @@ export function schemaRows(entry: SchemaEntry): SchemaRow[] {
     kind: "loading" | "empty" | "failed",
     path: string[],
     depth: number,
-    relation: Relation | null = null,
     error: string | null = null,
-  ) =>
+  ) => rows.push({ kind, key: nodeKey([...path, `:${kind}`]), depth, error });
+  const group = (
+    path: string[],
+    depth: number,
+    name: Extract<SchemaRow, { kind: "group" }>["group"],
+  ) => {
     rows.push({
-      kind,
-      key: nodeKey([...path, `:${kind}`]),
+      kind: "group",
+      key: nodeKey(path),
       depth,
-      relation,
-      error,
+      group: name,
+      expanded: open(path),
     });
+    return open(path);
+  };
 
   for (const schema of catalog.schemas) {
     const schemaPath = [schema];
@@ -88,36 +82,21 @@ export function schemaRows(entry: SchemaEntry): SchemaRow[] {
       expanded: open(schemaPath),
     });
     if (!open(schemaPath)) continue;
-    const relations = catalog.relations.filter((r) => r.schema === schema);
+    const relations = relationsOf(catalog, schema);
     if (relations.length === 0) note("empty", schemaPath, 1);
 
-    for (const group of ["tables", "views"] as const) {
-      const members = relations.filter((r) => relationGroup(r) === group);
-      if (members.length === 0) continue;
-      const groupPath = [schema, group];
-      rows.push({
-        kind: "group",
-        key: nodeKey(groupPath),
-        depth: 1,
-        group,
-        expanded: open(groupPath),
-        relation: null,
-      });
-      if (!open(groupPath)) continue;
+    for (const name of ["tables", "views"] as const) {
+      const members = relations.filter((r) => isView(r) === (name === "views"));
+      if (members.length === 0 || !group([schema, name], 1, name)) continue;
       for (const relation of members) {
-        relationRows(rows, entry, [...groupPath, relation.name], relation);
+        relationRows([schema, name, relation.name], relation);
       }
     }
   }
   return rows;
 
-  function relationRows(
-    out: SchemaRow[],
-    { details }: SchemaEntry,
-    path: string[],
-    relation: Relation,
-  ) {
-    out.push({
+  function relationRows(path: string[], relation: Relation) {
+    rows.push({
       kind: "relation",
       key: nodeKey(path),
       depth: 2,
@@ -125,38 +104,32 @@ export function schemaRows(entry: SchemaEntry): SchemaRow[] {
       expanded: open(path),
     });
     if (!open(path)) return;
-    for (const group of ["columns", "indexes", "constraints"] as const) {
-      const groupPath = [...path, group];
-      out.push({
-        kind: "group",
-        key: nodeKey(groupPath),
-        depth: 3,
-        group,
-        expanded: open(groupPath),
-        relation,
-      });
-      if (!open(groupPath)) continue;
-      if (group === "columns") {
-        for (const column of relation.columns) {
-          out.push({
-            kind: "column",
-            key: nodeKey([...groupPath, column.name]),
-            depth: 4,
-            column,
-          });
-        }
-        continue;
+
+    const columnsPath = [...path, "columns"];
+    if (group(columnsPath, 3, "columns")) {
+      for (const column of relation.columns) {
+        rows.push({
+          kind: "column",
+          key: nodeKey([...columnsPath, column.name]),
+          depth: 4,
+          column,
+        });
       }
-      const loaded = details[relation.oid];
+    }
+
+    const loaded = details[relation.oid];
+    for (const name of ["indexes", "constraints"] as const) {
+      const groupPath = [...path, name];
+      if (!group(groupPath, 3, name)) continue;
       if (loaded === undefined || loaded.status === "loading") {
-        note("loading", groupPath, 4, relation);
+        note("loading", groupPath, 4);
       } else if (loaded.status === "failed" || loaded.details === null) {
-        note("failed", groupPath, 4, relation, loaded.error);
-      } else if (group === "indexes") {
-        if (loaded.details.indexes.length === 0)
-          note("empty", groupPath, 4, relation);
+        note("failed", groupPath, 4, loaded.error);
+      } else if (loaded.details[name].length === 0) {
+        note("empty", groupPath, 4);
+      } else if (name === "indexes") {
         for (const index of loaded.details.indexes) {
-          out.push({
+          rows.push({
             kind: "index",
             key: nodeKey([...groupPath, index.name]),
             depth: 4,
@@ -164,10 +137,8 @@ export function schemaRows(entry: SchemaEntry): SchemaRow[] {
           });
         }
       } else {
-        if (loaded.details.constraints.length === 0)
-          note("empty", groupPath, 4, relation);
         for (const constraint of loaded.details.constraints) {
-          out.push({
+          rows.push({
             kind: "constraint",
             key: nodeKey([...groupPath, constraint.name]),
             depth: 4,
