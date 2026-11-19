@@ -32,6 +32,7 @@ impl From<AppError> for CommandError {
             AppError::QueryNotActive { .. } => "query_not_active",
             AppError::Cancel(_) => "cancel_failed",
             AppError::InvalidPath(_) => "invalid_path",
+            AppError::Catalog(_) => "catalog_failed",
             AppError::File(file) => match file {
                 FileError::NotFound { .. } => "file_not_found",
                 FileError::Exists { .. } => "file_exists",

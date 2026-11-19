@@ -1,23 +1,25 @@
 //! 프로젝트 하나와 그 세션들을 다루는 use case. Tauri command가 이것만 부른다.
 
 use std::collections::HashMap;
+use std::future::Future;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::Arc;
 
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedMutexGuard};
 use tokio::task::JoinSet;
 
 use super::session_actor::{self, QuerySink, SessionHandle};
 use super::tunnels::{TunnelError, TunnelLease, TunnelSink, Tunnels};
 use super::{
     CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey, PasswordStore,
-    PasswordStoreError, ProjectError, ProjectStore, SplitError, SqlFileStore, StatementInspector,
-    StatementSplitter, TunnelRunner,
+    PasswordStoreError, ProjectError, ProjectStore, QueryError, SplitError, SqlFileStore,
+    StatementInspector, StatementSplitter, TunnelRunner,
 };
 use crate::domain::{
-    ConnectionProfile, Danger, EndResult, FileStamp, Password, ProfileError, Project, QueryId,
-    QueryLimits, SessionId, SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError,
-    StatementSpan, TxEnd, TxMode, WriteMode,
+    Catalog, ConnectionProfile, Danger, EndResult, FileStamp, Password, ProfileError, Project,
+    QueryId, QueryLimits, SessionId, SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError,
+    StatementSpan, TableDetails, TxEnd, TxMode, WriteMode,
 };
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -54,6 +56,8 @@ pub enum AppError {
     File(#[from] FileError),
     #[error("File path is invalid: {0}")]
     InvalidPath(#[from] SqlPathError),
+    #[error("Could not read the schema: {0}")]
+    Catalog(QueryError),
 }
 
 pub struct App<C: Connector, T: TunnelRunner> {
@@ -65,9 +69,23 @@ pub struct App<C: Connector, T: TunnelRunner> {
     connector: C,
     tunnels: Tunnels<T>,
     state: Mutex<State>,
+    /// 접속 이름별 catalog connection. 슬롯 하나가 그 접속의 catalog 읽기를 차례로 한다.
+    catalogs: Mutex<HashMap<String, CatalogSlot<C::Connection>>>,
     /// `save_connection`을 하나씩 돌린다. 한 번의 저장이 키체인과 파일에 걸쳐 있어서다.
     save_lock: Mutex<()>,
 }
+
+/// 스키마 트리와 자동완성의 catalog를 읽는 연결. 탭 세션과 따로 열고, 같은 접속의 터널을 함께 쓴다.
+struct CatalogConnection<D> {
+    db: D,
+    tunnel: Option<TunnelLease>,
+}
+
+/// 접속 하나의 catalog connection 자리. 비어 있으면 다음 읽기가 연다.
+type CatalogSlot<D> = Arc<Mutex<Option<CatalogConnection<D>>>>;
+
+/// 연결 하나에서 catalog를 읽는 future. `read_catalog`와 `read_table_details`를 같은 길로 부른다.
+type CatalogRead<'a, R> = Pin<Box<dyn Future<Output = Result<R, QueryError>> + Send + 'a>>;
 
 /// 열린 세션 하나. 터널을 쓰는 접속이면 그 lease를 함께 갖는다.
 struct SessionEntry {
@@ -106,6 +124,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             connector,
             tunnels: Tunnels::new(runner, on_tunnel),
             state: Mutex::new(State::default()),
+            catalogs: Mutex::new(HashMap::new()),
             save_lock: Mutex::new(()),
         }
     }
@@ -140,6 +159,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             std::mem::take(&mut state.sessions)
         };
         self.close_all(previous).await;
+        self.close_all_catalogs().await;
         self.tunnels.stop_all().await;
     }
 
@@ -307,6 +327,35 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     }
 
     pub async fn open_session(&self, connection: &str) -> Result<SessionInfo, AppError> {
+        let (profile, db, tunnel, generation) = self.connect(connection).await?;
+        let mut state = self.state.lock().await;
+        if state.project_generation != generation {
+            // 연결하는 사이에 프로젝트가 다시 열렸다. 그때 세션을 모두 닫았으므로, 그 전의
+            // 접속 정보로 붙은 이 연결을 세션으로 남기지 않는다.
+            drop(state);
+            db.close().await;
+            self.release(tunnel).await;
+            return Err(AppError::ProjectChanged);
+        }
+        state.last_session_id += 1;
+        let info = SessionInfo {
+            id: SessionId(state.last_session_id),
+            connection: profile.name,
+            backend_pid: db.backend_pid(),
+        };
+        let handle = session_actor::spawn(db, QueryLimits::default());
+        state
+            .sessions
+            .insert(info.id, SessionEntry { handle, tunnel });
+        Ok(info)
+    }
+
+    /// 저장된 접속으로 DB에 연결한다. 터널을 쓰는 접속이면 터널 lease를 먼저 얻는다. 연결을
+    /// 시작할 때의 `project_generation`을 함께 돌려준다.
+    async fn connect(
+        &self,
+        connection: &str,
+    ) -> Result<(ConnectionProfile, C::Connection, Option<TunnelLease>, u64), AppError> {
         let (profile, key, generation, target) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
@@ -330,34 +379,97 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             Some(target) => Some(self.tunnels.acquire(&profile.name, &target).await?),
             None => None,
         };
-        let db = match self.connector.connect(&profile, password.as_ref()).await {
-            Ok(db) => db,
+        match self.connector.connect(&profile, password.as_ref()).await {
+            Ok(db) => Ok((profile, db, tunnel, generation)),
             Err(error) => {
                 self.release(tunnel).await;
-                return Err(error.into());
+                Err(error.into())
             }
-        };
+        }
+    }
 
-        let mut state = self.state.lock().await;
-        if state.project_generation != generation {
-            // 연결하는 사이에 프로젝트가 다시 열렸다. 그때 세션을 모두 닫았으므로, 그 전의
-            // 접속 정보로 붙은 이 연결을 세션으로 남기지 않는다.
-            drop(state);
+    /// 그 접속의 catalog connection(없으면 연다)으로 catalog를 읽는다.
+    pub async fn load_catalog(&self, connection: &str) -> Result<Catalog, AppError> {
+        self.read_catalog_with(connection, |db| Box::pin(db.read_catalog()))
+            .await
+    }
+
+    /// 그 접속의 catalog connection으로 relation 하나의 인덱스와 제약조건을 읽는다.
+    pub async fn load_table_details(
+        &self,
+        connection: &str,
+        relation: u32,
+    ) -> Result<TableDetails, AppError> {
+        self.read_catalog_with(connection, |db| Box::pin(db.read_table_details(relation)))
+            .await
+    }
+
+    /// catalog connection을 닫고 터널 lease를 놓는다. 없으면 아무것도 하지 않는다.
+    pub async fn close_catalog(&self, connection: &str) -> Result<(), AppError> {
+        let slot = self.catalogs.lock().await.remove(connection);
+        if let Some(slot) = slot {
+            close_catalog_slot(slot, self.tunnels.clone()).await;
+        }
+        Ok(())
+    }
+
+    /// catalog connection으로 `read`를 부른다. 연결이 끊겨 있었으면 한 번 새로 연결해 다시 부른다.
+    /// 서버 오류는 다시 부르지 않는다.
+    async fn read_catalog_with<R>(
+        &self,
+        connection: &str,
+        read: impl Fn(&C::Connection) -> CatalogRead<'_, R>,
+    ) -> Result<R, AppError> {
+        let mut retried = false;
+        loop {
+            let mut guard = self.catalog_guard(connection).await?;
+            let result = match guard.as_ref() {
+                Some(open) => read(&open.db).await,
+                None => unreachable!("catalog_guard가 연결을 연다"),
+            };
+            match result {
+                Err(QueryError::ConnectionLost { .. }) if !retried => {
+                    retried = true;
+                    discard_catalog(&mut guard, &self.tunnels).await;
+                }
+                result => return result.map_err(AppError::Catalog),
+            }
+        }
+    }
+
+    /// 그 접속의 catalog connection 자리를 잡는다. 비어 있으면 연결을 연다.
+    async fn catalog_guard(
+        &self,
+        connection: &str,
+    ) -> Result<OwnedMutexGuard<Option<CatalogConnection<C::Connection>>>, AppError> {
+        let slot = self
+            .catalogs
+            .lock()
+            .await
+            .entry(connection.to_string())
+            .or_default()
+            .clone();
+        let mut guard = slot.lock_owned().await;
+        if guard.is_some() {
+            return Ok(guard);
+        }
+        let (_, db, tunnel, generation) = self.connect(connection).await?;
+        // 연결하는 사이에 프로젝트가 다시 열렸으면 그 전의 접속 정보로 붙은 연결이다.
+        // (`close_catalog`가 이 자리를 지웠으면 그 닫기가 이 guard를 기다렸다가 닫는다.)
+        if self.state.lock().await.project_generation != generation {
             db.close().await;
             self.release(tunnel).await;
             return Err(AppError::ProjectChanged);
         }
-        state.last_session_id += 1;
-        let info = SessionInfo {
-            id: SessionId(state.last_session_id),
-            connection: profile.name,
-            backend_pid: db.backend_pid(),
-        };
-        let handle = session_actor::spawn(db, QueryLimits::default());
-        state
-            .sessions
-            .insert(info.id, SessionEntry { handle, tunnel });
-        Ok(info)
+        *guard = Some(CatalogConnection { db, tunnel });
+        Ok(guard)
+    }
+
+    async fn close_all_catalogs(&self) {
+        let slots = std::mem::take(&mut *self.catalogs.lock().await);
+        for slot in slots.into_values() {
+            close_catalog_slot(slot, self.tunnels.clone()).await;
+        }
     }
 
     async fn release(&self, tunnel: Option<TunnelLease>) {
@@ -383,6 +495,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     /// 앱을 끝낼 때. 세션을 모두 닫고 앱이 띄운 터널을 모두 끈다.
     pub async fn shutdown(&self) {
         self.close_all_sessions().await;
+        self.close_all_catalogs().await;
         self.tunnels.stop_all().await;
     }
 
@@ -512,6 +625,36 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     }
 }
 
+/// catalog connection 자리를 닫는다. 읽거나 여는 중이면 기다리지 않고 그것이 끝난 뒤 뒤에서 닫는다.
+/// 여는 중에는 터널을 20초까지 기다릴 수 있어서, 프로젝트 바꾸기와 종료가 그것을 기다리지 않게 한다.
+async fn close_catalog_slot<D: DbConnection, T: TunnelRunner>(
+    slot: CatalogSlot<D>,
+    tunnels: Tunnels<T>,
+) {
+    match slot.clone().try_lock_owned() {
+        Ok(mut guard) => discard_catalog(&mut guard, &tunnels).await,
+        Err(_) => {
+            tokio::spawn(async move {
+                let mut guard = slot.lock_owned().await;
+                discard_catalog(&mut guard, &tunnels).await;
+            });
+        }
+    }
+}
+
+/// 자리의 연결을 닫고 터널 lease를 놓는다(DB 연결이 먼저, 기획서 4.2의 순서).
+async fn discard_catalog<D: DbConnection, T: TunnelRunner>(
+    slot: &mut Option<CatalogConnection<D>>,
+    tunnels: &Tunnels<T>,
+) {
+    if let Some(open) = slot.take() {
+        open.db.close().await;
+        if let Some(lease) = open.tunnel {
+            tunnels.release(lease).await;
+        }
+    }
+}
+
 /// DB 연결을 닫은 뒤 터널을 놓는다(기획서 4.2의 순서).
 async fn close_entry<T: TunnelRunner>(entry: SessionEntry, tunnels: Tunnels<T>) {
     entry.handle.close().await;
@@ -550,15 +693,17 @@ mod tests {
     use tokio::sync::mpsc::UnboundedReceiver;
 
     use super::*;
-    use crate::application::TunnelError;
     use crate::application::test_support::{
         FakeConnector, FakeFiles, FakeInspector, FakePasswords, FakeProjects, FakeRun, FakeRunner,
         FakeSplitter, events_sink, next, profile, sink,
     };
-    use crate::application::{CancelError, PasswordKey, PasswordStore, ProjectError, SplitError};
+    use crate::application::{
+        CancelError, PasswordKey, PasswordStore, ProjectError, QueryError, SplitError, TunnelError,
+    };
     use crate::domain::{
-        ConnectionColor, EndOutcome, EndResult, FileStamp, ProfileError, QueryEvent, QueryOutcome,
-        SessionState, SslMode, StatementSpan, TxEnd, TxStatus, WriteMode,
+        Catalog, ConnectionColor, EndOutcome, EndResult, FileStamp, ProfileError, QueryEvent,
+        QueryOutcome, SessionState, SslMode, StatementSpan, TableDetails, TxEnd, TxStatus,
+        WriteMode,
     };
     use crate::domain::{TunnelEvent, TunnelFailure};
 
@@ -1671,6 +1816,157 @@ mod tests {
         assert_eq!(
             f.app.session_state(session.id).await,
             Err(AppError::UnknownSession { id: session.id })
+        );
+    }
+
+    // --- catalog connection (M7) ---
+
+    fn sample_catalog() -> Catalog {
+        Catalog {
+            search_path: vec!["public".into()],
+            schemas: vec!["public".into()],
+            ..Catalog::default()
+        }
+    }
+
+    fn lost() -> QueryError {
+        QueryError::ConnectionLost {
+            message: "끊겼다".into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn load_catalog_opens_one_connection_and_reuses_it() {
+        let f = opened().await;
+        f.connector.set_catalog(sample_catalog());
+        let details = TableDetails {
+            indexes: vec![],
+            constraints: vec![],
+        };
+        f.connector.set_details(7, details.clone());
+
+        assert_eq!(f.app.load_catalog("local").await, Ok(sample_catalog()));
+        assert_eq!(f.app.load_catalog("local").await, Ok(sample_catalog()));
+        assert_eq!(f.app.load_table_details("local", 7).await, Ok(details));
+
+        assert_eq!(f.connector.requests().len(), 1);
+        assert_eq!(f.connector.catalog_reads(), 2);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn catalog_connection_shares_the_tunnel_with_sessions() {
+        let f = tunneled().await;
+        let session = f.app.open_session("staging").await.unwrap();
+        f.app.load_catalog("staging").await.unwrap();
+        assert_eq!(f.runner.spawned().len(), 1);
+
+        f.app.close_session(session.id).await.unwrap();
+        assert_eq!(f.runner.running(), 1);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn closing_the_catalog_releases_the_tunnel() {
+        let f = tunneled().await;
+        let session = f.app.open_session("staging").await.unwrap();
+        f.app.load_catalog("staging").await.unwrap();
+        f.app.close_session(session.id).await.unwrap();
+
+        f.app.close_catalog("staging").await.unwrap();
+
+        assert_eq!(f.runner.running(), 0);
+        assert!(f.connector.links()[1].closed());
+    }
+
+    #[tokio::test]
+    async fn reconnects_once_when_the_catalog_connection_was_lost() {
+        let f = opened().await;
+        f.connector.set_catalog(sample_catalog());
+        f.app.load_catalog("local").await.unwrap();
+        f.connector.links()[0].lose();
+
+        assert_eq!(f.app.load_catalog("local").await, Ok(sample_catalog()));
+        assert_eq!(f.connector.requests().len(), 2);
+        assert!(f.connector.links()[0].closed());
+    }
+
+    #[tokio::test]
+    async fn a_second_loss_is_reported() {
+        let f = opened().await;
+        f.connector.fail_next_catalog(lost());
+        f.connector.fail_next_catalog(lost());
+
+        assert!(matches!(
+            f.app.load_catalog("local").await,
+            Err(AppError::Catalog(QueryError::ConnectionLost { .. }))
+        ));
+    }
+
+    #[tokio::test]
+    async fn server_errors_are_not_retried() {
+        let f = opened().await;
+        let error = QueryError::Server(crate::application::test_support::server_error("42501"));
+        f.connector.fail_next_catalog(error.clone());
+
+        assert_eq!(
+            f.app.load_catalog("local").await,
+            Err(AppError::Catalog(error))
+        );
+        assert_eq!(f.connector.requests().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn switching_projects_closes_catalog_connections() {
+        let f = opened().await;
+        f.app.load_catalog("local").await.unwrap();
+
+        f.app.open_project(Path::new("/q")).await.unwrap();
+
+        assert!(f.connector.links()[0].closed());
+    }
+
+    #[tokio::test]
+    async fn shutdown_closes_catalog_connections() {
+        let f = opened().await;
+        f.app.load_catalog("local").await.unwrap();
+
+        f.app.shutdown().await;
+
+        assert!(f.connector.links()[0].closed());
+    }
+
+    #[tokio::test]
+    async fn catalog_connected_across_a_project_reload_is_closed() {
+        let f = Arc::new(opened().await);
+        let blocked = f.connector.block().await;
+        let loading = tokio::spawn({
+            let f = f.clone();
+            async move { f.app.load_catalog("local").await }
+        });
+        while f.connector.requests().is_empty() {
+            tokio::task::yield_now().await;
+        }
+
+        f.app.open_project(Path::new("/p")).await.unwrap();
+        drop(blocked);
+
+        assert_eq!(loading.await.unwrap(), Err(AppError::ProjectChanged));
+        assert!(f.connector.links()[0].closed());
+    }
+
+    #[tokio::test]
+    async fn close_catalog_without_a_connection_is_ok() {
+        let f = opened().await;
+        assert_eq!(f.app.close_catalog("local").await, Ok(()));
+    }
+
+    #[tokio::test]
+    async fn load_catalog_of_an_unknown_connection_fails() {
+        let f = opened().await;
+        assert_eq!(
+            f.app.load_catalog("nope").await,
+            Err(AppError::UnknownConnection {
+                name: "nope".into()
+            })
         );
     }
 }

@@ -330,15 +330,12 @@ impl FakeConnector {
         self.log.lock().unwrap().fail_next = Some(error);
     }
 
-    // Task 3(App의 catalog connection) test가 쓴다.
-    #[allow(dead_code)]
     /// 만든 연결들의 `read_catalog`가 돌려줄 catalog. 처음에는 빈 catalog다.
     pub(crate) fn set_catalog(&self, catalog: Catalog) {
         self.catalog.lock().unwrap().catalog = catalog;
     }
 
     /// 만든 연결들의 `read_table_details(relation)`이 돌려줄 값. 없으면 빈 값이다.
-    #[allow(dead_code)]
     pub(crate) fn set_details(&self, relation: u32, details: TableDetails) {
         self.catalog
             .lock()
@@ -348,13 +345,11 @@ impl FakeConnector {
     }
 
     /// 다음 catalog 읽기 한 번이 `error`로 실패한다. 여러 번 부르면 차례로 쓴다.
-    #[allow(dead_code)]
     pub(crate) fn fail_next_catalog(&self, error: QueryError) {
         self.catalog.lock().unwrap().failures.push_back(error);
     }
 
     /// 만든 연결 전체의 `read_catalog` 호출 수.
-    #[allow(dead_code)]
     pub(crate) fn catalog_reads(&self) -> usize {
         self.catalog.lock().unwrap().reads
     }
