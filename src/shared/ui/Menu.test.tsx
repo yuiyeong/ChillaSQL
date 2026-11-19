@@ -150,3 +150,25 @@ test("align=end는 menu의 오른쪽 끝을 anchor의 오른쪽 끝에 맞춘다
   expect(screen.getByRole("menu").style.left).toBe("");
   vi.restoreAllMocks();
 });
+
+test("opens_at_a_point", () => {
+  const anchor = createRef<HTMLButtonElement>();
+  render(
+    <>
+      <button ref={anchor} type="button">
+        row
+      </button>
+      <Menu
+        open
+        onClose={vi.fn()}
+        anchor={anchor}
+        at={{ x: 40, y: 60 }}
+        label="Row"
+      >
+        <MenuItem onSelect={vi.fn()}>Copy name</MenuItem>
+      </Menu>
+    </>,
+  );
+  const menu = screen.getByRole("menu", { name: "Row" });
+  expect(menu).toHaveStyle({ left: "40px", top: "60px" });
+});

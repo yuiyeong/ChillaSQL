@@ -1,8 +1,12 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState, type MouseEvent } from "react";
+import { copyText } from "../../shared/api/clipboard";
 import type { ConstraintKind } from "../../shared/api/types";
+import { quoteIdent, reservedSet } from "../../shared/sql/identifiers";
 import { t } from "../../shared/i18n/t";
 import { Button } from "../../shared/ui/Button";
 import { IconButton } from "../../shared/ui/IconButton";
+import { Menu, MenuItem } from "../../shared/ui/Menu";
+import { Toast, useToast } from "../../shared/ui/Toast";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -13,6 +17,7 @@ import {
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
+import { selectFirstRows } from "../workspace/commands";
 import { relationGroup, schemaRows, type SchemaRow } from "./schemaRows";
 import { useSchema } from "./schemaStore";
 
@@ -114,6 +119,12 @@ export function SchemaView({
     [entry],
   );
   const [selected, setSelected] = useState<string | null>(null);
+  const [menu, setMenu] = useState<{
+    row: SchemaRow;
+    at: { x: number; y: number };
+  } | null>(null);
+  const menuAnchor = useRef<HTMLElement | null>(null);
+  const toast = useToast();
 
   if (connection === null) {
     return (
@@ -149,6 +160,33 @@ export function SchemaView({
     }
   }
 
+  const catalog = entry?.catalog ?? null;
+
+  function openMenu(row: SchemaRow, event: MouseEvent<HTMLElement>) {
+    // group과 상태 줄은 이름이 있는 object가 아니다.
+    if (row.kind === "group" || catalog === null) return;
+    event.preventDefault();
+    menuAnchor.current = event.currentTarget;
+    setSelected(row.key);
+    setMenu({ row, at: { x: event.clientX, y: event.clientY } });
+  }
+
+  function firstRows(row: SchemaRow) {
+    if (row.kind !== "relation" || catalog === null) return;
+    void selectFirstRows(row.relation, reservedSet(catalog));
+  }
+
+  async function copyName(row: SchemaRow) {
+    if (catalog === null) return;
+    const name = quoteIdent(nameOf(row), reservedSet(catalog));
+    try {
+      await copyText(name);
+    } catch {
+      return;
+    }
+    toast.show(t("schema.copied", { name }));
+  }
+
   const loadingFirst =
     entry === undefined ||
     (entry.status === "loading" && entry.catalog === null);
@@ -156,7 +194,7 @@ export function SchemaView({
   return (
     <section
       aria-label={t("schema.label")}
-      className="flex min-h-0 flex-1 flex-col"
+      className="relative flex min-h-0 flex-1 flex-col"
     >
       <div
         data-testid="schema-header"
@@ -204,10 +242,35 @@ export function SchemaView({
               row={row}
               selected={row.key === selected}
               onPress={() => press(row)}
+              onDoubleClick={() => firstRows(row)}
+              onContextMenu={(event) => openMenu(row, event)}
             />
           </li>
         ))}
       </ul>
+
+      <Menu
+        open={menu !== null}
+        onClose={() => setMenu(null)}
+        anchor={menuAnchor}
+        at={menu?.at}
+        label={menu === null ? "" : nameOf(menu.row)}
+      >
+        {menu?.row.kind === "relation" && (
+          <MenuItem onSelect={() => firstRows(menu.row)}>
+            <span className="flex-1">{t("schema.menu.selectFirstRows")}</span>
+            <span className="text-label text-fg-2">
+              {t("schema.menu.doubleClick")}
+            </span>
+          </MenuItem>
+        )}
+        {menu !== null && (
+          <MenuItem onSelect={() => void copyName(menu.row)}>
+            {t("schema.menu.copyName")}
+          </MenuItem>
+        )}
+      </Menu>
+      <Toast message={toast.message} />
     </section>
   );
 }
@@ -216,10 +279,14 @@ function TreeRow({
   row,
   selected,
   onPress,
+  onDoubleClick,
+  onContextMenu,
 }: {
   row: SchemaRow;
   selected: boolean;
   onPress(): void;
+  onDoubleClick(): void;
+  onContextMenu(event: MouseEvent<HTMLElement>): void;
 }) {
   if (row.kind === "loading" || row.kind === "empty" || row.kind === "failed") {
     return (
@@ -256,6 +323,8 @@ function TreeRow({
       ].join(" ")}
       style={indent(row.depth)}
       onClick={onPress}
+      onDoubleClick={onDoubleClick}
+      onContextMenu={onContextMenu}
     >
       <Chevron
         size={11}

@@ -43,6 +43,7 @@ import {
   execute,
   cancelRun,
   runAgain,
+  selectFirstRows,
   switchProject,
 } from "./commands";
 import { switchMode } from "./transactionPrompts";
@@ -50,7 +51,7 @@ import { useTunnels } from "../connections/tunnelsStore";
 import { useDialogs } from "../../shared/ui/dialogs";
 import { answerDialog, textOf } from "../../test/dialogs";
 import { deferred } from "../../test/deferred";
-import { catalogFixture, connection } from "../../test/fixtures";
+import { catalogFixture, connection, relation } from "../../test/fixtures";
 import { useSchema } from "../schema/schemaStore";
 import { resetStores } from "../../test/resetStores";
 
@@ -1224,4 +1225,30 @@ test("switching_projects_resets_schemas", async () => {
   await switchProject();
 
   expect(useSchema.getState().entries).toEqual({});
+});
+
+test("select_first_rows_quotes_names", async () => {
+  const before = tabWith("SELECT 1", "local");
+  useTabs.getState().setMode(before, "manual");
+
+  await selectFirstRows(
+    relation(9, "public", "Order Items"),
+    new Set(["user"]),
+  );
+
+  const { activeId, tabs } = useTabs.getState();
+  expect(activeId).not.toBe(before);
+  const opened = tabs.find((tab) => tab.id === activeId);
+  expect(opened?.connection).toBe("local");
+  expect(opened?.mode).toBe("auto");
+  const sql = 'SELECT * FROM public."Order Items" LIMIT 500';
+  expect(documentState(activeId!).doc.toString()).toBe(sql);
+  await vi.waitFor(() =>
+    expect(executeQuery).toHaveBeenCalledWith(
+      3,
+      sql,
+      "auto",
+      expect.any(Function),
+    ),
+  );
 });

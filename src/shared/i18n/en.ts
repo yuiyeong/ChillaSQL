@@ -163,6 +163,10 @@ export const en = {
   "schema.group.constraints": "Constraints",
   "schema.unique": "unique",
   "schema.materialized": "materialized",
+  "schema.menu.selectFirstRows": "Select first rows",
+  "schema.menu.doubleClick": "Double-click",
+  "schema.menu.copyName": "Copy name",
+  "schema.copied": "Copied {name}",
 
   "connectionForm.titleNew": "New Connection",
   "connectionForm.titleEdit": "Edit {name}",

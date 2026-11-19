@@ -18,6 +18,8 @@ interface MenuProps {
   onClose(): void;
   /** menu를 이 element 아래에 붙인다. 이 element를 누르는 것은 "바깥"이 아니다(여닫기는 그 element가 정한다). */
   anchor: RefObject<HTMLElement | null>;
+  /** 있으면 anchor 아래 대신 이 화면 좌표에 연다(우클릭 menu). */
+  at?: { x: number; y: number };
   /** `end`면 menu의 오른쪽 끝을 anchor의 오른쪽 끝에 맞춘다. 창 오른쪽 끝의 anchor에 쓴다. 기본은 `start`다. */
   align?: "start" | "end";
   /** `aria-label` */
@@ -33,6 +35,7 @@ export function Menu({
   open,
   onClose,
   anchor,
+  at,
   align = "start",
   label,
   children,
@@ -41,8 +44,13 @@ export function Menu({
 
   useLayoutEffect(() => {
     if (!open) return;
-    const rect = anchor.current?.getBoundingClientRect();
     const menu = ref.current;
+    if (at !== undefined && menu) {
+      menu.style.left = `${at.x}px`;
+      menu.style.top = `${at.y}px`;
+      return;
+    }
+    const rect = anchor.current?.getBoundingClientRect();
     if (!rect || !menu) return;
     menu.style.top = `${rect.bottom + 4}px`;
     if (align === "end") {
@@ -50,7 +58,7 @@ export function Menu({
     } else {
       menu.style.left = `${rect.left}px`;
     }
-  }, [open, anchor, align]);
+  }, [open, anchor, align, at]);
 
   // 열릴 때만 첫 항목으로 간다. 다시 그려질 때마다 가면 화살표로 옮긴 자리를 잃는다.
   useEffect(() => {

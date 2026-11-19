@@ -222,3 +222,9 @@ test("close는 그 탭의 이름을 묻고 있을 때만 naming을 비운다", (
   useTabs.getState().close(b);
   expect(useTabs.getState().naming).toBeNull();
 });
+
+test("new_tab_can_start_with_text", () => {
+  const id = useTabs.getState().newTab({ text: "SELECT 1" });
+  expect(documentText(id)).toBe("SELECT 1");
+  expect(useTabs.getState().activeId).toBe(id);
+});

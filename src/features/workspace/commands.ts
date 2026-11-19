@@ -5,7 +5,13 @@ import {
 } from "../../shared/api/commands";
 import { pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
-import type { Connection, Project, TxEnd } from "../../shared/api/types";
+import type {
+  Connection,
+  Project,
+  Relation,
+  TxEnd,
+} from "../../shared/api/types";
+import { quoteIdent } from "../../shared/sql/identifiers";
 import { targetChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { documentSelection, documentText } from "../editor/documents";
@@ -188,6 +194,26 @@ export async function runAgain(tabId: string): Promise<void> {
   const state = useRuns.getState().runs[tabId];
   if (state?.status !== "running" && state?.status !== "finished") return;
   const { sql, origin } = state.result;
+  return useRuns
+    .getState()
+    .run(tabId, () => confirmed(tabId, requestFor(tabId, sql, origin)));
+}
+
+/** Select first rows가 읽는 행 수. batch 하나다. */
+const FIRST_ROWS = 500;
+
+/**
+ * 활성 탭의 접속으로 새 탭을 열어 relation의 앞 행을 조회한다. 지금 탭의 받다 만 결과와
+ * 트랜잭션을 건드리지 않으려고 새 탭에서 한다.
+ */
+export async function selectFirstRows(
+  relation: Relation,
+  reservedWords: ReadonlySet<string>,
+): Promise<void> {
+  const name = `${quoteIdent(relation.schema, reservedWords)}.${quoteIdent(relation.name, reservedWords)}`;
+  const sql = `SELECT * FROM ${name} LIMIT ${FIRST_ROWS}`;
+  const tabId = useTabs.getState().newTab({ text: sql });
+  const origin = { line: 1, column: 1 };
   return useRuns
     .getState()
     .run(tabId, () => confirmed(tabId, requestFor(tabId, sql, origin)));

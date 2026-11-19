@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { click } from "../../test/click";
 import {
@@ -10,8 +10,12 @@ import {
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("../../shared/api/commands");
+vi.mock("../../shared/api/clipboard");
+vi.mock("../workspace/commands", () => ({ selectFirstRows: vi.fn() }));
 
+import { copyText } from "../../shared/api/clipboard";
 import { loadCatalog, loadTableDetails } from "../../shared/api/commands";
+import { selectFirstRows } from "../workspace/commands";
 import { useTabs } from "../editor/tabsStore";
 import { SchemaView } from "./SchemaView";
 import { nodeKey, useSchema, type SchemaEntry } from "./schemaStore";
@@ -228,4 +232,79 @@ test("materialized_views_are_labeled", () => {
   const view = row("active_users");
   expect(within(view).getByText("V")).toBeInTheDocument();
   expect(within(view).getByText("materialized")).toBeInTheDocument();
+});
+
+function tableFixture() {
+  activeTab("local");
+  setEntry({
+    catalog: catalogFixture({
+      relations: [
+        relation(9, "public", "Order Items", [["id", "bigint", true]]),
+      ],
+    }),
+    expanded: new Set(
+      [
+        ["public"],
+        ["public", "tables"],
+        ["public", "tables", "Order Items"],
+        ["public", "tables", "Order Items", "columns"],
+      ].map(nodeKey),
+    ),
+  });
+  renderView();
+}
+
+test("double_clicking_a_table_selects_first_rows", () => {
+  tableFixture();
+  fireEvent.doubleClick(row("Order Items"));
+  expect(selectFirstRows).toHaveBeenCalledWith(
+    expect.objectContaining({ oid: 9, name: "Order Items" }),
+    new Set(["select", "user"]),
+  );
+});
+
+test("context_menu_of_a_table", async () => {
+  tableFixture();
+  fireEvent.contextMenu(row("Order Items"), { clientX: 30, clientY: 50 });
+
+  const menu = screen.getByRole("menu", { name: "Order Items" });
+  expect(menu).toHaveStyle({ left: "30px", top: "50px" });
+  const items = within(menu).getAllByRole("menuitem");
+  expect(items.map((item) => item.textContent)).toEqual([
+    "Select first rowsDouble-click",
+    "Copy name",
+  ]);
+  await click(items[0]);
+  expect(selectFirstRows).toHaveBeenCalledTimes(1);
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
+test("context_menu_of_a_column_only_copies", () => {
+  tableFixture();
+  fireEvent.contextMenu(row("id"), { clientX: 30, clientY: 50 });
+  const menu = screen.getByRole("menu", { name: "id" });
+  expect(
+    within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent),
+  ).toEqual(["Copy name"]);
+});
+
+test("groups_have_no_menu", () => {
+  tableFixture();
+  fireEvent.contextMenu(row("Columns"), { clientX: 30, clientY: 50 });
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
+test("copy_name_copies_the_quoted_name_and_toasts", async () => {
+  vi.mocked(copyText).mockResolvedValue();
+  tableFixture();
+  fireEvent.contextMenu(row("Order Items"), { clientX: 30, clientY: 50 });
+
+  await click(screen.getByRole("menuitem", { name: "Copy name" }));
+
+  expect(copyText).toHaveBeenCalledWith('"Order Items"');
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    'Copied "Order Items"',
+  );
 });

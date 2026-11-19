@@ -23,7 +23,8 @@ export interface TabsState {
   /** 파일 이름을 묻는 중인 tab id */
   naming: string | null;
   error: string | null;
-  newTab(): string;
+  /** `text`가 있으면 그 내용으로 시작한다. */
+  newTab(options?: { text?: string }): string;
   openFile(path: string): Promise<void>;
   activate(id: string): void;
   /** 탭과 문서만 닫는다. 저장 확인과 세션 해제는 호출한 쪽이 한다. */
@@ -91,7 +92,7 @@ export const useTabs = create<TabsState>()((set, get) => {
     naming: null,
     error: null,
 
-    newTab() {
+    newTab(options) {
       const id = crypto.randomUUID();
       add(
         {
@@ -103,7 +104,7 @@ export const useTabs = create<TabsState>()((set, get) => {
           connection: activeConnection(),
           mode: "auto",
         },
-        "",
+        options?.text ?? "",
       );
       counter += 1;
       return id;
