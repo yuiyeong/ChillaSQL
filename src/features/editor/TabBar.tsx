@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { ConnectionDot } from "../connections/ConnectionDot";
+import { TunnelTabIcon } from "../connections/TunnelStatus";
 import { useProject } from "../project/projectStore";
 import { CloseIcon, PlusIcon } from "../../shared/ui/icons";
 import { IconButton } from "../../shared/ui/IconButton";
@@ -86,6 +87,9 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
                     <ConnectionDot color={color} testId="tab-dot" />
                     <span className="truncate">{tab.title}</span>
                   </button>
+                  <span className="mr-1 inline-flex">
+                    <TunnelTabIcon connection={tab.connection} />
+                  </span>
                   <span className="relative size-[18px] shrink-0">
                     {tab.dirty && (
                       <span

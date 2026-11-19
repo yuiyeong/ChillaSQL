@@ -6,6 +6,23 @@
 export const en = {
   "common.cancel": "Cancel",
   "common.save": "Save",
+  "common.close": "Close",
+
+  "tunnel.starting": "Starting tunnel",
+  "tunnel.seconds": "{elapsed} / {total} s",
+  "tunnel.reconnecting": "Reconnecting",
+  "tunnel.attempt": "{attempt}/3",
+  "tunnel.failed": "Tunnel failed",
+  "tunnel.external": "External tunnel",
+  "tunnel.externalHint":
+    "{target} was already open, so the tunnel command didn't run. ChillaSQL won't close this tunnel when it quits.",
+  "tunnel.ranCommand": "Ran the tunnel command. Connects once {target} opens.",
+  "tunnel.output": "Command output (stderr)",
+  "tunnel.tryAgain": "Try again",
+  "tunnel.editConnection": "Edit connection",
+  "tunnel.restarting":
+    "The tunnel process exited. Running the command again ({attempt}/3).",
+  "tunnel.gaveUp": "Ran the tunnel 3 times but it didn't open, so it stopped.",
 
   "toolbar.label": "Query",
   "toolbar.changeConnection": "Change this tab's connection",
@@ -93,6 +110,9 @@ export const en = {
 
   "result.hintRun": "Run statement at cursor",
   "result.hintNewTab": "New tab",
+  "result.reconnected": "Reconnected",
+  "result.reconnectedDetail":
+    "This is a new session, so session state such as SET values and temporary tables was reset.",
   "result.connecting": "Connecting…",
   "result.running": "Running {elapsed}",
   "result.waiting": "Waiting for the first row from the server",

@@ -803,28 +803,28 @@ git commit -m "feat: 접속 sheet를 캔버스 배치로 다시 만들고 tunnel
 
 `failed`가 재실행 뒤인지는 `TunnelView.afterRestart`로 가린다. notice가 `reconnected`면 결과 panel 맨 위에 `ReconnectedBanner`(refresh icon, `Reconnected`, `This is a new session, so session state such as SET values and temporary tables was reset.`, Close → `dismissNotice`). Cancel 버튼은 탭이 `connecting`이고 그 접속의 터널이 `starting`이면 켠다. tooltip은 `role="tooltip"`이고 `aria-describedby`로 잇는다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `TunnelStatus.test.tsx`: `useTunnels`에 상태를 넣고 위 표의 chip 문구와 탭 icon의 aria-label을 단언한다. fake timer로 3초 지나면 `3 / 20 s`. `external`에 hover하면 tooltip 문구가 보인다.
 - `TunnelPanels.test.tsx`/`ResultPane.test.tsx`: 연결 중 + starting이면 명령 text와 Cancel, Cancel이 `cancelTunnel("staging")`을 부름. rejection에 `output`이 있으면 pre와 Try again, Try again이 같은 `RunRequest`로 `run`을 부름, Edit connection이 `onEditConnection("staging")`. 재실행 뒤 failed면 Try again이 `restartTunnel("staging")`. notice가 있으면 banner, Close가 notice를 지움.
 - `Toolbar.test.tsx`: 연결 중 + 터널 starting이면 Cancel이 enabled, 터널 없는 연결 중이면 disabled(기존 test 유지).
 - `TabBar.test.tsx`: 탭의 접속이 external이면 `External tunnel` icon.
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 icon은 캔버스의 path를 그대로 `icons.tsx`에 `ExternalTunnelIcon`, `ReconnectIcon`으로 더한다(spinner와 x는 있는 `SpinnerIcon`, `ErrorIcon`). 문구는 `tunnel.*`, `result.reconnected*` key로 `en.ts`에 둔다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src

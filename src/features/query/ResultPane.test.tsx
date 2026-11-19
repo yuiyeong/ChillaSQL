@@ -3,12 +3,19 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/clipboard");
-vi.mock("../workspace/commands", () => ({ runAgain: vi.fn() }));
+vi.mock("../workspace/commands", () => ({
+  runAgain: vi.fn(),
+  cancelRun: vi.fn(),
+}));
 
 import { copyText } from "../../shared/api/clipboard";
 import { stubLayout } from "../../test/layout";
 import type { Cell, Outcome } from "../../shared/api/types";
-import { runAgain } from "../workspace/commands";
+import { cancelRun, runAgain } from "../workspace/commands";
+import { restartTunnel } from "../../shared/api/commands";
+import { useTunnels } from "../connections/tunnelsStore";
+import { connection, openProjectWith } from "../../test/fixtures";
+import type { TunnelState } from "../../shared/api/types";
 import { ResultPane } from "./ResultPane";
 import { fitWidth } from "./grid";
 import { emptyResult, type ResultData, type RunState } from "./runReducer";
@@ -561,5 +568,119 @@ describe("탭을 바꿨다 돌아올 때의 결과 표", () => {
     view.rerender(<ResultPane tabId="a" hasConnection />);
 
     expectFresh();
+  });
+});
+
+describe("터널", () => {
+  const staging = connection("staging", {
+    port: 25432,
+    tunnel: "ssh -N -L 25432:db.internal:5432 bastion",
+  });
+
+  beforeEach(() => {
+    openProjectWith([staging]);
+    useTunnels.getState().reset();
+  });
+
+  function tunnel(state: TunnelState) {
+    act(() => useTunnels.getState().apply({ connection: "staging", state }));
+  }
+
+  function showFor(state: RunState, onEditConnection = vi.fn()) {
+    useRuns.setState({ runs: { t: state } });
+    render(
+      <ResultPane
+        tabId="t"
+        hasConnection
+        connection="staging"
+        onEditConnection={onEditConnection}
+      />,
+    );
+    return onEditConnection;
+  }
+
+  test("연결 중에 터널이 시작 중이면 명령과 Cancel을 보여 준다", async () => {
+    tunnel({ status: "starting", attempt: 0, timeoutSecs: 20 });
+    showFor({ status: "connecting" });
+
+    expect(
+      screen.getByText(
+        "Ran the tunnel command. Connects once localhost:25432 opens.",
+      ),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("ssh -N -L 25432:db.internal:5432 bastion"),
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(cancelRun).toHaveBeenCalledWith("t");
+  });
+
+  test("터널을 열지 못한 실행은 명령의 출력과 Try again, Edit connection을 준다", () => {
+    const run = vi.spyOn(useRuns.getState(), "run").mockResolvedValue();
+    const retry = {
+      connection: "staging",
+      sql: "SELECT 1",
+      origin: { line: 1, column: 1 },
+    };
+    const onEdit = showFor({
+      status: "rejected",
+      rejection: {
+        title: "localhost:25432 didn't open within 20 seconds",
+        detail: null,
+        output: "Unauthorized. Please login",
+        retry,
+      },
+    });
+
+    expect(screen.getByText("Command output (stderr)")).toBeInTheDocument();
+    expect(screen.getByText("Unauthorized. Please login")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(run).toHaveBeenCalledWith("t", expect.any(Function));
+    const prepare = run.mock.calls[0][1];
+    expect(prepare()).toEqual(retry);
+
+    fireEvent.click(screen.getByRole("button", { name: "Edit connection" }));
+    expect(onEdit).toHaveBeenCalledWith("staging");
+    run.mockRestore();
+  });
+
+  test("다시 실행 중이면 한 줄로 알린다", () => {
+    tunnel({ status: "ready" });
+    tunnel({ status: "starting", attempt: 2, timeoutSecs: 20 });
+    showFor({ status: "idle" });
+    expect(
+      screen.getByText(
+        "The tunnel process exited. Running the command again (2/3).",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("다시 실행을 멈춘 터널은 출력과 Try again을 준다", () => {
+    tunnel({ status: "starting", attempt: 3, timeoutSecs: 20 });
+    tunnel({ status: "failed", reason: "exited", code: 1, output: "e3" });
+    showFor({ status: "idle" });
+
+    expect(
+      screen.getByText(
+        "Ran the tunnel 3 times but it didn't open, so it stopped.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("e3")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }));
+    expect(restartTunnel).toHaveBeenCalledWith("staging");
+  });
+
+  test("Reconnected 알림은 Close로 닫는다", () => {
+    useRuns.setState({ notices: { t: "reconnected" } });
+    showFor({ status: "idle" });
+
+    const banner = screen.getByText("Reconnected").closest('[role="status"]');
+    expect(banner).not.toBeNull();
+    expect(banner).toHaveTextContent(
+      "This is a new session, so session state such as SET values and temporary tables was reset.",
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(useRuns.getState().notices.t).toBeUndefined();
   });
 });

@@ -7,6 +7,7 @@ import { resetStores } from "../../test/resetStores";
 import { expectNoTextCorrection } from "../../test/textCorrection";
 import { TabBar } from "./TabBar";
 import { useTabs } from "./tabsStore";
+import { useTunnels } from "../connections/tunnelsStore";
 
 beforeEach(async () => {
   await resetStores();
@@ -219,4 +220,19 @@ test("error가 있으면 한 줄로 보여 주고 누르면 지운다", async ()
 
   expect(useTabs.getState().error).toBeNull();
   expect(screen.queryByText("저장하지 못했습니다")).toBeNull();
+});
+
+test("탭의 접속이 앱이 띄우지 않은 터널이면 icon으로 알린다", () => {
+  openProjectWith([connection("staging", { tunnel: "ssh" })]);
+  const id = useTabs.getState().newTab();
+  useTabs.getState().setConnection(id, "staging");
+  useTunnels
+    .getState()
+    .apply({ connection: "staging", state: { status: "external" } });
+  renderBar();
+
+  expect(
+    screen.getByRole("img", { name: "External tunnel" }),
+  ).toBeInTheDocument();
+  expect(tab("Query 1")).toBeInTheDocument();
 });

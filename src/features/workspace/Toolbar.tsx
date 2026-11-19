@@ -1,5 +1,7 @@
 import { useRef, useState } from "react";
 import { ConnectionDot } from "../connections/ConnectionDot";
+import { TunnelChipStatus } from "../connections/TunnelStatus";
+import { useTunnels } from "../connections/tunnelsStore";
 import { connectionTarget } from "../connections/connectionTarget";
 import { useEditorStatus } from "../editor/editorStatus";
 import { useTabs } from "../editor/tabsStore";
@@ -49,6 +51,11 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
   const hasSelection = useEditorStatus(
     (s) => s.tabId === tabId && s.hasSelection,
   );
+  const tunnelStarting = useTunnels(
+    (s) =>
+      tab?.connection != null &&
+      s.tunnels[tab.connection]?.state.status === "starting",
+  );
   const [connectionMenu, setConnectionMenu] = useState(false);
   const chipRef = useRef<HTMLButtonElement>(null);
 
@@ -81,6 +88,9 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
                 <span className="text-small text-fg-2 font-mono">
                   {current.database}
                 </span>
+              )}
+              {tab.connection !== null && (
+                <TunnelChipStatus connection={tab.connection} />
               )}
             </>
           ) : (
@@ -130,7 +140,8 @@ export function Toolbar({ onAddConnection }: { onAddConnection(): void }) {
         {busy ? (
           <Button
             size="kbd"
-            disabled={status === "connecting"}
+            // 연결 중에는 터널이 시작 중일 때만 멈출 수 있다(그 터널 시작을 멈춘다).
+            disabled={status === "connecting" && !tunnelStarting}
             aria-keyshortcuts={shortcutKeys("cancel")}
             style={{ width: CANCEL_WIDTH }}
             onClick={() => void execute("cancel")}

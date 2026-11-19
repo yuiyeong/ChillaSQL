@@ -13,6 +13,7 @@ import { useEditorStatus } from "../editor/editorStatus";
 import { useTabs } from "../editor/tabsStore";
 import { emptyResult, type RunState } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
+import { useTunnels } from "../connections/tunnelsStore";
 import { changeConnection, execute } from "./commands";
 import { Toolbar } from "./Toolbar";
 
@@ -314,4 +315,22 @@ test("프로젝트가 없어도 그린다", () => {
   expect(chip()).toBeDisabled();
   expect(errors).not.toHaveBeenCalled();
   errors.mockRestore();
+});
+
+test("터널이 시작 중인 연결 중에는 Cancel이 enabled이고 chip에 상태를 보여 준다", () => {
+  openProjectWith([connection("staging", { tunnel: "ssh" })]);
+  const id = tabWith("staging");
+  render(<Toolbar onAddConnection={vi.fn()} />);
+
+  setRun(id, { status: "connecting" });
+  expect(runButton("Cancel")).toBeDisabled();
+
+  act(() =>
+    useTunnels.getState().apply({
+      connection: "staging",
+      state: { status: "starting", attempt: 0, timeoutSecs: 20 },
+    }),
+  );
+  expect(runButton("Cancel")).toBeEnabled();
+  expect(chip()).toHaveTextContent("Starting tunnel");
 });

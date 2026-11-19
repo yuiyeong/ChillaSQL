@@ -44,7 +44,6 @@ export function Workspace() {
   const connectionName = useTabs(
     (s) => s.tabs.find((tab) => tab.id === s.activeId)?.connection ?? null,
   );
-  const hasConnection = connectionName !== null;
   const openFile = useTabs((s) => s.openFile);
   const markDirty = useTabs((s) => s.markDirty);
   const project = useProject((s) => s.project);
@@ -142,7 +141,8 @@ export function Workspace() {
           <ResultSplit
             editorRef={editorRef}
             tabId={activeId}
-            hasConnection={hasConnection}
+            connection={connectionName}
+            onEditConnection={editConnection}
           />
           <StatusBar tabId={activeId} />
         </main>
@@ -170,11 +170,13 @@ export function Workspace() {
 function ResultSplit({
   editorRef,
   tabId,
-  hasConnection,
+  connection,
+  onEditConnection,
 }: {
   editorRef: RefObject<HTMLDivElement | null>;
   tabId: string | null;
-  hasConnection: boolean;
+  connection: string | null;
+  onEditConnection(name: string): void;
 }) {
   const [resultHeight, setResultHeight] = useState(RESULT_HEIGHT);
   const [maxHeight, setMaxHeight] = useState(MIN_PANE);
@@ -248,7 +250,12 @@ function ResultSplit({
         style={{ flex: `0 1 ${resultHeight}px` }}
       >
         <div className="absolute inset-0">
-          <ResultPane tabId={tabId} hasConnection={hasConnection} />
+          <ResultPane
+            tabId={tabId}
+            hasConnection={connection !== null}
+            connection={connection}
+            onEditConnection={onEditConnection}
+          />
         </div>
       </div>
     </>

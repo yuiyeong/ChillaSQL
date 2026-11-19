@@ -23,7 +23,9 @@ import {
 } from "../../shared/ui/icons";
 import { Kbd } from "../../shared/ui/Kbd";
 import { Toast, useToast } from "../../shared/ui/Toast";
-import { runAgain } from "../workspace/commands";
+import { restartTunnel } from "../../shared/api/commands";
+import { useTunnels } from "../connections/tunnelsStore";
+import { cancelRun, runAgain } from "../workspace/commands";
 import { shortcutLabel } from "../workspace/shortcuts";
 import {
   affectedText,
@@ -35,6 +37,13 @@ import {
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
+import {
+  ReconnectedBanner,
+  TunnelFailed,
+  TunnelGaveUp,
+  TunnelRestarting,
+  TunnelStarting,
+} from "./TunnelPanels";
 
 const LIVE_MS = 100;
 
@@ -45,11 +54,22 @@ const LIVE_MS = 100;
 export const ResultPane = memo(function ResultPane({
   tabId,
   hasConnection,
+  connection = null,
+  onEditConnection,
 }: {
   tabId: string | null;
   hasConnection: boolean;
+  /** 탭의 접속. 그 접속의 터널 상태를 그린다. */
+  connection?: string | null;
+  onEditConnection?(name: string): void;
 }) {
   const state = useRuns((s) => (tabId === null ? undefined : s.runs[tabId]));
+  const runNotice = useRuns((s) =>
+    tabId === null ? undefined : s.notices[tabId],
+  );
+  const tunnel = useTunnels((s) =>
+    connection === null ? undefined : s.tunnels[connection],
+  );
   const toast = useToast();
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
@@ -105,7 +125,19 @@ export const ResultPane = memo(function ResultPane({
         );
       break;
     case "connecting":
-      body = <Centered>{t("result.connecting")}</Centered>;
+      body =
+        connection !== null &&
+        tunnel?.state.status === "starting" &&
+        tunnel.state.attempt === 0 ? (
+          <TunnelStarting
+            connection={connection}
+            onCancel={() => {
+              if (tabId !== null) void cancelRun(tabId);
+            }}
+          />
+        ) : (
+          <Centered>{t("result.connecting")}</Centered>
+        );
       break;
     case "running": {
       const { result } = state;
@@ -213,7 +245,23 @@ export const ResultPane = memo(function ResultPane({
       }
       break;
     }
-    case "rejected":
+    case "rejected": {
+      const { rejection } = state;
+      if (rejection.output !== undefined || rejection.retry !== undefined) {
+        body = (
+          <TunnelFailed
+            rejection={rejection}
+            onRetry={() => {
+              const { retry } = rejection;
+              if (tabId !== null && retry !== undefined) {
+                void useRuns.getState().run(tabId, () => retry);
+              }
+            }}
+            onEditConnection={onEditConnection}
+          />
+        );
+        break;
+      }
       body = (
         <MessageBlock icon={WarningIcon}>
           <div className="flex flex-col gap-1">
@@ -225,7 +273,37 @@ export const ResultPane = memo(function ResultPane({
         </MessageBlock>
       );
       break;
+    }
   }
+
+  const tunnelState = tunnel?.state;
+  const banners = (
+    <>
+      {runNotice === "reconnected" && tabId !== null && (
+        <ReconnectedBanner
+          onClose={() => useRuns.getState().dismissNotice(tabId)}
+        />
+      )}
+      {tunnelState?.status === "starting" && tunnelState.attempt >= 1 && (
+        <TunnelRestarting attempt={tunnelState.attempt} />
+      )}
+      {tunnelState?.status === "failed" &&
+        tunnelState.reason !== "cancelled" &&
+        tunnel?.afterRestart === true &&
+        connection !== null && (
+          <TunnelGaveUp
+            output={"output" in tunnelState ? tunnelState.output : null}
+            onRetry={async () => {
+              try {
+                await restartTunnel(connection);
+              } catch {
+                // 그 사이 프로젝트가 바뀌었다. 터널 상태는 event로 온다.
+              }
+            }}
+          />
+        )}
+    </>
+  );
 
   const copySelection = () => {
     const target = copyTargetRef.current?.();
@@ -234,6 +312,7 @@ export const ResultPane = memo(function ResultPane({
 
   return (
     <section className="bg-bg-0 text-fg relative flex h-full min-h-0 flex-col">
+      {banners}
       {header !== null && (
         <div className="border-line-1 flex h-9 shrink-0 items-center gap-3 border-b px-3">
           {header}

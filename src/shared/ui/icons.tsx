@@ -154,6 +154,22 @@ export function ErrorIcon({ size = 12, ...rest }: IconProps) {
   );
 }
 
+export function ExternalTunnelIcon({ size = 12, ...rest }: IconProps) {
+  return (
+    <Stroke size={size} width={1.5} join {...rest}>
+      <path d="M9 3h4v4M13 3L7.5 8.5M11 9.5V13H3V5h3.5" />
+    </Stroke>
+  );
+}
+
+export function ReconnectIcon({ size = 16, ...rest }: IconProps) {
+  return (
+    <Stroke size={size} width={1.6} join {...rest}>
+      <path d="M13 8a5 5 0 1 1-1.5-3.5M13 2.5V5h-2.5" />
+    </Stroke>
+  );
+}
+
 export function LockIcon({ size = 15, ...rest }: IconProps) {
   return (
     <Stroke size={size} width={1.6} {...rest}>
