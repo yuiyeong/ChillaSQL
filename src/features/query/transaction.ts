@@ -1,4 +1,5 @@
 import type { Outcome, TxMode, TxStatus } from "../../shared/api/types";
+import { t, tc } from "../../shared/i18n/t";
 import type { RunState } from "./runReducer";
 
 /** 탭의 열린 트랜잭션. 트랜잭션 밖이면 없다. */
@@ -36,6 +37,13 @@ export function nextTx(
     statements: previous.statements + (counted ? 1 : 0),
     openedAt: previous.openedAt,
   };
+}
+
+/** `2 statements`. 문장이 없으면 사용자가 직접 BEGIN한 트랜잭션이다(Auto 모드). */
+export function statementsLabel(statements: number): string {
+  return statements === 0
+    ? t("tx.manualBegin")
+    : tc("tx.statements", statements);
 }
 
 /** Commit, Rollback, 모드 전환이 가능한지(계획의 "가능한 때"). 쿼리를 읽는 동안은 먼저 Cancel해야 한다. */

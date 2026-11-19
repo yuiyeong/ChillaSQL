@@ -30,7 +30,9 @@ import { homeDir } from "../../shared/api/path";
 import { openDocument } from "../editor/documents";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
+import { useRuns } from "../query/runsStore";
 import { ask, resolveDialog } from "../../shared/ui/dialogs";
+import { answerDialog, textOf } from "../../test/dialogs";
 import { Workspace } from "./Workspace";
 
 /** 새 탭을 만들고 text와 접속을 둔다. */
@@ -401,6 +403,32 @@ test("저장 경로 dialog가 열려 있으면 단축키가 동작하지 않는�
   });
   expect(closeAgain.defaultPrevented).toBe(true);
   expect(useTabs.getState().tabs.map((tab) => tab.id)).toEqual([a]);
+});
+
+test("대상을 바꿔 저장하면 그 접속을 쓰는 탭의 열린 트랜잭션을 먼저 묻는다", async () => {
+  openProjectWith([connection("local"), connection("staging")]);
+  const a = tabWith("UPDATE a SET b = 1", "local");
+  const b = tabWith("SELECT 1", "staging");
+  act(() =>
+    useRuns.setState({
+      transactions: {
+        [a]: { status: "open", statements: 2, openedAt: Date.now() },
+        [b]: { status: "open", statements: 1, openedAt: Date.now() },
+      },
+    }),
+  );
+  renderWorkspace();
+
+  await click(screen.getByRole("button", { name: "Edit connection local" }));
+  change(screen.getByLabelText("host"), "db.example");
+  await click(within(connectionForm()).getByRole("button", { name: "Save" }));
+  const spec = await act(() => answerDialog("cancel"));
+
+  expect(textOf(spec.body)).toBe(
+    "Saving a new target closes the sessions of tabs using local. What should happen to the 2 uncommitted statements in Query 1?",
+  );
+  expect(saveConnection).not.toHaveBeenCalled();
+  expect(connectionForm()).toBeInTheDocument();
 });
 
 test("확인 dialog가 열려 있으면 단축키가 동작하지 않는다", async () => {

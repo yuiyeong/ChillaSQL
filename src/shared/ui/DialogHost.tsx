@@ -128,11 +128,12 @@ function Header({
 
 function Items({ items }: { items: DialogItem[] }) {
   return (
-    <ul className="border-line-1 bg-bg-0 text-small flex flex-col rounded-lg border">
+    // dialog의 높이가 모자라면 목록만 줄어들고 넘치는 줄은 목록 안에서 scroll한다.
+    <ul className="border-line-1 bg-bg-0 text-small flex min-h-0 flex-col overflow-auto rounded-lg border">
       {items.map((item, index) => (
         <li
           key={index}
-          className="border-line-1 flex h-[34px] items-center gap-2.5 border-b px-3 last:border-b-0"
+          className="border-line-1 flex h-[34px] shrink-0 items-center gap-2.5 border-b px-3 last:border-b-0"
         >
           <span className="text-fg truncate font-mono">{item.primary}</span>
           {item.secondary !== null && (

@@ -59,6 +59,43 @@ export const en = {
   "dialog.switchProject.note":
     "Switching projects discards these changes and closes every tab's session.",
   "dialog.switchProject.confirm": "Switch without saving",
+  "dialog.tx.oneTab.title": "This tab has an open transaction",
+  "dialog.tx.close.body":
+    "Closing {title} closes the {connection} session. {question}",
+  "dialog.tx.switchConnection.body":
+    "Switching to {target} closes the {connection} session. {question}",
+  "dialog.tx.switchMode.title": "End the transaction before switching to Auto",
+  "dialog.tx.saveTarget.title":
+    "A tab using this connection has an open transaction",
+  "dialog.tx.saveTarget.body":
+    "Saving a new target closes the sessions of tabs using {connection}. {question}",
+  "dialog.tx.switchProject.title": "A tab has an open transaction",
+  "dialog.tx.switchProject.body":
+    "Switching projects closes every tab's session. {question}",
+  "dialog.tx.question.one":
+    "What should happen to the 1 uncommitted statement?",
+  "dialog.tx.question.other":
+    "What should happen to the {count} uncommitted statements?",
+  "dialog.tx.question.none": "What should happen to the open transaction?",
+  "dialog.tx.questionIn.one":
+    "What should happen to the 1 uncommitted statement in {title}?",
+  "dialog.tx.questionIn.other":
+    "What should happen to the {count} uncommitted statements in {title}?",
+  "dialog.tx.questionIn.none":
+    "What should happen to the open transaction in {title}?",
+  "dialog.tx.manyTabs.title": "{count} tabs have open transactions",
+  "dialog.tx.manyTabs.item": "{connection} · {statements} · {elapsed}",
+  "dialog.tx.manyTabs.note":
+    "To decide tab by tab, cancel and use Commit or Rollback in each tab.",
+  "dialog.tx.rollback.close": "Roll back and close",
+  "dialog.tx.rollback.switch": "Roll back and switch",
+  "dialog.tx.rollback.save": "Roll back and save",
+  "dialog.tx.commit.close": "Commit and close",
+  "dialog.tx.commit.switch": "Commit and switch",
+  "dialog.tx.commit.save": "Commit and save",
+  "dialog.tx.rollbackAll.close": "Roll back all and close",
+  "dialog.tx.rollbackAll.switch": "Roll back all and switch",
+  "dialog.tx.rollbackAll.save": "Roll back all and save",
   "dialog.fileChanged.title": "{path} changed on disk",
   "dialog.fileChanged.body":
     "Another program edited this file after you opened it. Overwriting discards those changes.",

@@ -19,6 +19,11 @@ import { canEndTransaction } from "../query/transaction";
 import { mono, rt } from "../../shared/i18n/rich";
 import { t, tc } from "../../shared/i18n/t";
 import { ask } from "../../shared/ui/dialogs";
+import {
+  applySettlement,
+  chooseSettlement,
+  settleTransactions,
+} from "./transactionPrompts";
 
 export type CommandId =
   | "run"
@@ -181,8 +186,13 @@ export async function runAgain(tabId: string): Promise<void> {
   return useRuns.getState().run(tabId, () => requestFor(tabId, sql, origin));
 }
 
-/** 저장하지 않은 변경이 있으면 묻고, 세션을 놓은 뒤 탭을 닫는다. */
+/**
+ * 열린 트랜잭션이 있으면 어떻게 끝낼지, 저장하지 않은 변경이 있으면 저장할지 차례로 묻고,
+ * 세션을 놓은 뒤 탭을 닫는다.
+ */
 export async function closeTab(tabId: string): Promise<void> {
+  if (findTab(tabId) === undefined) return;
+  if (!(await settleTransactions([tabId], "close", {}))) return;
   const tab = findTab(tabId);
   if (tab === undefined) return;
   if (tab.dirty) {
@@ -213,11 +223,20 @@ export async function closeTab(tabId: string): Promise<void> {
   await released;
 }
 
-/** 지금 세션을 놓고 탭의 접속을 바꾼다. 다음 실행이 새 접속으로 세션을 연다. 모드는 그대로다. */
+/**
+ * 지금 세션을 놓고 탭의 접속을 바꾼다. 다음 실행이 새 접속으로 세션을 연다. 모드는 그대로다.
+ * 열린 트랜잭션이 있으면 먼저 묻는다. 같은 접속을 고르면 아무것도 하지 않는다.
+ */
 export async function changeConnection(
   tabId: string,
   connection: string | null,
 ): Promise<void> {
+  const tab = findTab(tabId);
+  if (tab === undefined || tab.connection === connection) return;
+  const settled = await settleTransactions([tabId], "switchConnection", {
+    target: connection ?? undefined,
+  });
+  if (!settled) return;
   const released = useRuns.getState().release(tabId, { keepMode: true });
   useTabs.getState().setConnection(tabId, connection);
   await released;
@@ -247,8 +266,17 @@ export async function applySavedProject(project: Project): Promise<void> {
   await Promise.all(released);
 }
 
-/** 다른 프로젝트를 연다. 열리면 탭과 실행 상태를 비운다. */
+/**
+ * 다른 프로젝트를 연다. 열리면 탭과 실행 상태를 비운다. 열린 트랜잭션을 묻고, 저장하지 않은 변경을
+ * 묻고, 폴더를 고른 뒤에야 고른 대로 끝낸다. 폴더를 고르지 않으면 끝내지 않는다.
+ */
 export async function switchProject(): Promise<void> {
+  const settlement = await chooseSettlement(
+    useTabs.getState().tabs.map((tab) => tab.id),
+    "switchProject",
+    {},
+  );
+  if (settlement === null) return;
   let dir: string | null;
   try {
     dir = await askProjectDir();
@@ -257,6 +285,8 @@ export async function switchProject(): Promise<void> {
     return;
   }
   if (dir === null) return;
+  // 프로젝트를 열면 Rust가 옛 세션을 닫으므로 그 전에 끝낸다.
+  if (!(await applySettlement(settlement))) return;
   if (!(await useProject.getState().open(dir))) return;
 
   // 옛 프로젝트의 세션은 Rust가 이미 닫았으므로 그 close는 실패하고 무시된다.

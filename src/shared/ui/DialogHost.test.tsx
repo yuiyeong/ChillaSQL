@@ -72,6 +72,25 @@ test("sql, 목록, note, icon을 그린다", () => {
   expect(within(dialog).getByTestId("dialog-icon")).toBeInTheDocument();
 });
 
+test("긴 목록은 그 안에서 scroll하고 버튼 줄을 밀어내지 않는다", () => {
+  render(<DialogHost />);
+  void open({
+    title: "12 tabs have open transactions",
+    items: Array.from({ length: 12 }, (_, index) => ({
+      primary: `Query ${index + 1}`,
+      secondary: null,
+    })),
+    actions: [{ id: "cancel", label: "Cancel" }],
+  });
+
+  const list = screen.getByRole("list");
+  // dialog는 max-h가 있는 flex column이다. 목록만 줄어들고 넘치는 줄은 목록 안에서 scroll한다.
+  expect(list).toHaveClass("min-h-0", "overflow-auto");
+  for (const item of within(list).getAllByRole("listitem")) {
+    expect(item).toHaveClass("shrink-0");
+  }
+});
+
 test("Escape는 cancel로 답한다", async () => {
   render(<DialogHost />);
   const answer = open(spec);

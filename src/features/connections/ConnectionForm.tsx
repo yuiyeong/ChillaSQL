@@ -76,12 +76,15 @@ function Field({
 export function ConnectionForm({
   original,
   existingNames,
+  beforeSave,
   onSaved,
   onClose,
 }: {
   original: Connection | null;
   /** 프로젝트에 이미 있는 접속 이름. 새 접속이 이 이름을 쓰지 못하게 한다. */
   existingNames: string[];
+  /** 연결 대상을 바꾼 수정을 저장하기 전에 묻는다. false면 저장하지 않는다. */
+  beforeSave?(connection: Connection): Promise<boolean>;
   onSaved(project: Project): void;
   onClose(): void;
 }) {
@@ -157,6 +160,9 @@ export function ConnectionForm({
 
   const save = () =>
     run(async (connection, secret) => {
+      const retargeted =
+        original !== null && targetChanged(connection, original);
+      if (retargeted && beforeSave && !(await beforeSave(connection))) return;
       const project = await saveConnection(connection, secret);
       setPassword("");
       onSaved(project);

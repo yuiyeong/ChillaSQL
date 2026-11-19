@@ -30,6 +30,11 @@ export function mono(text: string): ReactNode {
   return <span className="text-body font-mono">{text}</span>;
 }
 
+/** 둘레의 글자 크기 그대로 D2Coding으로 보인다(목록의 경과 시간). */
+export function monoText(text: string): ReactNode {
+  return <span className="font-mono">{text}</span>;
+}
+
 /** 본문 안의 SQL 조각(D2Coding). keyword는 SQL keyword 색을 쓴다. */
 export function sqlCode(
   text: string,

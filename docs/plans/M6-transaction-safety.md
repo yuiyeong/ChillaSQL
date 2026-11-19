@@ -749,7 +749,7 @@ export function switchMode(tabId: string, mode: TxMode): Promise<void>;
 
   `{question}`은 `What should happen to the {count} uncommitted statements?`(`.one`), 문장 0개면 `What should happen to the open transaction?`. 실패 상태의 트랜잭션은 Commit 버튼을 빼고, 문장은 같다. 이름(`{title}`, `{connection}`, `{target}`)은 `bold`다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `transactionPrompts.test.ts`(`ask`와 store를 mock):
 
@@ -763,19 +763,19 @@ export function switchMode(tabId: string, mode: TxMode): Promise<void>;
 
 `commands.test.ts`: `closing_a_tab_with_a_transaction_asks_before_the_unsaved_prompt`, `switch_project_commits_only_after_a_folder_is_chosen`, `switch_mode_to_auto_with_a_transaction_asks`. `ConnectionForm.test.tsx`: `save_stops_when_before_save_says_no`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/workspace src/features/connections`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

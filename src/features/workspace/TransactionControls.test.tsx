@@ -4,12 +4,14 @@ import { click } from "../../test/click";
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("./commands", () => ({ execute: vi.fn() }));
+vi.mock("./transactionPrompts", () => ({ switchMode: vi.fn() }));
 
 import { emptyResult, type RunState } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
 import type { TxInfo } from "../query/transaction";
 import { execute } from "./commands";
 import { shortcutKeys } from "./shortcuts";
+import { switchMode } from "./transactionPrompts";
 import { TransactionControls } from "./TransactionControls";
 
 const NOW = 1_000_000_000;
@@ -58,15 +60,13 @@ const commit = () => screen.getByRole("button", { name: "Commit" });
 const rollback = () => screen.getByRole("button", { name: "Rollback" });
 
 test("shows_the_mode_radiogroup", async () => {
-  const setMode = vi.fn();
-  act(() => useRuns.setState({ setMode }));
   render(<TransactionControls tabId="t1" />);
 
   expect(radio("Auto")).toHaveAttribute("aria-checked", "true");
   expect(radio("Manual")).toHaveAttribute("aria-checked", "false");
 
   await click(radio("Manual"));
-  expect(setMode).toHaveBeenCalledWith("t1", "manual");
+  expect(switchMode).toHaveBeenCalledWith("t1", "manual");
 });
 
 test("the checked radio follows the tab mode", () => {

@@ -1,10 +1,15 @@
 import { useRuns } from "../query/runsStore";
-import { canEndTransaction, type TxInfo } from "../query/transaction";
+import {
+  canEndTransaction,
+  statementsLabel,
+  type TxInfo,
+} from "../query/transaction";
 import { useElapsed } from "../query/useElapsed";
 import { Button } from "../../shared/ui/Button";
 import { execute } from "./commands";
 import { shortcutKeys } from "./shortcuts";
-import { t, tc } from "../../shared/i18n/t";
+import { switchMode } from "./transactionPrompts";
+import { t } from "../../shared/i18n/t";
 import type { TxMode } from "../../shared/api/types";
 
 const MODES: { mode: TxMode; label: "tx.auto" | "tx.manual" }[] = [
@@ -25,7 +30,6 @@ export function TransactionControls({ tabId }: { tabId: string | null }) {
     (s) =>
       tabId !== null && !s.ending[tabId] && canEndTransaction(s.runs[tabId]),
   );
-  const setMode = useRuns((s) => s.setMode);
 
   return (
     <>
@@ -48,7 +52,7 @@ export function TransactionControls({ tabId }: { tabId: string | null }) {
                 checked ? "bg-bg-3 text-fg" : "text-fg-2 bg-transparent",
               ].join(" ")}
               onClick={() => {
-                if (tabId !== null) setMode(tabId, value);
+                if (tabId !== null) void switchMode(tabId, value);
               }}
             >
               {t(label)}
@@ -83,14 +87,10 @@ export function TransactionControls({ tabId }: { tabId: string | null }) {
 /** `Open · 2 statements · 3:12`. 트랜잭션이 있을 때만 그려서 시계도 그때만 돈다. */
 function TransactionStatus({ tx }: { tx: TxInfo }) {
   const elapsed = useElapsed(tx.openedAt);
-  // 문장이 없으면 사용자가 직접 BEGIN한 트랜잭션이다(Auto 모드).
-  const statements =
-    tx.statements === 0
-      ? t("tx.manualBegin")
-      : tc("tx.statements", tx.statements);
   return (
     <span className="text-small text-fg-2 whitespace-nowrap">
-      {tx.status === "failed" ? t("tx.failed") : t("tx.open")} · {statements} ·{" "}
+      {tx.status === "failed" ? t("tx.failed") : t("tx.open")} ·{" "}
+      {statementsLabel(tx.statements)} ·{" "}
       <span className="font-mono">{elapsed}</span>
     </span>
   );

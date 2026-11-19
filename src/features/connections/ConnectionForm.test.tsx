@@ -449,3 +449,50 @@ test("Choose…는 고른 파일을 sslrootcert에 넣는다", async () => {
   expect(pickFile).toHaveBeenCalledWith(["pem", "crt"]);
   expect(screen.getByLabelText("sslrootcert")).toHaveValue("/certs/ca.pem");
 });
+
+test("save_stops_when_before_save_says_no", async () => {
+  const beforeSave = vi.fn(async () => false);
+  const onSaved = vi.fn();
+  render(
+    <ConnectionForm
+      original={original}
+      existingNames={["local"]}
+      beforeSave={beforeSave}
+      onSaved={onSaved}
+      onClose={vi.fn()}
+    />,
+  );
+
+  change(screen.getByLabelText("host"), "db.example");
+  await click(saveButton());
+
+  expect(beforeSave).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ name: "local", host: "db.example" }),
+  );
+  expect(saveConnection).not.toHaveBeenCalled();
+  expect(onSaved).not.toHaveBeenCalled();
+  expect(saveButton()).toBeEnabled();
+
+  beforeSave.mockResolvedValue(true);
+  await click(saveButton());
+  expect(saveConnection).toHaveBeenCalledOnce();
+  expect(onSaved).toHaveBeenCalledWith(saved);
+});
+
+test("before_save_is_asked_only_when_the_target_changes", async () => {
+  const beforeSave = vi.fn(async () => true);
+  render(
+    <ConnectionForm
+      original={original}
+      existingNames={["local"]}
+      beforeSave={beforeSave}
+      onSaved={vi.fn()}
+      onClose={vi.fn()}
+    />,
+  );
+
+  await click(saveButton());
+
+  expect(beforeSave).not.toHaveBeenCalled();
+  expect(saveConnection).toHaveBeenCalledOnce();
+});

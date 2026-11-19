@@ -25,6 +25,7 @@ import {
 import { useShortcuts } from "./shortcuts";
 import { StatusBar } from "./StatusBar";
 import { Toolbar } from "./Toolbar";
+import { settleTransactions } from "./transactionPrompts";
 import { subscribeTunnelEvents } from "./tunnelEvents";
 import { t } from "../../shared/i18n/t";
 import { useDialogs } from "../../shared/ui/dialogs";
@@ -79,6 +80,17 @@ export function Workspace() {
   function connectionSaved(saved: Project, from: OpenForm) {
     void applySavedProject(saved);
     setForm((current) => (current === from ? null : current));
+  }
+
+  /** 대상을 바꿔 저장하면 그 접속을 쓰는 탭의 세션이 닫히므로 열린 트랜잭션을 먼저 묻는다. */
+  function settleBeforeSave(connection: Connection): Promise<boolean> {
+    const using = useTabs
+      .getState()
+      .tabs.filter((tab) => tab.connection === connection.name)
+      .map((tab) => tab.id);
+    return settleTransactions(using, "saveTarget", {
+      connection: connection.name,
+    });
   }
 
   function nameTab(path: string) {
@@ -157,6 +169,7 @@ export function Workspace() {
             key={form.original?.name ?? "new"}
             original={form.original}
             existingNames={project?.connections.map((c) => c.name) ?? []}
+            beforeSave={settleBeforeSave}
             onSaved={(saved) => connectionSaved(saved, form)}
             onClose={() => setForm(null)}
           />

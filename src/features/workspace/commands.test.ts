@@ -40,6 +40,7 @@ import {
   runAgain,
   switchProject,
 } from "./commands";
+import { switchMode } from "./transactionPrompts";
 import { useTunnels } from "../connections/tunnelsStore";
 import { useDialogs } from "../../shared/ui/dialogs";
 import { answerDialog, textOf } from "../../test/dialogs";
@@ -825,4 +826,176 @@ test("commit does nothing without a transaction or while a query is being read",
   expect(runOf(id).status).toBe("running");
   await execute("rollback");
   expect(endTransaction).not.toHaveBeenCalled();
+});
+
+test("closing_a_tab_with_a_transaction_asks_before_the_unsaved_prompt", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  // Manual 모드라 앱이 BEGIN을 붙인 이 문장도 센다.
+  useRuns.getState().setMode(id, "manual");
+  await runInTransaction(id, "in_transaction");
+  useTabs.getState().markDirty(id);
+  let dialogWhenEnded: unknown;
+  vi.mocked(endTransaction).mockImplementation(async () => {
+    dialogWhenEnded = useDialogs.getState().current;
+    return { outcome: "ended", tx: "idle" };
+  });
+
+  const closing = closeTab(id);
+  const first = await answerDialog("rollback");
+  const second = await answerDialog("discard");
+  await closing;
+
+  // Rollback을 보낸 뒤에 저장하지 않은 변경을 묻는다.
+  expect(endTransaction).toHaveBeenCalledExactlyOnceWith(3, "rollback");
+  expect(dialogWhenEnded).toBeNull();
+
+  expect(textOf(first.title)).toBe("This tab has an open transaction");
+  expect(textOf(first.body)).toBe(
+    "Closing Query 1 closes the local session. What should happen to the 1 uncommitted statement?",
+  );
+  expect(textOf(second.title)).toBe("Save changes to Query 1?");
+  expect(tabOf(id)).toBeUndefined();
+});
+
+test("cancelling the transaction prompt keeps the tab and skips the unsaved prompt", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  useTabs.getState().markDirty(id);
+
+  const closing = closeTab(id);
+  await answerDialog("cancel");
+  await closing;
+
+  expect(useDialogs.getState().current).toBeNull();
+  expect(endTransaction).not.toHaveBeenCalled();
+  expect(tabOf(id)).toBeDefined();
+  expect(useRuns.getState().transactions[id]).toBeDefined();
+});
+
+test("a failed commit keeps the tab open with the error in its result panel", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  vi.mocked(endTransaction).mockResolvedValue({
+    outcome: "server_error",
+    tx: "idle",
+    error: {
+      code: "23503",
+      message: "violates foreign key",
+      detail: null,
+      hint: null,
+      position: null,
+    },
+  });
+
+  const closing = closeTab(id);
+  await answerDialog("commit");
+  await closing;
+
+  expect(tabOf(id)).toBeDefined();
+  expect(runOf(id)?.status).toBe("rejected");
+  expect(closeSession).not.toHaveBeenCalled();
+});
+
+test("switch_project_commits_only_after_a_folder_is_chosen", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  useTabs.getState().markDirty(id);
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+
+  // 폴더를 고르지 않으면 Commit하지 않는다.
+  vi.mocked(pickDirectory).mockResolvedValue(null);
+  let switching = switchProject();
+  const first = await answerDialog("commit");
+  const second = await answerDialog("switch");
+  await switching;
+  expect(textOf(first.title)).toBe("A tab has an open transaction");
+  expect(textOf(first.body)).toBe(
+    "Switching projects closes every tab's session. What should happen to the open transaction in Query 1?",
+  );
+  expect(textOf(second.title)).toBe("1 tab has unsaved changes");
+  expect(pickDirectory).toHaveBeenCalledTimes(1);
+  expect(endTransaction).not.toHaveBeenCalled();
+  expect(useRuns.getState().transactions[id]).toBeDefined();
+
+  // 고르면 Commit한 뒤에 연다.
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+  switching = switchProject();
+  await answerDialog("commit");
+  await answerDialog("switch");
+  await switching;
+  expect(endTransaction).toHaveBeenCalledWith(3, "commit");
+  expect(vi.mocked(endTransaction).mock.invocationCallOrder[0]).toBeLessThan(
+    vi.mocked(openProject).mock.invocationCallOrder[0],
+  );
+  expect(useTabs.getState().tabs).toEqual([]);
+});
+
+test("a failed commit does not switch projects", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  vi.mocked(endTransaction).mockResolvedValue({
+    outcome: "client_error",
+    tx: "in_transaction",
+    message: "boom",
+  });
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+
+  const switching = switchProject();
+  await answerDialog("commit");
+  await switching;
+
+  expect(openProject).not.toHaveBeenCalled();
+  expect(tabOf(id)).toBeDefined();
+});
+
+test("switch_mode_to_auto_with_a_transaction_asks", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  useRuns.getState().setMode(id, "manual");
+  await runInTransaction(id, "in_transaction");
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+
+  const switching = switchMode(id, "auto");
+  const spec = await answerDialog("commit");
+  await switching;
+
+  expect(textOf(spec.title)).toBe(
+    "End the transaction before switching to Auto",
+  );
+  expect(endTransaction).toHaveBeenCalledWith(3, "commit");
+  expect(useRuns.getState().modes[id]).toBe("auto");
+  expect(useRuns.getState().transactions[id]).toBeUndefined();
+});
+
+test("changing the connection of a tab with a transaction asks first", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+
+  let changing = changeConnection(id, "staging");
+  const spec = await answerDialog("cancel");
+  await changing;
+  expect(textOf(spec.body)).toBe(
+    "Switching to staging closes the local session. What should happen to the open transaction?",
+  );
+  expect(tabOf(id)?.connection).toBe("local");
+  expect(closeSession).not.toHaveBeenCalled();
+
+  changing = changeConnection(id, "staging");
+  await answerDialog("rollback");
+  await changing;
+  expect(endTransaction).toHaveBeenCalledWith(3, "rollback");
+  expect(tabOf(id)?.connection).toBe("staging");
+  expect(closeSession).toHaveBeenCalledWith(3);
+});
+
+test("choosing the same connection keeps the session and its transaction", async () => {
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+
+  await changeConnection(id, "local");
+
+  expect(useDialogs.getState().current).toBeNull();
+  expect(closeSession).not.toHaveBeenCalled();
+  expect(useRuns.getState().transactions[id]).toBeDefined();
 });
