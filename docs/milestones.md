@@ -86,10 +86,10 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **범위**: 터널 명령을 자식 프로세스로 실행, host:port가 열릴 때까지 대기(기본 20초, 접속별 변경), 실패 시 명령의 오류 출력 표시, 포트가 이미 열려 있으면 실행하지 않고 "앱이 띄우지 않은 터널" 표시, 같은 접속의 탭끼리 터널 공유(참조 수 관리), 마지막 세션이 끊기면 터널 종료, 프로세스 종료 감지와 재실행(연속 3회 실패 시 중단), 재연결 후 세션 상태 초기화 알림, 앱 종료 시 앱이 띄운 터널 모두 종료(4.2), 접속 테스트에 터널 포함(4.1), 접속 sheet에 `tunnel`과 `tunnel_timeout` 칸, 접속 sheet를 캔버스 배치로, 테스트 실패 시 명령의 오류 출력 표시, 탭과 toolbar의 터널 상태(시작 중, 실패, 재연결 n/3, 앱이 띄우지 않은 터널)
 - **완료 기준**: 터미널 없이 Railway staging에 접속. 터널 프로세스를 강제로 죽이면 재연결되고 알림이 뜸. 앱을 종료하면 터널 프로세스가 남지 않음
 - **먼저 확인할 것**:
-  - 접속 sheet에 둘 key 이름(캔버스는 `tunnel_timeout`으로 제안)
-  - Finder에서 띄운 앱은 shell의 PATH를 받지 못해 `railway`를 못 찾는다. 사용자 login shell(`$SHELL -lc`)로 실행할지 정한다
-  - shell을 거쳐 실행하면 손자 프로세스가 생기므로 process group 단위로 종료하는 방법
-  - `establish`와 `PgCancel`이 stream을 여는 분기를 따로 갖고 있다. 터널로 여는 방법이 바뀔 때 하나로 묶는다
+  - 접속 sheet에 둘 key 이름 → `tunnel_timeout`(초 단위 정수, 1~300)
+  - Finder에서 띄운 앱의 PATH → Finder로 띄운 앱에도 `SHELL`이 있고 `$SHELL -l -c`가 `.zprofile`의 PATH로 CLI를 찾는다. 명령은 프로젝트 디렉토리를 cwd로 login shell에서 실행한다
+  - 손자 프로세스의 종료 → 터널 CLI가 ssh를 다른 process group으로 띄우고 `SIGTERM`, `SIGINT`에 ssh를 남긴다. process group과 자손 프로세스 tree 전체를 끈다. 끊김도 자손의 종료로 본다
+  - `establish`와 `PgCancel`의 분기 → 터널은 local port를 열 뿐이라 여는 방법이 바뀌지 않아 묶지 않는다
 
 ### M6. 트랜잭션과 안전장치
 
@@ -115,7 +115,7 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 ### M8. 에디터·실행 편의
 
 - **목표**: 3단계 완료 기준 달성
-- **범위**: Formatting(sql-formatter, 선택 영역 또는 파일 전체, Opt+Cmd+L), DB가 알려준 오류 위치 밑줄, 파일 전체 실행과 문장별 결과 탭(오류 난 문장에서 멈춤), 타입별 표시(JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, 긴 값 줄임), 읽기 전용 접속(4.8), 접속별 타임아웃(4.5), 저장하지 않은 탭 내용을 SQLite에 보관하고 재시작 후 복원, 최근 프로젝트 목록과 프로젝트 바꾸기 menu(Cmd+O), 읽기 전용 접속에서는 위험 쿼리 확인을 건너뜀(4.8), 결과 column header의 type 표시, 셀을 고르면 옆 panel에 전체 값(Shift+Enter), 에디터에서 실행될 문장 범위 강조(배경과 왼쪽 선), 접속 sheet의 `read_only`와 `statement_timeout` 칸과 Advanced 접기, 전역 설정 파일 `~/.config/chilla/config.toml`(5장), 한국어 dictionary(`ko`)와 `language` 설정, Rust 오류 message의 한국어(오류 `kind`별로 화면이 번역), 결과 오류 화면의 Go to error(에디터 오류 밑줄로 이동), 빈 상태의 Reformat 안내(`⌥⌘L Reformat`), toolbar menu의 Run file 항목 켜기, 에디터 글꼴과 크기 설정
+- **범위**: Formatting(sql-formatter, 선택 영역 또는 파일 전체, Opt+Cmd+L), DB가 알려준 오류 위치 밑줄, 파일 전체 실행과 문장별 결과 탭(오류 난 문장에서 멈춤), 타입별 표시(JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, 긴 값 줄임), 읽기 전용 접속(4.8), 접속별 타임아웃(4.5), 저장하지 않은 탭 내용을 SQLite에 보관하고 재시작 후 복원, 최근 프로젝트 목록과 프로젝트 바꾸기 menu(Cmd+O), 읽기 전용 접속에서는 위험 쿼리 확인을 건너뜀(4.8), 결과 column header의 type 표시, 셀을 고르면 옆 panel에 전체 값(Shift+Enter), 에디터에서 실행될 문장 범위 강조(배경과 왼쪽 선), 접속 sheet의 `read_only`와 `statement_timeout` 칸과 Advanced 접기, 전역 설정 파일 `~/.config/chilla/config.toml`(5장), 한국어 dictionary(`ko`)와 `language` 설정, Rust 오류 message의 한국어(오류 `kind`별로 화면이 번역), 결과 오류 화면의 Go to error(에디터 오류 밑줄로 이동), 빈 상태의 Reformat 안내(`⌥⌘L Reformat`), toolbar menu의 Run file 항목 켜기, 에디터 글꼴과 크기 설정, 접속 테스트 성공 문구의 server version
 - **완료 기준 (3단계)**: 하루 업무를 DataGrip 없이 처리
 - **먼저 확인할 것**:
   - simple query protocol은 컬럼의 type OID를 주지 않는다(M2 결정). 타입별 표시에 필요한 type을 `TxTap`이 RowDescription을 읽어 얻을지, `prepare`로 Describe할지 정한다

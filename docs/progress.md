@@ -1,13 +1,13 @@
 # ChillaSQL 진행상황
 
-마지막 갱신: 2026-11-18
+마지막 갱신: 2026-11-19
 
 ## 지금
 
-- **진행 중**: 없음. M4 결과 표를 끝내 1단계(M0~M4)가 끝났다(2026-11-18). 계획은 [M4](plans/M4-result-table.md)
-- **작업 위치**: main. 2026-11-18에 branch `m4-result-table`을 main에 fast-forward로 합치고 branch를 지웠다. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
+- **진행 중**: M5 터널(2026-11-19 시작). 계획은 [M5](plans/M5-tunnel.md), 진행 기록은 `.superpowers/sdd/M5-tunnel/progress.md`(git에 올리지 않음)
+- **작업 위치**: branch `m5-tunnel`. main은 `12ae9da`이고 origin/main(`d2be9bf`) 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 기획서 8장대로 1단계 결과를 며칠 실제로 써 본 뒤 M5(터널)로 넘어간다. M4 Task 13에서 찾은 7가지는 고쳤다(아래 작업 로그 2026-11-18의 "M4 Task 13에서 찾은 것 고침"). 그 뒤 simplify(품질 정리)와 code-review(high)의 지적 고침도 했다(작업 로그 "M4 simplify", "M4 code-review")
+- **다음 할 일**: M5 계획의 Task 2부터 이어 간다. M5가 끝나면 실제 터널 명령과 서버 이름 같은 private 정보를 문서, 디자인 사본, test에서 지운다(사용자 지시)
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -36,7 +36,7 @@
 | M2 쿼리 실행 코어 | 1 | 완료 | [M2](plans/M2-query-core.md) | 2026-11-11 | 2026-11-11 |
 | M3 프로젝트·에디터 화면 | 1 | 완료 | [M3](plans/M3-project-editor.md) | 2026-11-12 | 2026-11-18 |
 | M4 결과 표 | 1 | 완료 | [M4](plans/M4-result-table.md) | 2026-11-18 | 2026-11-18 |
-| M5 터널 | 2 | 대기 | | | |
+| M5 터널 | 2 | 진행 중 | [M5](plans/M5-tunnel.md) | 2026-11-19 | |
 | M6 트랜잭션과 안전장치 | 2 | 대기 | | | |
 | M7 스키마 트리와 자동완성 | 3 | 대기 | | | |
 | M8 에디터·실행 편의 | 3 | 대기 | | | |
@@ -185,10 +185,32 @@
 | 2026-11-18 | M4 | `fetch_more`가 실패해도 `fetch`를 `fetching`에서 되돌리거나 다시 요청하지 않음 | Rust의 `fetch_more`는 그 세션이 발급한 query id면 끝난 쿼리에도 `Ok`(M2)라 실패는 세션이 없어졌을 때뿐이고, 그때는 `release`/`reset`이 상태를 지우거나 `connection_lost`로 끝남. 실패마다 다시 요청하면 되풀이될 수 있음. 틀렸다면 Run again 전까지 spinner가 남음(code-review에서 고치지 않은 지적) |
 | 2026-11-18 | M4 | Run again은 처음 실행의 `origin`(문서 안 위치)을 그대로 씀 | 다시 보내는 text가 지금 문서에 없을 수 있어, 그 text를 가져온 때의 위치가 정해진 유일한 위치임. 고친 문서에 맞춰 옮기는 것은 M8의 오류 위치로 가기와 함께 다룸. 그 사이 문서를 고쳤으면 오류의 Ln/Col이 옛 자리를 가리킬 수 있음(code-review에서 고치지 않은 지적) |
 | 2026-11-18 | M4 | 결과 탭 label과 행 수 문구는 SQL을 token으로 나눠 정함. 문자열(`'…'`, `E'…'`, `$tag$…$tag$`)과 주석은 건너뛰고, 앞의 `(`를 건너뛰고, 대상 앞의 `IF NOT EXISTS`, `IF EXISTS`, `ONLY`를 건너뜀. `WITH`는 CTE 목록 뒤 같은 괄호 깊이의 첫 `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`SELECT`를 본 문장으로 봄. 첫 단어가 없으면 label은 `Result`. 함수 안의 `FROM`(`extract(year FROM ts)`)은 가려내지 않음 | 함수 안의 `FROM`을 가려내려면 parser가 필요함. 틀려도 label이 조금 이상할 뿐임(code-review에서 일부만 고친 지적) |
+| 2026-11-19 | M5 | 1단계 결과를 써 보는 기간 없이 M5를 시작함 | 1단계는 기능이 모자라 실제로 쓸 수 없음(사용자 결정). 기획서 8장을 고침 |
+| 2026-11-19 | M5 | M5 완료 확인은 사용자가 고른 실제 터널 접속으로 하고, 그 명령과 서버 이름은 문서에 적지 않음. 문서의 예시는 지어낸 값(`ssh -N -L 25432:db.internal:5432 bastion`)을 씀 | 실제 명령은 private이고 저장소는 public이 될 수 있음(사용자 지시) |
+| 2026-11-19 | M5 | `chilla.toml`의 `tunnel_timeout`은 초 단위 정수(1~300), 없으면 20초. `tunnel` 없이 쓰거나 빈 `tunnel`은 오류. 연결 대상이 아니라 바꿔도 비밀번호를 지우지 않음 | 캔버스가 제안한 key 이름. `sslrootcert`와 `sslmode`의 관계와 같게 둠 |
+| 2026-11-19 | M5 | 터널 명령은 프로젝트 디렉토리를 cwd로 `$SHELL -l -c <tunnel>`(`SHELL`이 없거나 상대 경로면 `/bin/zsh`)로 새 process group에서 실행. stdin, stdout은 `/dev/null`, stderr는 끝 16 KiB | Finder로 띄운 앱에도 `SHELL`이 있고 login shell이 `.zprofile`의 PATH로 CLI를 찾음. 실행한 디렉토리로 project를 찾는 터널 CLI가 있음(Task 1) |
+| 2026-11-19 | M5 | 터널을 끌 때 process group과 자손 프로세스 tree 전체에 `SIGTERM`, 2초 뒤 남은 것에 `SIGKILL` | 터널 CLI가 ssh를 다른 process group으로 띄우고 `SIGTERM`, `SIGINT`를 받아도 ssh를 남김(Task 1). group만 끄면 포트가 열린 채 남음 |
+| 2026-11-19 | M5 | 실행한 프로세스나 포트가 열린 때의 자손 가운데 하나라도 끝나면 터널이 끊긴 것으로 보고 1초 뒤 다시 실행. 포트가 열리면 횟수를 처음으로, 연속 3번 실패하면 멈춤. 멈춘 터널은 다음 세션 열기나 Try again이 처음부터 다시 시작 | 터널 CLI는 ssh 자식이 죽어도 살아 남음(Task 1). 포트를 주기적으로 붙어 보면 DB 서버 log에 `incomplete startup packet`이 쌓여 쓰지 않음 |
+| 2026-11-19 | M5 | 포트는 명령을 실행하기 전에 한 번, 실행한 뒤 200ms마다 확인(시도마다 500ms). 실행 전에 열려 있으면 `External`로 명령을 실행하지 않고 끄지도 감시하지도 않음 | 기획서 4.2의 "포트가 이미 열려 있음" |
+| 2026-11-19 | M5 | DB 재연결은 다음 실행에서 함. 터널이 다시 시작되면 그 접속을 쓰는 탭의 세션을 stale로 두고, 다음 실행이 새 세션을 먼저 연 뒤 옛 세션을 닫음. 끊긴 세션을 새 세션이 대신하면 "Reconnected" banner. 터널 없는 접속의 `connection_lost` 뒤에도 같음 | 옛 세션을 먼저 닫으면 lease가 0이 되어 막 살린 터널이 꺼짐. 쓰지 않는 탭까지 미리 연결하지 않음 |
+| 2026-11-19 | M5 | 같은 접속 이름의 터널은 하나. 같은 이름의 터널이 다른 대상이거나 끄는 중이면 꺼질 때까지 기다린 뒤 새로 시작 | 연결 대상을 고쳐 저장한 직후 옛 터널의 포트를 `External`로 잘못 보지 않게 함 |
+| 2026-11-19 | M5 | 접속 테스트의 터널은 공유하지 않고 테스트가 끝나면 끔. 포트가 열려 있으면 띄우지 않음 | 저장하지 않은 접속 정보로 띄운 터널을 세션이 쓰지 않게 함 |
+| 2026-11-19 | M5 | 터널 시작 중의 Cancel은 그 접속의 터널 시작을 멈춤(같은 터널을 기다리던 다른 탭의 실행도 멈춤). 멈춘 실행의 결과 panel은 빈 상태 | 터널 대기는 20초까지 걸려 M4의 "연결 중 Cancel disabled"로는 기다릴 수밖에 없음 |
+| 2026-11-19 | M5 | 터널 상태는 Tauri event `tunnel`(`{ connection, state }`)로 보냄. 터널 오류는 Rust의 영어 message와 stderr(`CommandError.output`)를 그대로 보여 줌 | 화면이 터널 상태를 탭과 toolbar에 그려야 함 |
+| 2026-11-19 | M5 | 탭에 시작 중, 재실행 중, 실패, `External` 상태 icon을 그림 | 캔버스는 `External`만 그리지만 마일스톤이 탭의 터널 상태를 요구함 |
+| 2026-11-19 | M5 | 앱이 비정상 종료하면 터널이 남을 수 있음. 다음에는 그 포트를 `External`로 봄 | 정상 종료(`Cmd+Q`, 창 닫기)만 터널을 끔 |
+| 2026-11-19 | M5 | 접속 sheet는 캔버스 배치에서 `color`(M6), `read_only`와 `statement_timeout`(M8)을 뺌. 창 위쪽에 붙는 600px sheet. 테스트 성공은 `Connected · {ms} ms`, server version은 M8 | 각 칸은 그 기능의 마일스톤에서 더함 |
+| 2026-11-19 | M5 | `establish`와 `PgCancel`의 stream 여는 분기는 묶지 않음 | 터널은 local port를 열 뿐이라 여는 방법이 바뀌지 않음 |
 
 ## 작업 로그
 
 최신 항목이 위에 온다.
+
+### 2026-11-19
+
+- M5 계획(`docs/plans/M5-tunnel.md`)을 쓰고 branch `m5-tunnel`을 만듦. 1단계를 써 보는 기간은 건너뜀(사용자 결정)
+- M5 Task 1: 실제 터널로 프로세스 tree를 확인함. 포트는 약 3초에 열림. zsh가 단일 명령을 `exec`해 실행한 프로세스가 곧 터널 CLI임. 터널 CLI는 ssh를 다른 process group으로 띄우고, `SIGTERM`이나 `SIGINT`를 받아도 ssh를 남겨 포트가 열린 채 남음. ssh가 먼저 죽어도 CLI는 살아 있음. link되지 않은 디렉토리나 없는 서비스 이름이면 stderr에 이유를 쓰고 바로 exit 1. Finder로 띄운 `.app`에도 `SHELL=/bin/zsh`가 있고 `zsh -l -c`가 CLI를 찾음. 확인용 probe는 지움. 계획의 끄는 방법, 끊김 감지, cwd를 고침(결정 기록)
+- 터널 CLI는 터널이 열리면 stderr에 DB 비밀번호를 찍음. 화면은 터널이 열리지 않았을 때만 stderr를 보여 주므로 성공한 실행의 출력은 보이지 않음
 
 ### 2026-11-18
 
