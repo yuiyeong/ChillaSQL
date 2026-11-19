@@ -109,11 +109,11 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 기능 | 동작 |
 | --- | --- |
 | 기본 모드 | Auto. 문장마다 자동 커밋 |
-| Manual 전환 | 탭 단위로 전환. 첫 문장 실행 시 트랜잭션 시작, Commit과 Rollback 버튼 제공 |
+| Manual 전환 | 탭 단위로 전환. 첫 문장 실행 시 트랜잭션 시작(앱이 `BEGIN`을 먼저 보냄, 문장이 0개인 열린 트랜잭션은 `manual BEGIN`으로 표시), Commit과 Rollback 버튼 제공. 실행 중이어도 batch를 기다리는 중일 때만 Commit, Rollback, 모드 전환이 가능하고 쿼리를 읽는 동안은 먼저 Cancel해야 함 |
 | 탭 = 세션 | 탭마다 전용 DB 연결 1개를 고정. 커넥션 풀을 쓰지 않음 |
-| 열린 트랜잭션 표시 | 트랜잭션이 열려 있으면 탭에 경과 시간과 함께 표시하고 toolbar에 실행한 문장 수를 표시. Auto 모드에서 직접 BEGIN을 실행한 경우도 포함 |
-| 닫기 전 확인 | 트랜잭션이 열린 상태로 탭 닫기, Auto 전환, 탭의 접속 바꾸기 시 Commit 또는 Rollback 선택. 앱 종료 시에는 트랜잭션이 열린 탭을 보여 주고 모두 Rollback하거나 취소만 고름(Commit하려면 취소하고 탭에서 직접) |
-| 오류 후 상태 | 트랜잭션이 실패 상태가 되면 표시하고 Rollback 안내 |
+| 열린 트랜잭션 표시 | 트랜잭션이 열려 있으면 탭에 경과 시간과 함께 표시하고 toolbar에 실행한 문장 수를 표시. 문장 수는 트랜잭션이 열린 채 성공한 문장만 세고 Auto 모드에서 직접 쓴 `BEGIN`은 세지 않음. Auto 모드에서 직접 BEGIN을 실행한 경우도 포함 |
+| 닫기 전 확인 | 트랜잭션이 열린 상태로 탭 닫기, Auto 전환, 탭의 접속 바꾸기 시 Commit 또는 Rollback 선택. 앱 종료 시에는 트랜잭션이 열린 탭을 보여 주고 모두 Rollback하거나 취소만 고름(Commit하려면 취소하고 탭에서 직접). 접속의 연결 대상 저장과 프로젝트 바꾸기도 열린 트랜잭션이 있으면 먼저 확인하고, 탭이 둘 이상이면 앱 종료와 같이 모두 Rollback하거나 취소만 고름. Commit이 실패하면 오류를 보이고 "Commit and …"은 진행하지 않음. Dock의 Quit과 외부의 quit 요청은 확인할 수 없어 확인 없이 끝나고 서버가 되돌림 |
+| 오류 후 상태 | 트랜잭션이 실패 상태가 되면 표시하고 Rollback 안내. 실패 상태에서는 Commit을 보내지 않음(서버가 `ROLLBACK`으로 처리하므로 Commit된 것처럼 보임) |
 
 ### 4.4 SQL 에디터
 
@@ -145,7 +145,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 기능 | 동작 |
 | --- | --- |
 | 나눠 가져오기 | 처음 500행만 가져오고 스크롤하면 이어서 가져옴. 행이 크면 500행이 되기 전에 끊음(4 MiB) |
-| 받다 만 결과 | 같은 탭에서 다음 쿼리를 실행하면 남은 결과를 버림. 10분(기본값) 동안 더 가져오지 않으면 자동으로 닫아 DB에 쿼리가 열려 있지 않게 함 |
+| 받다 만 결과 | 같은 탭에서 다음 쿼리를 실행하면 남은 결과를 버림. 10분(기본값) 동안 더 가져오지 않으면 자동으로 닫아(`expired`) DB에 쿼리가 열려 있지 않게 함. 트랜잭션 안에서 버릴 때는 cancel이 트랜잭션을 실패시키므로 cancel 없이 남은 행을 읽어 버리고, 5초 안에 끝나지 않으면 cancel함(그 트랜잭션은 실패 상태가 됨) |
 | 보관 상한 | 탭당 10만 행을 넘으면 앞쪽 행부터 버림. 버려진 구간은 자동으로 다시 조회하지 않고 "다시 실행해야 볼 수 있음"으로 표시. 행은 화면이 보관하고, 어디부터 보관할지는 Rust가 알려 줌 |
 | 가상 스크롤 | 화면에 보이는 행만 그림 |
 | 타입별 표시 | JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, vector 같은 긴 값 줄임 표시. 셀을 고르면 옆 panel에 전체 값을 보여 줌(Shift+Enter) |
@@ -168,7 +168,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 기능 | 동작 |
 | --- | --- |
 | 읽기 전용 접속 | 세션을 읽기 전용으로 열어 DB가 쓰기를 거부하게 함 |
-| 위험 쿼리 확인 | WHERE 없는 UPDATE와 DELETE, DROP, TRUNCATE는 실행 전 확인. Manual 모드면 Commit 전까지 되돌릴 수 있다고, Auto 모드면 되돌릴 수 없다고 알림. 읽기 전용 접속에서는 확인하지 않고 실행해 DB의 거부를 그대로 보여 줌 |
+| 위험 쿼리 확인 | WHERE 없는 UPDATE와 DELETE(CTE 안 포함), DROP, TRUNCATE는 실행 전 확인. `EXPLAIN ANALYZE`는 안쪽 문장을 보고, `EXPLAIN`(ANALYZE 없음)과 `PREPARE`는 실행하지 않으므로 보지 않음. `DO` block, 함수 안의 문장, `ALTER TABLE … DROP COLUMN`도 보지 않고 parse가 실패하면 확인 없이 실행해 서버의 오류를 보여 줌. Manual 모드이거나 트랜잭션이 열려 있으면 Commit 전까지 되돌릴 수 있다고, Auto 모드에서 트랜잭션 밖이면 되돌릴 수 없다고 알림. 읽기 전용 접속에서는 확인하지 않고 실행해 DB의 거부를 그대로 보여 줌 |
 | 환경 색상 | 4.1의 접속별 색상으로 운영과 스테이징 구분. "운영" 같은 환경 구분 항목은 따로 두지 않음 |
 
 ### 4.9 쿼리 기록
@@ -187,7 +187,7 @@ DataGrip의 macOS 기본 키맵과 같게 한다. 예: 쿼리 실행 Cmd+Enter, 
 | 범위 | 실행, Formatting, Commit, Rollback, 탭 이동처럼 ChillaSQL에 있는 기능만 맞춤 |
 | 변경 | 전역 설정 파일에서 키를 바꿀 수 있음 (5장) |
 | M3의 키 | 실행 Cmd+Enter, 취소 Cmd+F2, 저장 Cmd+S, 새 탭 Shift+Cmd+L, 탭 닫기 Cmd+W, 다음 탭 Shift+Cmd+], 이전 탭 Shift+Cmd+[. 입력 소스와 무관하게 key의 위치로 판별. 접속 form이 열려 있는 동안은 동작하지 않음 |
-| M4 이후의 키 | Formatting Opt+Cmd+L, 프로젝트 열기 Cmd+O, 값 보기 Shift+Enter, Commit, Rollback. DataGrip 키맵과 같은지 확인한 뒤 정함(9장) |
+| M4 이후의 키 | Formatting Opt+Cmd+L, 프로젝트 열기 Cmd+O, 값 보기 Shift+Enter, Commit Opt+Shift+Cmd+Enter, Rollback Opt+Shift+Cmd+Z. 나머지는 DataGrip 키맵과 같은지 확인한 뒤 정함(9장). Commit은 DataGrip의 `Console.Transaction.Commit`과 같고, DataGrip에 단축키가 없는 Rollback은 디자인의 값을 씀 |
 
 ## 5. 프로젝트 디렉토리
 
@@ -299,6 +299,6 @@ color = "green"
 디자인(2026-11-18)에서 남은 것은 괄호 안의 마일스톤에서 정한다.
 
 - [ ] 접속 설정의 key 이름. 디자인은 `read_only`와 `statement_timeout`(M8)으로 제안
-- [ ] Commit, Rollback(디자인은 Opt+Shift+Cmd+K, Opt+Shift+Cmd+Z), 프로젝트 열기 Cmd+O, 값 보기 Shift+Enter가 DataGrip 키맵과 같은지(M6, M8)
+- [ ] 프로젝트 열기 Cmd+O, 값 보기 Shift+Enter가 DataGrip 키맵과 같은지(M8)
 - [ ] 파라미터 값을 SQL text에 그대로 넣을지(M9)
 - [ ] 내보내기가 받은 행만 저장하는지, 전체를 다시 조회하는지(M10)

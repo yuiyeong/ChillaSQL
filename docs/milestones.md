@@ -98,8 +98,9 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **완료 기준 (2단계)**: 터미널 없이 터널 뒤의 staging DB에 접속해 Manual 트랜잭션을 Commit, Rollback
 - **먼저 확인할 것**:
   - M1에서 정한 트랜잭션 상태 감지 방법을 쓴다
-  - Commit Opt+Shift+Cmd+K, Rollback Opt+Shift+Cmd+Z가 DataGrip macOS 기본 키맵과 같은지(4.10)
-  - 접속의 연결 대상을 고쳐 저장하거나 프로젝트를 바꾸면 그 접속의 세션을 묻지 않고 닫는다(M3). 열린 트랜잭션이 생기면 탭을 닫을 때와 같은 확인이 필요하다
+  - Commit, Rollback 단축키 → DataGrip과 같은 JetBrains DatabaseTools plugin의 `plugin.xml`에서 Commit은 `control alt shift ENTER`(macOS는 `Opt+Shift+Cmd+Enter`)이고 Rollback은 단축키가 없다. Commit은 `Opt+Shift+Cmd+Enter`, Rollback은 디자인의 `Opt+Shift+Cmd+Z`로 정한다(4.10)
+  - 접속의 연결 대상을 고쳐 저장하거나 프로젝트를 바꾸면 그 접속의 세션을 묻지 않고 닫는다(M3). 열린 트랜잭션이 생기면 탭을 닫을 때와 같은 확인이 필요하다 → 둘 다 열린 트랜잭션이 있으면 먼저 묻는다. 탭이 둘 이상이면 앱 종료와 같은 모양이다
+  - 종료 경로(Task 1에서 `.app`으로 확인, tauri 2.12.5) → 창의 닫기 버튼만 `CloseRequested`로 오고 `prevent_close`로 막힌다. menu의 Quit(`Cmd+Q`), Dock의 Quit, `osascript` quit은 `ExitRequested` 없이 `RunEvent::Exit`만 와서 막지 못한다. menu의 Quit은 custom item으로 바꿔 확인에 태우고, Dock의 Quit과 외부 quit은 확인 없이 끝나며 `shutdown`이 세션을 닫아 서버가 되돌린다
 
 ---
 
@@ -115,7 +116,7 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 ### M8. 에디터·실행 편의
 
 - **목표**: 3단계 완료 기준 달성
-- **범위**: Formatting(sql-formatter, 선택 영역 또는 파일 전체, Opt+Cmd+L), DB가 알려준 오류 위치 밑줄, 파일 전체 실행과 문장별 결과 탭(오류 난 문장에서 멈춤), 타입별 표시(JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, 긴 값 줄임), 읽기 전용 접속(4.8), 접속별 타임아웃(4.5), 저장하지 않은 탭 내용을 SQLite에 보관하고 재시작 후 복원, 최근 프로젝트 목록과 프로젝트 바꾸기 menu(Cmd+O), 읽기 전용 접속에서는 위험 쿼리 확인을 건너뜀(4.8), 결과 column header의 type 표시, 셀을 고르면 옆 panel에 전체 값(Shift+Enter), 에디터에서 실행될 문장 범위 강조(배경과 왼쪽 선), 접속 sheet의 `read_only`와 `statement_timeout` 칸과 Advanced 접기, 전역 설정 파일 `~/.config/chilla/config.toml`(5장), 한국어 dictionary(`ko`)와 `language` 설정, Rust 오류 message의 한국어(오류 `kind`별로 화면이 번역), 결과 오류 화면의 Go to error(에디터 오류 밑줄로 이동), 빈 상태의 Reformat 안내(`⌥⌘L Reformat`), toolbar menu의 Run file 항목 켜기, 에디터 글꼴과 크기 설정, 접속 테스트 성공 문구의 server version
+- **범위**: Formatting(sql-formatter, 선택 영역 또는 파일 전체, Opt+Cmd+L), DB가 알려준 오류 위치 밑줄, 파일 전체 실행과 문장별 결과 탭(오류 난 문장에서 멈춤), 타입별 표시(JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, 긴 값 줄임), 읽기 전용 접속(4.8), 접속별 타임아웃(4.5), 저장하지 않은 탭 내용을 SQLite에 보관하고 재시작 후 복원, 최근 프로젝트 목록과 프로젝트 바꾸기 menu(Cmd+O), 읽기 전용 접속에서는 위험 쿼리 확인을 건너뜀(4.8, M6은 모든 접속에서 확인), 결과 column header의 type 표시, 셀을 고르면 옆 panel에 전체 값(Shift+Enter), 에디터에서 실행될 문장 범위 강조(배경과 왼쪽 선), 접속 sheet의 `read_only`와 `statement_timeout` 칸과 Advanced 접기, 전역 설정 파일 `~/.config/chilla/config.toml`(5장), 한국어 dictionary(`ko`)와 `language` 설정, Rust 오류 message의 한국어(오류 `kind`별로 화면이 번역), 결과 오류 화면의 Go to error(에디터 오류 밑줄로 이동), 빈 상태의 Reformat 안내(`⌥⌘L Reformat`), toolbar menu의 Run file 항목 켜기, 에디터 글꼴과 크기 설정, 접속 테스트 성공 문구의 server version, 받다 만 결과를 닫는 시간 설정(M6은 600초 고정, `QueryLimits.idle_result_timeout`)
 - **완료 기준 (3단계)**: 하루 업무를 DataGrip 없이 처리
 - **먼저 확인할 것**:
   - simple query protocol은 컬럼의 type OID를 주지 않는다(M2 결정). 타입별 표시에 필요한 type을 `TxTap`이 RowDescription을 읽어 얻을지, `prepare`로 Describe할지 정한다

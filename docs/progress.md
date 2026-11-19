@@ -4,10 +4,10 @@
 
 ## 지금
 
-- **진행 중**: 없음. M5 터널을 끝냄(2026-11-19). 계획은 [M5](plans/M5-tunnel.md), 진행 기록은 `.superpowers/sdd/M5-tunnel/progress.md`(git에 올리지 않음)
-- **작업 위치**: main. 2026-11-19에 branch `m5-tunnel`을 main에 fast-forward로 합치고 branch를 지웠다. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
+- **진행 중**: M6 트랜잭션과 안전장치([M6](plans/M6-transaction-safety.md)). Task 1(종료 경로 확인, 결정 기록)을 끝냄. 다음은 Task 2. 진행 기록은 `.superpowers/sdd/M6-transaction-safety/`(git에 올리지 않음). M5 터널은 끝냄(2026-11-19, [M5](plans/M5-tunnel.md))
+- **작업 위치**: branch `m6-transactions`(main에서 2026-11-19에 만듦). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M6(트랜잭션과 안전장치). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: M6 Task 2부터([계획](plans/M6-transaction-safety.md)). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -37,7 +37,7 @@
 | M3 프로젝트·에디터 화면 | 1 | 완료 | [M3](plans/M3-project-editor.md) | 2026-11-12 | 2026-11-18 |
 | M4 결과 표 | 1 | 완료 | [M4](plans/M4-result-table.md) | 2026-11-18 | 2026-11-18 |
 | M5 터널 | 2 | 완료 | [M5](plans/M5-tunnel.md) | 2026-11-19 | 2026-11-19 |
-| M6 트랜잭션과 안전장치 | 2 | 대기 | | | |
+| M6 트랜잭션과 안전장치 | 2 | 진행 중 | [M6](plans/M6-transaction-safety.md) | 2026-11-19 | |
 | M7 스키마 트리와 자동완성 | 3 | 대기 | | | |
 | M8 에디터·실행 편의 | 3 | 대기 | | | |
 | M9 쿼리 도구 | 4 | 대기 | | | |
@@ -213,6 +213,28 @@
 | 2026-11-19 | M5 | 끌 때 기억한 pid가 다른 프로세스에 다시 쓰였는지 확인하지 않음 | 2초 안에 pid가 다시 쓰일 가능성이 매우 낮음. 확인하려면 pid마다 시작 시각을 기억해야 함(code-review에서 고치지 않은 지적) |
 | 2026-11-19 | M5 | 끊긴 세션을 화면이 event로 추정하는 구조는 그대로 둠 | simplify의 같은 지적과 같은 이유(code-review에서 고치지 않은 지적) |
 | 2026-11-19 | M5 | 기획서, 마일스톤, 계획, 디자인 사본, test에 있던 실제 터널 명령과 서비스·프로젝트 이름을 지어낸 예시(`ssh -N -L 25432:db.internal:5432 bastion`, `app`, `billing`)로 바꿈 | 실제 환경 정보가 public 저장소에 남지 않게 함(사용자 지시). git history에는 남아 있음 |
+| 2026-11-19 | M6 | M1의 `TxTap`이 읽은 트랜잭션 상태를 session actor가 쿼리마다 `Finished`의 `tx`에 실어 화면으로 보냄 | `TxTap`이 ReadyForQuery의 상태 byte를 읽고 actor가 쿼리가 끝날 때마다 `tx_status()`를 저장함(`settle`). 지금은 `session_state` command로만 나가고 화면이 부르지 않음. 화면이 따로 묻지 않으면 순서가 꼬이지 않음 |
+| 2026-11-19 | M6 | Commit은 `Opt+Shift+Cmd+Enter`, Rollback은 `Opt+Shift+Cmd+Z`. 디자인의 Commit `Opt+Shift+Cmd+K`는 쓰지 않음. 기획서 4.10과 9장을 고침 | DataGrip의 Commit과 Rollback 단축키는 같은 JetBrains DatabaseTools plugin(이 Mac의 PyCharm 2026.2)의 `plugin.xml`에서 확인함. `Console.Transaction.Commit`은 `$default` keymap에 `control alt shift ENTER`이고 macOS keymap은 `control`을 `meta`로 바꿈. `Console.Transaction.Rollback`은 단축키가 없어 디자인의 값을 씀. 웹의 keymap 문서에는 두 action이 나오지 않음 |
+| 2026-11-19 | M6 | Manual 모드의 `BEGIN`은 Rust가 보냄. 실행마다 `TxMode`를 싣고, actor가 Manual 실행을 받았는데 트랜잭션 밖(`Idle`)이면 그 쿼리 전에 `BEGIN`을 보냄. `BEGIN`이 실패하면 그 오류로 쿼리를 끝냄. Manual에서 트랜잭션 안에서 못 도는 문장(`VACUUM`, `CREATE DATABASE`)은 서버 오류가 남(DataGrip과 같음) | 모드는 화면의 탭 상태이고 세션은 기억하지 않음. 그래서 세션이 바뀌어도(재연결, 접속 바꾸기) 모드가 그대로임 |
+| 2026-11-19 | M6 | 트랜잭션 문장 수는 `Finished`의 `tx`가 열린 채(`in_transaction`)로 `completed`된 실행만 셈. 실패하거나 취소된 문장은 세지 않음. 트랜잭션을 연 실행이 Auto 모드면 사용자가 쓴 `BEGIN`이므로 세지 않고, Manual 모드면 앱이 `BEGIN`을 붙인 사용자 문장이므로 셈. 문장이 0개인 열린 트랜잭션은 `manual BEGIN`이라고 씀(TabsConn 3) | 서버에 들어가 트랜잭션에 남은 문장만 사용자가 한 일로 보이게 하려고. 캔버스(TabsConn 3)가 `manual BEGIN`을 보임 |
+| 2026-11-19 | M6 | 트랜잭션 경과 시간은 트랜잭션을 연 실행이 시작한 시각(`ResultData.startedAt`)부터 셈. 탭은 `TX 3:12`, toolbar는 `Open · 2 statements · 3:12`, 실패는 `Failed · 2 statements · 3:12`이고 Commit이 disabled | 트랜잭션이 열린 시각을 따로 서버에 묻지 않고 화면이 이미 가진 값으로 셈 |
+| 2026-11-19 | M6 | Commit과 Rollback은 actor 명령 `end_transaction`. 지금 쿼리가 있으면 버린 뒤(트랜잭션 안이므로 cancel 없이) 보내고, 기다리던 다음 쿼리는 끝내기 뒤에 실행함. 실패 상태에서 온 Commit은 보내지 않고 `TransactionFailed`로 답함. `COMMIT`이 서버 오류로 실패하면(deferred constraint) 그 오류를 결과 panel에 그리고 트랜잭션은 끝난 것으로 둠 | 끝내기가 기다리는 쿼리에 밀려 사라지면 안 됨. 서버는 실패한 트랜잭션의 `COMMIT`을 `ROLLBACK`으로 처리하므로 그대로 보내면 Commit이 된 것처럼 보임 |
+| 2026-11-19 | M6 | Commit, Rollback, Auto/Manual 전환은 탭이 연결 중이 아니고, 실행 중이면 batch를 기다리는 중(`fetch: "ready"`)일 때만 가능. 쿼리를 읽고 있는 동안은 disabled(먼저 Cancel) | 읽는 중에 끝내기를 보내면 읽던 결과의 처리가 겹침 |
+| 2026-11-19 | M6 | 닫기 전 확인의 Rollback은 명시적으로 `ROLLBACK`을 보낸 뒤 닫음. 실패해도(연결이 끊김) 진행함. `Commit and …`은 Commit이 성공해야 진행하고 실패하면 멈추고 오류를 보임. 실패 상태인 트랜잭션의 확인에는 Commit 버튼이 없음 | 세션이 닫히면 서버가 어차피 되돌리므로 Rollback 실패는 막을 이유가 없음. Commit은 실패하면 사용자가 모르는 채 데이터를 잃음 |
+| 2026-11-19 | M6 | 여러 탭의 확인(연결 대상 저장, 프로젝트 바꾸기)은 앱 종료와 같은 모양. 열린 트랜잭션이 있는 탭이 둘 이상이면 탭 목록과 `Roll back all and …`, Cancel만 둠. 한 탭이면 Commit, Rollback, Cancel | 한꺼번에 Commit하지 않는다는 앱 종료의 결정(2026-11-18)과 같은 이유 |
+| 2026-11-19 | M6 | 앱 종료의 `Roll back all and quit`은 `ROLLBACK`을 따로 보내지 않음. `quit_app`이 `shutdown`으로 세션을 닫고 서버가 되돌림 | 종료를 오래 막지 않으려고 |
+| 2026-11-19 | M6 | 확인 순서는 트랜잭션 확인이 먼저, 저장하지 않은 변경 확인이 다음. 프로젝트 바꾸기는 두 확인, 폴더 고르기, Commit(골랐으면), 열기 순서. 폴더 고르기를 취소하면 Commit하지 않음 | 취소했는데 Commit이 되면 안 됨 |
+| 2026-11-19 | M6 | 트랜잭션 중 끊김: 열린 트랜잭션이 있는 탭에서 (a) 그 접속의 터널이 다시 시작되면(stale) 바로, (b) 실행이 `connection_lost`로 끝나거나 세션이 없어졌으면(`unknown_session`) 그때, 결과 panel 위에 `Transaction lost` 알림(Tunnel 6)을 띄우고 트랜잭션 정보를 지움. 알림은 OK나 다음 실행이 지움. 터널 없는 접속은 다음 실행에서야 끊김을 앎 | 다음 실행이 옛 트랜잭션이 이어지는 것처럼 보이면 안 됨. 서버는 연결이 끊기면 트랜잭션을 되돌리므로 사용자에게 알려야 함 |
+| 2026-11-19 | M6 | 받다 만 결과 자동 닫기: batch를 보내고 `fetch_more`를 10분 동안 받지 못하면 actor가 결과를 버리고 새 outcome `expired`로 끝냄. 시간은 `QueryLimits.idle_result_timeout`(600초). 설정 파일로 바꾸는 것은 M8 | 기획서 4.6의 기본값 10분. DB에 쿼리가 열려 있지 않게 함 |
+| 2026-11-19 | M6 | 트랜잭션 안에서 버리기: 다음 쿼리, 끝내기, 자동 닫기가 트랜잭션 안의 쿼리를 버릴 때는 cancel 없이 남은 행을 읽어 버림. 5초(`QueryLimits.tx_drain_limit`) 안에 끝나지 않으면 cancel하고, 그러면 트랜잭션이 failed가 되어 화면이 Failed로 보임. 사용자가 누른 Cancel과 세션 닫기는 지금처럼 cancel | cancel이 닿으면 문장이 `57014`로 실패해 트랜잭션이 failed가 되고 다음 문장이 `25P02`로 거부됨. 세션 닫기는 어차피 되돌아가므로 cancel해도 됨 |
+| 2026-11-19 | M6 | 위험 쿼리 판별: 실행할 문장 하나를 `pg_query::parse`로 읽어 첫 위험을 돌려줌. WHERE 없는 `UPDATE`와 `DELETE`(CTE 안 포함), `DROP`(`DropStmt`의 모든 object, `DROP DATABASE`), `TRUNCATE`. `EXPLAIN ANALYZE`는 안쪽 문장을 봄. `EXPLAIN`(ANALYZE 없음)과 `PREPARE`는 실행하지 않으므로 보지 않음. parse가 실패하면 위험 없음(서버가 오류를 냄). `DO` block, 함수 안의 문장, `ALTER TABLE … DROP COLUMN`은 보지 않음. 기획서 4.8에 반영 | 겉이 `SELECT`나 `EXPLAIN`이어도 CTE와 `EXPLAIN ANALYZE`는 실제로 지움. 읽기 전용 접속에서 확인하지 않는 것은 읽기 전용(M8)과 함께 만듦 |
+| 2026-11-19 | M6 | 위험 쿼리 확인의 문구: Manual이거나 트랜잭션이 열려 있으면 "되돌릴 수 있음", Auto이고 트랜잭션 밖이면 "되돌릴 수 없음". `Run again`도 확인하고, 터널 오류의 `Try again`은 이미 확인한 실행이라 묻지 않음 | 트랜잭션이 열려 있으면 Auto여도 Rollback으로 되돌릴 수 있음 |
+| 2026-11-19 | M6 | 확인 dialog는 캔버스 모양의 `DialogHost` 하나로 그림(Dialogs, Safety). native `ask`를 쓰던 M3의 확인(저장하지 않은 탭 닫기, 프로젝트 바꾸기, 밖에서 바뀐/지워진 파일 저장)도 바꿈. 저장하지 않은 탭 닫기는 캔버스대로 `Don't save / Cancel / Save`이고 Save는 저장에 성공했을 때만 닫음. dialog가 열린 동안 단축키는 동작하지 않고 Escape는 Cancel, 기본 focus는 Cancel. 한 번에 하나만 보이고 나머지는 차례를 기다림 | 마일스톤이 확인 dialog를 캔버스 모양으로 요구함(native `ask`를 대신함). dialog가 겹치거나 단축키가 뒤의 에디터로 가면 안 됨 |
+| 2026-11-19 | M6 | `chilla.toml`의 `color`가 `green`, `yellow`, `red`, `blue`, `purple`이 아니면 프로젝트를 열지 않음. 접속 sheet의 `color`는 다섯 swatch의 radiogroup이고 고른 swatch를 다시 누르면 색을 지움(회색). 새 접속은 색이 없음 | 모르는 key를 거절하는 것과 같은 이유. 오타가 조용히 회색이 되면 운영 접속을 구분하지 못함 |
+| 2026-11-19 | M6 | 종료 경로: menu의 Quit을 custom item(`quit`, `Cmd+Q`)으로 바꾸고, 창 닫기(`CloseRequested`)와 사용자가 요청한 `ExitRequested`(`code`가 `None`)를 막은 뒤 `quit-requested` event를 보냄. 화면은 열린 트랜잭션이 없으면 바로, 있으면 확인한 뒤 `quit_app`을 부름. `quit_app`이 flag를 세운 뒤의 종료는 막지 않음. 확인하는 동안 온 두 번째 요청은 무시함. 화면이 응답하지 않으면 강제 종료로만 끝남(감수) | 현재는 menu의 Quit이 `PredefinedMenuItem::quit`이고 창 닫기와 Dock의 Quit은 따로 다루지 않음. 열린 트랜잭션을 확인 없이 잃지 않게 함. Dock Quit이 막히는지는 아래 probe 결과 |
+| 2026-11-19 | M6 | 접속 저장(`applySavedProject`)과 프로젝트 바꾸기(`switchProject`)는 열린 트랜잭션이 있으면 먼저 물음(M6 Task 11) | M3의 `applySavedProject`는 연결 대상이 바뀐 접속을 쓰는 탭을 묻지 않고 `release`하고 `switchProject`는 `reset`함. 둘 다 열린 트랜잭션을 잃을 수 있음 |
+| 2026-11-19 | M6 | 종료 경로 확인(M6 Task 1, tauri 2.12.5, tao 0.37.2, macOS): `ExitRequested`, `CloseRequested`, `Exit`에 probe를 달고 `prevent_exit`, `prevent_close`를 부르며 `.app`을 띄워 확인함. 창의 닫기 버튼은 `CloseRequested`만 오고 `prevent_close`로 막힘(창과 process가 남음). menu의 Quit(`Cmd+Q`, `PredefinedMenuItem::quit`), Dock의 Quit, `osascript -e 'quit app "ChillaSQL"'`는 모두 `ExitRequested` 없이 `RunEvent::Exit`만 오고 막히지 않음(`prevent_exit`이 불리지 않음) | 결정 규칙의 막히지 않는 쪽. 세 경로는 확인 없이 끝나고 `RunEvent::Exit`의 `shutdown`이 세션을 닫아 서버가 되돌림. `code: None`의 `ExitRequested`는 이 경로들에서 오지 않음 |
+| 2026-11-19 | M6 | Task 13은 menu의 Quit을 custom item으로 바꿔 `Cmd+Q`와 menu의 Quit을 확인에 태우고 창 닫기를 막음. Dock의 Quit과 `osascript` quit은 확인 없이 끝남(감수). `ExitRequested { code: None }` 막기는 안전망으로 두되 이 경로들에서는 오지 않음 | predefined Quit은 막을 수 없어 custom item이 필요함. Dock과 외부 quit 요청을 막는 방법은 찾지 못함(tao 0.37.2의 app delegate는 `applicationWillTerminate`만 구현하고 종료를 거절할 수 있는 `applicationShouldTerminate`는 없음). 열린 트랜잭션은 서버가 되돌리므로 데이터는 Commit되지 않은 채 사라짐 |
 
 ## 작업 로그
 
@@ -220,6 +242,8 @@
 
 ### 2026-11-19
 
+- M6 계획(`docs/plans/M6-transaction-safety.md`)을 쓰고 branch `m6-transactions`를 만듦
+- M6 Task 1: 종료 경로를 `.app`으로 확인함. 창의 닫기 버튼만 `CloseRequested`로 오고 `prevent_close`로 막힘. menu의 Quit(`Cmd+Q`), Dock의 Quit, `osascript` quit은 `ExitRequested` 없이 `RunEvent::Exit`만 와서 막히지 않음. 확인용 probe는 지움. 계획에서 정한 것 전부와 확인 결과를 결정 기록으로 옮기고 기획서(4.3, 4.6, 4.8, 4.10, 9장)와 마일스톤(M6, M8)을 고침
 - branch `m5-tunnel`을 main에 fast-forward로 합치고 branch를 지움
 - M5 code-review(high): 지적 9개를 `superpowers:receiving-code-review`로 검토해 6개를 고치고 3개를 고치지 않음. 고친 것마다 실패하는 test를 먼저 씀
 - M5 simplify: 4개 관점(reuse, simplification, efficiency, altitude) 검토의 지적 가운데 동작을 바꾸지 않는 것을 고침. Rust는 `wait_settled`가 `Result`를 돌려주고, `last_published`를 지우고, `PrivateTunnel`이 끝날 때 표에서 빠지고, `cancel`/`restart`를 동기 함수로 바꿈. 화면은 `useNow`, `MessageBlock`, `CommandOutput`/`Pre`, `useConnection`, `useTunnel`, `isTunnelStarting`을 함께 쓰게 하고, 같은 상태 event에서 store를 바꾸지 않고, 다시 실행 중에는 초를 세는 timer를 띄우지 않음. 고치지 않은 것은 결정 기록에 남김
