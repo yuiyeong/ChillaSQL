@@ -32,6 +32,8 @@ struct FakeQueries {
     fail_cancels: bool,
     ignore_cancels: usize,
     tx: TxStatus,
+    /// 다음 `start_query`가 돌려줄 오류.
+    start_error: Option<QueryError>,
 }
 
 impl Default for FakeQueries {
@@ -44,6 +46,7 @@ impl Default for FakeQueries {
             fail_cancels: false,
             ignore_cancels: 0,
             tx: TxStatus::Idle,
+            start_error: None,
         }
     }
 }
@@ -103,6 +106,11 @@ impl FakeLink {
     /// 서버 쪽 효과(끝나지 않은 결과를 57014로 끝내기)는 cancel을 부르는 즉시 일어난다.
     pub(crate) async fn hold_cancels(&self) -> OwnedRwLockWriteGuard<()> {
         self.cancel_gate.clone().write_owned().await
+    }
+
+    /// 다음 `start_query` 한 번이 `error`로 실패하게 한다.
+    pub(crate) fn fail_next_start(&self, error: QueryError) {
+        self.queries().start_error = Some(error);
     }
 
     /// `tx_status`가 돌려줄 값. 처음에는 `Idle`이다.
@@ -321,6 +329,9 @@ impl DbConnection for FakeConnection {
             return Err(QueryError::ConnectionLost {
                 message: "가짜 연결이 끊겼다".into(),
             });
+        }
+        if let Some(error) = queries.start_error.take() {
+            return Err(error);
         }
         // 실제 연결처럼 NUL이 든 text는 보내지 못한다. 연결은 그대로다.
         if sql.contains('\0') {

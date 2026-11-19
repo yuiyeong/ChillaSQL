@@ -168,7 +168,7 @@ impl<D: DbConnection> Actor<D> {
                 let current = self.query.as_mut().filter(|q| q.id == query);
                 if let Some(waiting) = self.pending.take_if(|p| p.id == query) {
                     // 아직 서버에 보내지 않았으므로 cancel 요청 없이 빼기만 한다.
-                    waiting.finish(QueryOutcome::Cancelled);
+                    waiting.finish(QueryOutcome::Cancelled, Some(self.tx));
                     let _ = reply.send(Ok(()));
                 } else if current.is_some_and(|q| q.drain(DrainReason::Cancelled)) {
                     self.send_cancel(Some(reply));
@@ -203,7 +203,7 @@ impl<D: DbConnection> Actor<D> {
             self.send_cancel(None);
         }
         if let Some(replaced) = self.pending.replace(next) {
-            replaced.finish(QueryOutcome::Discarded);
+            replaced.finish(QueryOutcome::Discarded, Some(self.tx));
         }
     }
 
@@ -221,7 +221,15 @@ impl<D: DbConnection> Actor<D> {
                     QueryError::Client { message } => QueryOutcome::ClientError { message },
                 };
                 let elapsed = started.elapsed();
-                (next.sink)(QueryEvent::Finished { outcome, elapsed });
+                let tx = match outcome {
+                    QueryOutcome::ConnectionLost { .. } => None,
+                    _ => self.read_tx().await,
+                };
+                (next.sink)(QueryEvent::Finished {
+                    outcome,
+                    elapsed,
+                    tx,
+                });
             }
         }
     }
@@ -237,13 +245,27 @@ impl<D: DbConnection> Actor<D> {
             return;
         };
         self.resend_at = None;
-        let lost = query.finish();
-        if !lost {
-            self.tx = self.connection.tx_status().await;
-        }
+        // `Finished`에 싣기 전에 읽는다. 결과를 다 읽은 뒤라 서버의 ReadyForQuery가 온다.
+        let tx = if query.is_lost() {
+            None
+        } else {
+            self.read_tx().await
+        };
+        query.finish(tx);
         if let Some(next) = self.pending.take() {
             self.start(next).await;
         }
+    }
+
+    /// 서버가 알려 주는 트랜잭션 상태를 읽고 `self.tx`에 남긴다. 쿼리가 없을 때만 부른다.
+    /// 읽는 사이에 연결이 끊겼으면 그 값은 죽은 연결의 것이므로 `None`이다.
+    async fn read_tx(&mut self) -> Option<TxStatus> {
+        let tx = self.connection.tx_status().await;
+        if self.connection.is_closed() {
+            return None;
+        }
+        self.tx = tx;
+        Some(tx)
     }
 
     /// cancel을 spawn한다. `reply`가 있으면 그 결과를 답한다.
@@ -270,7 +292,7 @@ impl<D: DbConnection> Actor<D> {
             query.finish_closed();
         }
         if let Some(pending) = self.pending.take() {
-            pending.finish(QueryOutcome::Discarded);
+            pending.finish(QueryOutcome::Discarded, None);
         }
         self.connection.close().await;
     }

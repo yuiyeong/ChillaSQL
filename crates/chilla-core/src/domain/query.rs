@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use super::TxStatus;
+
 /// 실행한 쿼리 하나.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct QueryId(pub u64);
@@ -46,6 +48,10 @@ pub enum QueryEvent {
     Finished {
         outcome: QueryOutcome,
         elapsed: Duration,
+        /// 그 쿼리가 끝난 뒤 서버가 알려 준 트랜잭션 상태. 연결이 끊겼거나 세션을 닫는 중이면 `None`이다.
+        /// 시작하지 않고 끝난 쿼리(`Discarded`, 기다리다 `Cancelled`)는 서버에 묻지 않으므로 세션이
+        /// 마지막으로 읽은 값이다.
+        tx: Option<TxStatus>,
     },
 }
 

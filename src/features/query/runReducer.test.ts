@@ -30,6 +30,7 @@ test("columns, rows, finished를 차례로 쌓는다", () => {
   });
   state = reduce(state, {
     type: "finished",
+    tx: "idle",
     elapsedMicros: 300,
     outcome: "completed",
     rows: 2,
@@ -127,6 +128,7 @@ test("끝나면 가져오는 중이었어도 fetch가 none이다", () => {
   const fetching = requestFetch(reduce(running(), rowsEvent));
   const state = reduce(fetching, {
     type: "finished",
+    tx: "idle",
     elapsedMicros: 2,
     outcome: "cancelled",
   });
@@ -159,6 +161,7 @@ test("running이 아닌 상태는 event를 무시한다", () => {
     expect(
       reduce(state, {
         type: "finished",
+        tx: "idle",
         elapsedMicros: 2,
         outcome: "cancelled",
       }),
@@ -201,6 +204,7 @@ test("requestFetch는 ready일 때만 fetching으로 바꾼다", () => {
   expect(requestFetch(none)).toBe(none);
   const finished = reduce(ready, {
     type: "finished",
+    tx: "idle",
     elapsedMicros: 2,
     outcome: "completed",
     rows: 1,

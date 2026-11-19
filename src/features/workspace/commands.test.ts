@@ -606,6 +606,7 @@ test("runAgain은 접속이 없으면 거절한다", async () => {
   await execute("run");
   onEventOf(0)({
     type: "finished",
+    tx: "idle",
     elapsedMicros: 1,
     outcome: "completed",
     rows: 0,

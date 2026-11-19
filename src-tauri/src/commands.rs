@@ -165,6 +165,15 @@ impl From<SessionInfo> for SessionDto {
     }
 }
 
+/// 화면이 보는 트랜잭션 상태의 이름.
+fn tx_name(tx: TxStatus) -> &'static str {
+    match tx {
+        TxStatus::Idle => "idle",
+        TxStatus::InTransaction => "in_transaction",
+        TxStatus::Failed => "failed",
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionStateDto {
@@ -179,11 +188,7 @@ impl From<SessionState> for SessionStateDto {
         match state {
             SessionState::Open { tx } => Self {
                 status: "open",
-                tx: Some(match tx {
-                    TxStatus::Idle => "idle",
-                    TxStatus::InTransaction => "in_transaction",
-                    TxStatus::Failed => "failed",
-                }),
+                tx: Some(tx_name(tx)),
             },
             SessionState::Lost => Self {
                 status: "lost",
@@ -289,6 +294,8 @@ pub enum QueryEventDto {
         #[serde(flatten)]
         outcome: OutcomeDto,
         elapsed_micros: u64,
+        /// `"idle"`, `"in_transaction"`, `"failed"`. 연결이 끊겼거나 세션을 닫는 중이면 `null`이다.
+        tx: Option<&'static str>,
     },
 }
 
@@ -350,9 +357,14 @@ impl QueryEventDto {
                 retained_from,
                 elapsed_micros: micros(elapsed),
             },
-            QueryEvent::Finished { outcome, elapsed } => Self::Finished {
+            QueryEvent::Finished {
+                outcome,
+                elapsed,
+                tx,
+            } => Self::Finished {
                 outcome: OutcomeDto::new(outcome, sql),
                 elapsed_micros: micros(elapsed),
+                tx: tx.map(tx_name),
             },
         }
     }
@@ -910,9 +922,18 @@ mod tests {
     }
 
     fn finished(outcome: QueryOutcome, micros: u64) -> serde_json::Value {
+        finished_with(outcome, micros, Some(TxStatus::Idle))
+    }
+
+    fn finished_with(
+        outcome: QueryOutcome,
+        micros: u64,
+        tx: Option<TxStatus>,
+    ) -> serde_json::Value {
         event_json(QueryEvent::Finished {
             outcome,
             elapsed: Duration::from_micros(micros),
+            tx,
         })
     }
 
@@ -946,11 +967,11 @@ mod tests {
         let completed = finished(QueryOutcome::Completed { rows: 3 }, 120);
         assert_eq!(
             completed,
-            json!({ "type": "finished", "outcome": "completed", "rows": 3, "elapsedMicros": 120 })
+            json!({ "type": "finished", "outcome": "completed", "rows": 3, "elapsedMicros": 120, "tx": "idle" })
         );
         assert_eq!(
             keys(&completed),
-            BTreeSet::from(["type", "outcome", "rows", "elapsedMicros"])
+            BTreeSet::from(["type", "outcome", "rows", "elapsedMicros", "tx"])
         );
 
         let failed = finished(
@@ -966,7 +987,7 @@ mod tests {
         assert_eq!(
             failed,
             json!({
-                "type": "finished", "outcome": "failed", "elapsedMicros": 90,
+                "type": "finished", "outcome": "failed", "elapsedMicros": 90, "tx": "idle",
                 "error": {
                     "code": "42P01", "message": "m", "detail": null, "hint": "h", "position": 15
                 }
@@ -974,7 +995,7 @@ mod tests {
         );
         assert_eq!(
             keys(&failed),
-            BTreeSet::from(["type", "outcome", "elapsedMicros", "error"])
+            BTreeSet::from(["type", "outcome", "elapsedMicros", "tx", "error"])
         );
         assert_eq!(
             keys(&failed["error"]),
@@ -988,11 +1009,12 @@ mod tests {
             let json = finished(outcome, 5300);
             assert_eq!(
                 json,
-                json!({ "type": "finished", "outcome": name, "elapsedMicros": 5300 })
+                json!({ "type": "finished", "outcome": name, "elapsedMicros": 5300, "tx": "idle"
+                })
             );
             assert_eq!(
                 keys(&json),
-                BTreeSet::from(["type", "outcome", "elapsedMicros"])
+                BTreeSet::from(["type", "outcome", "elapsedMicros", "tx"])
             );
         }
 
@@ -1006,12 +1028,12 @@ mod tests {
             lost,
             json!({
                 "type": "finished", "outcome": "connection_lost", "message": "x",
-                "elapsedMicros": 10
+                "elapsedMicros": 10, "tx": "idle"
             })
         );
         assert_eq!(
             keys(&lost),
-            BTreeSet::from(["type", "outcome", "message", "elapsedMicros"])
+            BTreeSet::from(["type", "outcome", "message", "elapsedMicros", "tx"])
         );
 
         let client = finished(
@@ -1024,12 +1046,29 @@ mod tests {
             client,
             json!({
                 "type": "finished", "outcome": "client_error", "message": "y",
-                "elapsedMicros": 11
+                "elapsedMicros": 11, "tx": "idle"
             })
         );
         assert_eq!(
             keys(&client),
-            BTreeSet::from(["type", "outcome", "message", "elapsedMicros"])
+            BTreeSet::from(["type", "outcome", "message", "elapsedMicros", "tx"])
         );
+    }
+
+    #[test]
+    fn finished_tx_is_the_status_name_or_null() {
+        let completed = QueryOutcome::Completed { rows: 0 };
+        for (tx, name) in [
+            (TxStatus::Idle, "idle"),
+            (TxStatus::InTransaction, "in_transaction"),
+            (TxStatus::Failed, "failed"),
+        ] {
+            let json = finished_with(completed.clone(), 1, Some(tx));
+            assert_eq!(json["tx"], json!(name));
+        }
+        // 연결이 끊겼거나 세션을 닫는 중이면 상태를 모른다. key는 남기고 null이다.
+        let unknown = finished_with(completed, 1, None);
+        assert_eq!(unknown["tx"], serde_json::Value::Null);
+        assert!(keys(&unknown).contains("tx"));
     }
 }

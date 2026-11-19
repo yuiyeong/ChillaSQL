@@ -42,6 +42,13 @@ fn outcome(event: QueryEvent) -> QueryOutcome {
     }
 }
 
+fn finished_tx(event: QueryEvent) -> Option<TxStatus> {
+    match event {
+        QueryEvent::Finished { tx, .. } => tx,
+        other => panic!("Finished가 아니다: {other:?}"),
+    }
+}
+
 async fn eventually(check: impl Fn() -> bool) -> bool {
     for _ in 0..100 {
         if check() {
@@ -476,7 +483,8 @@ async fn cancel_of_a_waiting_query_removes_it() {
         next(&mut events_b).await,
         QueryEvent::Finished {
             outcome: QueryOutcome::Cancelled,
-            elapsed: Duration::ZERO
+            elapsed: Duration::ZERO,
+            tx: Some(TxStatus::Idle),
         }
     );
     assert_eq!(events_b.recv().await, None);
@@ -751,4 +759,106 @@ async fn elapsed_does_not_count_the_time_spent_paused() {
     assert_eq!(handle.fetch_more(query).await, Some(true));
     let rows = batch(next(&mut events).await);
     assert!(rows.elapsed < Duration::from_secs(1), "{:?}", rows.elapsed);
+}
+
+#[tokio::test]
+async fn finished_carries_the_tx_status_read_after_the_query() {
+    let (handle, link) = session();
+    link.set_tx(TxStatus::InTransaction);
+    link.expect_query().complete(0);
+    let (sink, mut events) = sink();
+    handle.execute("BEGIN".into(), sink).await;
+    assert_eq!(
+        finished_tx(next(&mut events).await),
+        Some(TxStatus::InTransaction)
+    );
+}
+
+#[tokio::test]
+async fn a_query_failing_at_start_reads_the_tx_status() {
+    let (handle, link) = session();
+    link.set_tx(TxStatus::Failed);
+    link.fail_next_start(QueryError::Server(server_error("25P02")));
+    let (sink, mut events) = sink();
+    handle.execute("SELECT 1".into(), sink).await;
+    let event = next(&mut events).await;
+    assert!(matches!(
+        &event,
+        QueryEvent::Finished {
+            outcome: QueryOutcome::Failed(error),
+            tx: Some(TxStatus::Failed),
+            ..
+        } if *error == server_error("25P02")
+    ));
+}
+
+#[tokio::test]
+async fn a_lost_connection_has_no_tx_status() {
+    let (handle, link) = session();
+    // 쿼리를 시작하지 못한 경우.
+    link.lose();
+    let (sink, mut events) = self::sink();
+    handle.execute("SELECT 1".into(), sink).await;
+    assert_eq!(finished_tx(next(&mut events).await), None);
+
+    // 결과 도중에 끊긴 경우.
+    let (handle, link) = session();
+    link.set_tx(TxStatus::InTransaction);
+    let feed = link.expect_query();
+    feed.rows(0..3);
+    let (sink, mut events) = self::sink();
+    handle.execute("SELECT n".into(), sink).await;
+    assert!(eventually(|| link.sent().len() == 1).await);
+    feed.lose();
+    assert_eq!(batch(next(&mut events).await).rows.len(), 3);
+    assert_eq!(finished_tx(next(&mut events).await), None);
+}
+
+#[tokio::test]
+async fn closing_the_session_reports_no_tx_status() {
+    let (handle, link) = session();
+    link.set_tx(TxStatus::InTransaction);
+    link.expect_query();
+    let (sink, mut events) = sink();
+    handle.execute("SELECT pg_sleep(10)".into(), sink).await;
+    handle.close().await;
+    assert_eq!(finished_tx(next(&mut events).await), None);
+}
+
+/// 시작하지 않고 끝난 쿼리는 서버에 묻지 않고 actor가 마지막으로 읽은 값을 싣는다.
+#[tokio::test]
+async fn a_discarded_pending_query_reports_the_last_tx_status() {
+    let (handle, link) = session();
+    link.set_tx(TxStatus::InTransaction);
+    let (sink, mut events) = sink();
+    handle.execute("BEGIN".into(), sink).await;
+    assert_eq!(
+        finished_tx(next(&mut events).await),
+        Some(TxStatus::InTransaction)
+    );
+
+    link.fail_cancels();
+    let feed_a = link.expect_query();
+    let (sink_a, mut events_a) = self::sink();
+    let (sink_b, mut events_b) = self::sink();
+    let (sink_c, _events_c) = self::sink();
+    handle.execute("A".into(), sink_a).await;
+    handle.execute("B".into(), sink_b).await;
+    handle.execute("C".into(), sink_c).await;
+    // 서버의 상태가 바뀌어도 아직 읽지 않았으므로 마지막으로 읽은 값이 간다.
+    link.set_tx(TxStatus::Failed);
+    let discarded = next(&mut events_b).await;
+    assert_eq!(
+        discarded,
+        QueryEvent::Finished {
+            outcome: QueryOutcome::Discarded,
+            elapsed: Duration::ZERO,
+            tx: Some(TxStatus::InTransaction),
+        }
+    );
+    feed_a.complete(0);
+    assert_eq!(
+        finished_tx(next(&mut events_a).await),
+        Some(TxStatus::Failed)
+    );
 }

@@ -6,7 +6,9 @@ use tokio::time::Instant;
 
 use super::QuerySink;
 use crate::application::{QueryError, RowItem, RowSource};
-use crate::domain::{QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, ServerError};
+use crate::domain::{
+    QueryEvent, QueryId, QueryLimits, QueryOutcome, Row, RowBatch, ServerError, TxStatus,
+};
 
 /// SQLSTATE query_canceled. cancel 요청이 멈춘 문장의 오류다. 버리는 중에 오면 버린 이유로 알린다.
 const QUERY_CANCELED: &str = "57014";
@@ -73,11 +75,12 @@ pub(super) struct Pending {
 }
 
 impl Pending {
-    /// 시작하지 않고 마친다. `outcome`은 `Discarded` 또는 `Cancelled`다.
-    pub(super) fn finish(mut self, outcome: QueryOutcome) {
+    /// 시작하지 않고 마친다. `outcome`은 `Discarded` 또는 `Cancelled`이고, `tx`는 세션이 마지막으로 읽은 값이다.
+    pub(super) fn finish(mut self, outcome: QueryOutcome, tx: Option<TxStatus>) {
         (self.sink)(QueryEvent::Finished {
             outcome,
             elapsed: Duration::ZERO,
+            tx,
         });
     }
 }
@@ -271,10 +274,14 @@ impl<R: RowSource> Query<R> {
         }
     }
 
-    /// 끝난 결과의 남은 batch와 `Finished`를 보낸다. 연결이 끊겨서 끝났으면 true다.
-    pub(super) fn finish(mut self) -> bool {
+    /// 연결이 끊겨서 끝났다. 그 연결에는 `tx_status`를 부르지 않는다.
+    pub(super) fn is_lost(&self) -> bool {
+        matches!(self.end, Some(End::ConnectionLost { .. }))
+    }
+
+    /// 끝난 결과의 남은 batch와 `Finished`를 보낸다. `tx`는 그 쿼리가 끝난 뒤 서버가 알려 준 상태다.
+    pub(super) fn finish(mut self, tx: Option<TxStatus>) {
         let end = self.end.take().expect("결과가 끝난 쿼리만 마친다");
-        let lost = matches!(end, End::ConnectionLost { .. });
         let outcome = match (self.phase, end) {
             (Phase::Draining(_), End::ConnectionLost { message }) => {
                 QueryOutcome::ConnectionLost { message }
@@ -295,8 +302,7 @@ impl<R: RowSource> Query<R> {
                 }
             }
         };
-        self.emit_finished(outcome);
-        lost
+        self.emit_finished(outcome, tx);
     }
 
     /// 버리는 중에 `None`까지 읽은 결과. 문장이 실제로 어떻게 끝났는지 알면 그것을 알린다.
@@ -322,12 +328,16 @@ impl<R: RowSource> Query<R> {
             Phase::Draining(reason) => reason.outcome(),
             _ => QueryOutcome::Discarded,
         };
-        self.emit_finished(outcome);
+        self.emit_finished(outcome, None);
     }
 
-    fn emit_finished(&mut self, outcome: QueryOutcome) {
+    fn emit_finished(&mut self, outcome: QueryOutcome, tx: Option<TxStatus>) {
         let elapsed = self.clock.elapsed();
-        self.emit(QueryEvent::Finished { outcome, elapsed });
+        self.emit(QueryEvent::Finished {
+            outcome,
+            elapsed,
+            tx,
+        });
     }
 
     fn emit(&mut self, event: QueryEvent) {

@@ -124,7 +124,12 @@ test("앞 실행의 늦은 event는 새 실행의 상태를 바꾸지 않는다"
   expect(stateB.status === "running" && stateB.result.sql).toBe("SELECT 2");
 
   lateA(rowsEvent);
-  lateA({ type: "finished", elapsedMicros: 5, outcome: "discarded" });
+  lateA({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 5,
+    outcome: "discarded",
+  });
 
   expect(runOf("t")).toBe(stateB);
 });
@@ -205,6 +210,7 @@ test("connection_lost로 끝나면 세션을 닫고 버린다", async () => {
 
   onEventOf(0)({
     type: "finished",
+    tx: "idle",
     elapsedMicros: 50,
     outcome: "connection_lost",
     message: "연결이 끊겼습니다",
@@ -229,6 +235,7 @@ test("앞 실행의 늦은 connection_lost도 세션을 닫고 버린다", async
 
   lateA({
     type: "finished",
+    tx: "idle",
     elapsedMicros: 50,
     outcome: "connection_lost",
     message: "연결이 끊겼습니다",
@@ -347,6 +354,7 @@ test("실행 중이 아니면 cancel은 아무것도 하지 않는다", async ()
   await running;
   onEventOf(0)({
     type: "finished",
+    tx: "idle",
     elapsedMicros: 1,
     outcome: "completed",
     rows: 0,
@@ -388,7 +396,12 @@ test("release는 세션을 닫고 그 뒤의 event를 무시한다", async () =>
   expect(runOf("t")).toBeUndefined();
 
   onEvent(rowsEvent);
-  onEvent({ type: "finished", elapsedMicros: 5, outcome: "cancelled" });
+  onEvent({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 5,
+    outcome: "cancelled",
+  });
   expect(runOf("t")).toBeUndefined();
 });
 
@@ -549,7 +562,12 @@ test("실행 중에 거절된 실행은 진행 중인 쿼리를 건드리지 않
   await useRuns.getState().cancel("t");
   expect(cancelQuery).toHaveBeenCalledWith(3, 7);
 
-  onEvent({ type: "finished", elapsedMicros: 5, outcome: "cancelled" });
+  onEvent({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 5,
+    outcome: "cancelled",
+  });
   expect(runOf("t").status).toBe("finished");
   expect(executeQuery).toHaveBeenCalledTimes(1);
 });
@@ -576,7 +594,12 @@ test("prepare를 기다리는 동안에도 앞 쿼리의 event가 반영된다",
   expect(stateB.status === "running" && stateB.result.sql).toBe("SELECT B");
 
   // 새 실행이 시작된 뒤에는 앞 쿼리의 event를 버린다.
-  lateA({ type: "finished", elapsedMicros: 5, outcome: "discarded" });
+  lateA({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 5,
+    outcome: "discarded",
+  });
   expect(runOf("t")).toBe(stateB);
 });
 
@@ -584,6 +607,7 @@ test("쉬는 탭에서 거절되면 rejected다", async () => {
   await useRuns.getState().run("t", prepared());
   onEventOf(0)({
     type: "finished",
+    tx: "idle",
     elapsedMicros: 1,
     outcome: "completed",
     rows: 0,
@@ -637,8 +661,8 @@ test("rows가 오기 전과 끝난 결과에는 fetchMore를 보내지 않는다
     onEvent(rowsEvent);
     onEvent(
       outcome === "completed"
-        ? { type: "finished", elapsedMicros: 5, outcome, rows: 1 }
-        : { type: "finished", elapsedMicros: 5, outcome },
+        ? { type: "finished", tx: "idle", elapsedMicros: 5, outcome, rows: 1 }
+        : { type: "finished", tx: "idle", elapsedMicros: 5, outcome },
     );
     expect(runOf("t").status).toBe("finished");
 
@@ -728,6 +752,7 @@ test("끊긴 세션을 다음 실행이 대신하면 Reconnected를 알리고 �
   await useRuns.getState().run("t", prepared());
   onEventOf(0)({
     type: "finished",
+    tx: "idle",
     outcome: "connection_lost",
     message: "gone",
     elapsedMicros: 1,

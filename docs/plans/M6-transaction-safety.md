@@ -195,7 +195,7 @@ git commit -m "feat: chilla.toml의 color 값을 다섯 색으로 검사함"
 - Produces (DTO): `finished` event에 `"tx": "idle" | "in_transaction" | "failed" | null`.
 - Produces (화면): `type TxStatus = "idle" | "in_transaction" | "failed"`, `QueryEvent`의 finished에 `tx: TxStatus | null`.
 
-- [ ] **Step 1: actor test를 쓴다**
+- [x] **Step 1: actor test를 쓴다**
 
 `session_actor/tests.rs`:
 
@@ -206,21 +206,21 @@ git commit -m "feat: chilla.toml의 color 값을 다섯 색으로 검사함"
 
 `commands.rs`: `finished` DTO test의 기대값마다 `"tx"`를 더하고, `tx: None`이 `null`인지 단언한다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core session_actor && cargo test -p chillasql finished`
 Expected: FAIL(compile error)
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `settle`은 `tx_status()`를 *먼저* 읽고 그 값으로 `Finished`를 보낸다(지금은 보낸 뒤 읽는다). `start`의 오류 분기도 `ConnectionLost`가 아니면 읽는다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src

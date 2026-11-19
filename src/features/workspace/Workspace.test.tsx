@@ -124,6 +124,7 @@ test("실행 중에는 실행 버튼이 취소 버튼으로 바뀐다", async ()
   const onEvent = vi.mocked(executeQuery).mock.calls[0][2];
   const finished: QueryEvent = {
     type: "finished",
+    tx: "idle",
     elapsedMicros: 10,
     outcome: "cancelled",
   };

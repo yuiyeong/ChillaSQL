@@ -49,6 +49,9 @@ export interface ServerError {
 /** `null`은 NULL, 아니면 서버가 만든 text다. */
 export type Cell = string | null;
 
+/** 서버가 ReadyForQuery로 알려 주는 트랜잭션 상태. */
+export type TxStatus = "idle" | "in_transaction" | "failed";
+
 export type Outcome =
   | { outcome: "completed"; rows: number }
   | { outcome: "failed"; error: ServerError }
@@ -66,7 +69,12 @@ export type QueryEvent =
       retainedFrom: number;
       elapsedMicros: number;
     }
-  | ({ type: "finished"; elapsedMicros: number } & Outcome);
+  | ({
+      type: "finished";
+      elapsedMicros: number;
+      /** 그 쿼리가 끝난 뒤 서버가 알려 준 상태. 연결이 끊겼거나 세션을 닫는 중이면 null. */
+      tx: TxStatus | null;
+    } & Outcome);
 
 export interface SqlFile {
   text: string;
