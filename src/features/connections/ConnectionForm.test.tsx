@@ -7,12 +7,14 @@ import { connection } from "../../test/fixtures";
 import { expectNoTextCorrection } from "../../test/textCorrection";
 
 vi.mock("../../shared/api/commands");
+vi.mock("../../shared/api/dialog");
 
 import {
   hasPassword,
   saveConnection,
   testConnection,
 } from "../../shared/api/commands";
+import { pickFile } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
 import type { Connection, Project } from "../../shared/api/types";
 import { ConnectionForm } from "./ConnectionForm";
@@ -22,7 +24,7 @@ const saved: Project = { name: "demo", dir: "/p", connections: [] };
 const original = connection("local", { tunnel: "bastion", color: "#ff0000" });
 
 const warning =
-  "Changing the connection target deletes the saved password. Enter the password again";
+  "You changed where this connection points. Saving deletes the password stored in Keychain. Enter a new password below to save it instead.";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -55,11 +57,11 @@ test("제목이 새 접속과 수정을 가른다", () => {
   ).toBeInTheDocument();
 });
 
-test("수정 form의 제목은 Edit Connection이다", () => {
+test("수정 form의 제목은 접속 이름이고 이름은 바꿀 수 없다고 알린다", () => {
   renderForm(original);
-  expect(
-    screen.getByRole("form", { name: "Edit Connection" }),
-  ).toBeInTheDocument();
+  expect(screen.getByRole("form", { name: "Edit local" })).toBeInTheDocument();
+  expect(screen.getByText("Name can't be changed")).toBeInTheDocument();
+  expect(screen.queryByLabelText("name")).not.toBeInTheDocument();
 });
 
 function fillNew() {
@@ -113,8 +115,7 @@ test("수정은 이름을 고칠 수 없고 저장된 비밀번호가 있으면 
   vi.mocked(hasPassword).mockResolvedValue(true);
   renderForm(original);
 
-  expect(screen.getByLabelText("name")).toBeDisabled();
-  expect(screen.getByLabelText("name")).toHaveValue("local");
+  expect(screen.queryByLabelText("name")).not.toBeInTheDocument();
   expect(await screen.findByPlaceholderText("Keep saved password")).toBe(
     screen.getByLabelText("password"),
   );
@@ -267,16 +268,21 @@ test("저장된 비밀번호가 없으면 연결 대상을 바꿔도 알리지 �
   expect(screen.queryByText(warning)).not.toBeInTheDocument();
 });
 
+const sslmode = (mode: string) => screen.getByRole("radio", { name: mode });
+const advanced = () => screen.getByRole("button", { name: /^Advanced/ });
+
 test("sslrootcert는 verify-full일 때만 입력할 수 있다", async () => {
   renderForm();
   fillNew();
+  await click(advanced());
   const cert = screen.getByLabelText("sslrootcert");
   expect(cert).toBeDisabled();
 
-  change(screen.getByLabelText("sslmode"), "require");
+  await click(sslmode("require"));
   expect(cert).toBeDisabled();
 
-  change(screen.getByLabelText("sslmode"), "verify-full");
+  await click(sslmode("verify-full"));
+  expect(sslmode("verify-full")).toHaveAttribute("aria-checked", "true");
   expect(cert).toBeEnabled();
   change(cert, "/certs/ca.crt");
   await click(saveButton());
@@ -288,7 +294,7 @@ test("sslrootcert는 verify-full일 때만 입력할 수 있다", async () => {
     null,
   );
 
-  change(screen.getByLabelText("sslmode"), "require");
+  await click(sslmode("require"));
   await click(saveButton());
   expect(saveConnection).toHaveBeenLastCalledWith(
     expect.objectContaining({ sslmode: "require", sslrootcert: null }),
@@ -342,8 +348,9 @@ test("이미 있는 이름이면 저장하지 않는다", async () => {
   );
 });
 
-test("입력란은 자동 수정, 자동 대문자, 맞춤법 검사를 끈다", () => {
+test("입력란은 자동 수정, 자동 대문자, 맞춤법 검사를 끈다", async () => {
   renderForm();
+  await click(advanced());
 
   for (const label of [
     "name",
@@ -352,8 +359,93 @@ test("입력란은 자동 수정, 자동 대문자, 맞춤법 검사를 끈다",
     "database",
     "user",
     "password",
+    "tunnel",
+    "tunnel_timeout",
     "sslrootcert",
   ]) {
     expectNoTextCorrection(screen.getByLabelText(label));
   }
+});
+
+test("tunnel과 tunnel_timeout을 저장한다", async () => {
+  renderForm();
+  fillNew();
+  change(
+    screen.getByLabelText("tunnel"),
+    "ssh -N -L 25432:db.internal:5432 bastion",
+  );
+  await click(advanced());
+  change(screen.getByLabelText("tunnel_timeout"), "30");
+
+  await click(saveButton());
+
+  expect(saveConnection).toHaveBeenCalledWith(
+    expect.objectContaining({
+      tunnel: "ssh -N -L 25432:db.internal:5432 bastion",
+      tunnelTimeout: 30,
+    }),
+    null,
+  );
+});
+
+test("tunnel이 비면 tunnel_timeout은 disabled다", async () => {
+  renderForm();
+  await click(advanced());
+  expect(screen.getByLabelText("tunnel_timeout")).toBeDisabled();
+  change(screen.getByLabelText("tunnel"), "ssh");
+  expect(screen.getByLabelText("tunnel_timeout")).toBeEnabled();
+});
+
+test("Advanced는 tunnel_timeout이나 sslrootcert가 있으면 펼쳐서 연다", () => {
+  renderForm(connection("local", { tunnel: "ssh", tunnelTimeout: 30 }));
+  expect(advanced()).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByLabelText("tunnel_timeout")).toHaveValue("30");
+});
+
+test("테스트가 터널에서 실패하면 명령의 출력을 보여 준다", async () => {
+  vi.mocked(testConnection).mockRejectedValue(
+    new CommandError(
+      "tunnel_timeout",
+      "localhost:25432 didn't open within 20 seconds",
+      "Unauthorized. Please login",
+    ),
+  );
+  renderForm();
+  fillNew();
+
+  await click(testButton());
+
+  const alert = screen.getByRole("alert");
+  expect(alert).toHaveTextContent(
+    "localhost:25432 didn't open within 20 seconds",
+  );
+  expect(alert).toHaveTextContent("Unauthorized. Please login");
+});
+
+test("테스트가 성공하면 걸린 시간을 보여 준다", async () => {
+  let clock = 1000;
+  const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
+  vi.mocked(testConnection).mockImplementation(async () => {
+    clock += 41.4;
+  });
+  renderForm();
+  fillNew();
+
+  await click(testButton());
+
+  expect(await screen.findByText("41 ms")).toBeInTheDocument();
+  now.mockRestore();
+});
+
+test("Choose…는 고른 파일을 sslrootcert에 넣는다", async () => {
+  vi.mocked(pickFile).mockResolvedValue("/certs/ca.pem");
+  renderForm();
+  fillNew();
+  await click(sslmode("verify-full"));
+  await click(advanced());
+
+  await click(screen.getByRole("button", { name: "Choose…" }));
+
+  expect(pickFile).toHaveBeenCalledWith(["pem", "crt"]);
+  expect(screen.getByLabelText("sslrootcert")).toHaveValue("/certs/ca.pem");
 });

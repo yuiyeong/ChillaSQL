@@ -16,6 +16,8 @@ const values: FormValues = {
   user: "chilla",
   sslmode: "disable",
   sslrootcert: "",
+  tunnel: "",
+  tunnelTimeout: "",
 };
 
 const original = connection("local", {
@@ -34,6 +36,8 @@ test("새 접속의 초기값은 port 5432와 sslmode disable이다", () => {
     user: "",
     sslmode: "disable",
     sslrootcert: "",
+    tunnel: "",
+    tunnelTimeout: "",
   });
 });
 
@@ -46,7 +50,12 @@ test("수정의 초기값은 original에서 온다", () => {
     user: "chilla",
     sslmode: "verify-full",
     sslrootcert: "/certs/ca.crt",
+    tunnel: "bastion",
+    tunnelTimeout: "",
   });
+  expect(initialValues({ ...original, tunnelTimeout: 30 }).tunnelTimeout).toBe(
+    "30",
+  );
   expect(initialValues({ ...original, sslrootcert: null }).sslrootcert).toBe(
     "",
   );
@@ -144,9 +153,9 @@ test("sslrootcert는 verify-full일 때만 보낸다", () => {
   ).toMatchObject({ connection: { sslrootcert: null } });
 });
 
-test("수정은 이름, tunnel, color를 original에서 가져온다", () => {
+test("수정은 이름과 color를 original에서 가져온다", () => {
   const result = toConnection(
-    { ...values, name: "renamed", host: "db.example" },
+    { ...values, name: "renamed", host: "db.example", tunnel: "bastion" },
     original,
     [],
   );
@@ -183,9 +192,49 @@ test("새 접속은 이미 있는 이름을 쓸 수 없다", () => {
   );
 });
 
+test("tunnel은 앞뒤 공백을 빼고 비면 null이다", () => {
+  expect(
+    toConnection({ ...values, tunnel: "  ssh -N -L x  " }, null, []),
+  ).toMatchObject({ connection: { tunnel: "ssh -N -L x" } });
+  expect(toConnection({ ...values, tunnel: "  " }, null, [])).toMatchObject({
+    connection: { tunnel: null },
+  });
+});
+
+test("tunnel_timeout은 1부터 300까지의 정수 초다", () => {
+  const withTimeout = (tunnelTimeout: string) =>
+    toConnection({ ...values, tunnel: "ssh", tunnelTimeout }, null, []);
+  expect(withTimeout("30")).toMatchObject({
+    connection: { tunnelTimeout: 30 },
+  });
+  expect(withTimeout(" 300 ")).toMatchObject({
+    connection: { tunnelTimeout: 300 },
+  });
+  expect(withTimeout("")).toMatchObject({
+    connection: { tunnelTimeout: null },
+  });
+  for (const bad of ["0", "301", "2.5", "20s", "-1"]) {
+    expect(withTimeout(bad)).toEqual({
+      error: "tunnel_timeout must be a whole number of seconds from 1 to 300",
+    });
+  }
+});
+
+test("tunnel이 없으면 tunnel_timeout을 버린다", () => {
+  expect(
+    toConnection({ ...values, tunnel: "", tunnelTimeout: "30" }, null, []),
+  ).toMatchObject({ connection: { tunnel: null, tunnelTimeout: null } });
+});
+
 describe("targetChanged", () => {
   test("같으면 false다", () => {
     expect(targetChanged({ ...original }, original)).toBe(false);
+  });
+
+  test("tunnelTimeout만 다르면 false다", () => {
+    expect(targetChanged({ ...original, tunnelTimeout: 30 }, original)).toBe(
+      false,
+    );
   });
 
   test("color만 다르면 false다", () => {

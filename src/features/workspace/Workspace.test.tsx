@@ -58,9 +58,7 @@ function connectionChip() {
 }
 
 function connectionForm() {
-  const form = screen.getByLabelText("name").closest("form");
-  if (form === null) throw new Error("접속 form이 없습니다");
-  return form;
+  return screen.getByRole("form");
 }
 
 beforeEach(async () => {
@@ -219,15 +217,17 @@ test("수정을 누르면 그 접속의 값으로 form을 연다", async () => {
   });
 
   await click(editLocal);
-  expect(screen.getByLabelText("name")).toHaveValue("local");
+  expect(screen.getByRole("form", { name: "Edit local" })).toBeInTheDocument();
   expect(screen.getByLabelText("host")).toHaveValue("localhost");
 
   await click(editStaging);
-  expect(screen.getByLabelText("name")).toHaveValue("staging");
+  expect(
+    screen.getByRole("form", { name: "Edit staging" }),
+  ).toBeInTheDocument();
   expect(screen.getByLabelText("host")).toHaveValue("10.0.0.2");
 
   await click(within(connectionForm()).getByRole("button", { name: "Cancel" }));
-  expect(screen.queryByLabelText("name")).not.toBeInTheDocument();
+  expect(screen.queryByRole("form")).not.toBeInTheDocument();
 });
 
 test("닫은 form의 저장이 늦게 끝나도 접속을 반영하고 새로 연 form은 그대로 둔다", async () => {

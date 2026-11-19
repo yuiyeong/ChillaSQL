@@ -154,6 +154,15 @@ export function ErrorIcon({ size = 12, ...rest }: IconProps) {
   );
 }
 
+export function LockIcon({ size = 15, ...rest }: IconProps) {
+  return (
+    <Stroke size={size} width={1.6} {...rest}>
+      <rect x="3.5" y="7" width="9" height="6.5" rx="1.5" />
+      <path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" />
+    </Stroke>
+  );
+}
+
 export function WarningIcon({ size = 14, ...rest }: IconProps) {
   return (
     <Stroke size={size} width={1.6} join {...rest}>

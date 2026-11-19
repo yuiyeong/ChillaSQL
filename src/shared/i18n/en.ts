@@ -69,16 +69,27 @@ export const en = {
   "sidebar.refresh": "Refresh file list",
 
   "connectionForm.titleNew": "New Connection",
-  "connectionForm.titleEdit": "Edit Connection",
+  "connectionForm.titleEdit": "Edit {name}",
+  "connectionForm.nameFixed": "Name can't be changed",
+  "connectionForm.passwordHint": "Saved in Keychain, never in chilla.toml",
+  "connectionForm.tunnelHint": "Leave empty to connect directly",
+  "connectionForm.tunnelPlaceholder": "ssh -N -L … or another tunnel command",
+  "connectionForm.advanced": "Advanced",
+  "connectionForm.tunnelTimeoutHint": "Seconds · only with tunnel",
+  "connectionForm.sslrootcertHint": "Trust only this CA with verify-full",
+  "connectionForm.choose": "Choose…",
+  "connectionForm.elapsed": "{ms} ms",
   "connectionForm.connected": "Connected",
   "connectionForm.test": "Test",
   "connectionForm.keepPassword": "Keep saved password",
   "connectionForm.passwordWillClear":
-    "Changing the connection target deletes the saved password. Enter the password again",
+    "You changed where this connection points. Saving deletes the password stored in Keychain. Enter a new password below to save it instead.",
   "connectionForm.required": "Enter {field}",
   "connectionForm.nameTaken":
     "This name is already taken. To edit that connection, open it from the sidebar.",
   "connectionForm.portRange": "port must be a number from 1 to 65535",
+  "connectionForm.tunnelTimeoutRange":
+    "tunnel_timeout must be a whole number of seconds from 1 to 300",
 
   "result.hintRun": "Run statement at cursor",
   "result.hintNewTab": "New tab",

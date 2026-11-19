@@ -10,6 +10,9 @@ export interface FormValues {
   user: string;
   sslmode: SslMode;
   sslrootcert: string;
+  tunnel: string;
+  /** 초. 비우면 기본값(20초)이다 */
+  tunnelTimeout: string;
 }
 
 export function initialValues(original: Connection | null): FormValues {
@@ -22,6 +25,8 @@ export function initialValues(original: Connection | null): FormValues {
       user: "",
       sslmode: "disable",
       sslrootcert: "",
+      tunnel: "",
+      tunnelTimeout: "",
     };
   }
   return {
@@ -32,8 +37,14 @@ export function initialValues(original: Connection | null): FormValues {
     user: original.user,
     sslmode: original.sslmode,
     sslrootcert: original.sslrootcert ?? "",
+    tunnel: original.tunnel ?? "",
+    tunnelTimeout:
+      original.tunnelTimeout === null ? "" : String(original.tunnelTimeout),
   };
 }
+
+/** Rust의 `MAX_TUNNEL_TIMEOUT_SECS`와 같다. */
+const MAX_TUNNEL_TIMEOUT = 300;
 
 const required = ["name", "host", "database", "user"] as const;
 
@@ -66,6 +77,19 @@ export function toConnection(
   }
 
   const sslrootcert = values.sslrootcert.trim();
+  const tunnel = values.tunnel.trim();
+  let tunnelTimeout: number | null = null;
+  const timeoutText = values.tunnelTimeout.trim();
+  if (tunnel !== "" && timeoutText !== "") {
+    tunnelTimeout = /^\d+$/.test(timeoutText) ? Number(timeoutText) : NaN;
+    if (
+      !Number.isInteger(tunnelTimeout) ||
+      tunnelTimeout < 1 ||
+      tunnelTimeout > MAX_TUNNEL_TIMEOUT
+    ) {
+      return { error: t("connectionForm.tunnelTimeoutRange") };
+    }
+  }
   return {
     connection: {
       name: original?.name ?? trimmed.name,
@@ -78,8 +102,8 @@ export function toConnection(
         values.sslmode === "verify-full" && sslrootcert !== ""
           ? sslrootcert
           : null,
-      tunnel: original?.tunnel ?? null,
-      tunnelTimeout: original?.tunnelTimeout ?? null,
+      tunnel: tunnel === "" ? null : tunnel,
+      tunnelTimeout,
       color: original?.color ?? null,
     },
   };

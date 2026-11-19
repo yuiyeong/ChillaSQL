@@ -149,7 +149,7 @@ export function Workspace() {
       </div>
 
       {form !== null && (
-        <div className="bg-scrim fixed inset-0 z-10 flex items-center justify-center">
+        <div className="bg-scrim fixed inset-0 z-10 flex items-start justify-center">
           <ConnectionForm
             key={form.original?.name ?? "new"}
             original={form.original}

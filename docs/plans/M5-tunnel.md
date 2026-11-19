@@ -738,7 +738,7 @@ git commit -m "feat: 화면이 터널 상태를 받고 터널이 다시 시작�
 
 알림: 연결 대상을 바꿔 비밀번호를 지울 때(B의 lock 알림, password 칸 위), 테스트 성공 `Connected · {ms} ms`(check icon, ms는 오른쪽 mono), 실패는 error icon과 message, `output`이 있으면 그 아래 mono pre.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `connectionValues.test.ts`:
 - `tunnel_is_trimmed_and_empty_means_none`: `"  ssh -L x  "` → `tunnel: "ssh -L x"`, `""` → `null`.
@@ -754,21 +754,21 @@ git commit -m "feat: 화면이 터널 상태를 받고 터널이 다시 시작�
 - `choose_fills_sslrootcert`: verify-full에서 Choose → `pickFile(["pem", "crt"])`의 값이 input에 들어감.
 - 기존 test(비밀번호 지움 알림, 이름 중복, port 범위)는 새 배치에서 그대로 통과해야 한다.
 
-- [ ] **Step 2: test가 실패하는지 확인한다**
+- [x] **Step 2: test가 실패하는지 확인한다**
 
 Run: `pnpm vitest run src/features/connections`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `en.ts`에 `connectionForm.*`(passwordHint, nameFixed, tunnelHint, tunnelPlaceholder, advanced, tunnelTimeoutHint, sslrootcertHint, choose, connectedIn, tunnelTimeoutRange, commandOutput) 문구를 더한다. 문구는 캔버스의 영어 그대로다. segmented control은 `role="radiogroup"`과 `role="radio"` 버튼이다.
 
-- [ ] **Step 4: test가 통과하는지 확인한다**
+- [x] **Step 4: test가 통과하는지 확인한다**
 
 Run: `pnpm vitest run && pnpm typecheck && pnpm lint`
 Expected: PASS
 
-- [ ] **Step 5: commit한다**
+- [x] **Step 5: commit한다**
 
 ```bash
 git add src
