@@ -33,6 +33,9 @@ const CANCEL_RESEND: Duration = Duration::from_secs(1);
 /// 세션을 닫을 때 쿼리의 결과가 끝나기를 기다리는 최대 시간.
 const CLOSE_WAIT: Duration = Duration::from_secs(1);
 
+/// 사용자의 취소에 cancel 결과를 답하는 곳.
+type CancelReply = oneshot::Sender<Result<(), CancelError>>;
+
 /// 쿼리의 이벤트를 받는 쪽. session actor의 task 안에서 불린다. 오래 막으면 그 세션이 멈춘다.
 pub type QuerySink = Box<dyn FnMut(QueryEvent) + Send + 'static>;
 
@@ -54,7 +57,7 @@ enum SessionCommand {
     },
     Cancel {
         query: QueryId,
-        reply: oneshot::Sender<Result<(), CancelError>>,
+        reply: CancelReply,
     },
     Close(oneshot::Sender<()>),
 }
@@ -141,7 +144,7 @@ impl<D: DbConnection> Actor<D> {
                     self.settle().await;
                 }
                 Event::CancelDue => self.send_cancel(None),
-                Event::Expired => self.discard(DrainReason::Expired),
+                Event::Expired => self.discard(DrainReason::Expired, false, None),
             }
         }
     }
@@ -191,7 +194,7 @@ impl<D: DbConnection> Actor<D> {
                     let result = self.end_transaction(end).await;
                     let _ = reply.send(result);
                 } else {
-                    self.discard(DrainReason::Discarded);
+                    self.discard(DrainReason::Discarded, false, None);
                     self.ends.push_back((end, reply));
                 }
             }
@@ -204,19 +207,13 @@ impl<D: DbConnection> Actor<D> {
                 let _ = reply.send((1..=self.last_id).contains(&query.0));
             }
             SessionCommand::Cancel { query, reply } => {
-                let current = self.query.as_mut().filter(|q| q.id == query);
                 if let Some(waiting) = self.pending.take_if(|p| p.id == query) {
                     // 아직 서버에 보내지 않았으므로 cancel 요청 없이 빼기만 한다.
                     waiting.finish(QueryOutcome::Cancelled, Some(self.tx));
                     let _ = reply.send(Ok(()));
-                } else if let Some(query) = current {
-                    query.drain(DrainReason::Cancelled);
+                } else if self.query.as_ref().is_some_and(|q| q.id == query) {
                     // 트랜잭션 안에서 cancel 없이 버리던 중이어도 사용자의 취소는 바로 cancel한다.
-                    if self.cancel.is_none() && !query.is_over() {
-                        self.send_cancel(Some(reply));
-                    } else {
-                        let _ = reply.send(Ok(()));
-                    }
+                    self.discard(DrainReason::Cancelled, true, Some(reply));
                 } else {
                     let _ = reply.send(Ok(()));
                 }
@@ -244,7 +241,7 @@ impl<D: DbConnection> Actor<D> {
         if self.query.is_none() {
             return self.start(next).await;
         }
-        self.discard(DrainReason::Discarded);
+        self.discard(DrainReason::Discarded, false, None);
         if let Some(replaced) = self.pending.replace(next) {
             replaced.finish(QueryOutcome::Discarded, Some(self.tx));
         }
@@ -272,18 +269,10 @@ impl<D: DbConnection> Actor<D> {
                 self.query = Some(query);
             }
             Err(error) => {
-                let outcome = match error {
-                    QueryError::ConnectionLost { message } => {
-                        QueryOutcome::ConnectionLost { message }
-                    }
-                    QueryError::Server(error) => QueryOutcome::Failed(error),
-                    QueryError::Client { message } => QueryOutcome::ClientError { message },
-                };
+                let outcome = QueryOutcome::from(error);
                 let elapsed = started.elapsed();
-                let tx = match outcome {
-                    QueryOutcome::ConnectionLost { .. } => None,
-                    _ => self.read_tx().await,
-                };
+                let lost = matches!(outcome, QueryOutcome::ConnectionLost { .. });
+                let tx = self.read_tx(lost).await;
                 (next.sink)(QueryEvent::Finished {
                     outcome,
                     elapsed,
@@ -305,11 +294,7 @@ impl<D: DbConnection> Actor<D> {
         };
         self.cancel_at = None;
         // `Finished`에 싣기 전에 읽는다. 결과를 다 읽은 뒤라 서버의 ReadyForQuery가 온다.
-        let tx = if query.is_lost() {
-            None
-        } else {
-            self.read_tx().await
-        };
+        let tx = self.read_tx(query.is_lost()).await;
         query.finish(tx);
         while let Some((end, reply)) = self.ends.pop_front() {
             let result = self.end_transaction(end).await;
@@ -334,20 +319,20 @@ impl<D: DbConnection> Actor<D> {
         }
         let outcome = match self.connection.simple_execute(end.sql()).await {
             Ok(()) => EndOutcome::Ended,
-            Err(QueryError::Server(error)) => EndOutcome::Server(error),
-            Err(QueryError::ConnectionLost { message }) => EndOutcome::ConnectionLost { message },
-            Err(QueryError::Client { message }) => EndOutcome::Client { message },
+            Err(error) => error.into(),
         };
-        let tx = match outcome {
-            EndOutcome::ConnectionLost { .. } => None,
-            _ => self.read_tx().await,
-        };
+        let lost = matches!(outcome, EndOutcome::ConnectionLost { .. });
+        let tx = self.read_tx(lost).await;
         EndResult { outcome, tx }
     }
 
     /// 서버가 알려 주는 트랜잭션 상태를 읽고 `self.tx`에 남긴다. 쿼리가 없을 때만 부른다.
-    /// 읽는 사이에 연결이 끊겼으면 그 값은 죽은 연결의 것이므로 `None`이다.
-    async fn read_tx(&mut self) -> Option<TxStatus> {
+    /// 방금 끝난 일이 연결이 끊겨서 끝났으면(`lost`) 죽은 연결에 묻지 않고 `None`이다. 읽는 사이에
+    /// 연결이 끊겼어도 그 값은 죽은 연결의 것이므로 `None`이다.
+    async fn read_tx(&mut self, lost: bool) -> Option<TxStatus> {
+        if lost {
+            return None;
+        }
         let tx = self.connection.tx_status().await;
         if self.connection.is_closed() {
             return None;
@@ -358,21 +343,31 @@ impl<D: DbConnection> Actor<D> {
 
     /// 지금 쿼리를 버리기 시작한다. 트랜잭션 안의 쿼리는 cancel 없이 남은 행을 읽어 버리고,
     /// `tx_drain_limit` 안에 끝나지 않으면 그때 cancel한다(트랜잭션은 failed가 된다).
-    fn discard(&mut self, reason: DrainReason) {
+    ///
+    /// `force_cancel`이면 트랜잭션 안이어도, 이미 cancel 없이 버리던 중이어도 바로 cancel한다. 다만
+    /// cancel이 이미 가고 있거나 결과가 끝났으면 보내지 않는다. cancel하면 `reply`에 그 결과를,
+    /// 하지 않으면 바로 `Ok`를 답한다.
+    fn discard(&mut self, reason: DrainReason, force_cancel: bool, reply: Option<CancelReply>) {
         let Some(query) = &mut self.query else {
-            return;
+            return answer(reply);
         };
         match query.drain(reason) {
-            Drain::Cancel => self.send_cancel(None),
-            Drain::ReadOut => {
-                self.cancel_at = Some(Instant::now() + self.limits.tx_drain_limit);
+            Drain::Cancel => self.send_cancel(reply),
+            Drain::ReadOut | Drain::Already
+                if force_cancel && self.cancel.is_none() && !query.is_over() =>
+            {
+                self.send_cancel(reply);
             }
-            Drain::Already => {}
+            Drain::ReadOut if !force_cancel => {
+                self.cancel_at = Some(Instant::now() + self.limits.tx_drain_limit);
+                answer(reply);
+            }
+            Drain::ReadOut | Drain::Already => answer(reply),
         }
     }
 
     /// cancel을 spawn한다. `reply`가 있으면 그 결과를 답한다.
-    fn send_cancel(&mut self, reply: Option<oneshot::Sender<Result<(), CancelError>>>) {
+    fn send_cancel(&mut self, reply: Option<CancelReply>) {
         debug_assert!(self.cancel.is_none(), "cancel은 한 번에 하나다");
         let cancel = self.connection.cancel_handle();
         self.cancel_at = None;
@@ -387,11 +382,8 @@ impl<D: DbConnection> Actor<D> {
     /// 쿼리를 멈추고 결과가 끝나기를 잠깐 기다린 뒤 연결을 닫는다. 연결을 닫으면 트랜잭션은
     /// 어차피 되돌아가므로 트랜잭션 안이어도 cancel한다(cancel 없이 버리던 중이었어도).
     async fn close(mut self) {
+        self.discard(DrainReason::Discarded, true, None);
         if let Some(mut query) = self.query.take() {
-            query.drain(DrainReason::Discarded);
-            if self.cancel.is_none() && !query.is_over() {
-                self.send_cancel(None);
-            }
             // cancel이 듣지 않으면 결과를 버려 둔 채 닫는다. 그 뒤로 이 연결에 `tx_status`를 부르지 않는다.
             let _ = timeout(CLOSE_WAIT, query.drain_to_end()).await;
             query.finish_closed();
@@ -400,6 +392,13 @@ impl<D: DbConnection> Actor<D> {
             pending.finish(QueryOutcome::Discarded, None);
         }
         self.connection.close().await;
+    }
+}
+
+/// cancel 없이 끝난 취소에 바로 `Ok`를 답한다.
+fn answer(reply: Option<CancelReply>) {
+    if let Some(reply) = reply {
+        let _ = reply.send(Ok(()));
     }
 }
 

@@ -214,31 +214,17 @@ impl DbConnection for PgConnection {
     }
 
     async fn start_query(&self, sql: &str) -> Result<PgRows, QueryError> {
-        match self.client.simple_query_raw(sql).await {
-            Ok(stream) => Ok(PgRows::new(stream, self.driver.abort_handle())),
-            Err(error) if error.is_closed() => Err(QueryError::ConnectionLost {
-                message: error_message(&error),
-            }),
-            // 보내기 전에 실패했다(NUL이 든 text 등). 연결은 그대로다.
-            Err(error) => Err(QueryError::Client {
-                message: error_message(&error),
-            }),
-        }
+        // 서버의 응답을 기다리지 않으므로 오류는 보내기 전의 것(끊긴 연결, NUL이 든 text 등)뿐이다.
+        let stream = self
+            .client
+            .simple_query_raw(sql)
+            .await
+            .map_err(query_error)?;
+        Ok(PgRows::new(stream, self.driver.abort_handle()))
     }
 
     async fn simple_execute(&self, sql: &str) -> Result<(), QueryError> {
-        self.client
-            .batch_execute(sql)
-            .await
-            .map_err(|error| match error.as_db_error() {
-                Some(db) => QueryError::Server(rows::server_error(db)),
-                None if error.is_closed() => QueryError::ConnectionLost {
-                    message: error_message(&error),
-                },
-                None => QueryError::Client {
-                    message: error_message(&error),
-                },
-            })
+        self.client.batch_execute(sql).await.map_err(query_error)
     }
 
     fn cancel_handle(&self) -> PgCancel {
@@ -298,6 +284,20 @@ fn connect_error(error: tokio_postgres::Error) -> ConnectError {
 }
 
 /// `tokio-postgres`의 오류는 원인(io 오류 등)을 `source`에만 담는다.
+/// 서버가 거절했으면 `Server`, 연결이 끊겼으면 `ConnectionLost`, 그 밖에는 연결을 그대로 쓸 수 있는
+/// `Client`다.
+fn query_error(error: tokio_postgres::Error) -> QueryError {
+    match error.as_db_error() {
+        Some(db) => QueryError::Server(rows::server_error(db)),
+        None if error.is_closed() => QueryError::ConnectionLost {
+            message: error_message(&error),
+        },
+        None => QueryError::Client {
+            message: error_message(&error),
+        },
+    }
+}
+
 fn error_message(error: &tokio_postgres::Error) -> String {
     match error.source() {
         Some(source) => format!("{error}: {source}"),

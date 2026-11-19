@@ -4,8 +4,8 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use crate::domain::{
-    Column, ConnectionProfile, Danger, FileStamp, Password, ProfileError, Project, Row,
-    ServerError, SqlFile, SqlPath, StatementSpan, TxStatus, WriteMode,
+    Column, ConnectionProfile, Danger, EndOutcome, FileStamp, Password, ProfileError, Project,
+    QueryOutcome, Row, ServerError, SqlFile, SqlPath, StatementSpan, TxStatus, WriteMode,
 };
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽고 쓴다.
@@ -161,6 +161,26 @@ pub enum QueryError {
     /// 연결은 계속 쓸 수 있다.
     #[error("Could not process the query: {message}")]
     Client { message: String },
+}
+
+impl From<QueryError> for QueryOutcome {
+    fn from(error: QueryError) -> Self {
+        match error {
+            QueryError::Server(error) => QueryOutcome::Failed(error),
+            QueryError::ConnectionLost { message } => QueryOutcome::ConnectionLost { message },
+            QueryError::Client { message } => QueryOutcome::ClientError { message },
+        }
+    }
+}
+
+impl From<QueryError> for EndOutcome {
+    fn from(error: QueryError) -> Self {
+        match error {
+            QueryError::Server(error) => EndOutcome::Server(error),
+            QueryError::ConnectionLost { message } => EndOutcome::ConnectionLost { message },
+            QueryError::Client { message } => EndOutcome::Client { message },
+        }
+    }
 }
 
 pub trait QueryCancel: Send + 'static {

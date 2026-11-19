@@ -8,7 +8,7 @@ use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
 use super::atomic_write::{Missing, create_new_file, write_atomically};
 use crate::application::{ProjectError, ProjectStore};
-use crate::domain::{ConnectionColor, ConnectionProfile, ProfileError, Project, SslMode};
+use crate::domain::{ConnectionColor, ConnectionProfile, Project, SslMode};
 
 const FILE_NAME: &str = "chilla.toml";
 
@@ -324,14 +324,12 @@ fn connection(
         None => SslMode::default(),
         Some(value) => value.parse().map_err(invalid)?,
     };
-    let color = match &raw.color {
-        None => None,
-        Some(value) => Some(ConnectionColor::parse(value).ok_or_else(|| {
-            invalid(ProfileError::UnknownColor {
-                value: value.clone(),
-            })
-        })?),
-    };
+    let color: Option<ConnectionColor> = raw
+        .color
+        .as_deref()
+        .map(str::parse)
+        .transpose()
+        .map_err(invalid)?;
     let tunnel_timeout = match raw.tunnel_timeout {
         None => None,
         Some(toml::Value::Integer(secs)) if secs >= 0 => {

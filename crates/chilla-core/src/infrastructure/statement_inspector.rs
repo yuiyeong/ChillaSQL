@@ -1,4 +1,4 @@
-use pg_query::protobuf::{DropStmt, ObjectType, RangeVar, WithClause};
+use pg_query::protobuf::{DropStmt, ObjectType, RangeVar, SelectStmt, WithClause};
 use pg_query::{Node, NodeEnum};
 
 use crate::application::StatementInspector;
@@ -23,27 +23,21 @@ impl StatementInspector for PgQueryInspector {
 
 fn node_danger(node: &Node) -> Option<Danger> {
     match node.node.as_ref()? {
-        NodeEnum::UpdateStmt(stmt) => with_danger(stmt.with_clause.as_ref()).or_else(|| {
-            let table = stmt.relation.as_ref()?;
-            stmt.where_clause
-                .is_none()
-                .then(|| Danger::UpdateWithoutWhere {
-                    table: range_var_name(table),
-                })
-        }),
-        NodeEnum::DeleteStmt(stmt) => with_danger(stmt.with_clause.as_ref()).or_else(|| {
-            let table = stmt.relation.as_ref()?;
-            stmt.where_clause
-                .is_none()
-                .then(|| Danger::DeleteWithoutWhere {
-                    table: range_var_name(table),
-                })
-        }),
+        NodeEnum::UpdateStmt(stmt) => without_where(
+            stmt.with_clause.as_ref(),
+            stmt.relation.as_ref(),
+            stmt.where_clause.is_some(),
+            |table| Danger::UpdateWithoutWhere { table },
+        ),
+        NodeEnum::DeleteStmt(stmt) => without_where(
+            stmt.with_clause.as_ref(),
+            stmt.relation.as_ref(),
+            stmt.where_clause.is_some(),
+            |table| Danger::DeleteWithoutWhere { table },
+        ),
         NodeEnum::InsertStmt(stmt) => with_danger(stmt.with_clause.as_ref())
             .or_else(|| node_danger(stmt.select_stmt.as_deref()?)),
-        NodeEnum::SelectStmt(stmt) => with_danger(stmt.with_clause.as_ref())
-            .or_else(|| node_danger_boxed(stmt.larg.as_deref()))
-            .or_else(|| node_danger_boxed(stmt.rarg.as_deref())),
+        NodeEnum::SelectStmt(stmt) => select_danger(stmt),
         NodeEnum::ExplainStmt(stmt) => {
             // ANALYZE가 없으면 EXPLAIN은 안쪽 문장을 실행하지 않는다.
             if stmt.options.iter().any(analyze_is_on) {
@@ -64,12 +58,24 @@ fn node_danger(node: &Node) -> Option<Danger> {
     }
 }
 
+/// `UPDATE`와 `DELETE`는 CTE를 먼저 보고, 그다음 `WHERE`가 없는지 본다.
+fn without_where(
+    with: Option<&WithClause>,
+    relation: Option<&RangeVar>,
+    has_where: bool,
+    danger: fn(String) -> Danger,
+) -> Option<Danger> {
+    with_danger(with).or_else(|| {
+        let table = relation?;
+        (!has_where).then(|| danger(range_var_name(table)))
+    })
+}
+
 /// `SELECT`의 `larg`와 `rarg`는 `Node`가 아니라 `SelectStmt`로 바로 들어 있다.
-fn node_danger_boxed(stmt: Option<&pg_query::protobuf::SelectStmt>) -> Option<Danger> {
-    let stmt = stmt?;
+fn select_danger(stmt: &SelectStmt) -> Option<Danger> {
     with_danger(stmt.with_clause.as_ref())
-        .or_else(|| node_danger_boxed(stmt.larg.as_deref()))
-        .or_else(|| node_danger_boxed(stmt.rarg.as_deref()))
+        .or_else(|| select_danger(stmt.larg.as_deref()?))
+        .or_else(|| select_danger(stmt.rarg.as_deref()?))
 }
 
 /// CTE를 적힌 순서대로 본다.

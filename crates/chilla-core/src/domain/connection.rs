@@ -51,18 +51,6 @@ pub enum ConnectionColor {
 }
 
 impl ConnectionColor {
-    pub const ALL: [ConnectionColor; 5] = [
-        ConnectionColor::Green,
-        ConnectionColor::Yellow,
-        ConnectionColor::Red,
-        ConnectionColor::Blue,
-        ConnectionColor::Purple,
-    ];
-
-    pub fn parse(name: &str) -> Option<Self> {
-        Self::ALL.into_iter().find(|color| color.as_str() == name)
-    }
-
     pub fn as_str(self) -> &'static str {
         match self {
             ConnectionColor::Green => "green",
@@ -70,6 +58,23 @@ impl ConnectionColor {
             ConnectionColor::Red => "red",
             ConnectionColor::Blue => "blue",
             ConnectionColor::Purple => "purple",
+        }
+    }
+}
+
+impl FromStr for ConnectionColor {
+    type Err = ProfileError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "green" => Ok(ConnectionColor::Green),
+            "yellow" => Ok(ConnectionColor::Yellow),
+            "red" => Ok(ConnectionColor::Red),
+            "blue" => Ok(ConnectionColor::Blue),
+            "purple" => Ok(ConnectionColor::Purple),
+            _ => Err(ProfileError::UnknownColor {
+                value: s.to_string(),
+            }),
         }
     }
 }
@@ -230,11 +235,16 @@ mod tests {
     #[test]
     fn color_parses_only_the_five_names() {
         for name in ["green", "yellow", "red", "blue", "purple"] {
-            assert_eq!(ConnectionColor::parse(name).unwrap().as_str(), name);
+            assert_eq!(name.parse::<ConnectionColor>().unwrap().as_str(), name);
         }
-        assert_eq!(ConnectionColor::ALL.len(), 5);
         for name in ["orange", "Red", ""] {
-            assert_eq!(ConnectionColor::parse(name), None, "{name}");
+            assert_eq!(
+                name.parse::<ConnectionColor>(),
+                Err(ProfileError::UnknownColor {
+                    value: name.to_string()
+                }),
+                "{name}"
+            );
         }
     }
 

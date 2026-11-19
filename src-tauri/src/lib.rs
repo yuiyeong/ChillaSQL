@@ -9,7 +9,7 @@ use chilla_core::infrastructure::{
     ShellTunnelRunner, TomlProjectStore,
 };
 
-use commands::{CoreApp, Quitting, TunnelEventDto};
+use commands::{CoreApp, TunnelEventDto};
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 /// 화면이 터널 상태를 받는 event 이름.
@@ -55,7 +55,6 @@ pub fn run() {
                 }),
             );
             app.manage(core);
-            app.manage(Quitting::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -89,11 +88,12 @@ pub fn run() {
         // tauri 2.12 / tao 0.37에서는 Cmd+Q, Dock Quit, 외부 종료가 `ExitRequested` 없이 바로
         // `Exit`가 된다(tao가 보내지 않는다). 이 분기는 보내는 버전을 위한 안전망이다.
         // Dock Quit은 확인 없이 끝나고, `Exit`의 `shutdown`이 세션을 닫아 서버가 되돌린다.
-        RunEvent::ExitRequested { api, code, .. } => {
-            if handle.state::<Quitting>().should_prevent_exit(code) {
-                api.prevent_exit();
-                let _ = handle.emit(QUIT_REQUESTED_EVENT, ());
-            }
+        // code가 있는 종료(`quit_app`의 `app.exit(0)`)는 화면이 이미 확인했으므로 막지 않는다.
+        RunEvent::ExitRequested {
+            api, code: None, ..
+        } => {
+            api.prevent_exit();
+            let _ = handle.emit(QUIT_REQUESTED_EVENT, ());
         }
         RunEvent::Exit => {
             tauri::async_runtime::block_on(handle.state::<CoreApp>().shutdown());
