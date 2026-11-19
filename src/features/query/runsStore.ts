@@ -107,6 +107,11 @@ interface RunsState {
   runs: Record<string, RunState>;
   /** tab id → 알림. 그 탭의 다음 실행이 시작하거나 `dismissNotice`가 지운다. */
   notices: Record<string, RunNotice>;
+  /**
+   * tab id → 지금 실행의 discarded가 Commit이나 Rollback 때문이다. 행을 받다 만 결과를 두고 끝내기를
+   * 보낼 때 표시하고, 그 탭의 다음 실행이 시작하면 지운다.
+   */
+  discardedByEnd: Record<string, true>;
   /** tab id → 열린 트랜잭션. 트랜잭션이 열린 탭만 있다. */
   transactions: Record<string, TxInfo>;
   /** tab id → 트랜잭션 모드. 없으면 auto다. */
@@ -285,6 +290,7 @@ export const useRuns = create<RunsState>()((set, get) => {
   return {
     runs: {},
     notices: {},
+    discardedByEnd: {},
     transactions: {},
     modes: {},
     ending: {},
@@ -312,6 +318,10 @@ export const useRuns = create<RunsState>()((set, get) => {
       if (get().ending[tabId]) return;
       const attempt = bump(attempts, tabId);
       setNotice(tabId, null);
+      set((s) => {
+        const discardedByEnd = withEntry(s.discardedByEnd, tabId, undefined);
+        return discardedByEnd === s.discardedByEnd ? s : { discardedByEnd };
+      });
 
       let request: RunRequest | Rejection;
       try {
@@ -450,7 +460,14 @@ export const useRuns = create<RunsState>()((set, get) => {
       if (!(tabId in get().transactions)) return true;
       const call = {};
       endCalls.set(tabId, call);
-      set((s) => ({ ending: { ...s.ending, [tabId]: true } }));
+      // 행을 받다 만 쿼리는 끝내기가 버린다. 그 discarded는 다음 쿼리가 아니라 끝내기 때문이다.
+      const discards = get().runs[tabId]?.status === "running";
+      set((s) => ({
+        ending: { ...s.ending, [tabId]: true },
+        discardedByEnd: discards
+          ? { ...s.discardedByEnd, [tabId]: true }
+          : s.discardedByEnd,
+      }));
       // 이 token이 그대로면 끝내기를 보낸 뒤 시작한 실행이 없다.
       const token = tokens.get(tabId);
       const owns = () => sessions.get(tabId) === slot;
@@ -496,6 +513,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       set((s) => ({
         runs: withEntry(s.runs, tabId, undefined),
         notices: withEntry(s.notices, tabId, undefined),
+        discardedByEnd: withEntry(s.discardedByEnd, tabId, undefined),
         transactions: withEntry(s.transactions, tabId, undefined),
         modes: options?.keepMode
           ? s.modes
@@ -513,7 +531,14 @@ export const useRuns = create<RunsState>()((set, get) => {
       lost.clear();
       endCalls.clear();
       // 프로젝트가 바뀌면 탭이 새로 생기므로 모드도 지운다.
-      set({ runs: {}, notices: {}, transactions: {}, modes: {}, ending: {} });
+      set({
+        runs: {},
+        notices: {},
+        discardedByEnd: {},
+        transactions: {},
+        modes: {},
+        ending: {},
+      });
       clearGridViews();
       await Promise.all(slots.map(closeSlot));
     },

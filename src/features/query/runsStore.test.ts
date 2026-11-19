@@ -1255,3 +1255,50 @@ test("reset forgets every transaction and mode", async () => {
   expect(useRuns.getState().modes).toEqual({});
   expect(useRuns.getState().ending).toEqual({});
 });
+
+/** 두 문장 뒤에 행을 받다 만 SELECT가 running(ready)인 탭 t1. */
+async function pausedSelect(): Promise<void> {
+  await openTwoStatements();
+  await useRuns.getState().run("t1", prepared("SELECT * FROM big"));
+  onEventOf(2)(rowsEvent);
+}
+
+test("ending_a_paused_result_marks_the_discard_as_from_the_end", async () => {
+  await pausedSelect();
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+
+  await useRuns.getState().endTransaction("t1", "rollback");
+
+  expect(useRuns.getState().discardedByEnd.t1).toBe(true);
+});
+
+test("ending_a_finished_result_does_not_mark_a_discard", async () => {
+  await openTwoStatements();
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+
+  await useRuns.getState().endTransaction("t1", "commit");
+
+  expect(useRuns.getState().discardedByEnd.t1).toBeUndefined();
+});
+
+test("the_next_run_clears_the_discard_mark", async () => {
+  await pausedSelect();
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+  await useRuns.getState().endTransaction("t1", "rollback");
+
+  await useRuns.getState().run("t1", prepared("SELECT 1"));
+
+  expect(useRuns.getState().discardedByEnd.t1).toBeUndefined();
+});
+
+test("release_and_reset_forget_the_discard_mark", async () => {
+  await pausedSelect();
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+  await useRuns.getState().endTransaction("t1", "rollback");
+  await useRuns.getState().release("t1");
+  expect(useRuns.getState().discardedByEnd.t1).toBeUndefined();
+
+  useRuns.setState({ discardedByEnd: { t1: true } });
+  await useRuns.getState().reset();
+  expect(useRuns.getState().discardedByEnd).toEqual({});
+});

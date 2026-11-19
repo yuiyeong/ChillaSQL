@@ -19,6 +19,7 @@ import type { TunnelState } from "../../shared/api/types";
 import { ResultPane } from "./ResultPane";
 import { fitWidth } from "./grid";
 import { emptyResult, type ResultData, type RunState } from "./runReducer";
+import { shortcutLabel } from "../workspace/shortcuts";
 import { useRuns } from "./runsStore";
 
 const realFetchMore = useRuns.getInitialState().fetchMore;
@@ -718,5 +719,140 @@ describe("터널", () => {
     );
     fireEvent.click(screen.getByRole("button", { name: "Close" }));
     expect(useRuns.getState().notices.t).toBeUndefined();
+  });
+});
+
+describe("트랜잭션", () => {
+  const failedOutcome: Outcome = {
+    outcome: "failed",
+    error: {
+      code: "25P02",
+      message:
+        "current transaction is aborted, commands ignored until end of transaction block",
+      detail: null,
+      hint: null,
+      position: null,
+    },
+  };
+
+  function failedIn(status: "open" | "failed" | null) {
+    useRuns.setState({
+      runs: {
+        t: { status: "finished", result: result(), outcome: failedOutcome },
+      },
+      transactions:
+        status === null ? {} : { t: { status, statements: 2, openedAt: 0 } },
+    });
+    render(<ResultPane tabId="t" hasConnection />);
+  }
+
+  test("a_failed_statement_in_a_failed_transaction_says_so", () => {
+    const end = vi
+      .spyOn(useRuns.getState(), "endTransaction")
+      .mockResolvedValue(true);
+    failedIn("failed");
+
+    expect(screen.getByText("Transaction failed")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "current transaction is aborted, commands ignored until end of transaction block",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByText("SQLSTATE 25P02")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "An earlier error left the transaction failed. Roll back, then run again.",
+      ),
+    ).toBeInTheDocument();
+    const rollback = screen.getByRole("button", { name: /Rollback/ });
+    expect(within(rollback).getByText(shortcutLabel("rollback"))).toBeVisible();
+
+    fireEvent.click(rollback);
+    expect(end).toHaveBeenCalledWith("t", "rollback");
+    end.mockRestore();
+  });
+
+  test("the_failed_view_disables_rollback_while_ending", () => {
+    useRuns.setState({ ending: { t: true } });
+    failedIn("failed");
+
+    expect(screen.getByRole("button", { name: /Rollback/ })).toBeDisabled();
+  });
+
+  test("a_failure_outside_a_failed_transaction_is_the_plain_error", () => {
+    failedIn(null);
+
+    expect(screen.queryByText("Transaction failed")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Rollback/ })).toBeNull();
+    expect(screen.getByText("SQLSTATE 25P02")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Copy message" }),
+    ).toBeInTheDocument();
+  });
+
+  test("a_failure_in_an_open_transaction_is_the_plain_error", () => {
+    failedIn("open");
+
+    expect(screen.queryByText("Transaction failed")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Rollback/ })).toBeNull();
+  });
+
+  test("transaction_lost_notice_dismisses_with_ok", () => {
+    useRuns.setState({
+      notices: { t: { kind: "transactionLost", statements: 2 } },
+    });
+    show({ status: "idle" });
+
+    const banner = screen
+      .getByText("Transaction lost")
+      .closest('[role="alert"]');
+    expect(banner).not.toBeNull();
+    expect(banner).toHaveTextContent(
+      "The connection dropped while a transaction was open. The 2 uncommitted statements were not applied. The next run opens a new session.",
+    );
+    fireEvent.click(
+      within(banner as HTMLElement).getByRole("button", { name: "OK" }),
+    );
+    expect(useRuns.getState().notices.t).toBeUndefined();
+  });
+
+  test("transaction_lost_notice_counts_one_statement_and_none", () => {
+    useRuns.setState({
+      notices: { t: { kind: "transactionLost", statements: 1 } },
+    });
+    show({ status: "idle" });
+
+    expect(
+      screen.getByText(/The 1 uncommitted statement was not applied\./),
+    ).toBeInTheDocument();
+  });
+
+  test("transaction_lost_notice_without_statements_says_it_was_not_applied", () => {
+    useRuns.setState({
+      notices: { t: { kind: "transactionLost", statements: 0 } },
+    });
+    show({ status: "idle" });
+
+    expect(
+      screen.getByText(
+        "The connection dropped while a transaction was open. It was not applied. The next run opens a new session.",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  test("a_discard_from_ending_the_transaction_says_so", () => {
+    useRuns.setState({ discardedByEnd: { t: true } });
+    finished(
+      { outcome: "discarded" },
+      { columns: ["id", "name"], rows: someRows },
+    );
+
+    expect(screen.getByText("Results discarded")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "Ending the transaction discarded the rows not yet fetched. Run again to see them.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Running the next query/)).toBeNull();
   });
 });

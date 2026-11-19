@@ -7,6 +7,7 @@ export const en = {
   "common.cancel": "Cancel",
   "common.save": "Save",
   "common.close": "Close",
+  "common.ok": "OK",
 
   "tunnel.starting": "Starting tunnel",
   "tunnel.seconds": "{elapsed} / {total} s",
@@ -150,6 +151,8 @@ export const en = {
   "result.discarded": "Results discarded",
   "result.discardedDetail":
     "Running the next query discarded the rows not yet fetched. Run again to see them.",
+  "result.discardedByEnd":
+    "Ending the transaction discarded the rows not yet fetched. Run again to see them.",
   "result.expired": "Results closed",
   "result.expiredRows.one":
     "Nothing was fetched for {minutes} minutes, so the query was closed on the database. The 1 row received stays visible.",
@@ -181,6 +184,16 @@ export const en = {
   "tx.rollbackFailed": "Rollback failed",
   "tx.commitRefused":
     "The transaction failed, so it can't be committed. Roll back instead.",
+  "tx.failedTitle": "Transaction failed",
+  "tx.failedHint":
+    "An earlier error left the transaction failed. Roll back, then run again.",
+  "tx.lostTitle": "Transaction lost",
+  "tx.lostBody.one":
+    "The connection dropped while a transaction was open. The 1 uncommitted statement was not applied. The next run opens a new session.",
+  "tx.lostBody.other":
+    "The connection dropped while a transaction was open. The {count} uncommitted statements were not applied. The next run opens a new session.",
+  "tx.lostBody.none":
+    "The connection dropped while a transaction was open. It was not applied. The next run opens a new session.",
 
   "toast.copiedMessage": "Copied message",
   "toast.copiedCell": "Copied cell",

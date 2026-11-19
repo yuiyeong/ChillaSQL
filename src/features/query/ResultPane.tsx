@@ -38,6 +38,7 @@ import {
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
+import { TransactionFailed, TransactionLostBanner } from "./TransactionPanels";
 import {
   ReconnectedBanner,
   TunnelFailed,
@@ -70,6 +71,13 @@ export const ResultPane = memo(function ResultPane({
   const state = useRuns((s) => (tabId === null ? undefined : s.runs[tabId]));
   const runNotice = useRuns((s) =>
     tabId === null ? undefined : s.notices[tabId],
+  );
+  const txFailed = useRuns((s) =>
+    tabId === null ? false : s.transactions[tabId]?.status === "failed",
+  );
+  const ending = useRuns((s) => tabId !== null && s.ending[tabId] === true);
+  const discardedByEnd = useRuns((s) =>
+    tabId === null ? false : s.discardedByEnd[tabId] === true,
   );
   const tunnel = useTunnel(connection);
   const toast = useToast();
@@ -191,7 +199,18 @@ export const ResultPane = memo(function ResultPane({
           break;
         case "failed": {
           header = name;
-          body = <ServerError result={result} outcome={outcome} copy={copy} />;
+          body =
+            txFailed && tabId !== null ? (
+              <TransactionFailed
+                error={outcome.error}
+                ending={ending}
+                onRollback={() =>
+                  void useRuns.getState().endTransaction(tabId, "rollback")
+                }
+              />
+            ) : (
+              <ServerError result={result} outcome={outcome} copy={copy} />
+            );
           break;
         }
         case "cancelled":
@@ -226,7 +245,9 @@ export const ResultPane = memo(function ResultPane({
           header = name;
           body = (
             <Notice icon={<TrashIcon />} title={t("result.discarded")}>
-              {t("result.discardedDetail")}
+              {discardedByEnd
+                ? t("result.discardedByEnd")
+                : t("result.discardedDetail")}
             </Notice>
           );
           break;
@@ -291,6 +312,12 @@ export const ResultPane = memo(function ResultPane({
     <>
       {runNotice?.kind === "reconnected" && tabId !== null && (
         <ReconnectedBanner
+          onClose={() => useRuns.getState().dismissNotice(tabId)}
+        />
+      )}
+      {runNotice?.kind === "transactionLost" && tabId !== null && (
+        <TransactionLostBanner
+          statements={runNotice.statements}
           onClose={() => useRuns.getState().dismissNotice(tabId)}
         />
       )}

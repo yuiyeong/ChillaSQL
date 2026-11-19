@@ -679,7 +679,7 @@ git commit -m "feat: toolbar에 트랜잭션 모드와 Commit, Rollback을, 탭�
 - Consumes: Task 8의 `transactions`, `notices`, `endTransaction`
 - Produces: 문구 `tx.failedTitle` "Transaction failed", `tx.failedHint` "An earlier error left the transaction failed. Roll back, then run again.", `tx.lostTitle` "Transaction lost", `tx.lostBody.one`/`.other` "The connection dropped while a transaction was open. The {count} uncommitted statement(s) were not applied. The next run opens a new session.", `tx.lostBody.none` "The connection dropped while a transaction was open. It was not applied. The next run opens a new session.", `common.ok` "OK", `tx.commitFailed` "Commit failed", `tx.rollbackFailed` "Rollback failed", `tx.commitRefused` "The transaction failed, so it can't be committed. Roll back instead."
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `ResultPane.test.tsx`:
 
@@ -687,21 +687,21 @@ git commit -m "feat: toolbar에 트랜잭션 모드와 Commit, Rollback을, 탭�
 - 트랜잭션이 없는 실패는 지금 오류 화면 그대로다.
 - `transaction_lost_notice_dismisses_with_ok`(Tunnel 6): notice가 `transactionLost`면 제목, 본문(문장 수), OK. OK는 `dismissNotice`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 모양은 States "트랜잭션 실패"와 Tunnel 6이다. 상태 색이나 배경 tint를 쓰지 않는다(icon과 문장).
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
