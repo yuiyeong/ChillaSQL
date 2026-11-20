@@ -272,6 +272,10 @@ export const ko: Record<MessageKey, string> = {
     "{minutes}분 동안 가져오지 않아 데이터베이스에서 쿼리를 닫았습니다. 받은 1행은 그대로 보입니다.",
   "result.expiredRows.other":
     "{minutes}분 동안 가져오지 않아 데이터베이스에서 쿼리를 닫았습니다. 받은 {count}행은 그대로 보입니다.",
+  "result.expiredRowsSeconds.one":
+    "{seconds}초 동안 가져오지 않아 데이터베이스에서 쿼리를 닫았습니다. 받은 1행은 그대로 보입니다.",
+  "result.expiredRowsSeconds.other":
+    "{seconds}초 동안 가져오지 않아 데이터베이스에서 쿼리를 닫았습니다. 받은 {count}행은 그대로 보입니다.",
   "result.connectionLost": "연결 끊김",
   "result.nextRunNewSession":
     "다음 실행은 새 세션을 엽니다. SET 값과 임시 테이블은 사라졌습니다.",

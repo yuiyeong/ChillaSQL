@@ -271,6 +271,10 @@ export const en = {
     "Nothing was fetched for {minutes} minutes, so the query was closed on the database. The 1 row received stays visible.",
   "result.expiredRows.other":
     "Nothing was fetched for {minutes} minutes, so the query was closed on the database. The {count} rows received stay visible.",
+  "result.expiredRowsSeconds.one":
+    "Nothing was fetched for {seconds} seconds, so the query was closed on the database. The 1 row received stays visible.",
+  "result.expiredRowsSeconds.other":
+    "Nothing was fetched for {seconds} seconds, so the query was closed on the database. The {count} rows received stay visible.",
   "result.connectionLost": "Connection lost",
   "result.nextRunNewSession":
     "The next run opens a new session. SET values and temp tables are gone.",

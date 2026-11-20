@@ -18,6 +18,11 @@ export function template(key: MessageKey): string {
   return dictionary[key];
 }
 
+/** 모든 언어의 문구 그대로. 다른 언어로 저장된 값을 알아볼 때 쓴다. */
+export function templates(key: MessageKey): string[] {
+  return Object.values(dictionaries).map((dictionary) => dictionary[key]);
+}
+
 /** dictionary에 있는 key인가. Rust 오류의 `error.<kind>`처럼 밖에서 만든 key를 고를 때 쓴다. */
 export function isMessageKey(key: string): key is MessageKey {
   return Object.prototype.hasOwnProperty.call(dictionary, key);

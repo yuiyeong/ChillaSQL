@@ -1,10 +1,11 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/dialog");
 
 import { readSqlFile } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
+import { setLanguage } from "../../shared/i18n/t";
 import { documentText } from "./documents";
 import { useTabs, type RestoredTab } from "./tabsStore";
 
@@ -12,6 +13,8 @@ beforeEach(() => {
   vi.resetAllMocks();
   useTabs.getState().reset();
 });
+
+afterEach(() => setLanguage("en"));
 
 function ids(): string[] {
   return useTabs.getState().tabs.map((tab) => tab.id);
@@ -284,4 +287,18 @@ test("new_tab_titles_continue_after_restored_untitled_tabs", () => {
   useTabs.getState().newTab();
 
   expect(useTabs.getState().tabs[3].title).toBe("Query 4");
+});
+
+test("언어가 바뀌어도 다른 언어의 기본 제목 번호를 이어 간다", () => {
+  setLanguage("ko");
+  useTabs
+    .getState()
+    .restoreTabs(
+      [restored({ title: "Query 7" }), restored({ title: "쿼리 2" })],
+      0,
+    );
+
+  useTabs.getState().newTab();
+
+  expect(useTabs.getState().tabs[2].title).toBe("쿼리 8");
 });

@@ -195,14 +195,18 @@ test("forget_drops_the_cached_types_of_that_connection", async () => {
   expect(useTypes.getState().types).toEqual({ other: { "23:-1": integer } });
 });
 
-test("refresh_drops_the_cached_types_of_that_connection", async () => {
+test("refresh_keeps_the_cached_types", async () => {
   vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
   await useSchema.getState().ensure("local");
   seedTypes();
 
   await useSchema.getState().refresh("local");
 
-  expect(useTypes.getState().types).toEqual({ other: { "23:-1": integer } });
+  // type 이름은 새로고침으로 바뀌지 않는다. 화면의 결과 header가 이름을 잃지 않는다.
+  expect(useTypes.getState().types).toEqual({
+    local: { "23:-1": integer },
+    other: { "23:-1": integer },
+  });
 });
 
 test("a_response_after_forget_is_ignored", async () => {

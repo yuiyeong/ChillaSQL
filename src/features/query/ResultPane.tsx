@@ -284,9 +284,13 @@ export const ResultPane = memo(function ResultPane({
               </Notice>
             ) : (
               <Notice icon={<ClockIcon />} title={t("result.expired")}>
-                {tc("result.expiredRows", retained, {
-                  minutes: Math.round(idleTimeoutSecs / 60),
-                })}
+                {idleTimeoutSecs % 60 === 0
+                  ? tc("result.expiredRows", retained, {
+                      minutes: idleTimeoutSecs / 60,
+                    })
+                  : tc("result.expiredRowsSeconds", retained, {
+                      seconds: idleTimeoutSecs,
+                    })}
               </Notice>
             );
           if (retained > 0) grid = gridOf(result, null);

@@ -153,8 +153,7 @@ export const useSchema = create<SchemaState>()((set, get) => {
     },
 
     refresh(connection) {
-      // DDL로 type 이름이 바뀌었을 수 있다. 다음 결과가 다시 묻는다.
-      useTypes.getState().forget(connection);
+      // type 이름은 새로고침으로 바뀌지 않으므로 화면의 결과가 쓰는 type 캐시는 그대로 둔다.
       return load(connection);
     },
 

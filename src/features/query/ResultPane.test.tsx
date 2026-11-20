@@ -584,6 +584,19 @@ test("expired의 안내는 설정의 시간(분)을 쓴다", () => {
   ).toBeInTheDocument();
 });
 
+test("expired의 안내는 분으로 나누어떨어지지 않는 설정이면 초로 쓴다", () => {
+  useSettings.setState({ idleTimeoutSecs: 90 });
+  finished(
+    { outcome: "expired" },
+    { columns: resultColumns("id"), rows: [["1"], ["2"]] },
+  );
+  expect(
+    screen.getByText(
+      "Nothing was fetched for 90 seconds, so the query was closed on the database. The 2 rows received stay visible.",
+    ),
+  ).toBeInTheDocument();
+});
+
 test("expired의 받은 행이 하나면 단수로 쓴다", () => {
   finished(
     { outcome: "expired" },

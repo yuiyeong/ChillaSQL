@@ -3,7 +3,7 @@ import { readSqlFile } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
 import type { TxMode } from "../../shared/api/types";
 import { closeDocument, openDocument } from "./documents";
-import { t, template } from "../../shared/i18n/t";
+import { t, templates } from "../../shared/i18n/t";
 
 export interface Tab {
   id: string;
@@ -68,12 +68,15 @@ export function modeOf(state: Pick<TabsState, "tabs">, id: string): TxMode {
   return state.tabs.find((tab) => tab.id === id)?.mode ?? "auto";
 }
 
-/** 새 탭의 기본 제목이면 그 번호. 아니면 null이다. */
+/** 새 탭의 기본 제목이면 그 번호. 아니면 null이다. 다른 언어로 만든 제목도 알아본다. */
 function defaultTitleNumber(title: string): number | null {
-  const [before, after = ""] = template("tabs.defaultTitle").split("{n}");
-  if (!title.startsWith(before) || !title.endsWith(after)) return null;
-  const digits = title.slice(before.length, title.length - after.length);
-  return /^\d+$/.test(digits) ? Number(digits) : null;
+  for (const text of templates("tabs.defaultTitle")) {
+    const [before, after = ""] = text.split("{n}");
+    if (!title.startsWith(before) || !title.endsWith(after)) continue;
+    const digits = title.slice(before.length, title.length - after.length);
+    if (/^\d+$/.test(digits)) return Number(digits);
+  }
+  return null;
 }
 
 function updateTab(tabs: Tab[], id: string, patch: Partial<Tab>): Tab[] {
