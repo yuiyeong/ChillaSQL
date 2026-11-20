@@ -91,19 +91,19 @@ test가 없으면 사용자가 가장 먼저 부딪힐 입력과 상황이다. �
 **Files:**
 - Modify: `docs/progress.md`, `docs/spec.md`, `docs/milestones.md`
 
-- [ ] **Step 1: branch를 만든다**
+- [x] **Step 1: branch를 만든다**
 
 ```bash
 git switch -c m9-query-tools
 ```
 
-- [ ] **Step 2: 문서를 고친다**
+- [x] **Step 2: 문서를 고친다**
 
 - 진행상황: M9를 `진행 중`(시작 날짜, 계획 링크), "지금"을 M9 Task 2로. 결정 기록에 "먼저 확인한 것"의 결정 세 줄과 "이 계획에서 정한 것"의 줄마다 한 줄(날짜, M9). M4의 "Explain(M9)은 넣지 않음", "History(M9)는 disabled" 줄은 그대로 두고 새 줄이 대신한다고 쓴다.
 - 기획서: 4.5 파라미터(값을 SQL text로 넣음, dialog, `[ ]` 밖의 `:name`), 실행 계획(toolbar Explain, text 출력 parse, 자기 시간으로 강조, 원문 보기), 4.7 DDL 보기(범위와 넣지 않는 것, 결과 panel, Close), 4.9(프로젝트별, 최근 10,000개, 보낸 text, 첫 응답에 기록, 단어 검색, 새 탭에 불러오기), 5장 앱 내부 저장소(쿼리 기록 table), 9장에서 "파라미터 값을 SQL text에 그대로 넣을지(M9)"를 지운다. 마지막 수정 날짜.
 - 마일스톤 M9 "먼저 확인할 것" 둘에 `→ 정함:`으로 결과를 적는다.
 
-- [ ] **Step 3: commit**
+- [x] **Step 3: commit**
 
 ```bash
 git add docs
