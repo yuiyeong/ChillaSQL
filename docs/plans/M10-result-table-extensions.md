@@ -730,7 +730,7 @@ Expected: 통과
 
 앱을 띄우기 전에 사용자에게 해도 되는지 묻는다. 방법은 진행상황 "지금"의 "앱 동작 확인 방법"이다. test DB(54318)에 `CREATE SCHEMA m10_check`의 테이블(이 계획 "먼저 확인한 것"의 모양)을 만들어 쓰고 끝나면 지운다. 단축키 확인은 `~/.config/chilla/config.toml`을 잠시 만들고 끝나면 원래대로(없었으면 지움) 둔다.
 
-- [ ] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
+- [x] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
 
 | 확인 | 기준 |
 | --- | --- |
@@ -744,7 +744,7 @@ Expected: 통과
 | Export → Save as CSV…, Save as JSON… | 파일을 `psql \copy … FROM … CSV HEADER`로 다시 넣으면 같은 값(CSV), `jq`로 읽힘(JSON) |
 | `[shortcuts] reformat = "Shift+Cmd+F"`로 다시 시작 | `Shift+Cmd+F`가 Reformat, toolbar 표시가 `⇧⌘F`. 충돌하는 값이면 첫 화면에 오류 dialog |
 
-- [ ] **Step 2: 기록하고 commit한다**
+- [x] **Step 2: 기록하고 commit한다**
 
 - 진행상황: M10을 `완료`(날짜), 작업 로그에 Task별 결과와 Step 1의 결과, "지금"의 다음 할 일(4단계 완료 기준 확인, 실제로 며칠 써 보기).
 - 이 계획의 체크박스를 모두 체크한다.
