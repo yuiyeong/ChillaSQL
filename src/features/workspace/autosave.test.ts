@@ -10,6 +10,9 @@ import {
   writeSqlFile,
 } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
+import { useDialogs } from "../../shared/ui/dialogs";
+import { answerDialog, textOf } from "../../test/dialogs";
+import { connection } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 import { documentText, openDocument } from "../editor/documents";
 import { saveTab } from "../editor/saveTab";
@@ -34,7 +37,7 @@ beforeEach(async () => {
   vi.resetAllMocks();
   useProject.setState({
     status: "ready",
-    project: { name: "demo", dir: "/p", connections: [] },
+    project: { name: "demo", dir: "/p", connections: [connection("local")] },
   });
   vi.mocked(listSqlFiles).mockResolvedValue([]);
   vi.mocked(loadWorkspace).mockResolvedValue(null);
@@ -277,6 +280,80 @@ test("a_failed_save_is_ignored", async () => {
   );
   useTabs.getState().newTab();
 
-  await expect(flushAutosave()).resolves.toBeUndefined();
+  await expect(flushAutosave()).resolves.toBe(false);
   expect(saveWorkspace).toHaveBeenCalledTimes(1);
+});
+
+test("saves_at_most_five_seconds_after_the_first_change", async () => {
+  await started();
+  vi.useFakeTimers();
+  useTabs.getState().newTab();
+  // 1초가 지나기 전에 계속 고친다.
+  for (let elapsed = 800; elapsed < 5000; elapsed += 800) {
+    await vi.advanceTimersByTimeAsync(800);
+    documentChanged();
+  }
+  expect(saveWorkspace).not.toHaveBeenCalled();
+
+  await vi.advanceTimersByTimeAsync(5000 - 4800 - 1);
+  expect(saveWorkspace).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(1);
+  expect(saveWorkspace).toHaveBeenCalledTimes(1);
+
+  // 저장한 뒤의 변경은 다시 1초를 기다린다.
+  documentChanged();
+  await vi.advanceTimersByTimeAsync(999);
+  expect(saveWorkspace).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(saveWorkspace).toHaveBeenCalledTimes(2);
+});
+
+test("flush_says_whether_the_tabs_are_kept", async () => {
+  // 되살리기 전에는 보관하지 않는다.
+  expect(await flushAutosave()).toBe(false);
+
+  await started();
+  useTabs.getState().newTab();
+  expect(await flushAutosave()).toBe(true);
+  // 기다리는 저장이 없어도 지금 탭을 다시 저장한다.
+  expect(await flushAutosave()).toBe(true);
+  expect(saveWorkspace).toHaveBeenCalledTimes(2);
+});
+
+test("a_store_that_cannot_be_read_is_reported_and_not_written", async () => {
+  vi.mocked(loadWorkspace).mockRejectedValue(
+    new CommandError("store_failed", "database is locked"),
+  );
+
+  await started();
+
+  const spec = await answerDialog("cancel");
+  expect(textOf(spec.title)).toBe(
+    "Recent projects and unsaved tabs are not kept",
+  );
+  expect(textOf(spec.body)).toBe("database is locked");
+  useTabs.getState().newTab();
+  expect(await flushAutosave()).toBe(false);
+  expect(saveWorkspace).not.toHaveBeenCalled();
+});
+
+test("a_project_change_while_reading_is_not_reported", async () => {
+  vi.mocked(loadWorkspace).mockRejectedValue(
+    new CommandError("project_changed", "changed"),
+  );
+
+  await reopenTabs();
+
+  expect(useDialogs.getState().current).toBeNull();
+});
+
+test("restored_tabs_drop_connections_the_project_no_longer_has", async () => {
+  await restore(
+    snapshot([tab({ connection: "local" }), tab({ connection: "gone" })]),
+  );
+
+  expect(useTabs.getState().tabs.map((t) => t.connection)).toEqual([
+    "local",
+    null,
+  ]);
 });

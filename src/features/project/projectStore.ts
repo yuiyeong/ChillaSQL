@@ -23,8 +23,8 @@ export interface ProjectState {
    * 프로젝트를 열면 비운다.
    */
   unapplied: Record<string, Connection>;
-  /** 마지막 디렉토리를 연다 */
-  boot(): Promise<void>;
+  /** 마지막 디렉토리를 연다. 열렸으면 true */
+  boot(): Promise<boolean>;
   /** 열렸으면 true */
   open(dir: string): Promise<boolean>;
   create(dir: string): Promise<boolean>;
@@ -103,9 +103,11 @@ export const useProject = create<ProjectState>()((set, get) => {
       const dir = readLastDir();
       if (dir === null) {
         set({ status: "none" });
-        return;
+        return false;
       }
-      if (!(await enter(() => openProject(dir)))) set({ status: "none" });
+      if (await enter(() => openProject(dir))) return true;
+      set({ status: "none" });
+      return false;
     },
 
     open: (dir) => enter(() => openProject(dir), dir),

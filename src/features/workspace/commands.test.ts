@@ -61,6 +61,7 @@ import { deferred } from "../../test/deferred";
 import { catalogFixture, connection, relation } from "../../test/fixtures";
 import { targetChanged } from "../connections/connectionValues";
 import { useSchema } from "../schema/schemaStore";
+import { useSettings } from "../settings/settingsStore";
 import { resetStores } from "../../test/resetStores";
 
 const project: Project = { name: "demo", dir: "/p", connections: [] };
@@ -113,6 +114,10 @@ beforeEach(async () => {
   vi.mocked(listSqlFiles).mockResolvedValue([]);
   vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
   vi.mocked(inspectStatement).mockResolvedValue(null);
+  vi.mocked(loadWorkspace).mockResolvedValue(null);
+  vi.mocked(saveWorkspace).mockResolvedValue();
+  // 열린 프로젝트의 탭을 보관한다. 보관하지 못하면 프로젝트를 바꿀 때 dirty 탭을 묻는다.
+  await reopenTabs();
 });
 
 test("접속이 없으면 Choose a connection으로 거절한다", async () => {
@@ -696,10 +701,73 @@ test("switching_projects_flushes_and_does_not_ask_about_unsaved_tabs", async () 
   );
 });
 
+test("switching_asks_about_unsaved_tabs_when_they_are_not_kept", async () => {
+  useSettings.setState({ storeAvailable: false });
+  await reopenTabs();
+  const a = tabWith("SELECT 1");
+  const b = tabWith("SELECT 2");
+  tabWith("SELECT 3");
+  useTabs.getState().markDirty(a);
+  useTabs.getState().markDirty(b);
+
+  const switching = switchProject();
+  const spec = await answerDialog("cancel");
+  await switching;
+
+  expect(textOf(spec.title)).toBe("2 tabs have unsaved changes");
+  expect(spec.items?.map((item) => item.primary)).toEqual([
+    "Query 1",
+    "Query 2",
+  ]);
+  expect(textOf(spec.note)).toBe(
+    "Switching projects discards these changes and closes every tab's session.",
+  );
+  expect(spec.actions.map(({ id, label }) => [id, label])).toEqual([
+    ["cancel", "Cancel"],
+    ["switch", "Switch without saving"],
+  ]);
+  expect(pickDirectory).not.toHaveBeenCalled();
+  expect(useTabs.getState().tabs).toHaveLength(3);
+});
+
+test("a_failed_save_before_switching_asks_and_switches_when_confirmed", async () => {
+  const id = tabWith("SELECT 1");
+  useTabs.getState().markDirty(id);
+  vi.mocked(saveWorkspace).mockRejectedValue(
+    new CommandError("store_failed", "database is locked"),
+  );
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+
+  const switching = switchProject();
+  const spec = await answerDialog("switch");
+  await switching;
+
+  expect(textOf(spec.title)).toBe("1 tab has unsaved changes");
+  expect(openProject).toHaveBeenCalledWith("/q");
+  expect(useTabs.getState().tabs).toEqual([]);
+});
+
+test("switching_without_dirty_tabs_does_not_ask_even_when_tabs_are_not_kept", async () => {
+  useSettings.setState({ storeAvailable: false });
+  await reopenTabs();
+  tabWith("SELECT 1");
+  vi.mocked(pickDirectory).mockResolvedValue(null);
+
+  await switchProject();
+
+  expect(useDialogs.getState().current).toBeNull();
+  expect(pickDirectory).toHaveBeenCalledTimes(1);
+});
+
 test("opening_a_project_restores_its_tabs", async () => {
   tabWith("SELECT 1");
   vi.mocked(pickDirectory).mockResolvedValue("/q");
-  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+  vi.mocked(openProject).mockResolvedValue({
+    ...project,
+    dir: "/q",
+    connections: [connection("local")],
+  });
   vi.mocked(loadWorkspace).mockResolvedValue(
     JSON.stringify({
       version: 1,

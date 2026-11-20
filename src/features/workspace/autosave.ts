@@ -4,7 +4,9 @@ import {
   saveWorkspace,
 } from "../../shared/api/commands";
 import type { TxMode } from "../../shared/api/types";
-import { tc } from "../../shared/i18n/t";
+import { isCommandError, messageOf } from "../../shared/api/errors";
+import { t, tc } from "../../shared/i18n/t";
+import { ask } from "../../shared/ui/dialogs";
 import { documentFileText, findDocument } from "../editor/documents";
 import { useTabs, type RestoredTab, type TabsState } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
@@ -28,10 +30,14 @@ export interface WorkspaceSnapshot {
 
 /** 마지막 변경에서 저장까지 기다리는 ms */
 const DELAY_MS = 1000;
+/** 변경이 계속 와도 저장하지 않은 첫 변경에서 이만큼 지나면 저장한다. */
+const MAX_WAIT_MS = 5000;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
-/** 차례로 하는 저장의 끝. 저장은 실패해도 resolve한다. */
-let saving: Promise<void> = Promise.resolve();
+/** 기다리는 저장을 늦어도 할 때(Date.now 기준). 기다리는 저장이 없으면 null이다. */
+let deadline: number | null = null;
+/** 차례로 하는 저장의 끝. 저장했으면 true다. 실패해도 reject하지 않는다. */
+let saving: Promise<boolean> = Promise.resolve(true);
 /**
  * 보관한 탭을 읽어 되살린 프로젝트의 dir. 이 프로젝트가 열려 있을 때만 저장한다. 새 프로젝트를 연 뒤
  * 되살리기 전의 탭(빈 탭)을 저장해 보관한 탭을 덮어쓰지 않게 한다.
@@ -59,20 +65,24 @@ export function snapshotOf(state: TabsState): WorkspaceSnapshot {
   };
 }
 
-/** 지금 탭을 열린 프로젝트에 저장한다. 실패는 무시한다. 다음 변경이 다시 저장한다. */
-async function saveNow(): Promise<void> {
+/**
+ * 지금 탭을 열린 프로젝트에 저장한다. 저장했으면 true다. 이 프로젝트의 자동 보관이 꺼져 있거나
+ * 저장하지 못하면 false다. 실패는 알리지 않는다. 다음 변경이 다시 저장한다.
+ */
+async function saveNow(): Promise<boolean> {
   const dir = useProject.getState().project?.dir;
-  if (dir === undefined || dir !== readyDir) return;
+  if (dir === undefined || dir !== readyDir) return false;
   // dir과 snapshot을 같은 때에 읽는다. 그 사이 프로젝트가 바뀌면 Rust가 project_changed로 거절한다.
   const text = JSON.stringify(snapshotOf(useTabs.getState()));
   try {
     await saveWorkspace(dir, text);
+    return true;
   } catch {
-    // 저장하지 못해도 화면의 탭은 그대로다.
+    return false;
   }
 }
 
-function save(): Promise<void> {
+function save(): Promise<boolean> {
   saving = saving.then(saveNow);
   return saving;
 }
@@ -80,14 +90,22 @@ function save(): Promise<void> {
 function cancelTimer(): void {
   if (timer !== null) clearTimeout(timer);
   timer = null;
+  deadline = null;
 }
 
+/** 마지막 변경에서 1초 뒤, 늦어도 저장하지 않은 첫 변경에서 5초 뒤 저장한다. */
 function schedule(): void {
+  const now = Date.now();
+  const until = deadline ?? now + MAX_WAIT_MS;
   cancelTimer();
-  timer = setTimeout(() => {
-    timer = null;
-    void save();
-  }, DELAY_MS);
+  deadline = until;
+  timer = setTimeout(
+    () => {
+      cancelTimer();
+      void save();
+    },
+    Math.max(0, Math.min(DELAY_MS, until - now)),
+  );
 }
 
 /** 보이는 탭의 문서가 바뀌었다. 1초 뒤 저장한다. */
@@ -112,9 +130,12 @@ export function startAutosave(): () => void {
   };
 }
 
-/** 기다리는 저장을 바로 한다. 하고 있는 저장이 끝날 때까지 기다린다. */
-export function flushAutosave(): Promise<void> {
-  if (timer === null) return saving;
+/**
+ * 기다리는 저장을 바로 한다. 기다리는 저장이 없어도 지금 탭을 다시 저장한다. 하고 있는 저장이 끝날
+ * 때까지 기다린다. 지금 탭이 앱 저장소에 있으면 true, 자동 보관이 꺼져 있거나 저장하지 못했으면
+ * false다.
+ */
+export function flushAutosave(): Promise<boolean> {
   cancelTimer();
   return save();
 }
@@ -124,7 +145,7 @@ export function resetAutosave(): void {
   cancelTimer();
   subscription?.();
   subscription = null;
-  saving = Promise.resolve();
+  saving = Promise.resolve(true);
   readyDir = null;
 }
 
@@ -188,8 +209,16 @@ async function reread(tab: TabSnapshot): Promise<RestoredTab | null> {
 export async function restore(
   snapshot: WorkspaceSnapshot,
 ): Promise<{ skipped: string[] }> {
-  const dir = useProject.getState().project?.dir;
-  const read = await Promise.all(snapshot.tabs.map(reread));
+  const project = useProject.getState().project;
+  const dir = project?.dir;
+  // chilla.toml에서 없어진 접속은 쓰지 않는다.
+  const names = new Set(project?.connections.map((c) => c.name));
+  const tabs = snapshot.tabs.map((tab) =>
+    tab.connection !== null && !names.has(tab.connection)
+      ? { ...tab, connection: null }
+      : tab,
+  );
+  const read = await Promise.all(tabs.map(reread));
   // 읽는 동안 다른 프로젝트가 열렸으면 되살리지 않는다.
   if (useProject.getState().project?.dir !== dir) return { skipped: [] };
 
@@ -218,6 +247,15 @@ export async function restore(
   return { skipped };
 }
 
+/** 앱 저장소를 쓸 수 없다고 알린다. 시작할 때 저장소를 열지 못했을 때와 같은 dialog다. */
+function showStoreError(error: unknown): void {
+  void ask({
+    title: t("settings.storeErrorTitle"),
+    body: messageOf(error),
+    actions: [{ id: "cancel", label: t("common.ok"), variant: "primary" }],
+  });
+}
+
 /**
  * 열린 프로젝트의 보관한 탭을 되살리고 그 프로젝트의 자동 보관을 켠다. 프로젝트를 연 뒤마다 부른다.
  * 앱 저장소가 없거나 읽지 못하면 되살리지도 저장하지도 않는다.
@@ -231,8 +269,10 @@ export async function reopenTabs(): Promise<void> {
   let text: string | null;
   try {
     text = await loadWorkspace(dir);
-  } catch {
-    // project_changed면 이미 다른 프로젝트다. 그 밖의 오류면 보관한 탭을 덮어쓰지 않게 저장도 하지 않는다.
+  } catch (error) {
+    // project_changed면 이미 다른 프로젝트다. 그 밖의 오류는 알리고, 보관한 탭을 덮어쓰지 않게 저장도
+    // 하지 않는다. 그러면 프로젝트를 바꿀 때 저장하지 않은 변경을 다시 묻는다.
+    if (!isCommandError(error, "project_changed")) showStoreError(error);
     return;
   }
   if (useProject.getState().project?.dir !== dir) return;

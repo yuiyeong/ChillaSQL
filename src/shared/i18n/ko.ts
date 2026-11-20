@@ -60,6 +60,13 @@ export const ko: Record<MessageKey, string> = {
   "dialog.closeTab.title": "{title}의 변경 사항을 저장하겠습니까?",
   "dialog.closeTab.body": "저장하지 않으면 변경 사항이 사라집니다.",
   "dialog.closeTab.discard": "저장 안 함",
+  "dialog.switchProject.title.one":
+    "탭 1개에 저장하지 않은 변경 사항이 있습니다",
+  "dialog.switchProject.title.other":
+    "탭 {count}개에 저장하지 않은 변경 사항이 있습니다",
+  "dialog.switchProject.note":
+    "프로젝트를 바꾸면 이 변경 사항은 사라지고 모든 탭의 세션이 닫힙니다.",
+  "dialog.switchProject.confirm": "저장하지 않고 바꾸기",
   "dialog.tx.oneTab.title": "이 탭에 열린 트랜잭션이 있습니다",
   "dialog.tx.close.body":
     "{title} 탭을 닫으면 {connection} 세션이 닫힙니다. {question}",

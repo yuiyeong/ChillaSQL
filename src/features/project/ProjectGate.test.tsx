@@ -58,6 +58,7 @@ test("프로젝트가 없으면 여는 버튼을 보여 주고 고른 디렉토�
   await click(button);
   expect(await screen.findByText("작업 화면")).toBeInTheDocument();
   expect(openProject).toHaveBeenCalledWith("/p");
+  await waitFor(() => expect(loadWorkspace).toHaveBeenCalledWith("/p"));
 });
 
 test("열지 못하면 error를 보여 준다", async () => {

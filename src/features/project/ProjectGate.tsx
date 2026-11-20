@@ -1,13 +1,16 @@
 import { useEffect, useRef } from "react";
 import { pickDirectory } from "../../shared/api/dialog";
 import { messageOf } from "../../shared/api/errors";
-import { reopenTabs } from "../workspace/autosave";
+import { enterProject } from "../workspace/commands";
 import { useProject } from "./projectStore";
 import { Button } from "../../shared/ui/Button";
 import { ErrorIcon } from "../../shared/ui/icons";
 import { t } from "../../shared/i18n/t";
 
-/** "ready"일 때만 children을 그린다. 그 전에는 프로젝트를 열거나 만드는 화면이다. */
+/**
+ * "ready"일 때만 children을 그린다. 그 전에는 프로젝트를 열거나 만드는 화면이다. 여는 길은 모두
+ * `enterProject`를 거쳐 보관한 탭을 되살린다.
+ */
 export function ProjectGate({ children }: { children: React.ReactNode }) {
   const status = useProject((s) => s.status);
   const error = useProject((s) => s.error);
@@ -22,17 +25,8 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (booted.current) return;
     booted.current = true;
-    void boot();
+    void enterProject(boot);
   }, [boot]);
-
-  // 처음 연 프로젝트(마지막 프로젝트, 고른 폴더, 만든 프로젝트)의 탭을 되살린다. 프로젝트를 바꿀
-  // 때는 switchProject가 되살린다.
-  const restored = useRef(false);
-  useEffect(() => {
-    if (status !== "ready" || restored.current) return;
-    restored.current = true;
-    void reopenTabs();
-  }, [status]);
 
   async function pickAndOpen() {
     let dir: string | null;
@@ -42,7 +36,7 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
       showError(messageOf(error));
       return;
     }
-    if (dir !== null) await open(dir);
+    if (dir !== null) await enterProject(() => open(dir));
   }
 
   if (status === "ready") return <>{children}</>;
@@ -57,7 +51,10 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
             {t("project.missing", { dir: missingDir })}
           </p>
           <div className="flex gap-2">
-            <Button variant="primary" onClick={() => void create(missingDir)}>
+            <Button
+              variant="primary"
+              onClick={() => void enterProject(() => create(missingDir))}
+            >
               {t("project.create")}
             </Button>
             <Button onClick={() => void pickAndOpen()}>
