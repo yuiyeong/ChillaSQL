@@ -745,6 +745,8 @@ test("switching_asks_about_unsaved_tabs_when_they_are_not_kept", async () => {
   useTabs.getState().markDirty(a);
   useTabs.getState().markDirty(b);
 
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+
   const switching = switchProject();
   const spec = await answerDialog("cancel");
   await switching;
@@ -761,7 +763,9 @@ test("switching_asks_about_unsaved_tabs_when_they_are_not_kept", async () => {
     ["cancel", "Cancel"],
     ["switch", "Switch without saving"],
   ]);
-  expect(pickDirectory).not.toHaveBeenCalled();
+  // 폴더를 고른 뒤, 여는 바로 앞에서 묻는다.
+  expect(pickDirectory).toHaveBeenCalledTimes(1);
+  expect(openProject).not.toHaveBeenCalled();
   expect(useTabs.getState().tabs).toHaveLength(3);
 });
 
@@ -1401,6 +1405,81 @@ test("switch_project_commits_only_after_a_folder_is_chosen", async () => {
     vi.mocked(openProject).mock.invocationCallOrder[0],
   );
   expect(useTabs.getState().tabs).toEqual([]);
+});
+
+function edit(tabId: string, text: string): void {
+  setDocumentState(
+    tabId,
+    documentState(tabId).update({
+      changes: { from: 0, to: documentState(tabId).doc.length, insert: text },
+    }).state,
+  );
+  useTabs.getState().markDirty(tabId);
+}
+
+test("an_edit_made_during_the_commit_is_saved_under_the_old_project_before_opening", async () => {
+  await reopenTabs();
+  const id = tabWith("UPDATE a SET b = 1");
+  await runInTransaction(id, "in_transaction");
+  const ending = deferred<{ outcome: "ended"; tx: "idle" }>();
+  vi.mocked(endTransaction).mockReturnValue(ending.promise);
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+
+  const switching = switchProject();
+  await answerDialog("commit");
+  await vi.waitFor(() => expect(endTransaction).toHaveBeenCalled());
+  edit(id, "typed during the commit");
+  ending.resolve({ outcome: "ended", tx: "idle" });
+  await switching;
+
+  const saves = vi.mocked(saveWorkspace).mock.calls;
+  const last = saves[saves.length - 1];
+  expect(last[0]).toBe("/p");
+  expect(JSON.parse(last[1]).tabs[0].text).toBe("typed during the commit");
+  const saveOrders = vi.mocked(saveWorkspace).mock.invocationCallOrder;
+  expect(saveOrders[saveOrders.length - 1]).toBeLessThan(
+    vi.mocked(openProject).mock.invocationCallOrder[0],
+  );
+});
+
+test("the_editor_is_locked_from_the_flush_until_the_switch_finishes_or_fails", async () => {
+  tabWith("SELECT 1");
+  const opening = deferred<Project>();
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockReturnValue(opening.promise);
+
+  expect(useProject.getState().switching).toBe(false);
+  const switching = switchProject();
+  await vi.waitFor(() => expect(openProject).toHaveBeenCalled());
+  expect(useProject.getState().switching).toBe(true);
+
+  opening.reject(
+    new CommandError("project_not_found", "chilla.toml이 없습니다"),
+  );
+  await switching;
+  expect(useProject.getState().switching).toBe(false);
+
+  // 열린 뒤에도 푼다.
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+  await switchProject();
+  expect(useProject.getState().switching).toBe(false);
+});
+
+test("the_editor_is_already_locked_while_the_unsaved_tabs_dialog_is_open", async () => {
+  useSettings.setState({ storeAvailable: false });
+  await reopenTabs();
+  const id = tabWith("SELECT 1");
+  useTabs.getState().markDirty(id);
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+
+  const switching = switchProject();
+  await vi.waitFor(() => expect(useDialogs.getState().current).not.toBeNull());
+  expect(useProject.getState().switching).toBe(true);
+  await answerDialog("cancel");
+  await switching;
+
+  expect(useProject.getState().switching).toBe(false);
 });
 
 test("a project that fails to open does not roll back", async () => {

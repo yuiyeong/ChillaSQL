@@ -481,7 +481,8 @@ export function applySavedProjectKeepingSessions(project: Project): void {
  * 끝내지 않는다. `dir`이 있으면(최근 프로젝트) 폴더 picker를 건너뛴다.
  *
  * 지금 탭을 옛 프로젝트에 보관하므로 저장하지 않은 변경은 묻지 않는다. 보관하지 못하면
- * (앱 저장소가 없거나, 이 프로젝트의 탭을 읽지 못했거나, 저장이 실패하면) 버릴지 묻는다.
+ * (앱 저장소가 없거나, 이 프로젝트의 탭을 읽지 못했거나, 저장이 실패하면) 버릴지 묻는다. 보관과
+ * 이 물음은 폴더를 고르고 Commit한 뒤, 여는 바로 앞에서 한다.
  *
  * Rollback은 보내지 않는다. 프로젝트가 열리면 Rust가 옛 세션을 닫아 서버가 되돌리고, 열지 못하면
  * 트랜잭션이 그대로 남는다. Commit은 세션이 닫히기 전, 열기 전에 보낸다. 그래서 Commit한 뒤에
@@ -493,8 +494,6 @@ export async function switchProject(dir?: string): Promise<void> {
     "switchProject",
   );
   if (settlement === null) return;
-  // 기다리던 저장을 옛 프로젝트에 끝낸다.
-  if (!(await flushAutosave()) && !(await confirmDiscard())) return;
   let target: string | null;
   try {
     target = dir ?? (await pickDirectory());
@@ -507,7 +506,15 @@ export async function switchProject(dir?: string): Promise<void> {
   if (settlement.end === "commit" && !(await applySettlement(settlement))) {
     return;
   }
-  await enterProject(() => useProject.getState().open(target));
+  // 폴더 picker와 Commit이 기다리는 사이 친 글자까지 옛 프로젝트에 보관해야 하므로 보관은 여는
+  // 바로 앞에서 한다. 보관한 뒤 열기가 끝나거나 실패할 때까지 편집기를 잠가 그 뒤의 글자를 막는다.
+  useProject.getState().setSwitching(true);
+  try {
+    if (!(await flushAutosave()) && !(await confirmDiscard())) return;
+    await enterProject(() => useProject.getState().open(target));
+  } finally {
+    useProject.getState().setSwitching(false);
+  }
 }
 
 /**

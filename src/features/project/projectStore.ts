@@ -26,6 +26,12 @@ export interface ProjectState {
    * 프로젝트를 열면 비운다.
    */
   unapplied: Record<string, Connection>;
+  /**
+   * 프로젝트를 바꾸는 중이다. 탭을 옛 프로젝트에 보관한 뒤부터 열기가 끝나거나 실패할 때까지
+   * true이고, 그동안 편집기는 고칠 수 없다(그 사이 친 글자는 어느 프로젝트에도 보관되지 않는다).
+   */
+  switching: boolean;
+  setSwitching(switching: boolean): void;
   /** 최근에 연 프로젝트. 최근 것부터 최대 10개다. 앱 저장소가 없으면 비어 있다. */
   recent: RecentProject[];
   /** Rust에서 최근 프로젝트를 다시 읽는다. 읽지 못하면(앱 저장소가 없으면) 비운다. */
@@ -96,6 +102,11 @@ export const useProject = create<ProjectState>()((set, get) => {
     error: null,
     missingDir: null,
     unapplied: {},
+    switching: false,
+
+    setSwitching(switching) {
+      set({ switching });
+    },
 
     async refreshRecent() {
       try {

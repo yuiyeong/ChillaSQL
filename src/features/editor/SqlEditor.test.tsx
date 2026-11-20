@@ -22,6 +22,7 @@ import { catalogField } from "./completion";
 import { documentState } from "./documents";
 import { catalogFixture } from "../../test/fixtures";
 import { useSettings } from "../settings/settingsStore";
+import { useProject } from "../project/projectStore";
 
 beforeEach(() => {
   vi.mocked(splitStatements).mockReset();
@@ -32,6 +33,7 @@ beforeEach(() => {
 
 afterEach(() => {
   useSettings.setState(useSettings.getInitialState(), true);
+  useProject.setState(useProject.getInitialState(), true);
   closeDocument("a");
   closeDocument("b");
 });
@@ -295,4 +297,27 @@ test("나누는 동안 탭을 바꾸면 그 결과는 버리고 새로 보이는
     fresh: true,
   });
   expect(documentState("a").field(statementSpansField).fresh).toBe(false);
+});
+
+test("프로젝트를 바꾸는 동안 고칠 수 없고, 끝나면 다시 고칠 수 있다", () => {
+  const { container, rerender } = render(
+    <SqlEditor tabId="a" catalog={null} onDocChange={vi.fn()} />,
+  );
+  const view = editorView(container);
+  const editable = () => view.contentDOM.getAttribute("contenteditable");
+  expect(view.state.readOnly).toBe(false);
+  expect(editable()).toBe("true");
+
+  act(() => useProject.setState({ switching: true }));
+  expect(view.state.readOnly).toBe(true);
+  expect(editable()).toBe("false");
+
+  // 탭을 바꿔도 잠겨 있다.
+  rerender(<SqlEditor tabId="b" catalog={null} onDocChange={vi.fn()} />);
+  expect(view.state.readOnly).toBe(true);
+  expect(editable()).toBe("false");
+
+  act(() => useProject.setState({ switching: false }));
+  expect(view.state.readOnly).toBe(false);
+  expect(editable()).toBe("true");
 });

@@ -9,7 +9,13 @@ import {
   setDocumentState,
 } from "./documents";
 import { useEditorStatus } from "./editorStatus";
-import { editorFontCompartment, editorFontTheme } from "./extensions";
+import {
+  editorEditable,
+  editorEditableCompartment,
+  editorFontCompartment,
+  editorFontTheme,
+} from "./extensions";
+import { useProject } from "../project/projectStore";
 import { useSettings } from "../settings/settingsStore";
 
 interface SqlEditorProps {
@@ -27,6 +33,7 @@ export function SqlEditor({ tabId, catalog, onDocChange }: SqlEditorProps) {
   const shownTabRef = useRef(tabId);
   const onDocChangeRef = useRef(onDocChange);
   const { font, fontSize } = useSettings((s) => s.editor);
+  const switching = useProject((s) => s.switching);
   const fontTheme = useMemo(
     () => editorFontTheme(font, fontSize),
     [font, fontSize],
@@ -90,6 +97,19 @@ export function SqlEditor({ tabId, catalog, onDocChange }: SqlEditorProps) {
     if (editorFontCompartment.get(view.state) === fontTheme) return;
     view.dispatch({ effects: editorFontCompartment.reconfigure(fontTheme) });
   }, [fontTheme, tabId]);
+
+  // 프로젝트를 바꾸는 동안은 고칠 수 없다. 탭마다 state가 따로이므로 탭을 바꾼 뒤에도 넣는다.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) return;
+    const editable = view.state.facet(EditorView.editable);
+    if (editable === !switching) return;
+    view.dispatch({
+      effects: editorEditableCompartment.reconfigure(
+        editorEditable(!switching),
+      ),
+    });
+  }, [switching, tabId]);
 
   return <div ref={parentRef} className="h-full" />;
 }

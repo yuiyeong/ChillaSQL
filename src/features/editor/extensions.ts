@@ -18,7 +18,7 @@ import {
   syntaxHighlighting,
 } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-import { Compartment, type Extension } from "@codemirror/state";
+import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -186,6 +186,16 @@ export function editorFontTheme(font: string, size: number): Extension {
 /** 문서마다 state가 따로이므로 설정의 글꼴은 `SqlEditor`가 이 compartment에 넣는다. */
 export const editorFontCompartment = new Compartment();
 
+/**
+ * 고칠 수 있는가. 문서마다 state가 따로이므로 `SqlEditor`가 이 compartment에 넣는다. 프로젝트를
+ * 바꾸는 동안은 잠근다.
+ */
+export const editorEditableCompartment = new Compartment();
+
+export function editorEditable(editable: boolean): Extension {
+  return [EditorView.editable.of(editable), EditorState.readOnly.of(!editable)];
+}
+
 /** 문법 색. 테스트가 이 style의 rule을 읽는다. */
 export const syntaxStyle = HighlightStyle.define([
   { tag: tags.keyword, color: color("syntax-keyword") },
@@ -300,6 +310,7 @@ const extensions: Extension = [
   runMarksField,
   editorTheme,
   editorFontCompartment.of(editorFontTheme("D2Coding", 15)),
+  editorEditableCompartment.of(editorEditable(true)),
   syntaxHighlighting(syntaxStyle),
 ];
 
