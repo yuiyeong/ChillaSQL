@@ -83,7 +83,7 @@ export const statementSpansPlugin = ViewPlugin.fromClass(
       const doc = this.view.state.doc;
       let spans: StatementSpan[] | null;
       try {
-        spans = await splitStatements(doc.toString());
+        spans = (await splitStatements(doc.toString())) ?? null;
       } catch (error) {
         // 나눌 수 없는 문서만 spans를 비운다. 그 밖의 오류는 옮긴 span을 그대로 둔다.
         if (!isCommandError(error, "split_failed")) return;

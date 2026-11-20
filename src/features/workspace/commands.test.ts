@@ -27,6 +27,7 @@ import type {
   TxStatus,
 } from "../../shared/api/types";
 import {
+  closeDocument,
   documentState,
   openDocument,
   setDocumentState,
@@ -265,6 +266,43 @@ test("문장을 나누는 동안 탭을 닫으면 실행하지 않는다", async
 
   expect(openSession).not.toHaveBeenCalled();
   expect(runOf(id)).toBeUndefined();
+});
+
+test("문장을 나누는 동안 문서가 닫혀도 문서를 다시 읽지 않는다", async () => {
+  const split = deferred<{ start: number; end: number }[]>();
+  vi.mocked(splitStatements).mockReturnValue(split.promise);
+  const id = tabWith("SELECT 1");
+
+  const running = execute("run");
+  closeDocument(id);
+  split.resolve([{ start: 0, end: 8 }]);
+  await running;
+
+  // 탭을 닫는 경로는 release가 실행을 버린다. 여기서는 문서를 다시 읽다 던지지 않는지만 본다.
+  expect(runOf(id)).not.toMatchObject({
+    rejection: { title: expect.stringContaining("No open document") },
+  });
+});
+
+test("문장을 나누는 동안 문서를 고쳐도 나누기 전 문서로 고른다", async () => {
+  const split = deferred<{ start: number; end: number }[]>();
+  vi.mocked(splitStatements).mockReturnValue(split.promise);
+  const id = tabWith("SELECT 1");
+
+  const running = execute("run");
+  setDocumentState(
+    id,
+    documentState(id).update({ changes: { from: 0, insert: "-- c\n" } }).state,
+  );
+  split.resolve([{ start: 0, end: 8 }]);
+  await running;
+
+  expect(executeQuery).toHaveBeenCalledWith(
+    expect.anything(),
+    "SELECT 1",
+    "auto",
+    expect.any(Function),
+  );
 });
 
 test("문장을 나누는 동안 접속을 바꾸면 실행하지 않는다", async () => {

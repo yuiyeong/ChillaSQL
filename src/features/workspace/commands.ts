@@ -14,11 +14,7 @@ import type {
 import { quoteIdent } from "../../shared/sql/identifiers";
 import { targetChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
-import {
-  documentSelection,
-  documentState,
-  documentText,
-} from "../editor/documents";
+import { documentState } from "../editor/documents";
 import { showEditorNotice } from "../editor/editorNotice";
 import { reformatDocument } from "../editor/reformat";
 import { saveTab } from "../editor/saveTab";
@@ -60,8 +56,10 @@ function findTab(tabId: string) {
 async function statementToRun(
   tabId: string,
 ): Promise<{ sql: string; origin: Origin } | Rejection> {
-  const text = documentText(tabId);
-  const { from, to, head } = documentSelection(tabId);
+  // 나누는 동안 문서가 바뀌거나 닫혀도 text, span, 커서가 한 snapshot에서 나오게 한 번만 읽는다.
+  const state = documentState(tabId);
+  const text = state.doc.toString();
+  const { from, to, head } = state.selection.main;
   if (from !== to) {
     const sql = text.slice(from, to);
     if (sql.trim() === "") {
@@ -71,7 +69,7 @@ async function statementToRun(
   }
 
   // 문서에 둔 span이 지금 문서에 맞으면 다시 나누지 않는다.
-  const cached = documentState(tabId).field(statementSpansField, false);
+  const cached = state.field(statementSpansField, false);
   let spans;
   if (cached?.fresh && cached.spans !== null) {
     spans = cached.spans;
@@ -88,7 +86,7 @@ async function statementToRun(
       return { title: messageOf(error), detail: null };
     }
   }
-  const span = statementAt(documentState(tabId).doc, spans, head);
+  const span = statementAt(state.doc, spans, head);
   if (span === null) {
     return { title: t("run.noStatementAtCursor"), detail: null };
   }

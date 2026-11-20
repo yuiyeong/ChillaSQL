@@ -4,6 +4,12 @@ import { act, render } from "@testing-library/react";
 import { startCompletion } from "@codemirror/autocomplete";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+vi.mock("../../shared/api/commands");
+
+import { splitStatements } from "../../shared/api/commands";
+import type { StatementSpan } from "../../shared/api/types";
+import { deferred } from "../../test/deferred";
+import { statementSpansField } from "./statementSpans";
 import {
   closeDocument,
   documentSelection,
@@ -17,6 +23,7 @@ import { documentState } from "./documents";
 import { catalogFixture } from "../../test/fixtures";
 
 beforeEach(() => {
+  vi.mocked(splitStatements).mockReset();
   useEditorStatus.setState(useEditorStatus.getInitialState(), true);
   openDocument("a", "SELECT 1");
   openDocument("b", "SELECT 2");
@@ -223,4 +230,28 @@ test("footer_stays_below_the_list_when_options_change", async () => {
   );
   expect(popup()!.querySelectorAll(".cm-completionFooter")).toHaveLength(1);
   closeDocument("d");
+});
+
+test("나누는 동안 탭을 바꾸면 그 결과는 버리고 새로 보이는 탭을 나눈다", async () => {
+  const late = deferred<StatementSpan[]>();
+  vi.mocked(splitStatements).mockReturnValueOnce(late.promise);
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
+  const { container, rerender } = render(
+    <SqlEditor tabId="a" catalog={null} onDocChange={vi.fn()} />,
+  );
+  const view = editorView(container);
+
+  await act(async () => {
+    rerender(<SqlEditor tabId="b" catalog={null} onDocChange={vi.fn()} />);
+  });
+  await act(async () => {
+    late.resolve([{ start: 0, end: 1 }]);
+  });
+
+  expect(splitStatements).toHaveBeenLastCalledWith("SELECT 2");
+  expect(view.state.field(statementSpansField)).toEqual({
+    spans: [{ start: 0, end: 8 }],
+    fresh: true,
+  });
+  expect(documentState("a").field(statementSpansField).fresh).toBe(false);
 });
