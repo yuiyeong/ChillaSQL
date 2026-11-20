@@ -662,6 +662,40 @@ test("프로젝트를 바꾸면 탭과 실행 상태를 비운다", async () => 
   expect(closeSession).toHaveBeenCalledWith(3);
 });
 
+test("switch_project_with_a_dir_skips_the_picker", async () => {
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+
+  await switchProject("/q");
+
+  expect(pickDirectory).not.toHaveBeenCalled();
+  expect(openProject).toHaveBeenCalledWith("/q");
+  expect(useProject.getState().project?.dir).toBe("/q");
+});
+
+test("switch_project_with_a_dir_still_asks_about_unsaved_tabs", async () => {
+  useSettings.setState({ storeAvailable: false });
+  await reopenTabs();
+  const id = tabWith("SELECT 1");
+  useTabs.getState().markDirty(id);
+
+  const switching = switchProject("/q");
+  await answerDialog("cancel");
+  await switching;
+
+  expect(openProject).not.toHaveBeenCalled();
+  expect(pickDirectory).not.toHaveBeenCalled();
+});
+
+test("the_open_project_command_opens_the_folder_picker", async () => {
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+
+  await execute("openProject");
+
+  expect(pickDirectory).toHaveBeenCalledTimes(1);
+  expect(openProject).toHaveBeenCalledWith("/q");
+});
+
 test("세션을 닫지 못해도 프로젝트를 바꾼다", async () => {
   vi.mocked(closeSession).mockRejectedValue(
     new CommandError("unknown_session", "세션이 없습니다"),

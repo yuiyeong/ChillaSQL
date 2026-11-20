@@ -138,13 +138,21 @@ export const ko: Record<MessageKey, string> = {
   "run.splitFailed.detail":
     "닫히지 않은 따옴표 때문에 문장을 나눌 수 없습니다. 실행할 부분을 선택하면 그대로 보냅니다.",
 
-  "project.open": "프로젝트 열기…",
-  "project.missing": "{dir}에 chilla.toml이 없습니다",
+  "project.openShortcut": "프로젝트 열기…",
+  "project.recent": "최근 프로젝트",
+  "project.recentShort": "최근",
+  "project.missingTitle": "{dir}에 chilla.toml이 없습니다",
+  "project.missingBody":
+    "[project]만 있는 chilla.toml을 만들어 이 폴더를 프로젝트로 엽니다. 접속은 연 뒤에 추가하십시오.",
   "project.create": "chilla.toml 만들기",
   "project.chooseAnother": "다른 폴더 선택…",
+  "when.justNow": "방금",
+  "when.today": "오늘",
+  "when.yesterday": "어제",
 
   "sidebar.label": "사이드바",
   "sidebar.switchProject": "프로젝트 바꾸기",
+  "sidebar.projects": "프로젝트",
   "sidebar.connections": "접속",
   "sidebar.edit": "{name} 접속 편집",
   "sidebar.tunnel": "터널",

@@ -24,7 +24,6 @@ import {
   applySavedProjectKeepingSessions,
   closeTab,
   execute,
-  switchProject,
 } from "./commands";
 import { documentChanged, startAutosave } from "./autosave";
 import { useShortcuts } from "./shortcuts";
@@ -137,7 +136,6 @@ export function Workspace() {
                 onOpenFile={(path) => void openFile(path)}
                 onAddConnection={() => setForm({ original: null })}
                 onEditConnection={editConnection}
-                onSwitchProject={() => void switchProject()}
                 onChooseConnection={() => setConnectionMenu(true)}
               />
             </div>

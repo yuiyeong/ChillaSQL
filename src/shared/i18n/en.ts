@@ -137,13 +137,21 @@ export const en = {
   "run.splitFailed.detail":
     "An unclosed quote keeps the text from being split into statements. Select what to run and it is sent as is.",
 
-  "project.open": "Open Project…",
-  "project.missing": "{dir} has no chilla.toml",
+  "project.openShortcut": "Open Project…",
+  "project.recent": "Recent Projects",
+  "project.recentShort": "Recent",
+  "project.missingTitle": "{dir} has no chilla.toml",
+  "project.missingBody":
+    "Create a chilla.toml with only [project] and open the folder as a project. Add connections after it opens.",
   "project.create": "Create chilla.toml",
   "project.chooseAnother": "Choose another folder…",
+  "when.justNow": "Just now",
+  "when.today": "Today",
+  "when.yesterday": "Yesterday",
 
   "sidebar.label": "Sidebar",
   "sidebar.switchProject": "Switch project",
+  "sidebar.projects": "Projects",
   "sidebar.connections": "Connections",
   "sidebar.edit": "Edit connection {name}",
   "sidebar.tunnel": "Tunnel",

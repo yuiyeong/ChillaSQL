@@ -1,5 +1,4 @@
-import { useEffect, useId, useMemo, useState } from "react";
-import { homeDir } from "../../shared/api/path";
+import { useId, useMemo, useRef, useState } from "react";
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { connectionTarget } from "../connections/connectionTarget";
 import { ReadOnlyLock } from "../connections/ReadOnlyLock";
@@ -21,7 +20,9 @@ import {
   shortenHome,
   type TreeNode,
 } from "./fileTree";
+import { ProjectMenu } from "./ProjectMenu";
 import { useProject } from "./projectStore";
+import { useHome } from "./recent";
 import { SchemaView } from "../schema/SchemaView";
 import { t } from "../../shared/i18n/t";
 
@@ -59,13 +60,11 @@ export function Sidebar({
   onOpenFile,
   onAddConnection,
   onEditConnection,
-  onSwitchProject,
   onChooseConnection,
 }: {
   onOpenFile(path: string): void;
   onAddConnection(): void;
   onEditConnection(name: string): void;
-  onSwitchProject(): void;
   /** Schema 화면의 Choose connection. toolbar의 접속 menu를 연다. */
   onChooseConnection(): void;
 }) {
@@ -76,24 +75,11 @@ export function Sidebar({
   const activeId = useTabs((s) => s.activeId);
   const nameId = useId();
   const dirId = useId();
-  const [home, setHome] = useState<string | null>(null);
+  const home = useHome();
+  const projectButton = useRef<HTMLButtonElement>(null);
+  const [projectMenu, setProjectMenu] = useState(false);
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(new Set());
   const [view, setView] = useState<View>("files");
-
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      try {
-        const dir = await homeDir();
-        if (live) setHome(dir);
-      } catch {
-        // home을 모르면 전체 경로를 그대로 보여 준다.
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
 
   const tree = useMemo(() => buildTree(files), [files]);
   const rows = useMemo(() => visibleRows(tree, collapsed), [tree, collapsed]);
@@ -132,11 +118,14 @@ export function Sidebar({
 
       <div className="px-2.5 pt-0.5 pb-3">
         <button
+          ref={projectButton}
           type="button"
           aria-label={t("sidebar.switchProject")}
           aria-describedby={`${nameId} ${dirId}`}
+          aria-haspopup="menu"
+          aria-expanded={projectMenu}
           className="border-line-1 bg-bg-1 focus-visible:outline-accent flex w-full cursor-pointer items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left focus-visible:outline-2"
-          onClick={onSwitchProject}
+          onClick={() => setProjectMenu((open) => !open)}
         >
           <span
             aria-hidden="true"
@@ -154,6 +143,12 @@ export function Sidebar({
           </span>
           <SwitchIcon className="text-fg-2 shrink-0" />
         </button>
+        {projectMenu && (
+          <ProjectMenu
+            anchor={projectButton}
+            onClose={() => setProjectMenu(false)}
+          />
+        )}
       </div>
 
       <section

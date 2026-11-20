@@ -65,6 +65,16 @@ test("표의 key마다 command를 고른다", () => {
   expect(commandFor(key("KeyZ", optShiftCmd))).toBe("rollback");
 });
 
+test("cmd_o_is_open_project", () => {
+  expect(commandFor(key("KeyO", cmd))).toBe("openProject");
+  expect(commandFor(key("KeyO", cmd, { key: "ㅐ" }))).toBe("openProject");
+  expect(commandFor(key("KeyO", shiftCmd))).toBeNull();
+  expect(commandFor(key("KeyO", { metaKey: true, altKey: true }))).toBeNull();
+  expect(commandFor(key("KeyO"))).toBeNull();
+  expect(shortcutLabel("openProject")).toBe("⌘O");
+  expect(shortcutKeys("openProject")).toBe("Meta+O");
+});
+
 test("한글 입력 상태에서도 code로 command를 고른다", () => {
   expect(commandFor(key("KeyS", cmd, { key: "ㄴ" }))).toBe("save");
   expect(commandFor(key("KeyW", cmd, { key: "ㅈ" }))).toBe("closeTab");

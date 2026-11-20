@@ -11,8 +11,12 @@ vi.mock("./shared/api/path");
 
 import App from "./App";
 import { resetStores } from "./test/resetStores";
-import { LAST_PROJECT_KEY } from "./features/project/projectStore";
-import { listSqlFiles, loadSettings, openProject } from "./shared/api/commands";
+import {
+  listSqlFiles,
+  loadSettings,
+  openProject,
+  recentProjects,
+} from "./shared/api/commands";
 import { homeDir } from "./shared/api/path";
 import { ask } from "./shared/ui/dialogs";
 import { useSettings } from "./features/settings/settingsStore";
@@ -25,11 +29,18 @@ beforeEach(async () => {
   vi.resetAllMocks();
   vi.mocked(homeDir).mockResolvedValue("/Users/jo");
   vi.mocked(loadSettings).mockResolvedValue(settingsFixture());
-  localStorage.clear();
+  vi.mocked(recentProjects).mockResolvedValue([]);
 });
 
+/** 가장 최근 프로젝트가 `/p`다. */
+function recentIsP() {
+  vi.mocked(recentProjects).mockResolvedValue([
+    { dir: "/p", name: "demo", openedAt: 1_700_000_000 },
+  ]);
+}
+
 test("프로젝트가 열리면 작업 화면을 보여 준다", async () => {
-  localStorage.setItem(LAST_PROJECT_KEY, "/p");
+  recentIsP();
   vi.mocked(openProject).mockResolvedValue({
     name: "demo",
     dir: "/p",
@@ -69,7 +80,7 @@ test("프로젝트를 열기 전에도 확인 dialog를 그린다", async () => 
 });
 
 test("waits for settings before the project", async () => {
-  localStorage.setItem(LAST_PROJECT_KEY, "/p");
+  recentIsP();
   vi.mocked(openProject).mockRejectedValue(new Error("not reached"));
   const settings = deferred<Settings>();
   vi.mocked(loadSettings).mockReturnValue(settings.promise);

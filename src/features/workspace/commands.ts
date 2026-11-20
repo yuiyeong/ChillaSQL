@@ -55,7 +55,8 @@ export type CommandId =
   | "prevTab"
   | "commit"
   | "rollback"
-  | "reformat";
+  | "reformat"
+  | "openProject";
 
 function findTab(tabId: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === tabId);
@@ -212,10 +213,12 @@ function runSteps(
   );
 }
 
-/** 활성 탭에 대해 command를 실행한다. */
+/** command를 실행한다. 대부분은 활성 탭에 대해서이고, 탭이 없으면 아무것도 하지 않는다. */
 export async function execute(command: CommandId): Promise<void> {
   const tabs = useTabs.getState();
   switch (command) {
+    case "openProject":
+      return switchProject();
     case "newTab":
       tabs.newTab();
       return;
@@ -481,14 +484,16 @@ export function applySavedProjectKeepingSessions(project: Project): void {
 
 /**
  * 다른 프로젝트를 연다. 열린 트랜잭션을 묻고 폴더를 고른 뒤에야 고른 대로 끝낸다. 폴더를 고르지 않으면
- * 끝내지 않는다. 지금 탭을 옛 프로젝트에 보관하므로 저장하지 않은 변경은 묻지 않는다. 보관하지 못하면
+ * 끝내지 않는다. `dir`이 있으면(최근 프로젝트) 폴더 picker를 건너뛴다.
+ *
+ * 지금 탭을 옛 프로젝트에 보관하므로 저장하지 않은 변경은 묻지 않는다. 보관하지 못하면
  * (앱 저장소가 없거나, 이 프로젝트의 탭을 읽지 못했거나, 저장이 실패하면) 버릴지 묻는다.
  *
  * Rollback은 보내지 않는다. 프로젝트가 열리면 Rust가 옛 세션을 닫아 서버가 되돌리고, 열지 못하면
  * 트랜잭션이 그대로 남는다. Commit은 세션이 닫히기 전, 열기 전에 보낸다. 그래서 Commit한 뒤에
  * 프로젝트를 열지 못하면 Commit만 된 채 남는다.
  */
-export async function switchProject(): Promise<void> {
+export async function switchProject(dir?: string): Promise<void> {
   const settlement = await chooseSettlement(
     useTabs.getState().tabs.map((tab) => tab.id),
     "switchProject",
@@ -496,19 +501,19 @@ export async function switchProject(): Promise<void> {
   if (settlement === null) return;
   // 기다리던 저장을 옛 프로젝트에 끝낸다.
   if (!(await flushAutosave()) && !(await confirmDiscard())) return;
-  let dir: string | null;
+  let target: string | null;
   try {
-    dir = await pickDirectory();
+    target = dir ?? (await pickDirectory());
   } catch (error) {
     useProject.getState().showError(messageOf(error));
     return;
   }
-  if (dir === null) return;
+  if (target === null) return;
   // 프로젝트를 열면 Rust가 옛 세션을 닫으므로 Commit은 그 전에 보낸다.
   if (settlement.end === "commit" && !(await applySettlement(settlement))) {
     return;
   }
-  await enterProject(() => useProject.getState().open(dir));
+  await enterProject(() => useProject.getState().open(target));
 }
 
 /**

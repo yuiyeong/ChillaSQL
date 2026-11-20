@@ -3,11 +3,14 @@ import {
   createProject,
   listSqlFiles,
   openProject,
+  recentProjects,
 } from "../../shared/api/commands";
 import { isCommandError, messageOf } from "../../shared/api/errors";
-import type { Connection, Project } from "../../shared/api/types";
-
-export const LAST_PROJECT_KEY = "chilla.lastProjectDir";
+import type {
+  Connection,
+  Project,
+  RecentProject,
+} from "../../shared/api/types";
 
 export type ProjectStatus = "booting" | "none" | "missing" | "ready";
 
@@ -23,10 +26,19 @@ export interface ProjectState {
    * 프로젝트를 열면 비운다.
    */
   unapplied: Record<string, Connection>;
-  /** 마지막 디렉토리를 연다. 열렸으면 true */
+  /** 최근에 연 프로젝트. 최근 것부터 최대 10개다. 앱 저장소가 없으면 비어 있다. */
+  recent: RecentProject[];
+  /** Rust에서 최근 프로젝트를 다시 읽는다. 읽지 못하면(앱 저장소가 없으면) 비운다. */
+  refreshRecent(): Promise<void>;
+  /** 가장 최근 프로젝트를 연다. 열렸으면 true. 없거나 열지 못하면 "none"(Welcome)이고 true가 아니다. */
   boot(): Promise<boolean>;
-  /** 열렸으면 true */
-  open(dir: string): Promise<boolean>;
+  /**
+   * 열렸으면 true. chilla.toml이 없고 열린 프로젝트도 없으면 `askToCreate`일 때 "missing"(만들지 묻는
+   * sheet)이다. 목록에서 연 디렉토리는 `askToCreate`를 false로 두어 오류만 보인다.
+   */
+  open(dir: string, askToCreate?: boolean): Promise<boolean>;
+  /** "missing"의 sheet를 닫고 Welcome으로 돌아간다. */
+  dismissMissing(): void;
   create(dir: string): Promise<boolean>;
   /** 접속을 저장한 뒤. `unapplied`를 함께 바꾼다(없으면 비운다). */
   applyProject(project: Project, unapplied?: Record<string, Connection>): void;
@@ -34,22 +46,6 @@ export interface ProjectState {
   /** 프로젝트를 열기 전에 실패한 일(디렉토리 고르기)을 알린다. */
   showError(message: string): void;
   clearError(): void;
-}
-
-function readLastDir(): string | null {
-  try {
-    return localStorage.getItem(LAST_PROJECT_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeLastDir(dir: string): void {
-  try {
-    localStorage.setItem(LAST_PROJECT_KEY, dir);
-  } catch {
-    // 기억하지 못할 뿐이다. 프로젝트는 열린다.
-  }
 }
 
 export const useProject = create<ProjectState>()((set, get) => {
@@ -71,7 +67,8 @@ export const useProject = create<ProjectState>()((set, get) => {
         get().project === null &&
         isCommandError(error, "project_not_found")
       ) {
-        set({ status: "missing", missingDir, error: message });
+        // 오류는 만들기가 실패했을 때만 sheet에 보인다.
+        set({ status: "missing", missingDir, error: null });
       } else {
         set({ error: message });
       }
@@ -86,31 +83,47 @@ export const useProject = create<ProjectState>()((set, get) => {
       missingDir: null,
       unapplied: {},
     });
-    writeLastDir(project.dir);
     void get().refreshFiles();
+    void get().refreshRecent();
     return true;
   }
 
   return {
     status: "booting",
     project: null,
+    recent: [],
     files: [],
     error: null,
     missingDir: null,
     unapplied: {},
 
+    async refreshRecent() {
+      try {
+        set({ recent: await recentProjects() });
+      } catch {
+        // 앱 저장소가 없다(store_unavailable). 최근 프로젝트 없이 쓴다.
+        set({ recent: [] });
+      }
+    },
+
     async boot() {
-      const dir = readLastDir();
-      if (dir === null) {
+      await get().refreshRecent();
+      const latest = get().recent[0];
+      if (latest === undefined) {
         set({ status: "none" });
         return false;
       }
-      if (await enter(() => openProject(dir))) return true;
+      if (await enter(() => openProject(latest.dir))) return true;
       set({ status: "none" });
       return false;
     },
 
-    open: (dir) => enter(() => openProject(dir), dir),
+    open: (dir, askToCreate = true) =>
+      enter(() => openProject(dir), askToCreate ? dir : undefined),
+
+    dismissMissing() {
+      set({ status: "none", missingDir: null, error: null });
+    },
 
     create: (dir) => enter(() => createProject(dir)),
 

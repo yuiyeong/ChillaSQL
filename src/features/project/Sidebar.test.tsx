@@ -35,7 +35,6 @@ function handlers() {
     onOpenFile: vi.fn(),
     onAddConnection: vi.fn(),
     onEditConnection: vi.fn(),
-    onSwitchProject: vi.fn(),
     onChooseConnection: vi.fn(),
   };
 }
@@ -47,16 +46,23 @@ async function renderSidebar(h = handlers()) {
   return h;
 }
 
-test("프로젝트 버튼은 이니셜, 이름, 줄인 경로를 보여 주고 onSwitchProject를 부른다", async () => {
-  const h = await renderSidebar();
+test("프로젝트 버튼은 이니셜, 이름, 줄인 경로를 보여 주고 최근 프로젝트 menu를 연다", async () => {
+  await renderSidebar();
 
   const button = screen.getByRole("button", { name: "Switch project" });
   expect(within(button).getByText("CD")).toBeInTheDocument();
   expect(within(button).getByText("chilla-demo")).toBeInTheDocument();
   expect(within(button).getByText("~/work/chilla-demo")).toBeInTheDocument();
 
+  expect(button).toHaveAttribute("aria-expanded", "false");
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+
   await click(button);
-  expect(h.onSwitchProject).toHaveBeenCalledTimes(1);
+  expect(button).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByRole("menu", { name: "Projects" })).toBeInTheDocument();
+
+  await click(button);
+  expect(screen.queryByRole("menu")).not.toBeInTheDocument();
 });
 
 test("프로젝트 button의 설명에 이름과 경로가 들어 있다", async () => {
