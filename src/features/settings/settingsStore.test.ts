@@ -32,6 +32,7 @@ test("load sets the language", async () => {
   expect(state.editor).toEqual({ font: "Menlo", fontSize: 13 });
   expect(state.idleTimeoutSecs).toBe(120);
   expect(state.errors).toEqual([]);
+  expect(state.storeAvailable).toBe(true);
   expect(t("common.cancel")).toBe("취소");
 });
 
@@ -52,6 +53,7 @@ test("settings error is shown once", async () => {
     },
     { title: "settings.storeErrorTitle", reason: "database is locked" },
   ]);
+  expect(useSettings.getState().storeAvailable).toBe(false);
 
   useSettings.getState().dismissErrors();
 

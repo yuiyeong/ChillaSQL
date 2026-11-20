@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { pickDirectory } from "../../shared/api/dialog";
 import { messageOf } from "../../shared/api/errors";
+import { reopenTabs } from "../workspace/autosave";
 import { useProject } from "./projectStore";
 import { Button } from "../../shared/ui/Button";
 import { ErrorIcon } from "../../shared/ui/icons";
@@ -23,6 +24,15 @@ export function ProjectGate({ children }: { children: React.ReactNode }) {
     booted.current = true;
     void boot();
   }, [boot]);
+
+  // 처음 연 프로젝트(마지막 프로젝트, 고른 폴더, 만든 프로젝트)의 탭을 되살린다. 프로젝트를 바꿀
+  // 때는 switchProject가 되살린다.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (status !== "ready" || restored.current) return;
+    restored.current = true;
+    void reopenTabs();
+  }, [status]);
 
   async function pickAndOpen() {
     let dir: string | null;

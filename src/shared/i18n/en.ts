@@ -59,11 +59,6 @@ export const en = {
   "dialog.closeTab.title": "Save changes to {title}?",
   "dialog.closeTab.body": "Your changes will be lost if you don't save them.",
   "dialog.closeTab.discard": "Don't save",
-  "dialog.switchProject.title.one": "1 tab has unsaved changes",
-  "dialog.switchProject.title.other": "{count} tabs have unsaved changes",
-  "dialog.switchProject.note":
-    "Switching projects discards these changes and closes every tab's session.",
-  "dialog.switchProject.confirm": "Switch without saving",
   "dialog.tx.oneTab.title": "This tab has an open transaction",
   "dialog.tx.close.body":
     "Closing {title} closes the {connection} session. {question}",
@@ -315,6 +310,8 @@ export const en = {
   "toast.copiedRows.one": "Copied 1 row (tab-separated)",
   "toast.copiedRows.other": "Copied {count} rows (tab-separated)",
   "toast.reformatFailed": "Couldn't reformat: {reason}",
+  "autosave.skipped.one": "Couldn't reopen {path}",
+  "autosave.skipped.other": "Couldn't reopen {count} files",
 
   "settings.errorTitle": "Settings were not applied",
   "settings.storeErrorTitle": "Recent projects and unsaved tabs are not kept",

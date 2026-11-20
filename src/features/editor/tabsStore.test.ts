@@ -6,7 +6,7 @@ vi.mock("../../shared/api/dialog");
 import { readSqlFile } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
 import { documentText } from "./documents";
-import { useTabs } from "./tabsStore";
+import { useTabs, type RestoredTab } from "./tabsStore";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -227,4 +227,61 @@ test("new_tab_can_start_with_text", () => {
   const id = useTabs.getState().newTab({ text: "SELECT 1" });
   expect(documentText(id)).toBe("SELECT 1");
   expect(useTabs.getState().activeId).toBe(id);
+});
+
+function restored(patch: Partial<RestoredTab> = {}): RestoredTab {
+  return {
+    title: "Query 1",
+    path: null,
+    stamp: null,
+    dirty: false,
+    connection: null,
+    mode: "auto",
+    text: "",
+    ...patch,
+  };
+}
+
+test("restore_tabs_opens_each_document_and_activates_the_given_tab", () => {
+  useTabs
+    .getState()
+    .restoreTabs(
+      [
+        restored({ title: "a.sql", path: "a.sql", stamp: "s1", text: "A" }),
+        restored({ title: "Query 2", dirty: true, text: "B", mode: "manual" }),
+      ],
+      1,
+    );
+
+  const { tabs, activeId } = useTabs.getState();
+  expect(tabs).toMatchObject([
+    { title: "a.sql", path: "a.sql", stamp: "s1", dirty: false, mode: "auto" },
+    { title: "Query 2", path: null, dirty: true, mode: "manual" },
+  ]);
+  expect(activeId).toBe(tabs[1].id);
+  expect(tabs.map((tab) => documentText(tab.id))).toEqual(["A", "B"]);
+});
+
+test("restore_tabs_without_an_active_tab_activates_the_first", () => {
+  useTabs.getState().restoreTabs([restored(), restored()], null);
+
+  const { tabs, activeId } = useTabs.getState();
+  expect(activeId).toBe(tabs[0].id);
+});
+
+test("new_tab_titles_continue_after_restored_untitled_tabs", () => {
+  useTabs
+    .getState()
+    .restoreTabs(
+      [
+        restored({ title: "Query 7", path: "Query 9" }),
+        restored({ title: "Query 3" }),
+        restored({ title: "Query x" }),
+      ],
+      0,
+    );
+
+  useTabs.getState().newTab();
+
+  expect(useTabs.getState().tabs[3].title).toBe("Query 4");
 });

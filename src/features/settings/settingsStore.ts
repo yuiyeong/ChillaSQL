@@ -17,6 +17,8 @@ export interface SettingsState {
   idleTimeoutSecs: number;
   /** 설정 파일이나 앱 저장소의 오류. 첫 화면이 한 번 보이고 지운다. */
   errors: SettingsError[];
+  /** 앱 저장소를 열었는가. 열지 못했으면 탭을 보관하거나 되살리지 않는다. */
+  storeAvailable: boolean;
   /** 설정을 읽고 그 언어를 `t`에 고른 뒤 "ready"가 된다. */
   load(): Promise<void>;
   dismissErrors(): void;
@@ -28,6 +30,7 @@ export const useSettings = create<SettingsState>()((set) => ({
   editor: { font: "D2Coding", fontSize: 15 },
   idleTimeoutSecs: 600,
   errors: [],
+  storeAvailable: true,
 
   async load() {
     try {
@@ -47,6 +50,7 @@ export const useSettings = create<SettingsState>()((set) => ({
         editor: settings.editor,
         idleTimeoutSecs: settings.idleTimeoutSecs,
         errors,
+        storeAvailable: settings.storeError === null,
       });
     } catch (error) {
       // 설정을 받지 못해도 기본값으로 시작한다.

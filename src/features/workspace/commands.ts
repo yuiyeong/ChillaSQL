@@ -34,8 +34,9 @@ import { endable, useRuns, type ConfirmStep } from "../query/runsStore";
 import { useTypes } from "../query/typesStore";
 import { useSchema } from "../schema/schemaStore";
 import { mono, rt } from "../../shared/i18n/rich";
-import { t, tc } from "../../shared/i18n/t";
+import { t } from "../../shared/i18n/t";
 import { ask } from "../../shared/ui/dialogs";
+import { flushAutosave, reopenTabs } from "./autosave";
 import { confirmDanger } from "./dangerPrompt";
 import {
   applySettlement,
@@ -479,8 +480,9 @@ export function applySavedProjectKeepingSessions(project: Project): void {
 }
 
 /**
- * 다른 프로젝트를 연다. 열리면 탭과 실행 상태를 비운다. 열린 트랜잭션을 묻고, 저장하지 않은 변경을
- * 묻고, 폴더를 고른 뒤에야 고른 대로 끝낸다. 폴더를 고르지 않으면 끝내지 않는다.
+ * 다른 프로젝트를 연다. 열리면 탭과 실행 상태를 비우고 그 프로젝트에 보관한 탭을 되살린다. 열린
+ * 트랜잭션을 묻고 폴더를 고른 뒤에야 고른 대로 끝낸다. 폴더를 고르지 않으면 끝내지 않는다. 저장하지
+ * 않은 변경은 묻지 않는다. 열기 전에 지금 탭을 옛 프로젝트에 보관하기 때문이다.
  *
  * Rollback은 보내지 않는다. 프로젝트가 열리면 Rust가 옛 세션을 닫아 서버가 되돌리고, 열지 못하면
  * 트랜잭션이 그대로 남는다. Commit은 세션이 닫히기 전, 열기 전에 보낸다. 그래서 Commit한 뒤에
@@ -494,7 +496,7 @@ export async function switchProject(): Promise<void> {
   if (settlement === null) return;
   let dir: string | null;
   try {
-    dir = await askProjectDir();
+    dir = await pickDirectory();
   } catch (error) {
     useProject.getState().showError(messageOf(error));
     return;
@@ -504,6 +506,8 @@ export async function switchProject(): Promise<void> {
   if (settlement.end === "commit" && !(await applySettlement(settlement))) {
     return;
   }
+  // 기다리던 저장이 옛 프로젝트에 끝난 뒤에 연다.
+  await flushAutosave();
   if (!(await useProject.getState().open(dir))) return;
 
   // 옛 프로젝트의 세션은 Rust가 이미 닫았으므로 그 close는 실패하고 무시된다.
@@ -514,23 +518,5 @@ export async function switchProject(): Promise<void> {
   // 옛 프로젝트의 catalog 연결도 Rust가 이미 닫았다.
   useSchema.getState().reset();
   useTypes.getState().reset();
-  await closing;
-}
-
-/** dirty 탭이 있으면 버릴지 묻고 디렉토리를 고르게 한다. 그만두면 null이다. */
-async function askProjectDir(): Promise<string | null> {
-  const dirty = useTabs.getState().tabs.filter((tab) => tab.dirty);
-  if (dirty.length > 0) {
-    const choice = await ask({
-      title: tc("dialog.switchProject.title", dirty.length),
-      items: dirty.map((tab) => ({ primary: tab.title, secondary: null })),
-      note: t("dialog.switchProject.note"),
-      actions: [
-        { id: "cancel", label: t("common.cancel") },
-        { id: "switch", label: t("dialog.switchProject.confirm") },
-      ],
-    });
-    if (choice !== "switch") return null;
-  }
-  return pickDirectory();
+  await Promise.all([closing, reopenTabs()]);
 }

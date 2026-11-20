@@ -3,7 +3,7 @@ import { readSqlFile } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
 import type { TxMode } from "../../shared/api/types";
 import { closeDocument, openDocument } from "./documents";
-import { t } from "../../shared/i18n/t";
+import { t, template } from "../../shared/i18n/t";
 
 export interface Tab {
   id: string;
@@ -16,6 +16,9 @@ export interface Tab {
   /** 트랜잭션 모드. 새 탭은 auto다. 접속을 바꿔도 그대로다. */
   mode: TxMode;
 }
+
+/** 되살릴 탭. 문서 text를 함께 갖는다. */
+export type RestoredTab = Omit<Tab, "id"> & { text: string };
 
 export interface TabsState {
   tabs: Tab[];
@@ -35,6 +38,11 @@ export interface TabsState {
   /** 다음 실행부터 그 모드로 보낸다. 확인은 부르는 쪽이 한다. */
   setMode(id: string, mode: TxMode): void;
   markDirty(id: string): void;
+  /**
+   * 보관한 탭을 그 순서대로 지금 탭 앞에 연다. `active`번째 탭이 활성이 되고, null이면 지금 활성
+   * 탭(없으면 첫 탭)이 그대로다. 새 탭 제목 번호는 되살린 이름 없는 탭의 번호 다음부터다.
+   */
+  restoreTabs(tabs: RestoredTab[], active: number | null): void;
   /** 저장을 기록한다. 쓰는 동안 더 고쳤으면 `dirty`가 true다. */
   markSaved(id: string, path: string, stamp: string, dirty?: boolean): void;
   requestName(id: string | null): void;
@@ -58,6 +66,14 @@ export function selectActiveConnection(
 /** 그 탭의 트랜잭션 모드. 탭이 없으면 auto다. */
 export function modeOf(state: Pick<TabsState, "tabs">, id: string): TxMode {
   return state.tabs.find((tab) => tab.id === id)?.mode ?? "auto";
+}
+
+/** 새 탭의 기본 제목이면 그 번호. 아니면 null이다. */
+function defaultTitleNumber(title: string): number | null {
+  const [before, after = ""] = template("tabs.defaultTitle").split("{n}");
+  if (!title.startsWith(before) || !title.endsWith(after)) return null;
+  const digits = title.slice(before.length, title.length - after.length);
+  return /^\d+$/.test(digits) ? Number(digits) : null;
 }
 
 function updateTab(tabs: Tab[], id: string, patch: Partial<Tab>): Tab[] {
@@ -178,6 +194,26 @@ export const useTabs = create<TabsState>()((set, get) => {
       const tab = get().tabs.find((t) => t.id === id);
       if (tab === undefined || tab.dirty) return;
       set((state) => ({ tabs: updateTab(state.tabs, id, { dirty: true }) }));
+    },
+
+    restoreTabs(restored, active) {
+      const tabs = restored.map(({ text, ...rest }) => {
+        const id = crypto.randomUUID();
+        openDocument(id, text);
+        return { id, ...rest };
+      });
+      for (const tab of tabs) {
+        const n = tab.path === null ? defaultTitleNumber(tab.title) : null;
+        if (n !== null && n >= counter) counter = n + 1;
+      }
+      set((state) => ({
+        tabs: [...tabs, ...state.tabs],
+        activeId:
+          (active === null ? undefined : tabs[active]?.id) ??
+          state.activeId ??
+          tabs[0]?.id ??
+          null,
+      }));
     },
 
     markSaved(id, path, stamp, dirty = false) {

@@ -2,7 +2,11 @@ import { beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("../../shared/api/commands");
 
-import { quitApp } from "../../shared/api/commands";
+import {
+  loadWorkspace,
+  quitApp,
+  saveWorkspace,
+} from "../../shared/api/commands";
 import { useDialogs } from "../../shared/ui/dialogs";
 import { answerDialog, textOf } from "../../test/dialogs";
 import { connection } from "../../test/fixtures";
@@ -11,6 +15,7 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import type { TxInfo } from "../query/transaction";
+import { reopenTabs, startAutosave } from "./autosave";
 import { requestQuit } from "./quit";
 
 const NOW = 1_000_000_000;
@@ -142,4 +147,20 @@ test("a_second_quit_request_while_asking_is_ignored", async () => {
   await answerDialog("rollback");
   await again;
   expect(quitApp).toHaveBeenCalledTimes(1);
+});
+
+test("flushes_before_quit", async () => {
+  vi.mocked(loadWorkspace).mockResolvedValue(null);
+  vi.mocked(saveWorkspace).mockResolvedValue();
+  await reopenTabs();
+  const stop = startAutosave();
+  useTabs.getState().newTab({ text: "SELECT 1" });
+
+  await requestQuit();
+  stop();
+
+  expect(saveWorkspace).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(saveWorkspace).mock.invocationCallOrder[0]).toBeLessThan(
+    vi.mocked(quitApp).mock.invocationCallOrder[0],
+  );
 });

@@ -3,6 +3,7 @@ import { quitApp } from "../../shared/api/commands";
 import { onQuitRequested } from "../../shared/api/events";
 import { ask } from "../../shared/ui/dialogs";
 import { useTabs } from "../editor/tabsStore";
+import { flushAutosave } from "./autosave";
 import { manyTabsSpec, openTabs } from "./transactionPrompts";
 
 /** 묻는 중이면 true. 그 사이 온 종료 요청은 dialog를 쌓지 않고 버린다. */
@@ -10,6 +11,7 @@ let asking = false;
 
 /**
  * 앱 종료를 요청받았을 때 끝낸다. 열린 트랜잭션이 있으면 목록으로 묻고, Cancel이면 그대로 둔다.
+ * 끝내기 전에 기다리던 탭 보관을 마친다.
  * Rollback은 보내지 않는다. 세션이 닫히면 서버가 되돌린다.
  */
 export async function requestQuit(): Promise<void> {
@@ -23,6 +25,7 @@ export async function requestQuit(): Promise<void> {
     ) {
       return;
     }
+    await flushAutosave();
     await quitApp();
   } finally {
     asking = false;

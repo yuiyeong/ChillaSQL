@@ -13,10 +13,12 @@ vi.mock("../../shared/api/dialog");
 import {
   createProject,
   listSqlFiles,
+  loadWorkspace,
   openProject,
 } from "../../shared/api/commands";
 import { pickDirectory } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
+import { useTabs } from "../editor/tabsStore";
 import { LAST_PROJECT_KEY, useProject } from "./projectStore";
 import { ProjectGate } from "./ProjectGate";
 
@@ -169,4 +171,45 @@ test("디렉토리 고르기가 실패하면 오류를 보여 준다", async () 
     "창을 열 수 없습니다",
   );
   expect(openProject).not.toHaveBeenCalled();
+});
+
+test("the_first_opened_project_restores_its_tabs_once", async () => {
+  localStorage.setItem(LAST_PROJECT_KEY, "/p");
+  vi.mocked(openProject).mockResolvedValue({
+    name: "demo",
+    dir: "/p",
+    connections: [],
+  });
+  vi.mocked(loadWorkspace).mockResolvedValue(
+    JSON.stringify({
+      version: 1,
+      active: 0,
+      tabs: [
+        {
+          title: "Query 2",
+          path: null,
+          stamp: null,
+          connection: null,
+          mode: "auto",
+          text: "SELECT 2",
+        },
+      ],
+    }),
+  );
+
+  render(
+    <StrictMode>
+      <ProjectGate>
+        <p>작업 화면</p>
+      </ProjectGate>
+    </StrictMode>,
+  );
+
+  await waitFor(() =>
+    expect(useTabs.getState().tabs.map((tab) => tab.title)).toEqual([
+      "Query 2",
+    ]),
+  );
+  expect(loadWorkspace).toHaveBeenCalledTimes(1);
+  expect(loadWorkspace).toHaveBeenCalledWith("/p");
 });

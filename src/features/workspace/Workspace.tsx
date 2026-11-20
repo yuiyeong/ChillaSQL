@@ -26,6 +26,7 @@ import {
   execute,
   switchProject,
 } from "./commands";
+import { documentChanged, startAutosave } from "./autosave";
 import { useShortcuts } from "./shortcuts";
 import { StatusBar } from "./StatusBar";
 import { Toolbar } from "./Toolbar";
@@ -72,6 +73,9 @@ export function Workspace() {
   useShortcuts(form === null && !naming);
   useSchemaLifecycle();
 
+  // 탭과 문서가 바뀌면 1초 뒤 앱 저장소에 보관한다.
+  useEffect(() => startAutosave(), []);
+
   // 터널 상태 event를 받는다. 구독이 끝나기 전에 unmount되면 끝난 뒤 바로 그만 받는다.
   useEffect(() => {
     const subscribed = subscribeTunnelEvents();
@@ -106,6 +110,11 @@ export function Workspace() {
       connection: connection.name,
     });
     return settlement === null ? null : () => applySettlement(settlement);
+  }
+
+  function docChanged(tabId: string) {
+    markDirty(tabId);
+    documentChanged();
   }
 
   function nameTab(path: string) {
@@ -170,7 +179,7 @@ export function Workspace() {
                 <SqlEditor
                   tabId={activeId}
                   catalog={catalog}
-                  onDocChange={markDirty}
+                  onDocChange={docChanged}
                 />
               ) : (
                 <Hints />

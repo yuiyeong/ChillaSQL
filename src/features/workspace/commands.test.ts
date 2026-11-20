@@ -13,8 +13,10 @@ import {
   inspectStatement,
   listSqlFiles,
   loadCatalog,
+  loadWorkspace,
   openProject,
   openSession,
+  saveWorkspace,
   splitStatements,
   writeSqlFile,
 } from "../../shared/api/commands";
@@ -51,6 +53,7 @@ import {
   switchProject,
 } from "./commands";
 import { switchMode } from "./transactionPrompts";
+import { reopenTabs, startAutosave } from "./autosave";
 import { useTunnels } from "../connections/tunnelsStore";
 import { useDialogs } from "../../shared/ui/dialogs";
 import { answerDialog, textOf } from "../../test/dialogs";
@@ -672,44 +675,57 @@ test("세션을 닫지 못해도 프로젝트를 바꾼다", async () => {
   expect(useRuns.getState().runs).toEqual({});
 });
 
-test("dirty 탭이 있으면 프로젝트를 바꾸기 전에 묻는다", async () => {
-  const a = tabWith("SELECT 1");
-  const b = tabWith("SELECT 2");
-  tabWith("SELECT 3");
-  useTabs.getState().markDirty(a);
-  useTabs.getState().markDirty(b);
+test("switching_projects_flushes_and_does_not_ask_about_unsaved_tabs", async () => {
+  await reopenTabs();
+  const stop = startAutosave();
+  const id = tabWith("SELECT 1");
+  useTabs.getState().markDirty(id);
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
 
-  const switching = switchProject();
-  const spec = await answerDialog("cancel");
-  await switching;
+  await switchProject();
+  stop();
 
-  expect(textOf(spec.title)).toBe("2 tabs have unsaved changes");
-  expect(spec.items?.map((item) => item.primary)).toEqual([
-    "Query 1",
-    "Query 2",
-  ]);
-  expect(textOf(spec.note)).toBe(
-    "Switching projects discards these changes and closes every tab's session.",
+  expect(useDialogs.getState().current).toBeNull();
+  expect(saveWorkspace).toHaveBeenCalledTimes(1);
+  const [dir, text] = vi.mocked(saveWorkspace).mock.calls[0];
+  expect(dir).toBe("/p");
+  expect(JSON.parse(text).tabs[0].text).toBe("SELECT 1");
+  expect(vi.mocked(saveWorkspace).mock.invocationCallOrder[0]).toBeLessThan(
+    vi.mocked(openProject).mock.invocationCallOrder[0],
   );
-  expect(spec.actions.map(({ id, label }) => [id, label])).toEqual([
-    ["cancel", "Cancel"],
-    ["switch", "Switch without saving"],
-  ]);
-  expect(pickDirectory).not.toHaveBeenCalled();
-  expect(useTabs.getState().tabs).toHaveLength(3);
 });
 
-test("dirty 탭이 하나면 단수 제목으로 묻고 바꾸겠다고 하면 폴더를 고른다", async () => {
-  const a = tabWith("SELECT 1");
-  useTabs.getState().markDirty(a);
-  vi.mocked(pickDirectory).mockResolvedValue(null);
+test("opening_a_project_restores_its_tabs", async () => {
+  tabWith("SELECT 1");
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+  vi.mocked(loadWorkspace).mockResolvedValue(
+    JSON.stringify({
+      version: 1,
+      active: 0,
+      tabs: [
+        {
+          title: "Query 5",
+          path: null,
+          stamp: null,
+          connection: "local",
+          mode: "manual",
+          text: "SELECT 5",
+        },
+      ],
+    }),
+  );
 
-  const switching = switchProject();
-  const spec = await answerDialog("switch");
-  await switching;
+  await switchProject();
 
-  expect(textOf(spec.title)).toBe("1 tab has unsaved changes");
-  expect(pickDirectory).toHaveBeenCalledTimes(1);
+  expect(loadWorkspace).toHaveBeenCalledWith("/q");
+  const { tabs, activeId } = useTabs.getState();
+  expect(tabs).toMatchObject([
+    { title: "Query 5", connection: "local", mode: "manual", dirty: true },
+  ]);
+  expect(activeId).toBe(tabs[0].id);
+  expect(documentState(tabs[0].id).doc.toString()).toBe("SELECT 5");
 });
 
 test("save, cancel, newTab, nextTab, prevTab은 활성 탭에 한다", async () => {
@@ -1262,13 +1278,11 @@ test("switch_project_commits_only_after_a_folder_is_chosen", async () => {
   vi.mocked(pickDirectory).mockResolvedValue(null);
   let switching = switchProject();
   const first = await answerDialog("commit");
-  const second = await answerDialog("switch");
   await switching;
   expect(textOf(first.title)).toBe("A tab has an open transaction");
   expect(textOf(first.body)).toBe(
     "Switching projects closes every tab's session. What should happen to the open transaction in Query 1?",
   );
-  expect(textOf(second.title)).toBe("1 tab has unsaved changes");
   expect(pickDirectory).toHaveBeenCalledTimes(1);
   expect(endTransaction).not.toHaveBeenCalled();
   expect(useRuns.getState().transactions[id]).toBeDefined();
@@ -1278,7 +1292,6 @@ test("switch_project_commits_only_after_a_folder_is_chosen", async () => {
   vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
   switching = switchProject();
   await answerDialog("commit");
-  await answerDialog("switch");
   await switching;
   expect(endTransaction).toHaveBeenCalledWith(3, "commit");
   expect(vi.mocked(endTransaction).mock.invocationCallOrder[0]).toBeLessThan(
