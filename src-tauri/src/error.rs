@@ -1,64 +1,145 @@
-use chilla_core::application::{AppError, ConnectError, FileError, ProjectError};
+use std::collections::BTreeMap;
+use std::path::Path;
+
+use chilla_core::application::{
+    AppError, CancelError, ConnectError, FileError, PasswordStoreError, ProjectError, SplitError,
+    StoreError,
+};
 use chilla_core::domain::TunnelFailure;
 use serde::Serialize;
 
-/// 화면으로 가는 오류. `kind`로 화면이 다음 행동을 고르고 `message`를 그대로 보여 준다.
+/// 화면으로 가는 오류. `kind`로 화면이 다음 행동을 고르고 `params`로 문구를 번역한다.
+/// 번역이 없으면 `message`를 그대로 보여 준다.
 #[derive(Debug, Serialize)]
 pub struct CommandError {
     pub kind: &'static str,
     pub message: String,
+    /// `message`의 변하는 부분. 이름은 영어 message의 빈칸 이름이고, kind별 이름은
+    /// `src/shared/i18n/errorKinds.json`에 있다. 비면 보내지 않는다.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub params: BTreeMap<&'static str, String>,
     /// 터널 명령의 stderr. 명령이 실행된 터널 오류에만 있다.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub output: Option<String>,
 }
 
+type Params = BTreeMap<&'static str, String>;
+
+fn params<const N: usize>(pairs: [(&'static str, String); N]) -> Params {
+    BTreeMap::from(pairs)
+}
+
+fn path_param(path: &Path) -> (&'static str, String) {
+    ("path", path.display().to_string())
+}
+
 impl From<AppError> for CommandError {
     fn from(error: AppError) -> Self {
-        let kind = match &error {
-            AppError::NoProject => "no_project",
-            AppError::ProjectChanged => "project_changed",
-            AppError::UnknownConnection { .. } => "unknown_connection",
-            AppError::UnknownSession { .. } => "unknown_session",
-            AppError::Project(ProjectError::NotFound { .. }) => "project_not_found",
-            AppError::Project(ProjectError::PasswordInConfig { .. }) => "password_in_config",
-            AppError::Project(ProjectError::AlreadyExists { .. }) => "project_exists",
-            AppError::Project(ProjectError::Write { .. }) => "project_write_failed",
-            AppError::Project(_) => "project_invalid",
-            AppError::InvalidProfile(_) => "invalid_connection",
-            AppError::PasswordStore(_) => "password_store",
-            AppError::Split(_) => "split_failed",
-            AppError::EmptyStatement => "empty_statement",
-            AppError::MultipleStatements { .. } => "multiple_statements",
-            AppError::QueryNotActive { .. } => "query_not_active",
-            AppError::Cancel(_) => "cancel_failed",
-            AppError::InvalidPath(_) => "invalid_path",
-            AppError::Catalog(_) => "catalog_failed",
-            AppError::Store(_) => "store_failed",
-            AppError::StoreUnavailable => "store_unavailable",
+        let message = error.to_string();
+        // 한 kind가 message가 다른 variant를 묶으면 화면이 고를 수 없으므로 message 전체를 넘긴다.
+        let whole = || params([("message", message.clone())]);
+        let (kind, params): (&'static str, Params) = match &error {
+            AppError::NoProject => ("no_project", Params::new()),
+            AppError::ProjectChanged => ("project_changed", Params::new()),
+            AppError::UnknownConnection { name } => {
+                ("unknown_connection", params([("name", name.clone())]))
+            }
+            AppError::UnknownSession { id } => {
+                ("unknown_session", params([("id", id.0.to_string())]))
+            }
+            AppError::Project(ProjectError::NotFound { path }) => {
+                ("project_not_found", params([path_param(path)]))
+            }
+            AppError::Project(ProjectError::PasswordInConfig { connection }) => (
+                "password_in_config",
+                params([("connection", connection.clone())]),
+            ),
+            AppError::Project(ProjectError::AlreadyExists { path }) => {
+                ("project_exists", params([path_param(path)]))
+            }
+            AppError::Project(ProjectError::Write { path, message }) => (
+                "project_write_failed",
+                params([path_param(path), ("message", message.clone())]),
+            ),
+            AppError::Project(_) => ("project_invalid", whole()),
+            AppError::InvalidProfile(_) => ("invalid_connection", whole()),
+            AppError::PasswordStore(PasswordStoreError { message }) => {
+                ("password_store", params([("message", message.clone())]))
+            }
+            AppError::Split(SplitError { message }) => {
+                ("split_failed", params([("message", message.clone())]))
+            }
+            AppError::EmptyStatement => ("empty_statement", Params::new()),
+            AppError::MultipleStatements { count } => (
+                "multiple_statements",
+                params([("count", count.to_string())]),
+            ),
+            AppError::QueryNotActive { query } => {
+                ("query_not_active", params([("query", query.0.to_string())]))
+            }
+            AppError::Cancel(CancelError { message }) => {
+                ("cancel_failed", params([("message", message.clone())]))
+            }
+            AppError::InvalidPath(_) => ("invalid_path", whole()),
+            AppError::Catalog(query) => {
+                ("catalog_failed", params([("message", query.to_string())]))
+            }
+            AppError::Store(StoreError { message }) => {
+                ("store_failed", params([("message", message.clone())]))
+            }
+            AppError::StoreUnavailable => ("store_unavailable", Params::new()),
             AppError::File(file) => match file {
-                FileError::NotFound { .. } => "file_not_found",
-                FileError::Exists { .. } => "file_exists",
-                FileError::Changed { .. } => "file_changed",
-                FileError::TooLarge { .. } => "file_too_large",
-                FileError::NotUtf8 { .. } => "file_not_utf8",
-                FileError::Io { .. } => "file_io",
-                FileError::OutsideProject { .. } => "invalid_path",
+                FileError::NotFound { path } => {
+                    ("file_not_found", params([("path", path.clone())]))
+                }
+                FileError::Exists { path } => ("file_exists", params([("path", path.clone())])),
+                FileError::Changed { path } => ("file_changed", params([("path", path.clone())])),
+                FileError::TooLarge { path, bytes } => (
+                    "file_too_large",
+                    params([("path", path.clone()), ("bytes", bytes.to_string())]),
+                ),
+                FileError::NotUtf8 { path } => ("file_not_utf8", params([("path", path.clone())])),
+                FileError::Io { path, message } => (
+                    "file_io",
+                    params([("path", path.clone()), ("message", message.clone())]),
+                ),
+                FileError::OutsideProject { .. } => ("invalid_path", whole()),
             },
-            AppError::Tunnel(tunnel) => match tunnel.failure {
-                TunnelFailure::Spawn { .. } => "tunnel_spawn",
-                TunnelFailure::Exited { .. } => "tunnel_exited",
-                TunnelFailure::Timeout { .. } => "tunnel_timeout",
-                TunnelFailure::Cancelled => "tunnel_cancelled",
+            AppError::Tunnel(tunnel) => match &tunnel.failure {
+                TunnelFailure::Spawn { message } => {
+                    ("tunnel_spawn", params([("message", message.clone())]))
+                }
+                TunnelFailure::Exited { .. } => ("tunnel_exited", whole()),
+                TunnelFailure::Timeout { secs, .. } => (
+                    "tunnel_timeout",
+                    params([
+                        ("host", tunnel.host.clone()),
+                        ("port", tunnel.port.to_string()),
+                        ("secs", secs.to_string()),
+                    ]),
+                ),
+                TunnelFailure::Cancelled => ("tunnel_cancelled", Params::new()),
             },
             AppError::Connect(connect) => match connect {
-                ConnectError::Unreachable { .. } => "unreachable",
-                ConnectError::Timeout => "timeout",
-                ConnectError::TlsNotSupported => "tls_not_supported",
-                ConnectError::Certificate { .. } => "certificate",
-                ConnectError::PasswordRequired => "password_required",
-                ConnectError::AuthFailed { .. } => "auth_failed",
-                ConnectError::Database { .. } => "database",
-                ConnectError::Other { .. } => "other",
+                ConnectError::Unreachable { message } => {
+                    ("unreachable", params([("message", message.clone())]))
+                }
+                ConnectError::Timeout => ("timeout", Params::new()),
+                ConnectError::TlsNotSupported => ("tls_not_supported", Params::new()),
+                ConnectError::Certificate { message } => {
+                    ("certificate", params([("message", message.clone())]))
+                }
+                ConnectError::PasswordRequired => ("password_required", Params::new()),
+                ConnectError::AuthFailed { message } => {
+                    ("auth_failed", params([("message", message.clone())]))
+                }
+                ConnectError::Database { code, message } => (
+                    "database",
+                    params([("code", code.clone()), ("message", message.clone())]),
+                ),
+                ConnectError::Other { message } => {
+                    ("other", params([("message", message.clone())]))
+                }
             },
         };
         let output = match &error {
@@ -67,7 +148,8 @@ impl From<AppError> for CommandError {
         };
         Self {
             kind,
-            message: error.to_string(),
+            message,
+            params,
             output,
         }
     }
@@ -75,7 +157,7 @@ impl From<AppError> for CommandError {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
     use std::path::PathBuf;
 
     use chilla_core::application::{
@@ -292,6 +374,7 @@ mod tests {
                 ProfileError::UnknownColor { value: "x".into() },
                 ProfileError::TunnelTimeoutWithoutTunnel,
                 ProfileError::TunnelTimeoutRange { secs: 0 },
+                ProfileError::StatementTimeoutRange { secs: 0 },
             ]
             .map(|e| (AppError::from(e), "invalid_connection")),
         );
@@ -384,6 +467,62 @@ mod tests {
                 "{shown}: {message}"
             );
         }
+    }
+
+    /// `errorKinds.json`은 화면이 `error.<kind>` 문구에 쓸 param 이름을 kind별로 적은 파일이다.
+    /// 같은 kind의 variant마다 param이 다르면 합집합이다.
+    #[test]
+    fn kinds_and_params_match_the_screen() {
+        let mut actual: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+        for (error, _) in all_errors() {
+            let error = CommandError::from(error);
+            actual
+                .entry(error.kind.to_string())
+                .or_default()
+                .extend(error.params.keys().map(|key| key.to_string()));
+        }
+        let path = concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../src/shared/i18n/errorKinds.json"
+        );
+        let json = std::fs::read_to_string(path).unwrap();
+        let expected: BTreeMap<String, BTreeSet<String>> = serde_json::from_str(&json).unwrap();
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn params_hold_the_variable_parts() {
+        let not_found = CommandError::from(AppError::from(ProjectError::NotFound {
+            path: PathBuf::from("/p/chilla.toml"),
+        }));
+        assert_eq!(
+            not_found.params,
+            BTreeMap::from([("path", "/p/chilla.toml".to_string())])
+        );
+
+        let database = CommandError::from(AppError::from(ConnectError::Database {
+            code: "3D000".into(),
+            message: "database \"x\" does not exist".into(),
+        }));
+        assert_eq!(
+            database.params,
+            BTreeMap::from([
+                ("code", "3D000".to_string()),
+                ("message", "database \"x\" does not exist".to_string()),
+            ])
+        );
+        let json = serde_json::to_value(&database).unwrap();
+        assert_eq!(json["params"]["code"], "3D000");
+    }
+
+    #[test]
+    fn bundled_kinds_pass_the_whole_message() {
+        let error = AppError::from(ProjectError::Parse {
+            message: "bad".into(),
+        });
+        let command = CommandError::from(error);
+        assert_eq!(command.kind, "project_invalid");
+        assert_eq!(command.params["message"], command.message);
     }
 
     #[test]
