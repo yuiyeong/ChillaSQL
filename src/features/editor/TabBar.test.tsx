@@ -16,6 +16,7 @@ import { TabBar } from "./TabBar";
 import { useTabs } from "./tabsStore";
 import { useTunnels } from "../connections/tunnelsStore";
 import { useRuns } from "../query/runsStore";
+import { DEFAULT_KEYMAP, setKeymap } from "../workspace/shortcuts";
 
 beforeEach(async () => {
   await resetStores();
@@ -94,6 +95,18 @@ test("닫기와 새 탭 버튼이 handler를 부른다", async () => {
 
   await click(screen.getByRole("button", { name: "New tab (Shift+Cmd+L)" }));
   expect(onNew).toHaveBeenCalledTimes(1);
+});
+
+test("new_tab_button_label_follows_the_keymap", () => {
+  setKeymap([
+    ...DEFAULT_KEYMAP.filter((b) => b.command !== "newTab"),
+    { command: "newTab", code: "KeyT", shift: false, alt: false, ctrl: false },
+  ]);
+  renderBar();
+
+  expect(
+    screen.getByRole("button", { name: "New tab (Cmd+T)" }),
+  ).toBeInTheDocument();
 });
 
 test("dirty 탭은 Unsaved 표시를 갖고 닫기도 할 수 있다", async () => {

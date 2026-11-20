@@ -3,6 +3,7 @@
 use std::str::FromStr;
 
 use super::QueryLimits;
+use super::shortcuts::{Command, Shortcut, default_keymap};
 
 /// 화면 문구와 앱 menu의 언어.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -46,6 +47,8 @@ pub struct Settings {
     pub language: Language,
     pub editor: EditorSettings,
     pub limits: QueryLimits,
+    /// 모든 command의 단축키. 기본값에 설정 파일의 `[shortcuts]`를 덮은 것이다.
+    pub shortcuts: Vec<(Command, Shortcut)>,
 }
 
 impl Default for Settings {
@@ -57,6 +60,7 @@ impl Default for Settings {
                 font_size: 15,
             },
             limits: QueryLimits::default(),
+            shortcuts: default_keymap(),
         }
     }
 }

@@ -11,12 +11,12 @@ use chilla_core::application::{
     App, AppError, HistoryEntry, NewHistoryEntry, RecentProject, ServerInfo,
 };
 use chilla_core::domain::{
-    ApplyOutcome, ApplyResult, Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo,
-    ConstraintKind, Danger, EditTable, EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo,
-    ParameterSpan, Password, ProfileError, Project, QueryEvent, QueryId, QueryOutcome, Relation,
-    RelationKind, RowBatch, ServerError, SessionId, SessionInfo, SessionState, Settings,
-    SettingsError, SqlFile, StatementSpan, TableDetails, TunnelEvent, TunnelFailure, TunnelState,
-    TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
+    ApplyOutcome, ApplyResult, Catalog, CatalogColumn, Column, Command, ConnectionProfile,
+    ConstraintInfo, ConstraintKind, Danger, EditTable, EndOutcome, EndResult, FileStamp,
+    FunctionName, IndexInfo, ParameterSpan, Password, ProfileError, Project, QueryEvent, QueryId,
+    QueryOutcome, Relation, RelationKind, RowBatch, ServerError, SessionId, SessionInfo,
+    SessionState, Settings, SettingsError, Shortcut, SqlFile, StatementSpan, TableDetails,
+    TunnelEvent, TunnelFailure, TunnelState, TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
 };
 use chilla_core::infrastructure::{
     PgConnector, ShellTunnelRunner, write_export as write_export_file,
@@ -1195,8 +1195,32 @@ pub struct SettingsDto {
     pub language: &'static str,
     pub editor: EditorSettingsDto,
     pub idle_timeout_secs: u64,
+    pub shortcuts: Vec<ShortcutDto>,
     pub error: Option<String>,
     pub store_error: Option<String>,
+}
+
+/// 화면 keymap의 한 줄. Cmd는 늘 있으므로 보내지 않는다.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ShortcutDto {
+    pub command: &'static str,
+    pub code: String,
+    pub shift: bool,
+    pub alt: bool,
+    pub ctrl: bool,
+}
+
+impl From<&(Command, Shortcut)> for ShortcutDto {
+    fn from((command, shortcut): &(Command, Shortcut)) -> Self {
+        Self {
+            command: command.id(),
+            code: shortcut.code.clone(),
+            shift: shortcut.shift,
+            alt: shortcut.opt,
+            ctrl: shortcut.ctrl,
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -1216,6 +1240,7 @@ impl From<&LoadedSettings> for SettingsDto {
                 font_size: settings.editor.font_size,
             },
             idle_timeout_secs: settings.limits.idle_result_timeout.as_secs(),
+            shortcuts: settings.shortcuts.iter().map(ShortcutDto::from).collect(),
             error: loaded.error.as_ref().map(ToString::to_string),
             store_error: loaded.store_error.clone(),
         }
@@ -1443,6 +1468,13 @@ mod tests {
         let loaded = LoadedSettings {
             settings: Settings {
                 language: Language::Ko,
+                shortcuts: vec![
+                    (Command::Run, Shortcut::parse("Cmd+Enter").unwrap()),
+                    (
+                        Command::NewTab,
+                        Shortcut::parse("Ctrl+Opt+Shift+Cmd+L").unwrap(),
+                    ),
+                ],
                 ..Settings::default()
             },
             error: Some(SettingsError {
@@ -1457,6 +1489,10 @@ mod tests {
                 "language": "ko",
                 "editor": { "font": "D2Coding", "fontSize": 15 },
                 "idleTimeoutSecs": 600,
+                "shortcuts": [
+                    { "command": "run", "code": "Enter", "shift": false, "alt": false, "ctrl": false },
+                    { "command": "newTab", "code": "KeyL", "shift": true, "alt": true, "ctrl": true },
+                ],
                 "error": "/h/config.toml: unknown field `fontsize`",
                 "storeError": "file is not a database",
             })

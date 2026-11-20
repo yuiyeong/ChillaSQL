@@ -20,6 +20,7 @@ import { emptyResult, type RunState } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
 import { useTunnels } from "../connections/tunnelsStore";
 import { changeConnection, execute } from "./commands";
+import { DEFAULT_KEYMAP, setKeymap } from "./shortcuts";
 import { Toolbar } from "./Toolbar";
 
 function tabWith(connectionName: string | null): string {
@@ -433,6 +434,17 @@ test("reformat_button_runs_the_command", async () => {
   await click(button);
 
   expect(execute).toHaveBeenCalledWith("reformat");
+});
+
+test("reformat_button_label_follows_the_keymap", () => {
+  setKeymap([
+    ...DEFAULT_KEYMAP.filter((b) => b.command !== "reformat"),
+    { command: "reformat", code: "KeyF", shift: true, alt: false, ctrl: false },
+  ]);
+  renderToolbar();
+
+  const button = screen.getByRole("button", { name: "Reformat (Shift+Cmd+F)" });
+  expect(button).toHaveAttribute("aria-keyshortcuts", "Shift+Meta+F");
 });
 
 test("탭이 없으면 Reformat이 disabled다", () => {

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::domain::{Settings, SettingsError};
+use crate::domain::{Command, Settings, SettingsError, Shortcut, merge_keymap};
 
 const FONT_SIZE: (i64, i64) = (10, 32);
 const RETAINED_ROWS: (i64, i64) = (1_000, 1_000_000);
@@ -21,6 +21,8 @@ struct RawFile {
     editor: RawEditor,
     #[serde(default)]
     results: RawResults,
+    /// key가 command 이름이라 struct로 받지 않고 key마다 검사한다.
+    shortcuts: Option<toml::Table>,
 }
 
 // 정수는 i64로 받아 범위를 읽은 뒤 검사한다. 음수나 큰 값이 형 변환에서 사라지지 않게 한다.
@@ -95,7 +97,29 @@ fn parse(text: &str) -> Result<Settings, String> {
         let secs = in_range("results.idle_timeout", secs, IDLE_TIMEOUT_SECS)?;
         settings.limits.idle_result_timeout = Duration::from_secs(secs as u64);
     }
+    if let Some(table) = raw.shortcuts {
+        settings.shortcuts = parse_shortcuts(table)?;
+    }
     Ok(settings)
+}
+
+/// `[shortcuts]`를 기본값에 덮는다. 오류는 `shortcuts.<key>: <이유>`.
+fn parse_shortcuts(table: toml::Table) -> Result<Vec<(Command, Shortcut)>, String> {
+    let mut overrides = Vec::with_capacity(table.len());
+    for (key, value) in table {
+        let error = |reason: String| format!("shortcuts.{key}: {reason}");
+        let Some(command) = Command::from_config_key(&key) else {
+            let names: Vec<&str> = Command::ALL.iter().map(|c| c.config_key()).collect();
+            return Err(error(format!("unknown command; use {}", names.join(", "))));
+        };
+        let Some(text) = value.as_str() else {
+            return Err(error(
+                "must be a string like \"Opt+Shift+Cmd+Enter\"".into(),
+            ));
+        };
+        overrides.push((command, Shortcut::parse(text).map_err(error)?));
+    }
+    merge_keymap(overrides)
 }
 
 fn in_range(key: &str, value: i64, (min, max): (i64, i64)) -> Result<i64, String> {

@@ -8,6 +8,7 @@ import { useTabs } from "../editor/tabsStore";
 import { resetStores } from "../../test/resetStores";
 import { ParameterDialog } from "./ParameterDialog";
 import { askParameters } from "./parameterPrompt";
+import { DEFAULT_KEYMAP, setKeymap } from "./shortcuts";
 
 let views: EditorView[] = [];
 
@@ -247,4 +248,36 @@ test("enter_on_the_cancel_button_cancels_and_does_not_run", async () => {
   await click(cancel);
 
   await expect(answer).resolves.toBeNull();
+});
+
+test("rebound_run_key_runs", async () => {
+  setKeymap([
+    ...DEFAULT_KEYMAP.filter((b) => b.command !== "run"),
+    { command: "run", code: "KeyR", shift: true, alt: false, ctrl: false },
+  ]);
+  const { tabId, view } = editorForActiveTab();
+  const first = open(["id"], tabId);
+  type("id", "3");
+  view.focus();
+
+  // 바꾼 뒤의 Cmd+Enter는 에디터에서 Run이 아니다.
+  fireEvent.keyDown(view.contentDOM, { code: "Enter", metaKey: true });
+  expect(screen.getByRole("dialog")).toBeInTheDocument();
+  expect(runButton()).toHaveAttribute("aria-keyshortcuts", "Shift+Meta+R");
+  expect(runButton()).toHaveTextContent("⇧⌘R");
+
+  fireEvent.keyDown(view.contentDOM, {
+    code: "KeyR",
+    metaKey: true,
+    shiftKey: true,
+  });
+  await expect(first).resolves.toEqual({ id: "3" });
+
+  // 입력란의 Enter는 그대로 Run이다.
+  let second!: Promise<Record<string, string> | null>;
+  act(() => {
+    second = askParameters(tabId, ["id"]);
+  });
+  fireEvent.keyDown(screen.getByLabelText(":id"), { code: "Enter" });
+  await expect(second).resolves.toEqual({ id: "3" });
 });

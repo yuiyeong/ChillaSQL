@@ -40,7 +40,7 @@ export const ko: Record<MessageKey, string> = {
   "toolbar.runFile": "파일 실행",
   "toolbar.chooseWhatToRun": "실행할 범위 선택",
   "toolbar.whatToRun": "실행할 범위",
-  "toolbar.reformat": "Reformat (Opt+Cmd+L)",
+  "toolbar.reformat": "Reformat ({keys})",
   "toolbar.explain": "실행 계획 (EXPLAIN ANALYZE)",
 
   "workspace.resizeResults": "결과 패널 크기 조절",
@@ -53,7 +53,7 @@ export const ko: Record<MessageKey, string> = {
   "tabs.list": "열린 파일",
   "tabs.unsaved": "저장 안 됨",
   "tabs.close": "{title} 닫기",
-  "tabs.new": "새 탭 (Shift+Cmd+L)",
+  "tabs.new": "새 탭 ({keys})",
   "tabs.saveTitle": "{title} 저장",
   "tabs.filePath": "프로젝트 안의 경로",
   "tabs.filePathPlaceholder": "queries/name.sql",

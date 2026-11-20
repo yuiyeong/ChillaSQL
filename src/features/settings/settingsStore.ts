@@ -3,6 +3,7 @@ import { loadSettings } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
 import { setLanguage, type Language } from "../../shared/i18n/t";
 import type { Settings } from "../../shared/api/types";
+import { setKeymap } from "../workspace/shortcuts";
 
 /**
  * 설정을 읽기 전과 읽지 못했을 때의 값. 진짜 기본값은 Rust(`Settings::default`)가 정하고,
@@ -55,6 +56,7 @@ export const useSettings = create<SettingsState>()((set) => ({
           reason: settings.storeError,
         });
       setLanguage(settings.language);
+      setKeymap(settings.shortcuts);
       set({
         status: "ready",
         language: settings.language,
@@ -64,7 +66,7 @@ export const useSettings = create<SettingsState>()((set) => ({
         storeAvailable: settings.storeError === null,
       });
     } catch (error) {
-      // 설정을 받지 못해도 기본값으로 시작한다.
+      // 설정을 받지 못해도 기본값(keymap도)으로 시작한다.
       set({
         status: "ready",
         errors: [{ title: "settings.errorTitle", reason: messageOf(error) }],

@@ -2,7 +2,7 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use chilla_core::domain::{Language, Settings};
+use chilla_core::domain::{Command, Language, Settings, Shortcut, default_keymap};
 use chilla_core::infrastructure::load_settings;
 use tempfile::TempDir;
 
@@ -154,4 +154,133 @@ fn unreadable_path_is_an_error() {
     let (settings, error) = load_settings(dir.path());
     assert_eq!(settings, Settings::default());
     assert!(error.is_some());
+}
+
+fn shortcut_of(settings: &Settings, command: Command) -> Option<String> {
+    settings
+        .shortcuts
+        .iter()
+        .find(|(c, _)| *c == command)
+        .map(|(_, shortcut)| shortcut.label())
+}
+
+/// 기본값으로 시작했고 이유가 `expected`인가.
+fn assert_falls_back(text: &str, expected: &str) {
+    let (_dir, path) = write(text);
+    let (settings, error) = load_settings(&path);
+    assert_eq!(settings, Settings::default(), "{text}");
+    let error = error.unwrap_or_else(|| panic!("{text}: error 없음"));
+    assert_eq!(error.message, expected, "{text}");
+}
+
+#[test]
+fn default_settings_use_the_default_keymap() {
+    assert_eq!(Settings::default().shortcuts, default_keymap());
+}
+
+#[test]
+fn overrides_one_shortcut() {
+    let (_dir, path) = write("[shortcuts]\nreformat = \"Shift+Cmd+F\"\n");
+
+    let (settings, error) = load_settings(&path);
+
+    assert_eq!(error, None);
+    let expected: Vec<(Command, Shortcut)> = default_keymap()
+        .into_iter()
+        .map(|(command, shortcut)| match command {
+            Command::Reformat => (command, Shortcut::parse("Shift+Cmd+F").unwrap()),
+            _ => (command, shortcut),
+        })
+        .collect();
+    assert_eq!(settings.shortcuts, expected);
+    let mut rest = settings.clone();
+    rest.shortcuts = default_keymap();
+    assert_eq!(rest, Settings::default());
+}
+
+#[test]
+fn binds_a_command_without_a_default() {
+    let (_dir, path) = write("[shortcuts]\nexplain = \"Shift+Cmd+E\"\n");
+
+    let (settings, error) = load_settings(&path);
+
+    assert_eq!(error, None);
+    assert_eq!(
+        shortcut_of(&settings, Command::Explain).as_deref(),
+        Some("Shift+Cmd+E")
+    );
+    assert_eq!(shortcut_of(&settings, Command::RunFile), None);
+    assert_eq!(settings.shortcuts.len(), default_keymap().len() + 1);
+}
+
+#[test]
+fn conflicting_shortcuts_are_an_error() {
+    assert_falls_back(
+        "[shortcuts]\nsave = \"Cmd+Enter\"\n",
+        "shortcuts.save: Cmd+Enter is also the shortcut of shortcuts.run",
+    );
+
+    // run을 함께 다른 키로 바꾸면 겹치지 않는다.
+    let (_dir, path) = write("[shortcuts]\nsave = \"Cmd+Enter\"\nrun = \"Shift+Cmd+R\"\n");
+    let (settings, error) = load_settings(&path);
+    assert_eq!(error, None);
+    assert_eq!(
+        shortcut_of(&settings, Command::Save).as_deref(),
+        Some("Cmd+Enter")
+    );
+    assert_eq!(
+        shortcut_of(&settings, Command::Run).as_deref(),
+        Some("Shift+Cmd+R")
+    );
+}
+
+#[test]
+fn menu_keys_are_an_error() {
+    assert_falls_back(
+        "[shortcuts]\nrun = \"Cmd+Q\"\n",
+        "shortcuts.run: Cmd+Q is an app menu key",
+    );
+    assert_falls_back(
+        "[shortcuts]\nexplain = \"cmd+ctrl+f\"\n",
+        "shortcuts.explain: Ctrl+Cmd+F is an app menu key",
+    );
+}
+
+#[test]
+fn unknown_command_is_an_error() {
+    assert_falls_back(
+        "[shortcuts]\nfoo = \"Cmd+K\"\n",
+        "shortcuts.foo: unknown command; use run, run_file, explain, cancel, save, new_tab, \
+         close_tab, next_tab, prev_tab, commit, rollback, reformat, open_project",
+    );
+}
+
+#[test]
+fn missing_cmd_is_an_error() {
+    assert_falls_back(
+        "[shortcuts]\nreformat = \"Opt+L\"\n",
+        "shortcuts.reformat: must include Cmd, got \"Opt+L\"",
+    );
+}
+
+#[test]
+fn shortcut_must_be_a_string() {
+    assert_falls_back(
+        "[shortcuts]\nsave = 1\n",
+        "shortcuts.save: must be a string like \"Opt+Shift+Cmd+Enter\"",
+    );
+}
+
+#[test]
+fn shortcut_error_discards_the_other_settings() {
+    let (_dir, path) =
+        write("language = \"ko\"\n[shortcuts]\nreformat = \"Shift+Cmd+F\"\nsave = \"Cmd+Up\"\n");
+    let (settings, error) = load_settings(&path);
+    assert_eq!(settings, Settings::default());
+    assert!(
+        error
+            .unwrap()
+            .message
+            .starts_with("shortcuts.save: unknown key \"Up\"")
+    );
 }

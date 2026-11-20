@@ -8,6 +8,7 @@ import {
 import { pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import type {
+  CommandId,
   ParameterSpan,
   Project,
   Relation,
@@ -61,20 +62,7 @@ import {
   settleTransactions,
 } from "./transactionPrompts";
 
-export type CommandId =
-  | "run"
-  | "runFile"
-  | "cancel"
-  | "save"
-  | "newTab"
-  | "closeTab"
-  | "nextTab"
-  | "prevTab"
-  | "commit"
-  | "rollback"
-  | "reformat"
-  | "explain"
-  | "openProject";
+export type { CommandId };
 
 function findTab(tabId: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === tabId);

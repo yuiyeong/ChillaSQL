@@ -10,9 +10,13 @@ import { useRuns } from "../query/runsStore";
 import { resetStores } from "../../test/resetStores";
 import { answerParameters, askParameters } from "./parameterPrompt";
 import {
+  type Binding,
   commandFor,
+  DEFAULT_KEYMAP,
+  setKeymap,
   shortcutKeys,
   shortcutLabel,
+  shortcutText,
   useShortcuts,
 } from "./shortcuts";
 
@@ -174,4 +178,97 @@ test("shortcuts_are_ignored_while_the_prompt_is_open", async () => {
   await vi.waitFor(() =>
     expect(useRuns.getState().runs[tabId]?.status).toBe("rejected"),
   );
+});
+
+const NO_MODIFIERS = { shift: false, alt: false, ctrl: false };
+
+/** 기본값에서 `command`의 key만 바꾼 keymap. */
+function rebind(
+  command: Binding["command"],
+  binding: Omit<Binding, "command">,
+) {
+  return [
+    ...DEFAULT_KEYMAP.filter((b) => b.command !== command),
+    { command, ...binding },
+  ];
+}
+
+test("default_keymap_matches_the_spec", () => {
+  expect(DEFAULT_KEYMAP).toEqual([
+    { command: "run", code: "Enter", ...NO_MODIFIERS },
+    { command: "cancel", code: "F2", ...NO_MODIFIERS },
+    { command: "save", code: "KeyS", ...NO_MODIFIERS },
+    { command: "newTab", code: "KeyL", ...NO_MODIFIERS, shift: true },
+    { command: "closeTab", code: "KeyW", ...NO_MODIFIERS },
+    { command: "nextTab", code: "BracketRight", ...NO_MODIFIERS, shift: true },
+    { command: "prevTab", code: "BracketLeft", ...NO_MODIFIERS, shift: true },
+    { command: "commit", code: "Enter", ctrl: false, shift: true, alt: true },
+    { command: "rollback", code: "KeyZ", ctrl: false, shift: true, alt: true },
+    { command: "reformat", code: "KeyL", ...NO_MODIFIERS, alt: true },
+    { command: "openProject", code: "KeyO", ...NO_MODIFIERS },
+  ]);
+  expect(shortcutText("commit")).toBe("Opt+Shift+Cmd+Enter");
+  expect(shortcutText("reformat")).toBe("Opt+Cmd+L");
+  expect(shortcutText("newTab")).toBe("Shift+Cmd+L");
+});
+
+test("set_keymap_changes_dispatch_and_labels", () => {
+  setKeymap(rebind("reformat", { code: "KeyF", ...NO_MODIFIERS, shift: true }));
+
+  expect(commandFor(key("KeyF", shiftCmd))).toBe("reformat");
+  expect(commandFor(key("KeyL", { metaKey: true, altKey: true }))).toBeNull();
+  expect(shortcutLabel("reformat")).toBe("⇧⌘F");
+  expect(shortcutKeys("reformat")).toBe("Shift+Meta+F");
+  expect(shortcutText("reformat")).toBe("Shift+Cmd+F");
+  // 나머지는 그대로다.
+  expect(commandFor(key("Enter", cmd))).toBe("run");
+
+  setKeymap(DEFAULT_KEYMAP);
+  expect(commandFor(key("KeyF", shiftCmd))).toBeNull();
+  expect(shortcutLabel("reformat")).toBe("⌥⌘L");
+});
+
+test("ctrl_bindings_need_ctrl", () => {
+  const ctrlCmd = { metaKey: true, ctrlKey: true };
+  setKeymap(rebind("run", { code: "Enter", ...NO_MODIFIERS, ctrl: true }));
+
+  expect(commandFor(key("Enter", ctrlCmd))).toBe("run");
+  expect(commandFor(key("Enter", cmd))).toBeNull();
+  expect(shortcutLabel("run")).toBe("⌃⌘↵");
+  expect(shortcutKeys("run")).toBe("Control+Meta+Enter");
+  expect(shortcutText("run")).toBe("Ctrl+Cmd+Enter");
+
+  setKeymap(
+    rebind("commit", { code: "Enter", ctrl: true, shift: true, alt: true }),
+  );
+  expect(commandFor(key("Enter", { ...optShiftCmd, ctrlKey: true }))).toBe(
+    "commit",
+  );
+  expect(commandFor(key("Enter", optShiftCmd))).toBeNull();
+  expect(shortcutLabel("commit")).toBe("⌃⌥⇧⌘↵");
+  expect(shortcutKeys("commit")).toBe("Control+Alt+Shift+Meta+Enter");
+});
+
+test("digit_and_function_key_labels", () => {
+  const cases: [string, string, string, string][] = [
+    ["Digit1", "⌘1", "Meta+1", "Cmd+1"],
+    ["F12", "⌘F12", "Meta+F12", "Cmd+F12"],
+    ["Comma", "⌘,", "Meta+,", "Cmd+,"],
+    ["Period", "⌘.", "Meta+.", "Cmd+."],
+    ["Slash", "⌘/", "Meta+/", "Cmd+/"],
+    ["Semicolon", "⌘;", "Meta+;", "Cmd+;"],
+    ["Quote", "⌘'", "Meta+'", "Cmd+'"],
+    ["Minus", "⌘-", "Meta+-", "Cmd+-"],
+    ["Equal", "⌘=", "Meta+=", "Cmd+="],
+    ["Backquote", "⌘`", "Meta+`", "Cmd+`"],
+    ["Backslash", "⌘\\", "Meta+\\", "Cmd+\\"],
+    ["BracketLeft", "⌘[", "Meta+[", "Cmd+["],
+  ];
+  for (const [code, label, keys, text] of cases) {
+    setKeymap(rebind("explain", { code, ...NO_MODIFIERS }));
+    expect(shortcutLabel("explain"), code).toBe(label);
+    expect(shortcutKeys("explain"), code).toBe(keys);
+    expect(shortcutText("explain"), code).toBe(text);
+    expect(commandFor(key(code, cmd)), code).toBe("explain");
+  }
 });

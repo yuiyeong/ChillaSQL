@@ -270,12 +270,39 @@ export interface TunnelEvent {
   state: TunnelState;
 }
 
+/** 단축키와 toolbar가 부르는 command. Rust `Command::id`와 같은 이름이다. */
+export type CommandId =
+  | "run"
+  | "runFile"
+  | "cancel"
+  | "save"
+  | "newTab"
+  | "closeTab"
+  | "nextTab"
+  | "prevTab"
+  | "commit"
+  | "rollback"
+  | "reformat"
+  | "explain"
+  | "openProject";
+
+/** command 하나의 단축키. Cmd는 늘 있으므로 없다. `code`는 KeyboardEvent.code다. */
+export interface ShortcutBinding {
+  command: CommandId;
+  code: string;
+  shift: boolean;
+  alt: boolean;
+  ctrl: boolean;
+}
+
 /** 시작할 때 읽은 전역 설정(`~/.config/chilla/config.toml`). `error`가 있으면 기본값이고 그 이유다. */
 export interface Settings {
   language: Language;
   editor: { font: string; fontSize: number };
   /** 받다 만 결과를 닫는 초 */
   idleTimeoutSecs: number;
+  /** 기본값에 `[shortcuts]`를 덮은 keymap */
+  shortcuts: ShortcutBinding[];
   error: string | null;
   /** 앱 내부 저장소를 열지 못한 이유. 있으면 최근 프로젝트와 탭 복원이 없다. */
   storeError: string | null;

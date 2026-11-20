@@ -13,11 +13,12 @@ import { useSchema } from "../features/schema/schemaStore";
 import { useSettings } from "../features/settings/settingsStore";
 import { resetAutosave } from "../features/workspace/autosave";
 import { resetParameterPrompt } from "../features/workspace/parameterPrompt";
+import { DEFAULT_KEYMAP, setKeymap } from "../features/workspace/shortcuts";
 import { setLanguage } from "../shared/i18n/t";
 import { resetDialogs } from "../shared/ui/dialogs";
 
 /**
- * 자동 보관, 탭, 실행, 셀 편집, 프로젝트, 쿼리 기록, 에디터 상태, 설정, 확인 dialog, 파라미터 물음 store를 처음 상태로 돌리고 언어를 en으로 되돌린다. 탭의 문서는 `useTabs.reset`이 닫는다.
+ * 자동 보관, 탭, 실행, 셀 편집, 프로젝트, 쿼리 기록, 에디터 상태, 설정, 단축키, 확인 dialog, 파라미터 물음 store를 처음 상태로 돌리고 언어를 en으로 되돌린다. 탭의 문서는 `useTabs.reset`이 닫는다.
  * 앞 test의 세션을 닫는 호출이 끝난 뒤에 돌아오므로 `vi.resetAllMocks()` 앞에 부른다.
  */
 export async function resetStores(): Promise<void> {
@@ -37,6 +38,7 @@ export async function resetStores(): Promise<void> {
   useHistory.getState().reset();
   useHistory.setState({ open: false });
   useSettings.setState(useSettings.getInitialState(), true);
+  setKeymap(DEFAULT_KEYMAP);
   editorNotice.reset();
   setLanguage("en");
   // 답을 기다리던 ask는 cancel로 끝내고 차례를 비운다.

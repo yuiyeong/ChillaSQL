@@ -20,7 +20,7 @@ import {
 import { Kbd } from "../../shared/ui/Kbd";
 import { Menu, MenuItem, MenuSeparator } from "../../shared/ui/Menu";
 import { changeConnection, execute } from "./commands";
-import { shortcutKeys, shortcutLabel } from "./shortcuts";
+import { shortcutKeys, shortcutLabel, shortcutText } from "./shortcuts";
 import { TransactionControls } from "./TransactionControls";
 import { t } from "../../shared/i18n/t";
 import type { Connection } from "../../shared/api/types";
@@ -153,7 +153,7 @@ export function Toolbar({
         <Button
           variant="ghost"
           size="icon"
-          aria-label={t("toolbar.reformat")}
+          aria-label={t("toolbar.reformat", { keys: shortcutText("reformat") })}
           aria-keyshortcuts={shortcutKeys("reformat")}
           disabled={tab === undefined}
           style={{ width: ICON_WIDTH }}

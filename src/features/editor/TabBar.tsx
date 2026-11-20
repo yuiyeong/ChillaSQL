@@ -11,6 +11,7 @@ import { IconButton } from "../../shared/ui/IconButton";
 import { SaveNameDialog } from "./SaveNameDialog";
 import { useTabs } from "./tabsStore";
 import { t } from "../../shared/i18n/t";
+import { shortcutText } from "../workspace/shortcuts";
 
 interface TabBarProps {
   onClose(id: string): void;
@@ -117,7 +118,7 @@ export function TabBar({ onClose, onNew, onName }: TabBarProps) {
           </div>
         </div>
         <IconButton
-          label={t("tabs.new")}
+          label={t("tabs.new", { keys: shortcutText("newTab") })}
           className="mr-1 mb-1 ml-1"
           onClick={onNew}
         >

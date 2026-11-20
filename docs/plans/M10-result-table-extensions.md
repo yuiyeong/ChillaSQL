@@ -675,7 +675,7 @@ git commit -m "feat: 받은 결과 행을 CSV나 JSON 파일로 저장함"
   // shortcutLabel은 `⌃⌥⇧⌘` 순과 key glyph(Enter ↵, Bracket [ ], Digit 숫자, F키 그대로, 구두점 글자)
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `domain/shortcuts.rs` unit: `parses_modifiers_in_any_order_and_case`(`"cmd+shift+l"` = `"Shift+Cmd+L"`), `key_names_map_to_codes`(`1` → `Digit1`, `F12`, `[` → `BracketLeft`, `,` → `Comma`, `` ` `` → `Backquote`, `\` → `Backslash`), `requires_cmd`, `rejects_unknown_keys_and_two_keys`(`Cmd+Up`, `Cmd+L+K`, `Cmd+`), `defaults_match_the_spec`(4.10의 11개), `label_round_trips`.
 - `tests/settings_file.rs`:
@@ -686,24 +686,24 @@ git commit -m "feat: 받은 결과 행을 CSV나 JSON 파일로 저장함"
 - `settingsStore.test.ts`: `load_applies_the_keymap`, `failed_load_keeps_the_default_keymap`.
 - `ParameterDialog.test.tsx`: `rebound_run_key_runs`(run을 `Shift+Cmd+R`로 바꾸면 dialog도 그 키로 Run, `Enter`는 그대로 Run).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace shortcut && pnpm vitest run src/features/workspace src/features/settings`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `RawFile`에 `shortcuts: Option<toml::Table>`(`deny_unknown_fields`는 그대로). key마다 `Command`를 찾고 값이 문자열인지 본 뒤 `Shortcut::parse`, 끝에 `merge_keymap`. 오류 문구는 `shortcuts.<key>: <이유>` 꼴.
 - 충돌 비교는 (code, shift, opt, ctrl)로 한다. menu 키 목록은 `shortcuts.rs`의 상수.
 - 화면의 `keymap`은 module 변수로 두고 `setKeymap`이 바꾼다. `commandFor`는 `ctrlKey`도 binding과 비교한다.
 - ParameterDialog의 `Cmd+Enter` 처리를 `commandFor(event) === "run"`으로 바꾼다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src

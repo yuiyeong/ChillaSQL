@@ -12,7 +12,7 @@ import {
   useParameterPrompt,
   type ParameterRequest,
 } from "./parameterPrompt";
-import { shortcutKeys, shortcutLabel } from "./shortcuts";
+import { commandFor, shortcutKeys, shortcutLabel } from "./shortcuts";
 
 /**
  * 에디터 영역 오른쪽 아래에 뜨는 파라미터 값 물음. 실행에 `:name`이 있으면 `askParameters`가 열고,
@@ -49,7 +49,7 @@ function Form({ request }: { request: ParameterRequest }) {
   );
   const complete = request.names.every((name) => values[name].trim() !== "");
 
-  // 물음이 떠 있는 동안은 focus가 어디 있든 Esc와 Cmd+Enter가 듣는다. Enter는 이 dialog의 입력란에서만
+  // 물음이 떠 있는 동안은 focus가 어디 있든 Esc와 Run 단축키가 듣는다. Enter는 이 dialog의 입력란에서만
   // 보낸다(에디터의 Enter는 줄바꿈이고, 버튼의 Enter는 그 버튼을 누르는 것이다). 전역 단축키는 물음이
   // 떠 있는 동안 꺼져 있다.
   useEffect(() => {
@@ -61,11 +61,12 @@ function Form({ request }: { request: ParameterRequest }) {
         event.preventDefault();
         event.stopPropagation();
         answerParameters(null);
-      } else if (event.code === "Enter") {
+      } else {
         const inField =
+          event.code === "Enter" &&
           event.target instanceof HTMLInputElement &&
           dialogRef.current?.contains(event.target) === true;
-        if (!inField && !event.metaKey) return;
+        if (!inField && commandFor(event) !== "run") return;
         event.preventDefault();
         event.stopPropagation();
         if (complete) answerParameters(values);

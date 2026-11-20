@@ -39,7 +39,7 @@ export const en = {
   "toolbar.runFile": "Run file",
   "toolbar.chooseWhatToRun": "Choose what to run",
   "toolbar.whatToRun": "What to run",
-  "toolbar.reformat": "Reformat (Opt+Cmd+L)",
+  "toolbar.reformat": "Reformat ({keys})",
   "toolbar.explain": "Explain plan (EXPLAIN ANALYZE)",
 
   "workspace.resizeResults": "Resize results panel",
@@ -52,7 +52,7 @@ export const en = {
   "tabs.list": "Open files",
   "tabs.unsaved": "Unsaved",
   "tabs.close": "Close {title}",
-  "tabs.new": "New tab (Shift+Cmd+L)",
+  "tabs.new": "New tab ({keys})",
   "tabs.saveTitle": "Save {title}",
   "tabs.filePath": "Path inside the project",
   "tabs.filePathPlaceholder": "queries/name.sql",

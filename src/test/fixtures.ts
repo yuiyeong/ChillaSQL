@@ -14,6 +14,7 @@ import {
   DEFAULT_EDITOR,
   DEFAULT_IDLE_TIMEOUT_SECS,
 } from "../features/settings/settingsStore";
+import { DEFAULT_KEYMAP } from "../features/workspace/shortcuts";
 
 /** type을 모르는(OID 0) 결과 열. 이름만 중요한 test에서 쓴다. */
 export function resultColumns(...names: string[]): ResultColumn[] {
@@ -139,6 +140,7 @@ export function settingsFixture(patch: Partial<Settings> = {}): Settings {
     language: "en",
     editor: DEFAULT_EDITOR,
     idleTimeoutSecs: DEFAULT_IDLE_TIMEOUT_SECS,
+    shortcuts: [...DEFAULT_KEYMAP],
     error: null,
     storeError: null,
     ...patch,
