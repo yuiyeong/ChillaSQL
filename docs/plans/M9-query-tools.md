@@ -443,7 +443,7 @@ git commit -m "feat: :name 파라미터가 있으면 값을 물어 SQL에 넣고
   function isPlanResult(columns: ResultColumn[] | null): boolean;
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 fixture는 test DB에서 받은 실제 출력이다(이 계획의 "먼저 확인한 것"의 `EXPLAIN ANALYZE SELECT * FROM big_table b JOIN (SELECT id FROM big_table LIMIT 50) s USING (id) ORDER BY note` 출력 20줄).
 - `parses_postgres_18_analyze_output`: node 5개, 깊이 `0 1 2 3 2`, `Index Scan using big_table_pkey on big_table b`의 loops 50과 `totalMs` 0.05, `planningMs` 1.058, `executionMs` 0.124, detail 줄(`Sort Key:`, `Buffers:`, `Index Searches:`)과 `Planning:` 블록은 node가 아니다.
@@ -455,21 +455,21 @@ fixture는 test DB에서 받은 실제 출력이다(이 계획의 "먼저 확인
 - `costs_off_and_timing_off`: `(actual rows=1 loops=1)`만 있는 줄, cost 없는 줄도 node다.
 - `json_format_is_not_a_plan`: `[{"Plan": …}]` → null.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query/explainPlan.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 뿌리는 `->`가 없는 첫 줄 가운데 `(cost=`, `(actual `, `(never executed)`가 있는 줄, 자식은 `->  `로 시작하는 줄이다. label은 그 줄에서 처음 `  (` 앞까지다. `->`의 열 위치로 stack을 쌓아 부모를 정한다(열이 같거나 깊은 것을 pop). 나머지 줄은 detail로 버리고 `Planning Time:`, `Execution Time:`만 읽는다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
