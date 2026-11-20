@@ -283,10 +283,10 @@ export const en = {
     "The connection dropped while a transaction was open. It was not applied. The next run opens a new session.",
 
   "toast.copiedMessage": "Copied message",
-  "toast.reformatFailed": "Couldn't reformat: {reason}",
   "toast.copiedCell": "Copied cell",
   "toast.copiedRows.one": "Copied 1 row (tab-separated)",
   "toast.copiedRows.other": "Copied {count} rows (tab-separated)",
+  "toast.reformatFailed": "Couldn't reformat: {reason}",
 
   "settings.errorTitle": "Settings were not applied",
   "settings.storeErrorTitle": "Recent projects and unsaved tabs are not kept",

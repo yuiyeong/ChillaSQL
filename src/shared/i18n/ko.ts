@@ -284,10 +284,10 @@ export const ko: Record<MessageKey, string> = {
     "트랜잭션이 열린 동안 연결이 끊겼습니다. 트랜잭션은 반영되지 않았습니다. 다음 실행은 새 세션을 엽니다.",
 
   "toast.copiedMessage": "메시지 복사됨",
-  "toast.reformatFailed": "Reformat하지 못했습니다: {reason}",
   "toast.copiedCell": "셀 복사됨",
   "toast.copiedRows.one": "1행 복사됨 (탭으로 구분)",
   "toast.copiedRows.other": "{count}행 복사됨 (탭으로 구분)",
+  "toast.reformatFailed": "Reformat하지 못했습니다: {reason}",
 
   "settings.errorTitle": "설정을 적용하지 못했습니다",
   "settings.storeErrorTitle":

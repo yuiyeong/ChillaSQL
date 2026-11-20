@@ -13,11 +13,12 @@ const IDENT_CHAR = /[A-Za-z0-9_$\u0080-￿]/;
 const DOLLAR_TAG = /\$(?:[A-Za-z_\u0080-￿][\w\u0080-￿]*)?\$/y;
 
 /**
- * 닫히지 않은 block comment가 있는지. PostgreSQL의 block comment는 중첩되고, 문자열(`'`, `E'`),
- * 식별자(`"`), `--` 주석, dollar-quote 안의 `/*`는 주석을 열지 않는다. 닫히지 않은 quote는
- * 여기서 알리지 않는다(sql-formatter가 throw한다).
+ * text가 sql-formatter에 맡기면 SQL이 바뀌는 모양이면 그 이유. 아니면 null이다. 닫히지 않은
+ * block comment, 문자열, 식별자, dollar-quote 본문은 sql-formatter가 throw하지 않고 `/ * abc`
+ * 처럼 바꾸는 경우가 있어 먼저 알아본다. PostgreSQL의 block comment는 중첩되고, 문자열(`'`, `E'`),
+ * 식별자(`"`), `--` 주석, dollar-quote 안의 `/*`는 주석을 열지 않는다.
  */
-export function hasUnclosedBlockComment(text: string): boolean {
+export function unclosedReason(text: string): string | null {
   let depth = 0;
   let i = 0;
   while (i < text.length) {
@@ -45,8 +46,10 @@ export function hasUnclosedBlockComment(text: string): boolean {
       const escaped =
         /[eE]/.test(text[i - 1] ?? "") && !IDENT_CHAR.test(text[i - 2] ?? "");
       i = closingQuote(text, i, escaped);
+      if (i === -1) return "unclosed string";
     } else if (char === '"') {
       i = closingQuote(text, i, false);
+      if (i === -1) return "unclosed quoted identifier";
     } else if (char === "$" && !IDENT_CHAR.test(text[i - 1] ?? "")) {
       DOLLAR_TAG.lastIndex = i;
       const tag = DOLLAR_TAG.exec(text)?.[0];
@@ -54,23 +57,24 @@ export function hasUnclosedBlockComment(text: string): boolean {
         i++;
       } else {
         const end = text.indexOf(tag, i + tag.length);
-        i = end === -1 ? text.length : end + tag.length;
+        if (end === -1) return "unclosed dollar-quoted string";
+        i = end + tag.length;
       }
     } else {
       i++;
     }
   }
-  return depth > 0;
+  return depth > 0 ? "unclosed block comment" : null;
 }
 
-/** `start`의 여는 quote 뒤 닫는 quote 다음 위치. 닫히지 않으면 끝이다. `''`는 quote 둘로 읽어도 같다. */
+/** `start`의 여는 quote 뒤 닫는 quote 다음 위치. 닫히지 않으면 -1이다. `''`는 quote 둘로 읽어도 같다. */
 function closingQuote(text: string, start: number, escaped: boolean): number {
   const quote = text[start];
   for (let i = start + 1; i < text.length; i++) {
     if (escaped && text[i] === "\\") i++;
     else if (text[i] === quote) return i + 1;
   }
-  return text.length;
+  return -1;
 }
 
 /** 공백이 아닌 글자가 `count`개 나온 직후의 위치 */
@@ -101,12 +105,15 @@ export function reformatDocument(
   const original = state.sliceDoc(from, to);
   if (original.trim() === "") return { ok: true };
 
-  if (hasUnclosedBlockComment(original)) {
-    return { ok: false, reason: "unclosed block comment" };
-  }
+  const unclosed = unclosedReason(original);
+  if (unclosed !== null) return { ok: false, reason: unclosed };
   let formatted: string;
   try {
-    formatted = format(original, OPTIONS);
+    // sql-formatter는 앞뒤 공백을 지우므로 범위의 것을 다시 붙인다. 선택 밖 줄과 파일 끝 줄바꿈이 남는다.
+    formatted =
+      /^\s*/.exec(original)![0] +
+      format(original, OPTIONS) +
+      /\s*$/.exec(original)![0];
   } catch (error) {
     return { ok: false, reason: firstLine(error) };
   }

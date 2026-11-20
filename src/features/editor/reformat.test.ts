@@ -12,7 +12,7 @@ import {
   openDocument,
   setDocumentState,
 } from "./documents";
-import { hasUnclosedBlockComment, reformatDocument } from "./reformat";
+import { unclosedReason, reformatDocument } from "./reformat";
 
 beforeEach(() => {
   openDocument("t", "");
@@ -92,7 +92,7 @@ test("one_undo_restores_the_text", () => {
 });
 
 test("failure_leaves_the_document", () => {
-  setText("SELECT 'unclosed");
+  setText("SELECT 1 ]");
   const before = documentState("t");
 
   const result = reformatDocument("t");
@@ -173,28 +173,58 @@ test("goes_through_the_mounted_view", () => {
   view.destroy();
 });
 
-test("unclosed_block_comment_detection", () => {
-  const unclosed = [
-    "SELECT 1 /* abc",
-    "/* a /* b */ c",
-    "SELECT 1 -- x */\n/* y",
+test("unclosed_literal_detection", () => {
+  const unclosed: [string, string][] = [
+    ["SELECT 1 /* abc", "unclosed block comment"],
+    ["/* a /* b */ c", "unclosed block comment"],
+    ["SELECT 1 -- x */\n/* y", "unclosed block comment"],
+    ["SELECT 'abc", "unclosed string"],
+    ["SELECT E'abc\\' /*", "unclosed string"],
+    ['SELECT "abc', "unclosed quoted identifier"],
+    ["SELECT $$ /*", "unclosed dollar-quoted string"],
+    ["SELECT $t$ a $$", "unclosed dollar-quoted string"],
   ];
   const closed = [
     "SELECT 1 /* abc */",
     "/* a /* b */ c */ SELECT 1",
     "SELECT '/*'",
+    "SELECT 'it''s /*'",
     "SELECT E'\\'/*'",
     'SELECT "/*" FROM t',
     "SELECT 1 -- /*\n, 2",
     "SELECT $$ /* $$",
     "SELECT $tag$ /* $tag$, $1",
     "/* ' */ SELECT 1",
-    // 닫히지 않은 quote는 sql-formatter가 알린다.
-    "SELECT 'abc /*",
-    "SELECT $$ /*",
   ];
-  for (const sql of unclosed)
-    expect(hasUnclosedBlockComment(sql), sql).toBe(true);
-  for (const sql of closed)
-    expect(hasUnclosedBlockComment(sql), sql).toBe(false);
+  for (const [sql, reason] of unclosed) {
+    expect(unclosedReason(sql), sql).toBe(reason);
+  }
+  for (const sql of closed) expect(unclosedReason(sql), sql).toBeNull();
+});
+
+test("keeps_whitespace_around_a_selection_ending_with_a_newline", () => {
+  const text = "select 1;\nselect 2";
+  setText(text, 0, "select 1;\n".length);
+
+  expect(reformatDocument("t")).toEqual({ ok: true });
+
+  expect(documentText("t")).toBe("select\n  1;\nselect 2");
+  expect(documentSelection("t")).toMatchObject({ from: 0, to: 12 });
+});
+
+test("keeps_leading_and_trailing_whitespace_of_the_whole_document", () => {
+  setText("\n\nselect 1;\n");
+
+  expect(reformatDocument("t")).toEqual({ ok: true });
+
+  expect(documentText("t")).toBe("\n\nselect\n  1;\n");
+});
+
+test("an_already_formatted_document_is_left_alone", () => {
+  setText("select\n  1;\n");
+  const before = documentState("t");
+
+  expect(reformatDocument("t")).toEqual({ ok: true });
+
+  expect(documentState("t")).toBe(before);
 });
