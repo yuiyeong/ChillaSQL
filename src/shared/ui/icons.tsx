@@ -243,3 +243,11 @@ export function SpinnerIcon({ size = 12, className = "", ...rest }: IconProps) {
     </Stroke>
   );
 }
+
+export function ReformatIcon({ size = 15, ...rest }: IconProps) {
+  return (
+    <Stroke size={size} width={1.5} {...rest}>
+      <path d="M2.5 4h11M2.5 8h7M2.5 12h9" />
+    </Stroke>
+  );
+}

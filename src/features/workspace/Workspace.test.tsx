@@ -755,3 +755,59 @@ test("탭이 없으면 status bar가 비고 에디터 자리에 단축키 안내
   expect(screen.getAllByText("Run statement at cursor")).toHaveLength(2);
   expect(screen.getAllByText("New tab")).toHaveLength(2);
 });
+
+describe("Reformat", () => {
+  // jsdom의 Range에는 CodeMirror가 scrollIntoView에서 재는 함수가 없다.
+  beforeEach(() => {
+    const rect = new DOMRect();
+    const rects = Object.assign([], { item: () => null });
+    Object.defineProperties(Range.prototype, {
+      getClientRects: { value: () => rects, configurable: true },
+      getBoundingClientRect: { value: () => rect, configurable: true },
+    });
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(Range.prototype, "getClientRects");
+    Reflect.deleteProperty(Range.prototype, "getBoundingClientRect");
+  });
+
+  const optCmdL = () =>
+    act(async () => {
+      window.dispatchEvent(
+        new KeyboardEvent("keydown", {
+          code: "KeyL",
+          metaKey: true,
+          altKey: true,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    });
+
+  test("Opt+Cmd+L이 문서를 정렬하고 dirty로 표시한다", async () => {
+    openProjectWith([connection("local")]);
+    tabWith("select a,b from t", "local");
+    renderWorkspace();
+
+    await optCmdL();
+
+    expect(screen.getByLabelText("Unsaved")).toBeInTheDocument();
+    expect(document.querySelector(".cm-content")?.textContent).toContain(
+      "from",
+    );
+    expect(document.querySelectorAll(".cm-line").length).toBeGreaterThan(1);
+  });
+
+  test("정렬하지 못하면 문서를 두고 toast로 이유를 보여 준다", async () => {
+    openProjectWith([connection("local")]);
+    tabWith("SELECT 1 /* abc", "local");
+    renderWorkspace();
+
+    await optCmdL();
+
+    expect(
+      within(screen.getByTestId("editor-area")).getByRole("status"),
+    ).toHaveTextContent("Couldn't reformat: unclosed block comment");
+    expect(screen.queryByLabelText("Unsaved")).toBeNull();
+  });
+});

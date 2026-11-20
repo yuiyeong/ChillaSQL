@@ -23,6 +23,7 @@ const keymap: {
   { code: "BracketLeft", shift: true, alt: false, command: "prevTab" },
   { code: "Enter", shift: true, alt: true, command: "commit" },
   { code: "KeyZ", shift: true, alt: true, command: "rollback" },
+  { code: "KeyL", shift: false, alt: true, command: "reformat" },
 ];
 
 /** 화면에 쓰지 않는 key의 이름. 나머지 `KeyX`는 `X`다. */

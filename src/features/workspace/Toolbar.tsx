@@ -11,6 +11,7 @@ import { Button } from "../../shared/ui/Button";
 import {
   ChevronDownIcon,
   PlayIcon,
+  ReformatIcon,
   StopIcon,
   TunnelIcon,
 } from "../../shared/ui/icons";
@@ -25,6 +26,7 @@ import type { Connection } from "../../shared/api/types";
 /** 실행 버튼의 너비. label이 바뀌어도 toolbar가 움직이지 않도록 고정한다. */
 const RUN_WIDTH = 200;
 const CHOOSE_WIDTH = 26;
+const ICON_WIDTH = 28;
 const CANCEL_WIDTH = 227;
 /** menu 너비에서 border 2px과 padding 8px을 뺀 안쪽 너비 */
 const CONNECTION_MENU_WIDTH = 290;
@@ -143,6 +145,19 @@ export function Toolbar({
         </Menu>
 
         <TransactionControls tabId={tabId} />
+
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("toolbar.reformat")}
+          aria-keyshortcuts={shortcutKeys("reformat")}
+          disabled={tab === undefined}
+          style={{ width: ICON_WIDTH }}
+          onClick={() => void execute("reformat")}
+        >
+          <ReformatIcon />
+        </Button>
+        <div aria-hidden="true" className="bg-line-2 h-[18px] w-px shrink-0" />
 
         {busy ? (
           <Button

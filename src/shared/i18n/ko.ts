@@ -39,6 +39,7 @@ export const ko: Record<MessageKey, string> = {
   "toolbar.runFile": "파일 실행",
   "toolbar.chooseWhatToRun": "실행할 범위 선택",
   "toolbar.whatToRun": "실행할 범위",
+  "toolbar.reformat": "Reformat (Opt+Cmd+L)",
 
   "workspace.resizeResults": "결과 패널 크기 조절",
   "status.position": "줄 {line}, 열 {column}",
@@ -203,6 +204,7 @@ export const ko: Record<MessageKey, string> = {
 
   "result.hintRun": "커서 위치의 문장 실행",
   "result.hintNewTab": "새 탭",
+  "result.hintReformat": "Reformat",
   "result.reconnected": "다시 연결됨",
   "result.reconnectedDetail":
     "새 세션이라 SET 값과 임시 테이블 같은 세션 상태가 초기화되었습니다.",
@@ -282,6 +284,7 @@ export const ko: Record<MessageKey, string> = {
     "트랜잭션이 열린 동안 연결이 끊겼습니다. 트랜잭션은 반영되지 않았습니다. 다음 실행은 새 세션을 엽니다.",
 
   "toast.copiedMessage": "메시지 복사됨",
+  "toast.reformatFailed": "Reformat하지 못했습니다: {reason}",
   "toast.copiedCell": "셀 복사됨",
   "toast.copiedRows.one": "1행 복사됨 (탭으로 구분)",
   "toast.copiedRows.other": "{count}행 복사됨 (탭으로 구분)",

@@ -1,4 +1,5 @@
 import { EditorState } from "@codemirror/state";
+import type { EditorView } from "@codemirror/view";
 import { editorExtensions } from "./extensions";
 
 // 문서 text는 여기의 EditorState에만 둔다. Zustand와 React state에 넣지 않는다.
@@ -9,6 +10,23 @@ const documents = new Map<string, EditorState>();
  * 나뉘지 않기 때문이다.
  */
 const crlfDocuments = new Set<string>();
+
+/** 에디터가 지금 보여 주는 탭의 view. 에디터는 view 하나로 탭을 바꿔 가며 보여 준다. */
+let liveView: { view: EditorView; tabId: string } | null = null;
+
+/** `view`가 `tabId`의 문서를 보여 준다고 알린다. 탭을 바꿀 때마다 다시 부른다. */
+export function attachView(view: EditorView, tabId: string): void {
+  liveView = { view, tabId };
+}
+
+export function detachView(view: EditorView): void {
+  if (liveView?.view === view) liveView = null;
+}
+
+/** 그 탭을 지금 보여 주는 view. 보여 주지 않는 탭은 null이다. */
+export function viewShowing(tabId: string): EditorView | null {
+  return liveView?.tabId === tabId ? liveView.view : null;
+}
 
 export function openDocument(tabId: string, text: string): void {
   documents.set(

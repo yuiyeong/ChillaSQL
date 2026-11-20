@@ -8,6 +8,7 @@ import {
 } from "react";
 import type { Connection, Project } from "../../shared/api/types";
 import { ConnectionForm } from "../connections/ConnectionForm";
+import { useEditorNotice } from "../editor/editorNotice";
 import { saveTab } from "../editor/saveTab";
 import { SqlEditor } from "../editor/SqlEditor";
 import { TabBar } from "../editor/TabBar";
@@ -32,6 +33,7 @@ import { Toolbar } from "./Toolbar";
 import { applySettlement, chooseSettlement } from "./transactionPrompts";
 import { subscribeTunnelEvents } from "./tunnelEvents";
 import { t } from "../../shared/i18n/t";
+import { Toast } from "../../shared/ui/Toast";
 
 /** 연 접속 form. 열 때마다 새 object라서 닫은 form의 늦은 onSaved를 가려낸다. */
 interface OpenForm {
@@ -57,6 +59,7 @@ export function Workspace() {
   const project = useProject((s) => s.project);
   const error = useProject((s) => s.error);
   const clearError = useProject((s) => s.clearError);
+  const notice = useEditorNotice((s) => s.message);
   const [form, setForm] = useState<OpenForm | null>(null);
   const [connectionMenu, setConnectionMenu] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
@@ -174,6 +177,7 @@ export function Workspace() {
                 <Hints />
               )}
             </div>
+            <Toast message={notice} />
           </div>
           <ResultSplit
             editorRef={editorRef}

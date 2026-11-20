@@ -381,3 +381,23 @@ test("connection_menu_open_is_controlled", async () => {
   );
   expect(screen.queryByRole("menu", { name: "Connections" })).toBeNull();
 });
+
+test("reformat_button_runs_the_command", async () => {
+  openProjectWith([connection("local")]);
+  tabWith("local");
+  renderToolbar();
+
+  const button = screen.getByRole("button", { name: "Reformat (Opt+Cmd+L)" });
+  expect(button).toHaveAttribute("aria-keyshortcuts", "Alt+Meta+L");
+  await click(button);
+
+  expect(execute).toHaveBeenCalledWith("reformat");
+});
+
+test("탭이 없으면 Reformat이 disabled다", () => {
+  renderToolbar();
+
+  expect(
+    screen.getByRole("button", { name: "Reformat (Opt+Cmd+L)" }),
+  ).toBeDisabled();
+});

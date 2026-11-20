@@ -131,3 +131,14 @@ test("unmount하면 key를 잡지 않는다", () => {
 
   expect(run.defaultPrevented).toBe(false);
 });
+
+test("opt_cmd_l_is_reformat", () => {
+  expect(
+    commandFor(key("KeyL", { metaKey: true, altKey: true }, { key: "ㅣ" })),
+  ).toBe("reformat");
+  // Shift가 붙은 Cmd+L은 새 탭이다.
+  expect(commandFor(key("KeyL", shiftCmd))).toBe("newTab");
+  expect(commandFor(key("KeyL", { altKey: true }))).toBeNull();
+  expect(shortcutLabel("reformat")).toBe("⌥⌘L");
+  expect(shortcutKeys("reformat")).toBe("Alt+Meta+L");
+});

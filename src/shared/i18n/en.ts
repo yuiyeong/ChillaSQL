@@ -38,6 +38,7 @@ export const en = {
   "toolbar.runFile": "Run file",
   "toolbar.chooseWhatToRun": "Choose what to run",
   "toolbar.whatToRun": "What to run",
+  "toolbar.reformat": "Reformat (Opt+Cmd+L)",
 
   "workspace.resizeResults": "Resize results panel",
   "status.position": "Ln {line}, Col {column}",
@@ -201,6 +202,7 @@ export const en = {
 
   "result.hintRun": "Run statement at cursor",
   "result.hintNewTab": "New tab",
+  "result.hintReformat": "Reformat",
   "result.reconnected": "Reconnected",
   "result.reconnectedDetail":
     "This is a new session, so session state such as SET values and temporary tables was reset.",
@@ -281,6 +283,7 @@ export const en = {
     "The connection dropped while a transaction was open. It was not applied. The next run opens a new session.",
 
   "toast.copiedMessage": "Copied message",
+  "toast.reformatFailed": "Couldn't reformat: {reason}",
   "toast.copiedCell": "Copied cell",
   "toast.copiedRows.one": "Copied 1 row (tab-separated)",
   "toast.copiedRows.other": "Copied {count} rows (tab-separated)",

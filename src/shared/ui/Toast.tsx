@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-const TOAST_MS = 2000;
+export const TOAST_MS = 2000;
 
 /**
  * 잠깐 보이는 알림. message가 null이면 비어 있다.

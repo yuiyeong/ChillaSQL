@@ -75,6 +75,13 @@ test("tabId가 null이거나 idle이면 단축키를 가르친다", () => {
   expect(screen.getByText("Run statement at cursor")).toBeInTheDocument();
 });
 
+test("hints_include_reformat", () => {
+  render(<ResultPane tabId={null} hasConnection={false} />);
+
+  expect(screen.getByText("Reformat")).toBeInTheDocument();
+  expect(screen.getByText(shortcutLabel("reformat"))).toHaveTextContent("⌥⌘L");
+});
+
 test("접속이 없는 탭은 접속을 고르라고 한다", () => {
   render(<ResultPane tabId="t" hasConnection={false} />);
 

@@ -437,7 +437,7 @@ function Centered({ children }: { children: ReactNode }) {
   );
 }
 
-/** 실행과 새 탭 단축키 안내. 결과 panel의 빈 상태와 탭이 없는 에디터 자리가 같이 쓴다. */
+/** 실행, 새 탭, Reformat 단축키 안내. 결과 panel의 빈 상태와 탭이 없는 에디터 자리가 같이 쓴다. */
 export function Hints() {
   return (
     <div className="text-small text-fg-2 flex h-full min-h-16 items-center justify-center gap-7 p-4">
@@ -448,6 +448,10 @@ export function Hints() {
       <span className="flex items-center gap-2">
         <Kbd>{shortcutLabel("newTab")}</Kbd>
         {t("result.hintNewTab")}
+      </span>
+      <span className="flex items-center gap-2">
+        <Kbd>{shortcutLabel("reformat")}</Kbd>
+        {t("result.hintReformat")}
       </span>
     </div>
   );

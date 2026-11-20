@@ -2,7 +2,12 @@ import { EditorView } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 import type { Catalog } from "../../shared/api/types";
 import { catalogField, setCatalog } from "./completion";
-import { documentState, setDocumentState } from "./documents";
+import {
+  attachView,
+  detachView,
+  documentState,
+  setDocumentState,
+} from "./documents";
 import { useEditorStatus } from "./editorStatus";
 
 interface SqlEditorProps {
@@ -43,7 +48,9 @@ export function SqlEditor({ tabId, catalog, onDocChange }: SqlEditorProps) {
       },
     });
     viewRef.current = view;
+    attachView(view, shownTabRef.current);
     return () => {
+      detachView(view);
       view.destroy();
       viewRef.current = null;
     };
@@ -56,6 +63,7 @@ export function SqlEditor({ tabId, catalog, onDocChange }: SqlEditorProps) {
     const state = documentState(tabId);
     shownTabRef.current = tabId;
     view.setState(state);
+    attachView(view, tabId);
     useEditorStatus.getState().update(tabId, state);
     view.focus();
   }, [tabId]);

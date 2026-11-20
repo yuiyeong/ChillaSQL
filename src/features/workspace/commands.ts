@@ -15,6 +15,8 @@ import { quoteIdent } from "../../shared/sql/identifiers";
 import { targetChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { documentSelection, documentText } from "../editor/documents";
+import { showEditorNotice } from "../editor/editorNotice";
+import { reformatDocument } from "../editor/reformat";
 import { saveTab } from "../editor/saveTab";
 import { lineColumn, statementAt } from "../editor/statementAt";
 import { useTabs } from "../editor/tabsStore";
@@ -42,7 +44,8 @@ export type CommandId =
   | "nextTab"
   | "prevTab"
   | "commit"
-  | "rollback";
+  | "rollback"
+  | "reformat";
 
 function findTab(tabId: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === tabId);
@@ -146,6 +149,13 @@ export async function execute(command: CommandId): Promise<void> {
       return;
     case "closeTab":
       return closeTab(tabId);
+    case "reformat": {
+      const result = reformatDocument(tabId);
+      if (!result.ok) {
+        showEditorNotice(t("toast.reformatFailed", { reason: result.reason }));
+      }
+      return;
+    }
     case "commit":
     case "rollback":
       await endActiveTransaction(tabId, command);
