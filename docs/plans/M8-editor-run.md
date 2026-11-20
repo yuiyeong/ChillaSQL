@@ -113,18 +113,18 @@ test가 없으면 사용자가 가장 먼저 부딪힐 입력과 상황이다. �
 **Files:**
 - Modify: `docs/progress.md`, `docs/spec.md`, `docs/milestones.md`, `docs/architecture.md`, `package.json`, `pnpm-lock.yaml`
 
-- [ ] **Step 1: `sql-formatter`를 확인한다**
+- [x] **Step 1: `sql-formatter`를 확인한다**
 
 `pnpm add sql-formatter@15.9.1` 뒤 scratchpad의 node script로 `format(text, { language: "postgresql", keywordCase: "preserve", tabWidth: 2 })`를 돌린다. 확인할 것: `::date` 캐스팅, `$$ … $$` 함수 본문(안의 `;` 포함), `->>`, `@>`, `"Order Items"`, 한글 식별자와 주석이 의미를 바꾸지 않음. 문법 오류(`SELEC 1 FROM`), 닫히지 않은 따옴표에서 throw하는지와 그 message. 2,000문장 text의 시간. 결과를 이 계획의 "먼저 확인한 것" 표 마지막 줄에 적는다. 의미가 바뀌는 입력이 있으면 그 입력은 Reformat하지 않도록(toast) Task 10의 test에 더한다.
 
-- [ ] **Step 2: 문서를 고친다**
+- [x] **Step 2: 문서를 고친다**
 
 - 진행상황: M8을 `진행 중`(시작 2026-11-20, 계획 링크), "지금"을 M8 Task 2로. 결정 기록에 "먼저 확인한 것"의 결정과 "이 계획에서 정한 것"의 줄마다 한 줄(날짜, M8). M3의 "마지막 프로젝트를 `localStorage`에", "앱을 끝낼 때 묻지 않음", M4의 "Run again은 처음 `origin`" 줄에 대신하는 결정을 가리킨다.
 - 기획서: 4.1 읽기 전용(key 이름), 4.4(Formatting의 선택 영역, 오류 위치의 Go to error, 자동 보관과 프로젝트 바꾸기), 4.5(여러 문장의 `drain`, 타임아웃의 key와 단위, 실행 범위 강조), 4.6(timestamptz는 Mac의 time zone), 4.10(Cmd+O, Shift+Enter 확정), 5장(전역 설정 key 표, 앱 내부 저장소 위치), 9장에서 정한 두 줄(key 이름, 키맵)을 지운다. 마지막 수정 날짜.
 - 마일스톤 M8 "먼저 확인할 것" 넷에 `→ 정함:`으로 결과를 적는다.
 - 구조 2장 표에 `rusqlite`, `iana-time-zone`을 `infrastructure`의 crate로 더한다.
 
-- [ ] **Step 3: commit**
+- [x] **Step 3: commit**
 
 ```bash
 git add docs package.json pnpm-lock.yaml
@@ -152,30 +152,30 @@ git commit -m "docs: M8 계획과 type 얻기, 범위 강조, 접속 key, 설정
   `TxTap`: `pub(crate) struct RowTypes(Arc<Mutex<VecDeque<Vec<(u32, i32)>>>>)`, `fn clear(&self)`, `fn pop(&self) -> Option<Vec<(u32, i32)>>`. `TxTap::new`가 `(Self, TxStatusCell, RowTypes)`를 돌려준다.
 - 화면: `export interface ResultColumn { name: string; typeOid: number; typeModifier: number }`. `QueryEvent`의 `columns`와 `ResultData.columns`가 `ResultColumn[]`이다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `tx_tap.rs`: `row_description_types_are_queued`(필드 둘인 `T` message를 3 byte씩 나눠 넣으면 `pop()`이 `[(23, -1), (1043, 259)]`), `clear_drops_queued_types`, `status_is_still_read_after_a_row_description`.
 - `tests/query_stream.rs`: `columns_carry_type_oid_and_modifier`(`SELECT 1::int4 AS a, 'x'::varchar(10) AS b, NULL::numeric(10,2) AS c` → `(23,-1)`, `(1043,14)`, `(1700,655366)`), `types_follow_each_query`(앞 쿼리 뒤에 다른 컬럼의 쿼리를 보내도 그 쿼리의 type).
 - `runReducer.test.ts`: `columns_keep_their_types`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core tx_tap query_stream` 와 `pnpm vitest run src/features/query/runReducer.test.ts`
 Expected: FAIL(`type_oid` 없음)
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `TxTap::start_payload`: `T` message면 payload를 모아(header에 길이가 있다) 다 모이면 field 수(int16) → field마다 name(NUL로 끝남), table OID(4), attnum(2), type OID(4), typlen(2), typmod(4), format(2)에서 type OID와 typmod를 꺼내 queue에 넣는다. 다른 message는 지금처럼 건너뛴다.
 - `PgConnection::start_query`가 `simple_query_raw` 전에 `row_types.clear()`. `PgRows`가 `RowDescription`에서 `pop()`한 값을 이름과 짝짓는다. 값이 없거나 수가 다르면 `(0, -1)`이다(화면은 type 없음으로 그린다).
 - fake connection은 test가 준 type을 그대로 돌려준다. DTO는 `typeOid`, `typeModifier`(camelCase, 기존 DTO와 같은 규칙).
 - 화면은 컬럼 이름이 필요한 곳에서 `column.name`을 쓴다. 그리는 모양은 Task 14가 바꾼다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src
@@ -218,28 +218,28 @@ git commit -m "feat: RowDescription에서 결과 컬럼의 type OID와 typmod를
   export function useColumnType(connection: string | null, column: ResultColumn): TypeInfo | undefined;
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `tests/catalog.rs`: `describe_types_formats_with_typmod`(위 "먼저 확인한 것"의 다섯 쌍이 그 이름과 category), `describe_types_skips_unknown_oids`(`(0,-1)`과 없는 OID는 결과에 없음), `describe_types_of_a_domain_and_enum`(test에서 만든 `CREATE TYPE mood AS ENUM`, `CREATE DOMAIN`의 이름이 schema 경로대로).
 - `app.rs`의 test: `describe_types_uses_the_catalog_connection`(같은 접속의 `load_catalog`와 연결 하나).
 - `typesStore.test.ts`: `asks_only_unknown_types`, `does_not_ask_twice_while_pending`, `failure_is_ignored`, `forget_drops_the_connection`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core describe_types` 와 `pnpm vitest run src/features/query/typesStore.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - SQL: `SELECT m.oid, m.typmod, format_type(m.oid, m.typmod), t.typcategory FROM unnest($1::oid[], $2::int4[]) AS m(oid, typmod) JOIN pg_type t ON t.oid = m.oid`. `App::describe_types`는 `read_catalog_with`를 쓴다(끊기면 한 번 다시 연결).
 - 화면은 `runsStore`가 `columns` event를 받을 때 그 탭의 접속으로 `useTypes.getState().ensure`를 부른다. `useSchema`의 `forget`/`refresh`와 `switchProject`가 `useTypes`의 `forget`/`reset`도 부른다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src
@@ -273,31 +273,31 @@ git commit -m "feat: catalog connection이 결과 컬럼의 type 이름과 categ
   ```
   TS `Connection`에 `readOnly: boolean`, `statementTimeout: number | null`(초). `testConnection`이 `Promise<{ version: string }>`.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `connection.rs`: `statement_timeout_range`(0과 86401 거절), `same_session_compares_read_only_and_timeout`, `same_target_ignores_session_settings`(비밀번호를 지우지 않는다).
 - `tests/project_file.rs`: `reads_read_only_and_statement_timeout`, `writes_them_only_when_set`(false와 없음은 key를 쓰지 않음), `rejects_a_string_statement_timeout`(`"30s"`는 `InvalidConnection`).
 - `tests/sessions.rs`: `read_only_session_rejects_writes`(`CREATE TEMP TABLE`이 SQLSTATE `25006`), `statement_timeout_cancels_long_queries`(1초, `pg_sleep(2)`가 `57014`), `session_time_zone_is_the_mac_zone`(`SHOW TimeZone`이 `iana_time_zone::get_timezone()`과 같음).
 - `tests/connect.rs`: `test_connection_returns_the_server_version`(`"18."`으로 시작).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `start`에서 `config.options(…)`: `-c default_transaction_read_only=on`(read_only), `-c statement_timeout={ms}`, `-c TimeZone={zone}`. zone은 `PgConnector::new`에서 `iana_time_zone::get_timezone()`으로 한 번 얻고, 실패하거나 공백·작은따옴표가 든 이름이면 넣지 않는다.
 - `server_version`: 연결 직후 `backend_pid`와 같은 simple query에서 `SELECT pg_backend_pid(), current_setting('server_version')`으로 함께 읽는다(round trip을 늘리지 않는다).
 - `project_file.rs`는 `tunnel_timeout`과 같은 방식으로 읽고 쓴다.
 - 화면 쪽 `Connection` type과 `toConnection` 기본값만 맞춘다(form은 Task 16).
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src
@@ -395,7 +395,7 @@ git commit -m "feat: 전역 설정 파일을 읽어 결과 한도, 언어, 에�
   ```
   commands `recent_projects`, `load_workspace`, `save_workspace`. `load_settings`의 DTO에 `storeError: string | null`(열지 못한 이유)을 더한다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `tests/app_store.rs`(임시 파일):
 - `records_and_lists_recent_projects_newest_first`, `keeps_only_ten`, `recording_again_moves_it_to_the_top`.
@@ -404,23 +404,23 @@ git commit -m "feat: 전역 설정 파일을 읽어 결과 한도, 언어, 에�
 - `app.rs` test: `opening_a_project_records_it`(`open_project`, `create_project` 둘 다), `a_failed_open_does_not_record_it`, `save_workspace_needs_a_project`.
 - `layer_deps.rs`의 금지 목록에 `rusqlite`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace app_store opening_a_project_records_it`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `rusqlite`(`bundled`)는 `Mutex<Connection>`로 갖는다. 호출이 blocking이므로 App은 키체인처럼 `blocking(…)`으로 부른다. 열 때 `PRAGMA user_version`이 0이면 table을 만들고 1로, 1이면 그대로, 그 밖이면 오류다.
 - 기록 실패는 프로젝트 열기를 실패시키지 않는다(열기는 성공, 기록만 빠진다).
 - `lib.rs`: `app.path().app_data_dir()`에 디렉토리를 만들고 `chilla.sqlite3`를 연다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src
@@ -437,26 +437,26 @@ git commit -m "feat: SQLite 앱 저장소에 최근 프로젝트와 프로젝트
 **Interfaces:**
 - Produces: `App::execute(session, sql, mode, drain: bool, sink)`. `drain`이면 `Columns`와 첫 batch 하나만 보내고 나머지 행은 읽어서 버린 뒤 `Finished { Completed { rows } }`. 그 쿼리에 `fetch_more`는 `Ok`이고 아무것도 하지 않는다. idle timeout을 걸지 않는다. Cancel과 다음 실행에 밀리는 것은 지금과 같다. command `execute_query(…, drain: bool)`, TS `executeQuery(sessionId, sql, mode, onEvent, options?: { drain?: boolean })`.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - actor test(fake): `drain_sends_one_batch_and_completes`(1200행 → `Rows` 하나(500행), `Completed { rows: 1200 }`), `drain_does_not_expire`(시간을 idle timeout 너머로 보내도 `Expired`가 아님), `drain_can_be_cancelled`.
 - `tests/queries.rs`(test DB): `a_drained_statement_keeps_its_changes`(임시 테이블에 1000행을 넣고 `UPDATE t SET v = v + 1 RETURNING *`를 `drain`으로 실행 → batch 500행, `Completed { rows: 1000 }`, 다음 쿼리에서 1000행 모두 바뀌어 있음. Manual 모드에서도 같음).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla-core drain`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `Pending`에 `drain: bool`을 더하고, 첫 batch를 보낸 뒤 `drain`이면 `Paused`로 가지 않고 행을 버리며 읽는다. 버린 행의 byte는 batch 한도에 세지 않는다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src
@@ -474,26 +474,26 @@ git commit -m "feat: 여러 문장 실행을 위해 결과를 끝까지 읽고 �
 **Interfaces:**
 - Produces: `CommandError { kind, message, params: BTreeMap<&'static str, String>, output }`(`params`가 비면 보내지 않음). param 이름은 Rust message의 빈칸 이름이다: `path`, `name`, `connection`, `message`, `count`, `bytes`, `secs`, `code`, `id`, `query`. `errorKinds.json`은 `{ "<kind>": ["param", …] }`. TS `CommandError`에 `readonly params: Record<string, string>`.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `error.rs`: `kinds_and_params_match_the_screen`(`all_errors()`가 만드는 `(kind, params의 key 집합)`이 `../src/shared/i18n/errorKinds.json`과 같음 — 같은 kind인데 variant마다 param이 다르면 합집합), `params_hold_the_variable_parts`(`ProjectError::NotFound`의 `path`, `ConnectError::Database`의 `code`와 `message`).
 - `errors.test.ts`: `params_are_read_from_the_payload`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test -p chilla error` 와 `pnpm vitest run src/shared/api`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `From<AppError>`에서 kind를 고르는 match 옆에서 params를 채운다. kind 하나가 여러 variant를 묶으면(`project_invalid`, `invalid_connection`) 서버·파일 message를 `message` param 하나로 넘긴다. 화면이 쓰는 것은 Task 9다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src-tauri src
@@ -529,7 +529,7 @@ git commit -m "feat: Rust 오류에 화면이 번역할 params를 붙임"
   `messageOf(error)`: `CommandError`이고 `error.<kind>` key가 있으면 `t(key, params)`, 아니면 지금처럼 `error.message`.
 - 문구(`en.ts`): `error.<kind>`마다 지금 Rust message(빈칸은 `{param}`), `settings.errorTitle` "Settings were not applied", `settings.storeErrorTitle` "Recent projects and unsaved tabs are not kept".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `t.test.ts`: `t_uses_the_selected_language`, `plurals_follow_the_language`.
 - `ko.test.ts`: `every_error_kind_has_a_message`(`errorKinds.json`의 kind마다 en과 ko에 `error.<kind>`가 있고, 그 문구의 `{…}`가 param 이름과 같음), `placeholders_match_en`(모든 key에서 ko와 en의 `{…}` 집합이 같음).
@@ -538,22 +538,22 @@ git commit -m "feat: Rust 오류에 화면이 번역할 params를 붙임"
 - `App.test.tsx`: `waits_for_settings_before_the_project`, `shows_settings_errors_in_a_dialog`.
 - `sourceRules.test.ts`: `ko.ts`는 한글 문구 검사에서 뺀다(dictionary다).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/shared src/features/settings src/App.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `App`이 `useSettings.load()`를 기다린 뒤 `setLanguage`하고 `ProjectGate`를 그린다. `errors`가 있으면 `ask`(DialogHost)로 제목과 이유를 보이고 OK에서 `dismissErrors`.
 - `ko.ts`는 `en.ts`의 모든 key를 "이 계획에서 정한 것"의 `ko` 문구 규칙으로 옮긴다. 복수형 key는 같은 문구를 둔다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
