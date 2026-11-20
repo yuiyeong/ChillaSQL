@@ -75,25 +75,45 @@ impl Connector for PgConnector {
         profile: &ConnectionProfile,
         password: Option<&Password>,
     ) -> Result<PgConnection, ConnectError> {
-        let connection = establish(profile, password, self);
+        let connection = async {
+            let time_zone = self.time_zone.as_deref();
+            match establish(profile, password, self, time_zone).await {
+                // 서버의 tzdata가 Mac의 zone 이름을 모르면 startup packet의 `TimeZone` 때문에
+                // 모든 연결이 FATAL이 된다. 서버 기본값으로 한 번 다시 연결한다.
+                Err(error) if time_zone.is_some() && rejects_time_zone(&error) => {
+                    establish(profile, password, self, None).await
+                }
+                result => result,
+            }
+        };
         tokio::time::timeout(self.connect_timeout, connection)
             .await
             .unwrap_or(Err(ConnectError::Timeout))
     }
 }
 
+/// 서버가 startup packet의 `TimeZone` 값을 거절했는가(`invalid_parameter_value`).
+fn rejects_time_zone(error: &ConnectError) -> bool {
+    matches!(
+        error,
+        ConnectError::Database { code, message }
+            if code == SqlState::INVALID_PARAMETER_VALUE.code() && message.contains("TimeZone")
+    )
+}
+
 async fn establish(
     profile: &ConnectionProfile,
     password: Option<&Password>,
     connector: &PgConnector,
+    time_zone: Option<&str>,
 ) -> Result<PgConnection, ConnectError> {
     let tcp = open_tcp((profile.host.as_str(), profile.port)).await?;
     let server = tcp.peer_addr().map_err(unreachable)?;
     let Some(verification) = verification(profile) else {
-        return start(tcp, profile, server, password, connector).await;
+        return start(tcp, profile, server, password, connector, time_zone).await;
     };
     let tls = tls::negotiate(tcp, &profile.host, verification).await?;
-    start(tls, profile, server, password, connector).await
+    start(tls, profile, server, password, connector, time_zone).await
 }
 
 async fn open_tcp(addr: impl ToSocketAddrs) -> Result<TcpStream, ConnectError> {
@@ -134,6 +154,7 @@ async fn start<S>(
     server: SocketAddr,
     password: Option<&Password>,
     connector: &PgConnector,
+    time_zone: Option<&str>,
 ) -> Result<PgConnection, ConnectError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -147,7 +168,7 @@ where
         .application_name(APPLICATION_NAME)
         // 암호화는 이 함수에 오기 전에 끝난다. tokio-postgres는 SSL을 협상하지 않는다.
         .ssl_mode(tokio_postgres::config::SslMode::Disable);
-    if let Some(options) = startup_options(profile, connector.time_zone.as_deref()) {
+    if let Some(options) = startup_options(profile, time_zone) {
         config.options(&options);
     }
     if let Some(password) = password {
@@ -427,6 +448,65 @@ mod tests {
             startup_options(&all, Some("UTC")).as_deref(),
             Some("-c default_transaction_read_only=on -c statement_timeout=30000 -c TimeZone=UTC")
         );
+    }
+
+    fn database_error(code: &str, message: &str) -> ConnectError {
+        ConnectError::Database {
+            code: code.into(),
+            message: message.into(),
+        }
+    }
+
+    #[test]
+    fn only_a_rejected_time_zone_is_retried() {
+        let rejected = database_error(
+            "22023",
+            "invalid value for parameter \"TimeZone\": \"Europe/Kyiv\"",
+        );
+        assert!(rejects_time_zone(&rejected));
+        // 다른 parameter를 거절했거나 다른 오류면 다시 연결해도 소용없다.
+        assert!(!rejects_time_zone(&database_error(
+            "22023",
+            "invalid value for parameter \"statement_timeout\": \"-5\""
+        )));
+        assert!(!rejects_time_zone(&database_error(
+            "3D000",
+            "database \"TimeZone\" does not exist"
+        )));
+        assert!(!rejects_time_zone(&ConnectError::Timeout));
+    }
+
+    /// 서버가 모르는 zone 이름을 보내도 연결되고 서버 기본 `TimeZone`을 쓴다. 다른 startup option은
+    /// 다시 연결할 때도 건다.
+    #[tokio::test]
+    async fn unknown_time_zone_falls_back_to_the_server_default() {
+        let connector = PgConnector {
+            connect_timeout: DEFAULT_CONNECT_TIMEOUT,
+            time_zone: Some("Mars/Olympus_Mons".into()),
+        };
+        let profile = ConnectionProfile {
+            read_only: true,
+            ..local_profile()
+        };
+        let conn = connector
+            .connect(&profile, Some(&Password::new("chilla".into())))
+            .await
+            .expect("scripts/test-db.sh up 을 먼저 실행하세요");
+
+        let rows = conn
+            .client
+            .simple_query("SHOW TimeZone; SHOW default_transaction_read_only")
+            .await
+            .unwrap();
+        let values: Vec<String> = rows
+            .iter()
+            .filter_map(|m| match m {
+                SimpleQueryMessage::Row(row) => row.get(0).map(str::to_string),
+                _ => None,
+            })
+            .collect();
+        assert_ne!(values[0], "Mars/Olympus_Mons");
+        assert_eq!(values[1], "on");
     }
 
     #[test]
