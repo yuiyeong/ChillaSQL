@@ -57,6 +57,7 @@ import {
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
 import { useColumnTypes } from "./typesStore";
+import { ValueViewer } from "./ValueViewer";
 
 /** 지금 선택을 복사할 text와 알림 문구. 선택이 없으면 null */
 export type CopyTarget = { text: string; message: string } | null;
@@ -213,6 +214,16 @@ function Grid({
   const [selection, setSelection] = useState<Selection>(
     restored?.selection ?? null,
   );
+  // 값 보기 panel. 열어 둔 채 고른 셀을 바꾸면 그 셀을 보이고, 셀이 아닌 것을 고르면 숨는다.
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const viewedRow =
+    viewerOpen && selection?.kind === "cell"
+      ? rows[selection.row - firstRow]
+      : undefined;
+  const closeViewer = useCallback(() => {
+    setViewerOpen(false);
+    scrollRef.current?.focus({ preventScroll: true });
+  }, []);
 
   // 아래 effect와 handler가 읽는 최신 값. render 중에는 쓰지 않는다.
   const latest = useRef({
@@ -362,6 +373,17 @@ function Grid({
   // 그 frame의 행을 그리기 전에 화면이 먼저 움직여 빈 몸통이 보인다. 끝으로 바로 가면 scroll event가 한 번이다.
   const onGridKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
+    if (event.key === "Enter" && event.shiftKey) {
+      // 고른 셀이 있을 때만 연다. 전역 단축키가 아니라 표에 focus가 있을 때의 key다.
+      if (viewerOpen) {
+        event.preventDefault();
+        setViewerOpen(false);
+      } else if (selection?.kind === "cell") {
+        event.preventDefault();
+        setViewerOpen(true);
+      }
+      return;
+    }
     const toEnd =
       event.key === "End" || (event.metaKey && event.key === "ArrowDown");
     const toStart =
@@ -413,71 +435,91 @@ function Grid({
 
   return (
     <div
-      ref={scrollRef}
-      role="grid"
-      tabIndex={0}
-      aria-rowcount={receivedRows(result) + 1}
-      className="bg-bg-0 text-small text-fg @container relative min-h-0 flex-1 overflow-auto font-mono outline-none"
-      style={sizeVars}
-      onKeyDown={onGridKeyDown}
+      className="flex min-h-0 flex-1"
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && viewerOpen) {
+          event.preventDefault();
+          closeViewer();
+        }
+      }}
     >
-      <HeaderRow
-        headers={headers}
-        columns={columns}
-        types={columnTypes}
-        columnSizing={columnSizing}
-        resizing={resizing}
-        onFit={fitColumn}
-      />
       <div
-        className="relative w-(--row-width) min-w-full select-none"
-        style={{ height: totalSize }}
-        onClick={onBodyClick}
+        ref={scrollRef}
+        role="grid"
+        tabIndex={0}
+        aria-rowcount={receivedRows(result) + 1}
+        className="bg-bg-0 text-small text-fg @container relative min-h-0 min-w-0 flex-1 overflow-auto font-mono outline-none"
+        style={sizeVars}
+        onKeyDown={onGridKeyDown}
       >
-        {firstRow > 0 && (
-          <div
-            role="row"
-            className="border-line-1 absolute top-0 left-0 h-10 w-full border-b bg-[repeating-linear-gradient(135deg,var(--color-bg-1)_0_8px,var(--color-bg-0)_8px_16px)]"
-          >
-            <div className="sticky left-0 flex h-full w-[100cqw] items-center gap-3 px-3 font-sans">
-              <span className="min-w-0 flex-1 truncate">
-                {t("result.dropped", { end: formatCount(firstRow) })}
-              </span>
-              <Button size="small" onClick={onRunAgain}>
-                {t("result.runAgain")}
-              </Button>
-            </div>
-          </div>
-        )}
-        {items.map((item) => {
-          const rowNumber = firstRow + item.index;
-          return (
-            <Row
-              key={item.key}
-              cells={rows[item.index]}
-              kinds={kinds}
-              rowNumber={rowNumber}
-              top={item.start - HEADER_HEIGHT}
-              selected={
-                rowRange !== null &&
-                rowNumber >= rowRange[0] &&
-                rowNumber <= rowRange[1]
-              }
-              selectedColumn={
-                selection?.kind === "cell" && selection.row === rowNumber
-                  ? selection.column
-                  : -1
-              }
-            />
-          );
-        })}
-        <Footer
-          top={totalSize - FOOTER_HEIGHT}
-          fetching={fetch === "fetching"}
-          endRows={endRows}
-          received={firstRow + rows.length}
+        <HeaderRow
+          headers={headers}
+          columns={columns}
+          types={columnTypes}
+          columnSizing={columnSizing}
+          resizing={resizing}
+          onFit={fitColumn}
         />
+        <div
+          className="relative w-(--row-width) min-w-full select-none"
+          style={{ height: totalSize }}
+          onClick={onBodyClick}
+        >
+          {firstRow > 0 && (
+            <div
+              role="row"
+              className="border-line-1 absolute top-0 left-0 h-10 w-full border-b bg-[repeating-linear-gradient(135deg,var(--color-bg-1)_0_8px,var(--color-bg-0)_8px_16px)]"
+            >
+              <div className="sticky left-0 flex h-full w-[100cqw] items-center gap-3 px-3 font-sans">
+                <span className="min-w-0 flex-1 truncate">
+                  {t("result.dropped", { end: formatCount(firstRow) })}
+                </span>
+                <Button size="small" onClick={onRunAgain}>
+                  {t("result.runAgain")}
+                </Button>
+              </div>
+            </div>
+          )}
+          {items.map((item) => {
+            const rowNumber = firstRow + item.index;
+            return (
+              <Row
+                key={item.key}
+                cells={rows[item.index]}
+                kinds={kinds}
+                rowNumber={rowNumber}
+                top={item.start - HEADER_HEIGHT}
+                selected={
+                  rowRange !== null &&
+                  rowNumber >= rowRange[0] &&
+                  rowNumber <= rowRange[1]
+                }
+                selectedColumn={
+                  selection?.kind === "cell" && selection.row === rowNumber
+                    ? selection.column
+                    : -1
+                }
+              />
+            );
+          })}
+          <Footer
+            top={totalSize - FOOTER_HEIGHT}
+            fetching={fetch === "fetching"}
+            endRows={endRows}
+            received={firstRow + rows.length}
+          />
+        </div>
       </div>
+      {viewedRow !== undefined && selection?.kind === "cell" && (
+        <ValueViewer
+          column={resultColumns![selection.column]}
+          type={columnTypes[selection.column]}
+          row={selection.row + 1}
+          value={viewedRow[selection.column]}
+          onClose={closeViewer}
+          onCopied={onCopied}
+        />
+      )}
     </div>
   );
 }

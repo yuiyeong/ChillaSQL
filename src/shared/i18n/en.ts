@@ -295,8 +295,15 @@ export const en = {
   "tx.lostBody.none":
     "The connection dropped while a transaction was open. It was not applied. The next run opens a new session.",
 
+  "viewer.label": "Value viewer",
+  "viewer.copy": "Copy value",
+  "viewer.close": "Close value viewer",
+  "viewer.meta": "{type} · row {row}",
+  "viewer.metaUntyped": "row {row}",
+
   "toast.copiedMessage": "Copied message",
   "toast.copiedCell": "Copied cell",
+  "toast.copiedValue": "Copied value",
   "toast.copiedRows.one": "Copied 1 row (tab-separated)",
   "toast.copiedRows.other": "Copied {count} rows (tab-separated)",
   "toast.reformatFailed": "Couldn't reformat: {reason}",

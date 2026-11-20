@@ -45,7 +45,7 @@ const JSON_COLLAPSE_LIMIT = 100_000;
 const WHITESPACE = /\s/;
 
 /** `start`의 문자열 literal이 끝난 다음 index */
-function endOfString(text: string, start: number): number {
+export function endOfString(text: string, start: number): number {
   let i = start + 1;
   while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
   return i + 1;

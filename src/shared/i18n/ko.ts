@@ -296,8 +296,15 @@ export const ko: Record<MessageKey, string> = {
   "tx.lostBody.none":
     "트랜잭션이 열린 동안 연결이 끊겼습니다. 트랜잭션은 반영되지 않았습니다. 다음 실행은 새 세션을 엽니다.",
 
+  "viewer.label": "값 보기",
+  "viewer.copy": "값 복사",
+  "viewer.close": "값 보기 닫기",
+  "viewer.meta": "{type} · {row}행",
+  "viewer.metaUntyped": "{row}행",
+
   "toast.copiedMessage": "메시지 복사됨",
   "toast.copiedCell": "셀 복사됨",
+  "toast.copiedValue": "값 복사됨",
   "toast.copiedRows.one": "1행 복사됨 (탭으로 구분)",
   "toast.copiedRows.other": "{count}행 복사됨 (탭으로 구분)",
   "toast.reformatFailed": "Reformat하지 못했습니다: {reason}",
