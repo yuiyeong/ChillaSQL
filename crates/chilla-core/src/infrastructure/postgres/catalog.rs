@@ -1,4 +1,5 @@
 //! 스키마 트리와 자동완성의 catalog를 읽는 SQL. PostgreSQL 11 이상을 가정한다(`prokind`).
+//! DDL 읽기(`read_ddl`)만 PostgreSQL 13 이상이다(`attgenerated`는 12, `tgparentid`는 13부터 있다).
 
 use tokio_postgres::Client;
 use tokio_postgres::types::ToSql;
@@ -230,13 +231,16 @@ const DDL_CONSTRAINTS_SQL: &str = "\
 
 /// 제약조건이 만든 인덱스와 partition이 부모의 인덱스에 attach한 인덱스는 뺀다.
 /// partitioned table의 인덱스는 `ON ONLY`를 뗀다. `ON ONLY`로 만들면 partition에 내려가지 않아
-/// 부모 인덱스가 invalid로 남는다. 첫 `ON ONLY`는 `CREATE INDEX name` 바로 뒤다.
+/// 부모 인덱스가 invalid로 남는다. 인덱스 이름에 든 ` ON ONLY `는 건드리지 않게 테이블 이름까지
+/// 맞춰 바꾼다.
 const DDL_INDEXES_SQL: &str = "\
     SELECT CASE WHEN c.relkind = 'p' \
-                THEN regexp_replace(pg_get_indexdef(i.indexrelid), ' ON ONLY ', ' ON ') \
+                THEN replace(pg_get_indexdef(i.indexrelid), ' ON ONLY ' || t.name, ' ON ' || t.name) \
                 ELSE pg_get_indexdef(i.indexrelid) END \
     FROM pg_index i \
     JOIN pg_class c ON c.oid = i.indrelid \
+    JOIN pg_namespace n ON n.oid = c.relnamespace \
+    CROSS JOIN LATERAL (SELECT quote_ident(n.nspname) || '.' || quote_ident(c.relname) AS name) t \
     JOIN pg_class ic ON ic.oid = i.indexrelid \
     WHERE i.indrelid = $1 \
       AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid \
@@ -244,10 +248,9 @@ const DDL_INDEXES_SQL: &str = "\
       AND NOT EXISTS (SELECT 1 FROM pg_inherits h WHERE h.inhrelid = i.indexrelid) \
     ORDER BY ic.relname";
 
-/// partition이 부모에게서 받은 trigger(`tgparentid`)는 뺀다. `pretty`를 쓰지 않는 것은 그래야
-/// search_path에 있는 테이블에도 schema를 붙이기 때문이다.
+/// partition이 부모에게서 받은 trigger(`tgparentid`)는 뺀다.
 const DDL_TRIGGERS_SQL: &str = "\
-    SELECT pg_get_triggerdef(oid) FROM pg_trigger \
+    SELECT pg_get_triggerdef(oid, true) FROM pg_trigger \
     WHERE tgrelid = $1 AND NOT tgisinternal AND tgparentid = 0 \
     ORDER BY tgname";
 
@@ -259,10 +262,36 @@ const DDL_COLUMN_COMMENTS_SQL: &str = "\
     ORDER BY attnum";
 
 /// relation 하나의 DDL 재료. 테이블, partitioned table, view, materialized view가 아니면 `None`이다.
+///
+/// `pg_get_*`와 `format_type`은 search_path에 보이는 object의 schema를 떼므로 pg_dump처럼 빈
+/// search_path로 읽는다. 기본 type과 `pg_catalog` 함수는 그래도 schema 없이 나온다. transaction
+/// 하나에서 읽으므로 snapshot도 하나이고, `SET LOCAL`은 transaction이 끝나면 돌아온다. 이 연결은
+/// catalog 자리 하나가 차례로 쓰므로 그사이 다른 읽기가 바뀐 search_path를 보지 않는다.
 pub(super) async fn read_ddl(
     client: &Client,
     relation: u32,
 ) -> Result<Option<RelationDdl>, QueryError> {
+    let read = async {
+        client
+            .batch_execute("BEGIN READ ONLY; SET LOCAL search_path = ''")
+            .await
+            .map_err(query_error)?;
+        read_ddl_parts(client, relation).await
+    };
+    match read.await {
+        Ok(ddl) => {
+            client.batch_execute("COMMIT").await.map_err(query_error)?;
+            Ok(ddl)
+        }
+        Err(error) => {
+            // 연결을 transaction 안에 남기지 않는다. transaction이 없으면 서버는 경고만 한다.
+            let _ = client.batch_execute("ROLLBACK").await;
+            Err(error)
+        }
+    }
+}
+
+async fn read_ddl_parts(client: &Client, relation: u32) -> Result<Option<RelationDdl>, QueryError> {
     let params: [&(dyn ToSql + Sync); 1] = [&relation];
     let (relations, columns, constraints, indexes, triggers, column_comments) = tokio::try_join!(
         query(client, DDL_RELATION_SQL, &params),

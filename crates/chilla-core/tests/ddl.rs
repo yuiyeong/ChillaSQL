@@ -1,45 +1,47 @@
 //! relation 하나의 DDL을 실제 catalog(test DB)에서 읽어 조립한다.
-//! test DB는 `scripts/test-db.sh up`으로 띄운다. test마다 schema를 따로 만들고 끝에 지운다.
+//! test DB는 `scripts/test-db.sh up`으로 띄운다. test마다 schema(또는 `public`의 고유한 이름)를
+//! 따로 만들고 끝에 지운다.
 
 mod support;
 
 use chilla_core::application::DbConnection;
 use chilla_core::domain::render_ddl;
 use chilla_core::infrastructure::PgConnection;
-use support::{admin, connect};
+use support::{activity, admin, connect};
 
-/// 만든 schema들. test가 실패해도 drop할 때 지운다. 시작할 때도 지우므로 지난 실행이 남긴 것이
-/// 있어도 된다.
-struct Schemas(&'static [&'static str]);
+/// test가 만든 것을 지우는 SQL. 시작할 때 먼저 실행하므로 지난 실행이 남긴 것이 있어도 되고,
+/// test가 실패해도 drop할 때 다시 실행한다.
+struct Cleanup(String);
 
-impl Schemas {
+impl Cleanup {
+    /// `drop`으로 지우고 `sql`로 만든다.
+    async fn run(drop: String, sql: &str) -> Self {
+        admin()
+            .await
+            .batch_execute(&format!("{drop}{sql}"))
+            .await
+            .unwrap();
+        Self(drop)
+    }
+
     /// schema들을 새로 만들고 `sql`을 실행한다.
-    async fn create(names: &'static [&'static str], sql: &str) -> Self {
-        let schemas = Self(names);
+    async fn schemas(names: &[&str], sql: &str) -> Self {
+        let drop: String = names
+            .iter()
+            .map(|name| format!("DROP SCHEMA IF EXISTS {name} CASCADE;"))
+            .collect();
         let create: String = names
             .iter()
             .map(|name| format!("CREATE SCHEMA {name};"))
             .collect();
-        admin()
-            .await
-            .batch_execute(&format!("{}{create}{sql}", schemas.drop_sql()))
-            .await
-            .unwrap();
-        schemas
-    }
-
-    fn drop_sql(&self) -> String {
-        self.0
-            .iter()
-            .map(|name| format!("DROP SCHEMA IF EXISTS {name} CASCADE;"))
-            .collect()
+        Self::run(drop, &format!("{create}{sql}")).await
     }
 }
 
-impl Drop for Schemas {
+impl Drop for Cleanup {
     /// test의 runtime은 이미 멈추는 중일 수 있어 따로 띄운 thread와 runtime에서 지운다.
     fn drop(&mut self) {
-        let sql = self.drop_sql();
+        let sql = self.0.clone();
         let _ = std::thread::spawn(move || {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -116,7 +118,7 @@ const RELATIONS: [&str; 8] = [
 /// `ddl_src`에서 읽은 DDL을 `ddl_dst`에서 실행하고 다시 읽으면 schema 이름 말고는 같다.
 #[tokio::test]
 async fn ddl_round_trips() {
-    let _schemas = Schemas::create(&["ddl_src", "ddl_dst"], SOURCE).await;
+    let _cleanup = Cleanup::schemas(&["ddl_src", "ddl_dst"], SOURCE).await;
     let db = connect().await;
     let admin = admin().await;
 
@@ -197,7 +199,7 @@ COMMENT ON COLUMN ddl_src.items.note IS 'free text';"#
 /// PostgreSQL 18은 NOT NULL을 `_not_null` 제약(contype `n`)으로도 둔다. 컬럼에만 한 번 쓴다.
 #[tokio::test]
 async fn postgres_18_not_null_appears_once() {
-    let _schemas = Schemas::create(
+    let _cleanup = Cleanup::schemas(
         &["ddl_not_null"],
         "CREATE TABLE ddl_not_null.t (id int PRIMARY KEY, email text NOT NULL, note text);",
     )
@@ -211,6 +213,61 @@ async fn postgres_18_not_null_appears_once() {
     assert!(!ddl.contains("_not_null "), "{ddl}");
 }
 
+/// catalog connection의 search_path(`"$user", public`)에 있는 object도 schema를 붙여 쓴다.
+/// 기본 type과 `pg_catalog` 함수는 그대로다.
+#[tokio::test]
+async fn public_objects_are_qualified() {
+    let _cleanup = Cleanup::run(
+        "DROP TABLE IF EXISTS public.ddl_pub_users, public.ddl_pub_orgs CASCADE; \
+         DROP FUNCTION IF EXISTS public.ddl_pub_touch(); \
+         DROP TYPE IF EXISTS public.ddl_pub_mood;"
+            .into(),
+        r#"
+        CREATE TYPE public.ddl_pub_mood AS ENUM ('ok');
+        CREATE FUNCTION public.ddl_pub_touch() RETURNS trigger LANGUAGE plpgsql
+            AS $$BEGIN RETURN NEW; END$$;
+        CREATE TABLE public.ddl_pub_orgs (id int PRIMARY KEY);
+        CREATE TABLE public.ddl_pub_users (
+            id serial PRIMARY KEY,
+            org_id int REFERENCES public.ddl_pub_orgs,
+            mood public.ddl_pub_mood,
+            at timestamptz DEFAULT now(),
+            n bigint
+        );
+        CREATE TRIGGER ddl_pub_users_touch BEFORE UPDATE ON public.ddl_pub_users
+            FOR EACH ROW EXECUTE FUNCTION public.ddl_pub_touch();
+        CREATE VIEW public.ddl_pub_v AS SELECT id FROM public.ddl_pub_users;
+        "#,
+    )
+    .await;
+    let db = connect().await;
+
+    assert_eq!(
+        ddl_of(&db, "public.ddl_pub_users").await,
+        r#"CREATE TABLE public.ddl_pub_users (
+  id     integer DEFAULT nextval('public.ddl_pub_users_id_seq'::regclass),
+  org_id integer,
+  mood   public.ddl_pub_mood,
+  at     timestamp with time zone DEFAULT now(),
+  n      bigint,
+  CONSTRAINT ddl_pub_users_pkey PRIMARY KEY (id),
+  CONSTRAINT ddl_pub_users_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.ddl_pub_orgs(id)
+);
+CREATE TRIGGER ddl_pub_users_touch BEFORE UPDATE ON public.ddl_pub_users FOR EACH ROW EXECUTE FUNCTION public.ddl_pub_touch();"#
+    );
+    assert_eq!(
+        ddl_of(&db, "public.ddl_pub_v").await,
+        "CREATE VIEW public.ddl_pub_v AS\nSELECT id\n   FROM public.ddl_pub_users;"
+    );
+
+    // 읽기는 transaction 하나로 끝나고 search_path는 그대로다.
+    let admin = admin().await;
+    let (state, _) = activity(&admin, db.backend_pid()).await;
+    assert_eq!(state.as_deref(), Some("idle"));
+    let catalog = db.read_catalog().await.unwrap();
+    assert_eq!(catalog.search_path, vec!["public".to_string()]);
+}
+
 #[tokio::test]
 async fn unknown_oid_is_none() {
     let db = connect().await;
@@ -222,7 +279,7 @@ async fn unknown_oid_is_none() {
 
 #[tokio::test]
 async fn quoted_names() {
-    let _schemas = Schemas::create(
+    let _cleanup = Cleanup::schemas(
         &["ddl_names"],
         r#"
         CREATE TABLE ddl_names."Order Items" (id int PRIMARY KEY, "수량" int NOT NULL);
