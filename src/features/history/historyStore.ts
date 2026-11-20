@@ -24,8 +24,12 @@ export interface HistoryState {
   load(): Promise<void>;
   move(delta: 1 | -1): void;
   select(index: number): void;
-  /** 실행 하나를 기록한다. 실패는 무시한다. 화면이 열려 있으면 기록한 뒤 목록을 다시 읽는다. */
-  record(entry: Omit<HistoryEntry, "id">): Promise<void>;
+  /**
+   * 실행 하나를 `dir` 프로젝트에 기록한다. `dir`은 실행을 시작할 때 열려 있던 프로젝트이고, 지금
+   * 열린 프로젝트와 다르거나 없으면 아무것도 하지 않는다. 실패는 무시한다. 화면이 열려 있으면 기록한
+   * 뒤 목록을 다시 읽는다.
+   */
+  record(dir: string | null, entry: Omit<HistoryEntry, "id">): Promise<void>;
   /** 프로젝트를 바꿀 때. 검색어와 목록을 비우고 늦게 오는 답을 버린다. */
   reset(): void;
 }
@@ -101,9 +105,8 @@ export const useHistory = create<HistoryState>()((set, get) => {
       if (index >= 0 && index < get().entries.length) set({ selected: index });
     },
 
-    async record(entry) {
-      const dir = useProject.getState().project?.dir;
-      if (dir === undefined) return;
+    async record(dir, entry) {
+      if (dir === null || useProject.getState().project?.dir !== dir) return;
       try {
         await recordQuery(dir, entry);
       } catch {

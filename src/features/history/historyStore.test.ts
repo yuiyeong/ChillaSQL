@@ -137,7 +137,7 @@ test("record_failure_is_ignored", async () => {
   useHistory.setState({ open: true });
 
   await expect(
-    useHistory.getState().record({
+    useHistory.getState().record("/p", {
       connection: "local",
       sql: "SELECT 1",
       executedAt: 1,
@@ -158,20 +158,37 @@ test("record_reloads_only_while_the_view_is_open", async () => {
     elapsedMicros: 2,
   };
 
-  await useHistory.getState().record(row);
+  await useHistory.getState().record("/p", row);
   expect(recordQuery).toHaveBeenCalledWith("/p", row);
   expect(searchHistory).not.toHaveBeenCalled();
 
   useHistory.setState({ open: true });
-  await useHistory.getState().record(row);
+  await useHistory.getState().record("/p", row);
   expect(searchHistory).toHaveBeenCalledTimes(1);
+});
+
+test("record_for_another_project_does_nothing", async () => {
+  await useHistory.getState().record("/other", {
+    connection: "local",
+    sql: "SELECT 1",
+    executedAt: 1,
+    elapsedMicros: 2,
+  });
+  await useHistory.getState().record(null, {
+    connection: "local",
+    sql: "SELECT 1",
+    executedAt: 1,
+    elapsedMicros: 2,
+  });
+
+  expect(recordQuery).not.toHaveBeenCalled();
 });
 
 test("record_without_a_project_does_nothing", async () => {
   const { useProject } = await import("../project/projectStore");
   useProject.setState(useProject.getInitialState(), true);
 
-  await useHistory.getState().record({
+  await useHistory.getState().record("/p", {
     connection: "local",
     sql: "SELECT 1",
     executedAt: 1,

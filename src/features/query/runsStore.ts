@@ -22,6 +22,7 @@ import { t } from "../../shared/i18n/t";
 import { modeOf, useTabs } from "../editor/tabsStore";
 import { markRunStart, markServerError } from "../editor/runAnchors";
 import { useHistory } from "../history/historyStore";
+import { useProject } from "../project/projectStore";
 import { clearGridViews, dropGridView } from "./gridViews";
 import {
   emptyResult,
@@ -446,6 +447,8 @@ export const useRuns = create<RunsState>()((set, get) => {
     async run(tabId, prepare, confirmStep) {
       // Commit이나 Rollback의 답을 기다리는 동안은 그 세션에 쿼리를 보내지 않는다.
       if (get().ending[tabId]) return;
+      // 기록은 실행을 시작한 프로젝트에 남긴다. 프로젝트를 바꾼 뒤 옛 실행의 늦은 event가 와도 새 프로젝트에 쓰지 않는다.
+      const projectDir = useProject.getState().project?.dir ?? null;
       const attempt = bump(attempts, tabId);
 
       let request: RunRequest | Rejection | null;
@@ -558,7 +561,7 @@ export const useRuns = create<RunsState>()((set, get) => {
               (event.type === "finished" && event.outcome !== "discarded"))
           ) {
             recorded = true;
-            void useHistory.getState().record({
+            void useHistory.getState().record(projectDir, {
               connection,
               sql: step.sql,
               executedAt: startedAt,

@@ -1989,5 +1989,30 @@ test("a_record_failure_does_not_disturb_the_run", async () => {
   onEventOf(0)(finishedEvent(2));
   await Promise.resolve();
 
+  expect(recordQuery).toHaveBeenCalledTimes(1);
   expect(runOf("t").status).toBe("finished");
+});
+
+test("a_late_event_after_a_project_switch_is_not_recorded", async () => {
+  openProjectWith();
+  await useRuns.getState().run("t", prepared("SELECT old"));
+  const late = onEventOf(0);
+
+  // 프로젝트를 바꾼 뒤 옛 실행이 끝난다.
+  useProject.setState({
+    project: { name: "other", dir: "/other", connections: [] },
+  });
+  late(rowsEvent);
+  late(finishedEvent(5));
+
+  expect(recordQuery).not.toHaveBeenCalled();
+});
+
+test("records_into_the_project_the_run_started_in", async () => {
+  openProjectWith();
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+
+  onEventOf(0)(rowsEvent);
+
+  expect(recordQuery).toHaveBeenCalledWith("/p", expect.anything());
 });

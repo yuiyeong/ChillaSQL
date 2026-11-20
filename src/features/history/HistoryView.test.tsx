@@ -213,7 +213,7 @@ test("a_recorded_query_appears_while_the_view_is_open", async () => {
   ]);
 
   await act(async () => {
-    await useHistory.getState().record({
+    await useHistory.getState().record("/p", {
       connection: "local",
       sql: "SELECT 5",
       executedAt: NOW.getTime(),
