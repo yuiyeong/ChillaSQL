@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/clipboard");
+vi.mock("../../shared/api/dialog");
 vi.mock("../workspace/commands", () => ({
   runAgain: vi.fn(),
   cancelRun: vi.fn(),
@@ -12,7 +13,10 @@ vi.mock("../workspace/commands", () => ({
 
 import { EditorView } from "@codemirror/view";
 import { copyText } from "../../shared/api/clipboard";
-import { describeTables } from "../../shared/api/commands";
+import { describeTables, writeExport } from "../../shared/api/commands";
+import { CommandError } from "../../shared/api/errors";
+import { pickSavePath } from "../../shared/api/dialog";
+import { answerDialog } from "../../test/dialogs";
 import { stubLayout } from "../../test/layout";
 import type {
   Cell,
@@ -99,6 +103,14 @@ function show(state: RunState) {
 
 function finished(outcome: Outcome, patch: Partial<ResultData> = {}) {
   show({ status: "finished", result: result(patch), outcome });
+}
+
+/** header의 Export menu에서 `item`을 고르고 저장이 끝나기를 기다린다. */
+async function chooseExport(item: "Save as CSV…" | "Save as JSON…") {
+  fireEvent.click(screen.getByRole("button", { name: "Export" }));
+  await act(async () => {
+    fireEvent.click(screen.getByRole("menuitem", { name: item }));
+  });
 }
 
 test("tabId가 null이거나 idle이면 단축키를 가르친다", () => {
@@ -1799,6 +1811,24 @@ describe("cell editing", () => {
     ).toBeNull();
   });
 
+  test("unapplied_changes_are_not_exported", async () => {
+    vi.mocked(pickSavePath).mockResolvedValue("/out/result.csv");
+    vi.mocked(writeExport).mockReset();
+    vi.mocked(writeExport).mockResolvedValue(undefined);
+    await showEditable();
+    act(() => useEdits.getState().setCell("t", shownKey, 0, 2, "c@x", "a@x"));
+    expect(
+      within(screen.getByRole("grid")).getByText("c@x"),
+    ).toBeInTheDocument();
+
+    await chooseExport("Save as CSV…");
+
+    expect(writeExport).toHaveBeenCalledWith(
+      "/out/result.csv",
+      "id,email\n1,a@x\n2,b@x\n",
+    );
+  });
+
   test("read_only_connection_of_the_tab_is_not_editable", async () => {
     openProjectWith([connection("local", { readOnly: true })]);
     await showEditable();
@@ -1888,5 +1918,194 @@ describe("sorting", () => {
 
     expect(idHeader()).toHaveAttribute("aria-sort", "ascending");
     expect(screen.queryByText(/^Sorted/)).toBeNull();
+  });
+});
+
+describe("export", () => {
+  const columns = resultColumns("id", "name");
+  const idHeader = () =>
+    screen.getByText("id").closest<HTMLElement>("[role=columnheader]")!;
+  const sortId = () => fireEvent.click(within(idHeader()).getByRole("button"));
+
+  beforeEach(() => {
+    openProjectWith([]);
+    vi.mocked(writeExport).mockReset();
+    vi.mocked(pickSavePath).mockReset();
+    vi.mocked(pickSavePath).mockImplementation((defaultPath) =>
+      Promise.resolve(defaultPath.replace("/p/", "/out/")),
+    );
+    vi.mocked(writeExport).mockResolvedValue(undefined);
+  });
+
+  test("export_menu_has_csv_and_json", () => {
+    finished({ outcome: "completed", rows: 3 }, { columns, rows: someRows });
+
+    const button = screen.getByRole("button", { name: "Export" });
+    // 복사 버튼 앞에 있다.
+    const copy = screen.getByRole("button", { name: "Copy selected cells" });
+    expect(
+      button.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(button).toHaveAttribute("aria-haspopup", "menu");
+    expect(button).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(button);
+
+    expect(button).toHaveAttribute("aria-expanded", "true");
+    const menu = screen.getByRole("menu", { name: "Export" });
+    expect(
+      within(menu)
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Save as CSV…", "Save as JSON…"]);
+  });
+
+  test("no_export_without_a_grid", () => {
+    // 행을 돌려주지 않는 문장(UPDATE 등)은 표가 없다.
+    finished({ outcome: "completed", rows: 3 }, { columns: null });
+    expect(screen.queryByRole("grid")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Export" })).toBeNull();
+  });
+
+  test("export_csv_saves_to_the_chosen_path_and_toasts", async () => {
+    finished({ outcome: "completed", rows: 3 }, { columns, rows: someRows });
+
+    await chooseExport("Save as CSV…");
+
+    expect(pickSavePath).toHaveBeenCalledWith("/p/result.csv", "csv");
+    expect(writeExport).toHaveBeenCalledWith(
+      "/out/result.csv",
+      "id,name\n1,a\n2,b\n3,c\n",
+    );
+    expect(screen.getByText("Saved 3 rows to result.csv")).toBeInTheDocument();
+  });
+
+  test("export_json_uses_the_column_types", async () => {
+    openProjectWith([connection("local")]);
+    useTypes.setState({
+      types: {
+        local: {
+          "23:-1": { oid: 23, modifier: -1, name: "integer", category: "N" },
+        },
+      },
+    });
+    useRuns.setState({
+      runs: {
+        t: {
+          status: "finished",
+          result: result({
+            columns: [
+              { ...columns[0], typeOid: 23 },
+              { ...columns[1], typeOid: 25 },
+            ],
+            rows: someRows,
+          }),
+          outcome: { outcome: "completed", rows: 3 },
+        },
+      },
+    });
+    render(<ResultPane tabId="t" connection="local" hasConnection />);
+
+    await chooseExport("Save as JSON…");
+
+    expect(pickSavePath).toHaveBeenCalledWith("/p/result.json", "json");
+    expect(writeExport).toHaveBeenCalledWith(
+      "/out/result.json",
+      '[\n{"id":1,"name":"a"},\n{"id":2,"name":"b"},\n{"id":3,"name":"c"}\n]',
+    );
+    useTypes.getState().reset();
+  });
+
+  test("export_writes_rows_in_view_order", async () => {
+    finished({ outcome: "completed", rows: 3 }, { columns, rows: someRows });
+    // 오름차순, 내림차순
+    sortId();
+    sortId();
+
+    await chooseExport("Save as CSV…");
+
+    expect(writeExport).toHaveBeenCalledWith(
+      "/out/result.csv",
+      "id,name\n3,c\n2,b\n1,a\n",
+    );
+  });
+
+  test("export_skips_dropped_rows", async () => {
+    finished(
+      { outcome: "completed", rows: 2000 },
+      { columns, rows: someRows, firstRow: 1997 },
+    );
+
+    await chooseExport("Save as CSV…");
+
+    expect(writeExport).toHaveBeenCalledWith(
+      "/out/result.csv",
+      "id,name\n1,a\n2,b\n3,c\n",
+    );
+    expect(
+      screen.getByText("Saved 3 received rows to result.csv"),
+    ).toBeInTheDocument();
+  });
+
+  test("partial_export_toast_says_received_rows", async () => {
+    const rows = Array.from({ length: 1200 }, (_, i) => [String(i), "x"]);
+    show({
+      status: "running",
+      result: result({ columns, rows, fetch: "ready" }),
+    });
+
+    await chooseExport("Save as JSON…");
+
+    expect(
+      screen.getByText("Saved 1,200 received rows to result.json"),
+    ).toBeInTheDocument();
+  });
+
+  test("one_row_toast_is_singular", async () => {
+    finished(
+      { outcome: "completed", rows: 1 },
+      { columns, rows: [["1", "a"]] },
+    );
+
+    await chooseExport("Save as CSV…");
+
+    expect(screen.getByText("Saved 1 row to result.csv")).toBeInTheDocument();
+  });
+
+  test("cancelled_save_dialog_writes_nothing", async () => {
+    vi.mocked(pickSavePath).mockResolvedValue(null);
+    finished({ outcome: "completed", rows: 3 }, { columns, rows: someRows });
+
+    await chooseExport("Save as CSV…");
+
+    expect(writeExport).not.toHaveBeenCalled();
+    expect(screen.queryByText(/^Saved/)).toBeNull();
+  });
+
+  test("write_failure_shows_an_error_dialog", async () => {
+    vi.mocked(writeExport).mockRejectedValue(
+      new CommandError(
+        "export_failed",
+        "Could not write /out/result.csv: Permission denied (os error 13)",
+        null,
+        {
+          path: "/out/result.csv",
+          message: "Permission denied (os error 13)",
+        },
+      ),
+    );
+    finished({ outcome: "completed", rows: 3 }, { columns, rows: someRows });
+
+    await chooseExport("Save as CSV…");
+
+    const spec = await answerDialog("cancel");
+    expect(spec.title).toBe("Couldn't save the file");
+    expect(spec.body).toBe(
+      "Could not write /out/result.csv: Permission denied (os error 13)",
+    );
+    expect(spec.actions).toEqual([
+      { id: "cancel", label: "OK", variant: "primary" },
+    ]);
+    expect(screen.queryByText(/^Saved/)).toBeNull();
   });
 });

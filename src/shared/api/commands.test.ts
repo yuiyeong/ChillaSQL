@@ -32,6 +32,7 @@ import {
   splitStatements,
   testConnection,
   writeSqlFile,
+  writeExport,
   cancelTunnel,
   closeCatalog,
   describeTables,
@@ -176,6 +177,17 @@ test("command 이름과 인자 key를 그대로 보낸다", async () => {
     path: "a.sql",
     text: "x",
     mode: { mode: "replace", stamp: "s" },
+  });
+});
+
+test("writeExport passes the path and text", async () => {
+  invokeMock.mockResolvedValue(null);
+
+  await writeExport("/out/result.csv", "id\n1\n");
+
+  expect(invokeMock).toHaveBeenLastCalledWith("write_export", {
+    path: "/out/result.csv",
+    text: "id\n1\n",
   });
 });
 

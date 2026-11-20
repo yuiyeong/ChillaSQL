@@ -18,7 +18,9 @@ use chilla_core::domain::{
     SettingsError, SqlFile, StatementSpan, TableDetails, TunnelEvent, TunnelFailure, TunnelState,
     TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
 };
-use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
+use chilla_core::infrastructure::{
+    PgConnector, ShellTunnelRunner, write_export as write_export_file,
+};
 use serde::{Deserialize, Serialize};
 use tauri::State;
 use tauri::ipc::Channel;
@@ -879,6 +881,14 @@ pub async fn write_sql_file(
     mode: WriteModeDto,
 ) -> CommandResult<String> {
     Ok(app.write_sql_file(&path, text, mode.into()).await?.0)
+}
+
+/// 내보낸 결과 text를 저장 dialog가 고른 `path`에 쓴다. 있으면 덮어쓴다.
+/// 파일 쓰기는 blocking이라 main thread가 아닌 곳에서 돈다(`async`).
+#[tauri::command(async)]
+pub fn write_export(path: String, text: String) -> CommandResult<()> {
+    let path = PathBuf::from(path);
+    write_export_file(&path, &text).map_err(|e| CommandError::export_failed(&path, &e))
 }
 
 #[tauri::command]

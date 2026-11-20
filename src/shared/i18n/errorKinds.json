@@ -26,6 +26,7 @@
   "file_too_large": ["bytes", "path"],
   "file_not_utf8": ["path"],
   "file_io": ["message", "path"],
+  "export_failed": ["message", "path"],
   "tunnel_spawn": ["message"],
   "tunnel_exited": ["message"],
   "tunnel_timeout": ["host", "port", "secs"],

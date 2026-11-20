@@ -305,6 +305,15 @@ export const en = {
   "result.sortedPartial.one": "Sorted 1 received row only",
   "result.sortedPartial.other": "Sorted {count} received rows only",
 
+  "export.button": "Export",
+  "export.csv": "Save as CSV…",
+  "export.json": "Save as JSON…",
+  "export.saved.one": "Saved 1 row to {file}",
+  "export.saved.other": "Saved {count} rows to {file}",
+  "export.savedPartial.one": "Saved 1 received row to {file}",
+  "export.savedPartial.other": "Saved {count} received rows to {file}",
+  "export.failedTitle": "Couldn't save the file",
+
   "edit.changed.one": "1 cell changed",
   "edit.changed.other": "{count} cells changed",
   "edit.revert": "Revert",
@@ -440,6 +449,7 @@ export const en = {
     "{path} is too large ({bytes} bytes). Files up to 16 MiB can be opened",
   "error.file_not_utf8": "{path} is not UTF-8",
   "error.file_io": "Could not access {path}: {message}",
+  "error.export_failed": "Could not write {path}: {message}",
   "error.tunnel_spawn": "Could not run the tunnel command: {message}",
   "error.tunnel_exited": "{message}",
   "error.tunnel_timeout": "{host}:{port} didn't open within {secs} seconds",

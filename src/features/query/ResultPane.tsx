@@ -50,6 +50,8 @@ import { isPlanResult, parsePlan, type Plan } from "./explainPlan";
 import { DdlView } from "./DdlView";
 import { useDdl } from "./ddlStore";
 import { ExplainView } from "./ExplainView";
+import { ExportMenu } from "./ExportMenu";
+import type { ExportSource } from "./exportRows";
 import { ResultBar, SingleTab } from "./ResultBar";
 import type { UpdateStatement } from "./editSql";
 import { changedCount, useEdits } from "./editsStore";
@@ -138,6 +140,7 @@ export const ResultPane = memo(function ResultPane({
   const toast = useToast();
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
   const statementsRef = useRef<UpdateStatement[] | null>(null);
+  const exportSourceRef = useRef<ExportSource | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
   const [sorted, setSorted] = useState(false);
 
@@ -202,6 +205,7 @@ export const ResultPane = memo(function ResultPane({
       onCopied={show}
       copyTargetRef={copyTargetRef}
       statementsRef={statementsRef}
+      exportSourceRef={exportSourceRef}
       onSelectionChange={setHasSelection}
       onSortChange={setSorted}
     />
@@ -523,6 +527,13 @@ export const ResultPane = memo(function ResultPane({
                     {t("edit.apply")}
                   </Button>
                 </>
+              )}
+              {grid !== null && (
+                <ExportMenu
+                  sourceRef={exportSourceRef}
+                  partial={state !== undefined && isPartialResult(state)}
+                  onSaved={show}
+                />
               )}
               {grid !== null && (
                 <IconButton

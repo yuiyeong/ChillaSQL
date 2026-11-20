@@ -71,6 +71,7 @@ import {
 import { ResultNote } from "./ResultNote";
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
+import { rowsInView, type ExportSource } from "./exportRows";
 import { nextSort, sortOrder, type SortState } from "./sortRows";
 import { useColumnTypes } from "./typesStore";
 import { ValueViewer } from "./ValueViewer";
@@ -96,6 +97,8 @@ interface ResultGridProps {
   copyTargetRef: RefObject<(() => CopyTarget) | null>;
   /** ResultPane header의 Apply가 보낼 UPDATE 문. 미리 보기와 같다 */
   statementsRef: RefObject<UpdateStatement[] | null>;
+  /** ResultPane header의 Export가 부른다. 보관한 행을 보이는 순서로, 서버 값 그대로 준다 */
+  exportSourceRef?: RefObject<ExportSource | null>;
   /** 복사할 선택이 생기거나 없어질 때(고른 행이 모두 버려진 때도). header 복사 버튼의 disabled에 쓴다 */
   onSelectionChange(hasSelection: boolean): void;
   /** 정렬을 켜거나 끌 때(탭을 바꿔 이어 간 정렬도). ResultPane이 일부만 정렬했다는 안내에 쓴다 */
@@ -151,6 +154,7 @@ function Grid({
   onCopied,
   copyTargetRef,
   statementsRef,
+  exportSourceRef,
   onSelectionChange,
   onSortChange,
 }: ResultGridProps & { runKey: string }) {
@@ -431,6 +435,15 @@ function Grid({
     copyTargetRef,
     () => () => copyTargetOf(latest.current),
     [],
+  );
+  useImperativeHandle(
+    exportSourceRef,
+    () => () => ({
+      columns: resultColumns ?? NO_RESULT_COLUMNS,
+      rows: rowsInView(latest.current.rows, latest.current.view),
+      types: columnTypes,
+    }),
+    [resultColumns, columnTypes],
   );
 
   // Cmd+C와 Edit > Copy는 둘 다 copy event로 온다. focus가 표 안일 때만 가로챈다.

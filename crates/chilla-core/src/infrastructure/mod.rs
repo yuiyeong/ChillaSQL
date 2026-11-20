@@ -1,6 +1,7 @@
 //! port 구현. `tokio-postgres`, 키체인, SQLite, 파일 I/O가 여기 있다.
 
 mod atomic_write;
+mod export_file;
 mod keychain;
 mod memory_password_store;
 mod postgres;
@@ -12,6 +13,7 @@ mod statement_inspector;
 mod statement_splitter;
 mod tunnel_process;
 
+pub use export_file::write_export;
 pub use keychain::KeychainPasswordStore;
 pub use memory_password_store::MemoryPasswordStore;
 pub use postgres::{PgCancel, PgConnection, PgConnector, PgRows};

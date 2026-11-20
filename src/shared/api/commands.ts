@@ -212,6 +212,11 @@ export function writeSqlFile(
   return call("write_sql_file", { path, text, mode });
 }
 
+/** 내보낸 결과 text를 `path`에 쓴다. 있으면 덮어쓴다. 실패는 `export_failed`다. */
+export function writeExport(path: string, text: string): Promise<void> {
+  return call("write_export", { path, text });
+}
+
 /** 앱을 끝낸다. 열린 세션은 닫히고 서버가 열린 트랜잭션을 되돌린다. */
 export function quitApp(): Promise<void> {
   return call("quit_app");

@@ -306,6 +306,15 @@ export const ko: Record<MessageKey, string> = {
   "result.sortedPartial.one": "받은 1행만 정렬함",
   "result.sortedPartial.other": "받은 {count}행만 정렬함",
 
+  "export.button": "내보내기",
+  "export.csv": "CSV로 저장…",
+  "export.json": "JSON으로 저장…",
+  "export.saved.one": "1행을 {file}에 저장함",
+  "export.saved.other": "{count}행을 {file}에 저장함",
+  "export.savedPartial.one": "받은 1행을 {file}에 저장함",
+  "export.savedPartial.other": "받은 {count}행을 {file}에 저장함",
+  "export.failedTitle": "파일을 저장하지 못했습니다",
+
   "edit.changed.one": "셀 1개 바뀜",
   "edit.changed.other": "셀 {count}개 바뀜",
   "edit.revert": "되돌리기",
@@ -447,6 +456,7 @@ export const ko: Record<MessageKey, string> = {
     "{path} 파일이 너무 큽니다({bytes}바이트). 16 MiB까지 열 수 있습니다",
   "error.file_not_utf8": "{path} 파일이 UTF-8이 아닙니다",
   "error.file_io": "{path}에 접근할 수 없습니다: {message}",
+  "error.export_failed": "{path} 파일을 쓸 수 없습니다: {message}",
   "error.tunnel_spawn": "터널 명령을 실행할 수 없습니다: {message}",
   "error.tunnel_exited": "{message}",
   "error.tunnel_timeout":

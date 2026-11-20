@@ -1,4 +1,5 @@
 use std::collections::BTreeMap;
+use std::io;
 use std::path::Path;
 
 use chilla_core::application::{
@@ -35,6 +36,19 @@ fn message_param(message: &str) -> Params {
 
 fn path_param(path: &Path) -> (&'static str, String) {
     ("path", path.display().to_string())
+}
+
+impl CommandError {
+    /// 내보낸 결과를 `path`에 쓰지 못했다. 경로는 저장 dialog가 고른 것이라 `AppError`를 거치지 않는다.
+    pub fn export_failed(path: &Path, error: &io::Error) -> Self {
+        let message = error.to_string();
+        Self {
+            kind: "export_failed",
+            message: format!("Could not write {}: {message}", path.display()),
+            params: params([path_param(path), ("message", message)]),
+            output: None,
+        }
+    }
 }
 
 impl From<AppError> for CommandError {
@@ -462,8 +476,14 @@ mod tests {
     #[test]
     fn kinds_and_params_match_the_screen() {
         let mut actual: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
-        for (error, _) in all_errors() {
-            let error = CommandError::from(error);
+        let export = CommandError::export_failed(
+            Path::new("/p/result.csv"),
+            &io::Error::from(io::ErrorKind::NotFound),
+        );
+        let errors = all_errors()
+            .into_iter()
+            .map(|(error, _)| CommandError::from(error));
+        for error in errors.chain([export]) {
             actual
                 .entry(error.kind.to_string())
                 .or_default()
@@ -476,6 +496,27 @@ mod tests {
         let json = std::fs::read_to_string(path).unwrap();
         let expected: BTreeMap<String, BTreeSet<String>> = serde_json::from_str(&json).unwrap();
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn export_failed_carries_the_path_and_message() {
+        let error = CommandError::export_failed(
+            Path::new("/p/out/result.csv"),
+            &io::Error::other("disk full"),
+        );
+        assert_eq!(error.kind, "export_failed");
+        assert_eq!(
+            error.message,
+            "Could not write /p/out/result.csv: disk full"
+        );
+        assert_eq!(
+            error.params,
+            BTreeMap::from([
+                ("message", "disk full".to_string()),
+                ("path", "/p/out/result.csv".to_string()),
+            ])
+        );
+        assert!(error.output.is_none());
     }
 
     #[test]

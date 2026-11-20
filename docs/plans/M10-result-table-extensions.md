@@ -597,7 +597,7 @@ git commit -m "feat: 결과 표 header를 눌러 받은 행을 정렬하고 일�
   ```
   문구 key: `export.button`(`Export`), `export.csv`(`Save as CSV…`), `export.json`(`Save as JSON…`), `export.saved.one/other`(`Saved {count} rows to {file}`), `export.savedPartial.one/other`(`Saved {count} received rows to {file}`), `error.export_failed`.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `exportRows.test.ts`:
   - `csv_quotes_like_copy`: `a,b`, `say "hi"`, 줄바꿈이 든 값, 빈 문자열, NULL, 한글 → `"a,b"`, `"say ""hi"""`, `"…\n…"`, `""`, 빈 칸, 그대로. 첫 줄은 컬럼 이름(쉼표가 든 이름도 감쌈), 줄 끝 LF, 마지막 줄 뒤에도 LF.
@@ -606,24 +606,24 @@ git commit -m "feat: 결과 표 header를 눌러 받은 행을 정렬하고 일�
 - Rust: `write_export_replaces_the_file_atomically`(있던 파일을 덮고 임시 파일이 남지 않음), `write_export_reports_a_missing_directory`.
 - `ResultPane.test.tsx`: `export_menu_has_csv_and_json`, `export_writes_rows_in_view_order`(정렬한 결과), `export_skips_dropped_rows`, `partial_export_toast_says_received_rows`, `cancelled_save_dialog_writes_nothing`, `write_failure_shows_an_error_dialog`, `unapplied_changes_are_not_exported`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query/exportRows.test.ts src/features/query/ResultPane.test.tsx && cargo test --workspace write_export`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `write_atomically`를 `Missing::Create`로 부른다. `atomic_write`의 범위는 `pub(super)` 그대로 두고 `export_file.rs`를 `infrastructure` 안에 둔다.
 - `pickSavePath`는 `@tauri-apps/plugin-dialog`의 `save({ defaultPath, filters })`. 기본 경로는 열린 프로젝트 dir + `result.csv`.
 - Export 버튼은 ResultBar에서 복사 버튼 앞(`grid !== null`일 때). menu는 `shared/ui/Menu`(`align="end"`, 220px). 결과가 일부인지는 Task 8의 판단과 같은 함수를 쓴다.
 - 오류 dialog는 M6의 `DialogHost` 확인 dialog(버튼 하나)를 쓴다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src

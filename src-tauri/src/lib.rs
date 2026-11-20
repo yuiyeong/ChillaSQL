@@ -93,6 +93,7 @@ pub fn run() {
             commands::list_sql_files,
             commands::read_sql_file,
             commands::write_sql_file,
+            commands::write_export,
             commands::set_password,
             commands::has_password,
             commands::delete_password,
