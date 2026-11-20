@@ -11,6 +11,28 @@ Tauri 2 + React/TypeScript로 만들었다. 화면은 React, DB 연결과 터널
 | 배포 | 스토어 배포 없이 로컬에서 빌드해 직접 설치한다 |
 | 화면 | dark 테마 고정. 기본 영어, 전역 설정 파일에서 한국어로 바꾼다 |
 
+## Tauri
+
+[Tauri](https://tauri.app)는 웹 기술(HTML, CSS, JavaScript)로 화면을 만들고 Rust로 앱의 나머지를 만드는 데스크톱 앱 framework다. Electron과 달리 Chromium과 Node.js를 앱에 넣지 않고 OS가 가진 WebView(macOS에서는 WKWebView)로 화면을 그린다. 그래서 앱이 작고 가볍다. 이 저장소는 Tauri 2를 쓴다.
+
+| 구성 | 역할 | 이 저장소에서 |
+| --- | --- | --- |
+| 화면 (WebView) | HTML, CSS, JavaScript로 그린다 | `src/` (React + TypeScript, Vite로 번들) |
+| Rust 코어 | 파일, 네트워크, 프로세스 같은 OS 기능을 다룬다 | `src-tauri/`가 앱 껍데기를, `crates/chilla-core/`가 DB 연결과 터널을 맡는다 |
+| command | 화면이 Rust 함수를 부르는 통로(IPC). Rust에서 `#[tauri::command]`로 만들고 화면에서 `invoke`로 부른다 | `src-tauri/src/commands.rs`. 화면 쪽 호출은 `src/shared/api/`에서만 한다 |
+| capability | 화면이 쓸 수 있는 plugin 권한 목록. 적지 않은 권한은 막힌다 | `src-tauri/capabilities/default.json` (저장 dialog, clipboard 등) |
+| plugin | dialog, clipboard 같은 기능을 더하는 공식 확장 | `tauri-plugin-dialog`, `tauri-plugin-clipboard-manager` |
+| 설정 | 창 크기, 보안 정책(CSP), bundle 옵션 | `src-tauri/tauri.conf.json` |
+
+저장한 DB 비밀번호는 화면으로 돌려보내지 않고 Rust 쪽(키체인)에만 둔다. CSP는 앱 자신의 script만 실행하게 막는다.
+
+Tauri CLI(`@tauri-apps/cli`)는 `pnpm install`로 같이 설치되고 `pnpm tauri`로 실행한다.
+
+| 명령 | 하는 일 |
+| --- | --- |
+| `pnpm tauri dev` | Vite dev server(1420 포트)와 Rust 앱을 함께 띄운다. 화면 코드는 저장하면 바로 반영되고 Rust 코드는 다시 빌드한다 |
+| `pnpm tauri build` | frontend를 빌드하고 Rust를 release로 빌드해 `.app`을 만든다. 서명까지 맞춘 빌드는 `scripts/build-app.sh`를 쓴다 |
+
 ## 기능
 
 - **접속 관리**: 프로젝트 디렉토리의 `chilla.toml`에 접속 목록을 둔다. 비밀번호는 macOS 키체인에만 저장한다. SSL(`require`, `verify-full`), 읽기 전용 접속, `statement_timeout`을 접속마다 정한다.
