@@ -44,6 +44,8 @@ compiler는 같은 crate 안의 module 사이 의존 방향을 막지 못한다.
 
 I/O를 하는 crate를 새로 들이면 이 표와 test의 목록에 함께 넣는다.
 
+`src-tauri`의 command는 use case를 부르는 것이 원칙이다. 예외로 use case가 없는 단순 파일 쓰기(`write_export`)는 infrastructure 함수(`write_export`)를 직접 부른다. 확장자가 `.csv`나 `.json`이 아니면 쓰지 않는다(진행상황의 결정 기록 M10 참조).
+
 ## 3. 화면
 
 ```

@@ -34,7 +34,7 @@
 - **편집 UI(Tools M10).** 편집할 수 있는 셀을 두 번 누르거나, 셀을 고르고 `Enter`를 누르면 그 칸에 editor(textarea, D2Coding 13, 칸 크기)가 열린다. `Enter`는 확정, `Opt+Enter`는 줄바꿈, `Esc`는 취소, 바깥을 누르면 확정이다. 원래 값과 같으면 변경이 아니다. NULL인 셀을 빈 채 확정하면 NULL 그대로다. 셀 우클릭 menu는 `Set NULL`과 `Revert value`(바뀐 셀만). 바뀐 셀은 `inset 2px 0 0 accent`와 `accent/8` 배경이다. 편집할 수 없는 셀을 두 번 누르거나 `Enter`를 누르면 result header 아래에 note(자물쇠 icon, 위 문구)가 뜨고 선택이 바뀌면 사라진다.
 - **편집 상태.** 바뀐 값은 탭의 보이는 결과(`runKey`)에 묶이고 키는 (결과 행 번호, attnum)이다. 같은 attnum의 열이 둘이면(`email AS e, email`) 둘 다 바뀐 값을 보인다. 같은 탭의 다음 실행, release, 다른 결과의 편집 시작이 바뀐 값을 묻지 않고 버린다.
 - **header와 미리 보기.** 바뀐 셀이 있으면 header에 `{n} cells changed`(`edit.changed.one/other`), Revert(ghost 24px), Apply(primary 24px)가 오고, 표 아래에 `SQL to send on Apply` label과 보낼 SQL(M9 `highlightSql`로 칠한 mono 13 pre, `bg-1`, 최대 높이 160px scroll)이 뜬다.
-- **UPDATE 문.** 바뀐 행마다 한 문장, 결과 행 번호 순. `UPDATE {schema.table} SET {col} = {value}[, …] WHERE {pk} = {원래 값}[ AND …] RETURNING {바뀐 col, …};`. SET은 attnum 순. 이름은 서버의 `quote_ident`. 값은 NULL이면 `NULL`, 컬럼 type category가 `N`이고 `^-?\d+(\.\d+)?$`면 그대로, `\`가 있으면 `E'…'`(`\`와 `'`를 두 번), 그 밖은 `'…'`(`'`를 두 번). type은 쓰지 않는다(unknown literal을 서버가 컬럼 type으로 바꾼다). **`RETURNING`은 캔버스 예시에 없지만 더한다.** 서버가 저장한 text(`2026-11-20` → `2026-11-20 00:00:00+09`)를 표에 다시 그리기 위해서다.
+- **UPDATE 문.** 바뀐 행마다 한 문장, 결과 행 번호 순. `UPDATE {schema.table} SET {col} = {value}[, …] WHERE {pk} = {원래 값}[ AND …] RETURNING {바뀐 col, …};`. SET은 attnum 순. 이름은 서버의 `quote_ident`. 값은 NULL이면 `NULL`, 컬럼 type category가 `N`이고 `^-?\d+$`(정수)면 그대로(처음에는 소수도 `^-?\d+(\.\d+)?$`로 그대로 썼으나 최종 review에서 바꿨다. 소수는 `'1.5'`처럼 따옴표로 감싼다), `\`가 있으면 `E'…'`(`\`와 `'`를 두 번), 그 밖은 `'…'`(`'`를 두 번). type은 쓰지 않는다(unknown literal을 서버가 컬럼 type으로 바꾼다). **`RETURNING`은 캔버스 예시에 없지만 더한다.** 서버가 저장한 text(`2026-11-20` → `2026-11-20 00:00:00+09`)를 표에 다시 그리기 위해서다.
 - **Apply.** actor 명령 `apply_edits`가 문장들을 한 단위로 보낸다. 트랜잭션 밖이고 Auto면 `BEGIN` … `COMMIT`(실패하면 `ROLLBACK`), Manual이고 트랜잭션 밖이면 `BEGIN; SAVEPOINT chilla_edit` … `RELEASE SAVEPOINT chilla_edit`(트랜잭션은 열린 채), 트랜잭션 안이면 `SAVEPOINT chilla_edit` … `RELEASE`(실패하면 `ROLLBACK TO SAVEPOINT chilla_edit; RELEASE SAVEPOINT chilla_edit`, 트랜잭션은 열린 채 실패 상태가 되지 않음). 문장마다 행이 정확히 하나여야 하고 아니면 전부 되돌린다. 실패한 트랜잭션에는 보내지 않는다. 확인 dialog는 없다(미리 보기와 Apply 버튼이 확인이다). 성공하면 `RETURNING` 값으로 표의 셀을 바꾸고 바뀐 값을 지우고 toast `Updated {n} rows`. 실패하면 바뀐 값을 두고 note에 이유: 행이 없으면 `Row {row} was not found. It may have been deleted or its key changed. Nothing was applied.`, 서버 오류면 `Row {row}: {message}. Nothing was applied.`(COMMIT 오류면 `{message}. Nothing was applied.`), 실패한 트랜잭션이면 `Roll back the failed transaction first.`. Apply는 그 탭이 실행 중이거나 끝내기를 기다리는 중이면 disabled. 보낸 문장은 줄바꿈으로 이어 쿼리 기록에 한 개로 남긴다. Manual이나 트랜잭션 안의 Apply는 트랜잭션의 문장 수에 문장 수만큼 더한다.
 - **정렬.** header의 이름 부분을 누르면 오름차순 → 내림차순 → 정렬 없음. 한 열만. 이름 뒤에 `↑`/`↓`(fg-2), `aria-sort`. 비교는 type category `N`이면 값의 크기(임의 길이 정수와 소수, `-Infinity` < 수 < `Infinity` < `NaN`, 수로 읽을 수 없는 값은 문자열 비교), 그 밖은 UTF-16 code unit 순(`COLLATE "C"`와 같은 순). NULL은 오름차순에서 끝, 내림차순에서 처음(PostgreSQL 기본). 같은 값은 결과 순서를 지킨다. 행 번호 열은 결과의 행 번호를 그대로 보인다. 행 범위 선택(`Shift`+클릭)과 복사는 보이는 순서를 따른다. 정렬한 동안은 스크롤로 다음 batch를 요청하지 않고, 이미 요청한 batch가 오면 정렬에 넣는다. 결과가 일부면(받는 중, `cancelled`, `expired`, 앞 행을 버림) header에 `Sorted {count} received rows only`(fg-2)를 더한다. 정렬은 탭을 바꿨다 와도 이어 간다(`GridView`).
 - **내보내기(Tools M10).** 표가 있으면 header 오른쪽, 복사 버튼 앞에 `Export`(ghost 26px)와 menu `Save as CSV…`, `Save as JSON…`. 저장 dialog의 기본 이름은 `result.csv`/`result.json`, 기본 위치는 프로젝트 디렉토리. 받은 행만(앞에서 버린 행 제외), 보이는 순서(정렬 반영), 서버 값(Apply 안 한 변경은 넣지 않음)으로 쓴다. 끝나면 toast `Saved {count} rows to {file}`, 결과가 일부면 `Saved {count} received rows to {file}`. 쓰지 못하면 toast 대신 오류 dialog.
@@ -96,19 +96,19 @@ test가 없으면 사용자가 가장 먼저 부딪힐 입력과 상황이다. �
 **Files:**
 - Modify: `docs/progress.md`, `docs/spec.md`, `docs/milestones.md`
 
-- [ ] **Step 1: branch를 만든다**
+- [x] **Step 1: branch를 만든다**
 
 ```bash
 git switch -c m10-result-table-extensions
 ```
 
-- [ ] **Step 2: 문서를 고친다**
+- [x] **Step 2: 문서를 고친다**
 
 - 진행상황: M10을 `진행 중`(시작 날짜, 계획 링크), "지금"을 M10 Task 2로. 결정 기록에 "먼저 확인한 것"의 결정 두 줄과 "이 계획에서 정한 것"의 줄마다 한 줄(날짜, M10). 캔버스와 다른 것(`RETURNING`, note 위치, 우클릭 menu)은 이유 칸에 적는다.
 - 기획서: 4.6 표 조작(정렬 규칙과 일부 결과 표시), 복사와 내보내기(받은 행만, CSV와 JSON 형식), 셀 편집(편집할 수 있는 결과, 미리 보기, Apply의 트랜잭션 처리, 편집할 수 없는 이유), 4.10 변경(`[shortcuts]`의 key와 값 형식, 오류), 5장 전역 설정의 key 표에 `shortcuts.<command>`. 9장에서 "내보내기가 받은 행만 저장하는지(M10)"를 지운다. 마지막 수정 날짜.
 - 마일스톤 M10 "먼저 확인할 것"에 `→ 정함:`으로 결과를 적는다.
 
-- [ ] **Step 3: commit**
+- [x] **Step 3: commit**
 
 ```bash
 git add docs
@@ -140,26 +140,26 @@ git commit -m "docs: M10 계획과 단일 테이블 판별, 내보내기 범위 
   interface ResultColumn { name: string; typeOid: number; typeModifier: number; tableOid: number; columnNumber: number }
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `tx_tap.rs` unit: `row_description_carries_table_and_number`(payload의 table OID 4 byte와 attnum 2 byte를 읽음, 기존 type test는 그대로 통과).
 - `tests/query_stream.rs`: `columns_carry_table_and_number` — `SELECT id, note, id + 1 FROM big_table LIMIT 1`의 열이 (`'big_table'::regclass`, 1), (같은 OID, note의 attnum), (0, 0).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace table_and_number`
 Expected: FAIL (field 없음)
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `parse_row_description`이 `fixed[0..4]`(table OID)와 `fixed[4..6]`(attnum)도 읽는다. `PgRows`가 `Column`에 옮긴다. DTO는 camelCase. 화면 fixture의 `ResultColumn`에 `tableOid: 0, columnNumber: 0`을 기본으로 둔다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src
@@ -207,7 +207,7 @@ git commit -m "feat: 결과 열마다 RowDescription의 table OID와 attnum을 �
   function describeTables(connection: string, oids: number[]): Promise<EditTable[]>;
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `tests/catalog.rs`(schema `m10_edit`를 만들고 끝에 지운다. 이 계획 "먼저 확인한 것"의 `users`, `orders`, `nopk`, `parted`, `parted_1`, view, materialized view와 같은 모양, `"Order Items"`처럼 따옴표가 필요한 이름 하나):
 - `describes_columns_by_number`: `users`의 컬럼 attnum이 `1 2 4 5 6`(지운 컬럼 없음), `id`는 `primary_key`이고 `updatable` false(identity always), `doubled`는 `updatable` false, `email`은 true.
@@ -216,21 +216,21 @@ git commit -m "feat: 결과 열마다 RowDescription의 table OID와 attnum을 �
 - `unknown_oids_are_left_out`: 없는 OID와 인덱스 OID를 섞어 물으면 테이블만 온다.
 - `table_without_primary_key`: `nopk`의 컬럼이 모두 `primary_key` false.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace describe`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `catalog.rs`에 SQL 하나: `pg_class`(`oid = ANY($1)`, relkind `r p f v m`)에 `pg_namespace`, `pg_attribute`(`attnum > 0 AND NOT attisdropped`), `pg_index`(`indisprimary`, `attnum = ANY(indkey)`)를 붙이고, `updatable`은 `attgenerated = '' AND attidentity <> 'a'`. 행을 OID별로 묶는다. relkind → `RelationKind`는 M7 catalog의 변환을 다시 쓴다. command `describe_tables`.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src
@@ -278,7 +278,7 @@ git commit -m "feat: catalog에서 결과 열의 테이블 이름, PK, 고칠 �
   function applyEdits(sessionId: number, statements: string[], mode: TxMode): Promise<ApplyResult>;
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `session_actor/tests.rs`(fake connection, 보낸 SQL 목록을 본다):
 - `auto_idle_wraps_in_begin_and_commit`: 보낸 SQL이 `BEGIN`, 문장들, `COMMIT`.
@@ -294,24 +294,24 @@ git commit -m "feat: catalog에서 결과 열의 테이블 이름, PK, 고칠 �
 - `deferred_constraint_fails_at_commit`: `DEFERRABLE INITIALLY DEFERRED` FK를 어기면 `Failed { index: None, .. }`, 반영 없음.
 - `e_string_values_round_trip`: `E'C:\\temp\\n'`, `'O''Brien'`, 줄바꿈과 한글 값이 다시 읽어도 같다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace apply`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - 새 `SessionCommand::Apply { statements, mode, reply }`. `self.query`가 있으면 `Busy`. `self.tx == Failed`면 `TransactionFailed`.
 - `edit.rs`에 앞뒤 문장 상수와 `apply(&mut self, …)`: 앞 문장(`simple_execute`), 문장마다 `start_query`로 끝까지 읽어 `Complete { rows }`와 첫 `Row`를 받는다. `Err(Server)`면 `None`까지 읽은 뒤 되돌린다. 끝 문장, 되돌리는 문장도 `simple_execute`. 끝나면 `read_tx`.
 - `savepoint_on_top`은 바꾸지 않는다(`chilla_edit`을 그 위에 두고 같은 Apply 안에서 푼다).
 - command `apply_edits(session_id, statements, mode)`.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src
@@ -715,8 +715,8 @@ git commit -m "feat: 전역 설정 파일의 [shortcuts]로 단축키를 바꿈"
 ### Task 11: 정리와 code review
 
 - [x] **Step 1:** `simplify`를 돌려 고친 것을 commit한다(`chore: …`).
-- [ ] **Step 2:** `code-review`를 high로 돌린다.
-- [ ] **Step 3:** 지적마다 `superpowers:receiving-code-review`로 다시 검토해 고칠 것만 고치고 commit한다(`fix: …`). 고치지 않은 지적은 이유와 함께 진행상황의 결정 기록에 남긴다.
+- [x] **Step 2:** `code-review`를 high로 돌린다.
+- [x] **Step 3:** 지적마다 `superpowers:receiving-code-review`로 다시 검토해 고칠 것만 고치고 commit한다(`fix: …`). 고치지 않은 지적은 이유와 함께 진행상황의 결정 기록에 남긴다.
 
 Run: `pnpm check`
 Expected: 통과
