@@ -8,7 +8,7 @@ vi.mock("../../shared/api/commands");
 vi.mock("../../shared/api/dialog");
 vi.mock("../../shared/api/path");
 
-import { listSqlFiles } from "../../shared/api/commands";
+import { listSqlFiles, searchHistory } from "../../shared/api/commands";
 import { homeDir } from "../../shared/api/path";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "./projectStore";
@@ -236,7 +236,7 @@ test("schema_segment_switches_the_view", async () => {
   const history = within(list).getByRole("tab", { name: "History" });
   expect(files).toHaveAttribute("aria-selected", "true");
   expect(schema).toHaveAttribute("aria-selected", "false");
-  expect(history).toHaveAttribute("aria-disabled", "true");
+  expect(history).toHaveAttribute("aria-selected", "false");
 
   await click(schema);
   expect(schema).toHaveAttribute("aria-selected", "true");
@@ -246,11 +246,34 @@ test("schema_segment_switches_the_view", async () => {
   await click(screen.getByRole("button", { name: "Choose connection" }));
   expect(h.onChooseConnection).toHaveBeenCalledTimes(1);
 
-  await click(history);
-  expect(schema).toHaveAttribute("aria-selected", "true");
-
   await click(files);
   expect(screen.getByRole("region", { name: "SQL Files" })).toBeInTheDocument();
+});
+
+test("history_segment_shows_the_history_view", async () => {
+  vi.mocked(searchHistory).mockResolvedValue([
+    {
+      id: 1,
+      connection: "local",
+      sql: "SELECT 42",
+      executedAt: Date.now(),
+      elapsedMicros: 1000,
+    },
+  ]);
+  await renderSidebar();
+
+  const history = screen.getByRole("tab", { name: "History" });
+  await click(history);
+
+  expect(history).toHaveAttribute("aria-selected", "true");
+  expect(screen.queryByRole("region", { name: "SQL Files" })).toBeNull();
+  expect(
+    screen.getByRole("searchbox", { name: "Search history" }),
+  ).toBeInTheDocument();
+  expect(await screen.findByText("SELECT 42")).toBeInTheDocument();
+
+  await click(screen.getByRole("tab", { name: "Files" }));
+  expect(screen.queryByRole("searchbox")).toBeNull();
 });
 
 test("위 38px은 창을 끄는 빈 자리다", async () => {

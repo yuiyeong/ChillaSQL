@@ -210,7 +210,7 @@ git commit -m "feat: 앱 저장소에 프로젝트별 쿼리 기록을 두고 �
   ```
   문구 key: `history.search`(placeholder와 aria-label `Search history`), `history.openInEditor`(`Open in editor`), `history.empty`(`Queries you run appear here`), `history.noMatch`(`No queries match`).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `when.test.ts`: `labels_today_yesterday_and_dates`(자정 직전·직후 경계), `time_is_24_hour`.
 - `historyStore.test.ts`: `search_waits_150ms`(fake timer로 149ms에는 안 부름), `a_stale_answer_is_dropped`, `selects_the_first_entry_after_load`, `move_stops_at_the_ends`, `record_failure_is_ignored`.
@@ -218,12 +218,12 @@ git commit -m "feat: 앱 저장소에 프로젝트별 쿼리 기록을 두고 �
 - `HistoryView.test.tsx`: `groups_by_day`, `shows_connection_dot_only_for_known_connections`, `enter_opens_the_selected_entry_in_a_new_tab`(기록의 접속이 골라짐), `double_click_opens`, `unknown_connection_keeps_the_default`, `arrow_keys_move_selection_from_the_search_field`, `store_unavailable_shows_the_error`.
 - `Sidebar.test.tsx`: History 탭이 눌리고 HistoryView를 그린다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/history src/features/query/runsStore.test.ts src/features/project/Sidebar.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `runsStore`의 `sendStep` `onEvent`에서 실행마다 한 번 `useHistory.getState().record({ connection, sql: step.sql, executedAt: startedAt, elapsedMicros: event.elapsedMicros })`. 밀려난(fresh가 아닌) 실행도 기록한다.
 - `record`와 `load`는 `useProject`의 열린 프로젝트 dir을 쓴다. 프로젝트가 없으면 아무것도 하지 않는다.
@@ -231,12 +231,12 @@ Expected: FAIL
 - HistoryView는 Sidebar C를 따른다: 검색 칸(28px, 7px radius, `bg-0`, 돋보기 icon), 목록(day label은 sidebar의 section label 모양), footer `↵ Open in editor`. 목록은 view가 열릴 때 `load`한다. 프로젝트를 바꾸는 `switchProject`/`enterProject`가 `reset`한다.
 - `openHistoryEntry`: `useTabs.newTab({ text: entry.sql })` 뒤 `project.connections`에 그 이름이 있으면 `setConnection`. 새 탭의 에디터에 focus.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

@@ -3,6 +3,7 @@ import { ConnectionDot } from "../connections/ConnectionDot";
 import { connectionTarget } from "../connections/connectionTarget";
 import { ReadOnlyLock } from "../connections/ReadOnlyLock";
 import { useTabs } from "../editor/tabsStore";
+import { HistoryView } from "../history/HistoryView";
 import {
   ChevronDownIcon,
   ChevronRightIcon,
@@ -47,13 +48,12 @@ function visibleRows(
   ]);
 }
 
-type View = "files" | "schema";
+type View = "files" | "schema" | "history";
 
-/** History(M9)는 아직 없다. */
 const SEGMENTS = [
   { key: "sidebar.viewFiles", view: "files" },
   { key: "sidebar.viewSchema", view: "schema" },
-  { key: "sidebar.viewHistory", view: null },
+  { key: "sidebar.viewHistory", view: "history" },
 ] as const;
 
 export function Sidebar({
@@ -209,18 +209,13 @@ export function Sidebar({
               type="button"
               role="tab"
               aria-selected={selected}
-              aria-disabled={target === null ? true : undefined}
               className={[
                 "text-small h-[22px] flex-1 rounded-[5px] border-0 font-medium",
                 selected
                   ? "bg-bg-3 text-fg cursor-pointer"
-                  : target === null
-                    ? "text-fg-2 cursor-default bg-transparent opacity-50"
-                    : "text-fg-2 hover:text-fg cursor-pointer bg-transparent",
+                  : "text-fg-2 hover:text-fg cursor-pointer bg-transparent",
               ].join(" ")}
-              onClick={() => {
-                if (target !== null) setView(target);
-              }}
+              onClick={() => setView(target)}
             >
               {t(key)}
             </button>
@@ -230,6 +225,8 @@ export function Sidebar({
 
       {view === "schema" ? (
         <SchemaView onChooseConnection={onChooseConnection} />
+      ) : view === "history" ? (
+        <HistoryView />
       ) : (
         <section
           aria-label={t("sidebar.files")}

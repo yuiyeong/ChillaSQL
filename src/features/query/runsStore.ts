@@ -21,6 +21,7 @@ import type {
 import { t } from "../../shared/i18n/t";
 import { modeOf, useTabs } from "../editor/tabsStore";
 import { markRunStart, markServerError } from "../editor/runAnchors";
+import { useHistory } from "../history/historyStore";
 import { clearGridViews, dropGridView } from "./gridViews";
 import {
   emptyResult,
@@ -545,8 +546,25 @@ export const useRuns = create<RunsState>()((set, get) => {
         const drain = index < steps.length - 1;
         // 문장마다 따로 센다. 트랜잭션을 연 문장의 시각이 트랜잭션의 시작이다.
         const startedAt = Date.now();
+        // 실행 하나는 첫 rows나 버리지 않은 finished에서 한 번 기록한다.
+        let recorded = false;
 
         const onEvent = (event: QueryEvent) => {
+          // 서버에 가서 답이 온 실행은 화면이 밀려난 것이어도 기록한다. 버린 실행(discarded)은 답이
+          // 아니므로 기록하지 않는다.
+          if (
+            !recorded &&
+            (event.type === "rows" ||
+              (event.type === "finished" && event.outcome !== "discarded"))
+          ) {
+            recorded = true;
+            void useHistory.getState().record({
+              connection,
+              sql: step.sql,
+              executedAt: startedAt,
+              elapsedMicros: event.elapsedMicros,
+            });
+          }
           // 세션이 죽었다. 늦은 event여도 그 세션이 아직 이 탭의 것이면 버린다.
           if (
             event.type === "finished" &&

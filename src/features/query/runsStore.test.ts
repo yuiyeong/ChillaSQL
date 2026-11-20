@@ -10,6 +10,7 @@ import {
   executeQuery,
   fetchMore,
   openSession,
+  recordQuery,
 } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
 import type {
@@ -23,8 +24,13 @@ import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
 import { useTypes } from "./typesStore";
 import { deferred } from "../../test/deferred";
-import { resultColumns, setTabMode } from "../../test/fixtures";
+import {
+  openProjectWith,
+  resultColumns,
+  setTabMode,
+} from "../../test/fixtures";
 import { modeOf, useTabs } from "../editor/tabsStore";
+import { useProject } from "../project/projectStore";
 
 function session(id: number, connection = "local"): Session {
   return { id, connection, backendPid: 100 + id };
@@ -60,6 +66,7 @@ const rowsEvent: QueryEvent = {
 beforeEach(async () => {
   // 앞 test의 세션을 닫는 호출이 mock 기록을 지우기 전에 끝나게 한다.
   await useRuns.getState().reset();
+  useProject.setState(useProject.getInitialState(), true);
   useTabs.getState().reset();
   useTypes.getState().reset();
   vi.resetAllMocks();
@@ -68,6 +75,7 @@ beforeEach(async () => {
   vi.mocked(closeSession).mockResolvedValue();
   vi.mocked(cancelQuery).mockResolvedValue();
   vi.mocked(fetchMore).mockResolvedValue();
+  vi.mocked(recordQuery).mockResolvedValue();
 });
 
 test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () => {
@@ -1859,4 +1867,127 @@ test("an_end_between_statements_stops_the_script", async () => {
 
   await vi.waitFor(() => expect(scriptOf("t1").stoppedAt).toBe(0));
   expect(executeQuery).toHaveBeenCalledTimes(1);
+});
+
+/** 서버가 `elapsedMicros`로 끝냈다는 finished event. */
+function finishedEvent(
+  elapsedMicros = 1,
+  outcome: "completed" | "discarded" = "completed",
+): QueryEvent {
+  return outcome === "completed"
+    ? { type: "finished", tx: "idle", elapsedMicros, outcome, rows: 1 }
+    : { type: "finished", tx: "idle", elapsedMicros, outcome };
+}
+
+test("records_once_on_the_first_rows", async () => {
+  openProjectWith();
+  const before = Date.now();
+  await useRuns.getState().run("t", prepared("SELECT 1", "staging"));
+  const onEvent = onEventOf(0);
+
+  onEvent({ ...rowsEvent, elapsedMicros: 10 });
+  onEvent({ ...rowsEvent, elapsedMicros: 20 });
+  onEvent(finishedEvent(30));
+
+  expect(recordQuery).toHaveBeenCalledTimes(1);
+  expect(recordQuery).toHaveBeenCalledWith("/p", {
+    connection: "staging",
+    sql: "SELECT 1",
+    executedAt: expect.any(Number),
+    elapsedMicros: 10,
+  });
+  const [, saved] = vi.mocked(recordQuery).mock.calls[0];
+  expect(saved.executedAt).toBeGreaterThanOrEqual(before);
+  expect(saved.executedAt).toBeLessThanOrEqual(Date.now());
+});
+
+test("records_a_statement_without_rows_on_finished", async () => {
+  openProjectWith();
+  await useRuns.getState().run("t", prepared("CREATE TABLE a ()"));
+
+  onEventOf(0)(finishedEvent(7));
+
+  expect(recordQuery).toHaveBeenCalledTimes(1);
+  expect(recordQuery).toHaveBeenCalledWith(
+    "/p",
+    expect.objectContaining({ sql: "CREATE TABLE a ()", elapsedMicros: 7 }),
+  );
+});
+
+test("records_a_failed_statement", async () => {
+  openProjectWith();
+  await useRuns.getState().run("t", prepared("SELECT * FROM nope"));
+
+  fail(0);
+
+  expect(recordQuery).toHaveBeenCalledTimes(1);
+  expect(recordQuery).toHaveBeenCalledWith(
+    "/p",
+    expect.objectContaining({ sql: "SELECT * FROM nope", elapsedMicros: 1 }),
+  );
+});
+
+test("does_not_record_a_discarded_first_event", async () => {
+  openProjectWith();
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+
+  onEventOf(0)(finishedEvent(3, "discarded"));
+
+  expect(recordQuery).not.toHaveBeenCalled();
+});
+
+test("records_a_superseded_execution_too", async () => {
+  openProjectWith();
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+  const lateA = onEventOf(0);
+  await useRuns.getState().run("t", prepared("SELECT 2"));
+
+  lateA(rowsEvent);
+
+  expect(recordQuery).toHaveBeenCalledTimes(1);
+  expect(recordQuery).toHaveBeenCalledWith(
+    "/p",
+    expect.objectContaining({ sql: "SELECT 1" }),
+  );
+});
+
+test("does_not_record_when_the_session_did_not_open", async () => {
+  openProjectWith();
+  vi.mocked(openSession).mockRejectedValue(
+    new CommandError("connect_failed", "refused"),
+  );
+
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+
+  expect(executeQuery).not.toHaveBeenCalled();
+  expect(recordQuery).not.toHaveBeenCalled();
+});
+
+test("records_each_statement_of_a_script", async () => {
+  openProjectWith();
+  const running = useRuns.getState().run("t", script("SELECT 1", "SELECT 2"));
+  await sent(1);
+  onEventOf(0)(rowsEvent);
+  onEventOf(0)(finishedEvent(4));
+  await sent(2);
+  onEventOf(1)(finishedEvent(6));
+  await running;
+
+  expect(
+    vi.mocked(recordQuery).mock.calls.map(([, entry]) => entry.sql),
+  ).toEqual(["SELECT 1", "SELECT 2"]);
+});
+
+test("a_record_failure_does_not_disturb_the_run", async () => {
+  openProjectWith();
+  vi.mocked(recordQuery).mockRejectedValue(
+    new CommandError("store_unavailable", "no store"),
+  );
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+
+  onEventOf(0)(rowsEvent);
+  onEventOf(0)(finishedEvent(2));
+  await Promise.resolve();
+
+  expect(runOf("t").status).toBe("finished");
 });

@@ -32,6 +32,7 @@ import type {
 } from "../query/runReducer";
 import { endable, useRuns, type ConfirmStep } from "../query/runsStore";
 import { useTypes } from "../query/typesStore";
+import { useHistory } from "../history/historyStore";
 import { useSchema } from "../schema/schemaStore";
 import { mono, rt } from "../../shared/i18n/rich";
 import { t, tc } from "../../shared/i18n/t";
@@ -533,6 +534,8 @@ export async function enterProject(
   // 옛 프로젝트의 catalog 연결도 Rust가 이미 닫았다.
   useSchema.getState().reset();
   useTypes.getState().reset();
+  // 기록은 프로젝트마다 따로다. 열려 있는 History 화면은 프로젝트가 바뀌면 다시 읽는다.
+  useHistory.getState().reset();
   // reset이 부른 빈 탭의 저장은 reopenTabs가 바로 거둔다.
   await Promise.all([closing, reopenTabs()]);
   return true;

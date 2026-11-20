@@ -15,9 +15,26 @@ function startOfDay(time: number): number {
 }
 
 /**
- * 프로젝트를 연 때를 한 마디로. 1분 안이면 Just now, 오늘이면 Today, 어제면 Yesterday, 그 밖에는
- * `language`에 맞는 짧은 날짜(Nov 9, 11월 9일)다. `openedAt`과 `now`는 둘 다 밀리초다(Rust가 주는
- * Unix 초는 1000을 곱해 넘긴다). 오늘과 어제는 지역 시각의 날짜로 가른다. 낱말은 `t`가 고른 언어다.
+ * 날짜를 한 마디로. 오늘이면 Today, 어제면 Yesterday, 그 밖에는 `language`에 맞는 짧은 날짜(Nov 9,
+ * 11월 9일)다. `time`과 `now`는 둘 다 밀리초다. 오늘과 어제는 지역 시각의 날짜로 가른다. 낱말은 `t`가
+ * 고른 언어다. 최근 프로젝트와 쿼리 기록의 날짜 묶음이 함께 쓴다.
+ */
+export function dayWord(time: number, now: number, language: Language): string {
+  const today = startOfDay(now);
+  if (time >= today) return t("when.today");
+  // 하루는 24시간이 아닐 수 있으므로(일광 절약 시간) 어제 0시는 날짜로 구한다.
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (time >= yesterday.getTime()) return t("when.yesterday");
+  return new Intl.DateTimeFormat(language, {
+    month: "short",
+    day: "numeric",
+  }).format(time);
+}
+
+/**
+ * 프로젝트를 연 때를 한 마디로. 1분 안이면 Just now, 그 밖에는 `dayWord`다. `openedAt`과 `now`는 둘 다
+ * 밀리초다(Rust가 주는 Unix 초는 1000을 곱해 넘긴다).
  */
 export function openedWhen(
   openedAt: number,
@@ -25,16 +42,7 @@ export function openedWhen(
   language: Language,
 ): string {
   if (now - openedAt < MINUTE) return t("when.justNow");
-  const today = startOfDay(now);
-  if (openedAt >= today) return t("when.today");
-  // 하루는 24시간이 아닐 수 있으므로(일광 절약 시간) 어제 0시는 날짜로 구한다.
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-  if (openedAt >= yesterday.getTime()) return t("when.yesterday");
-  return new Intl.DateTimeFormat(language, {
-    month: "short",
-    day: "numeric",
-  }).format(openedAt);
+  return dayWord(openedAt, now, language);
 }
 
 /**

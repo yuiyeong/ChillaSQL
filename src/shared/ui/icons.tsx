@@ -251,3 +251,12 @@ export function ReformatIcon({ size = 15, ...rest }: IconProps) {
     </Stroke>
   );
 }
+
+export function SearchIcon({ size = 12, ...rest }: IconProps) {
+  return (
+    <Stroke size={size} width={1.5} {...rest}>
+      <circle cx="7" cy="7" r="4.5" />
+      <path d="M10.5 10.5L14 14" />
+    </Stroke>
+  );
+}
