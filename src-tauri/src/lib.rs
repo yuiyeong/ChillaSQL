@@ -105,6 +105,7 @@ pub fn run() {
             commands::describe_types,
             commands::close_catalog,
             commands::split_statements,
+            commands::find_parameters,
             commands::inspect_statement,
             commands::execute_query,
             commands::end_transaction,

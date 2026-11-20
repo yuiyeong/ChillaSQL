@@ -22,8 +22,8 @@ use super::{
     RecentProject, SplitError, SqlFileStore, StatementInspector, StatementSplitter, StoreError,
 };
 use crate::domain::{
-    Catalog, ConnectionColor, ConnectionProfile, Danger, FileStamp, Password, Project, QueryEvent,
-    Row, SqlFile, SqlPath, StatementSpan, TableDetails, TypeInfo, WriteMode,
+    Catalog, ConnectionColor, ConnectionProfile, Danger, FileStamp, ParameterSpan, Password,
+    Project, QueryEvent, Row, SqlFile, SqlPath, StatementSpan, TableDetails, TypeInfo, WriteMode,
 };
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
@@ -240,6 +240,43 @@ impl StatementSplitter for FakeSplitter {
             start = end + 1;
         }
         Ok(spans)
+    }
+
+    /// `::`가 아닌 `:` 바로 뒤의 영문자·밑줄·숫자를 이름으로 본다. 따옴표 검사는 `split`과 같다.
+    fn parameters(&self, sql: &str) -> Result<Vec<ParameterSpan>, SplitError> {
+        if sql.matches('\'').count() % 2 == 1 {
+            return Err(SplitError {
+                message: "따옴표가 닫히지 않았다".into(),
+            });
+        }
+        let bytes = sql.as_bytes();
+        let is_word = |b: u8| b.is_ascii_alphanumeric() || b == b'_';
+        let mut params = Vec::new();
+        let mut at = 0;
+        while at < bytes.len() {
+            if bytes[at] != b':' {
+                at += 1;
+                continue;
+            }
+            let start = at;
+            at += 1;
+            if bytes.get(at) == Some(&b':') {
+                at += 1;
+                continue;
+            }
+            let name_start = at;
+            while at < bytes.len() && is_word(bytes[at]) {
+                at += 1;
+            }
+            if at > name_start {
+                params.push(ParameterSpan {
+                    name: sql[name_start..at].to_string(),
+                    start,
+                    end: at,
+                });
+            }
+        }
+        Ok(params)
     }
 }
 

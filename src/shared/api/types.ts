@@ -107,6 +107,13 @@ export interface StatementSpan {
   end: number;
 }
 
+/** `:name` 파라미터의 위치. `start`는 `:`, `end`는 이름 끝이고 UTF-16 code unit offset이다. */
+export interface ParameterSpan {
+  name: string;
+  start: number;
+  end: number;
+}
+
 /**
  * 실행 전에 확인할 위험한 문장. 이름은 문장에 쓴 그대로다.
  * `drop`의 `object`는 SQL keyword("TABLE", "MATERIALIZED VIEW" 등)이고 그 밖의 object는 "".

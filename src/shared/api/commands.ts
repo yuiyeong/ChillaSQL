@@ -13,6 +13,7 @@ import type {
   Settings,
   Session,
   SqlFile,
+  ParameterSpan,
   StatementSpan,
   TableDetails,
   TxEnd,
@@ -99,6 +100,11 @@ export function closeCatalog(connection: string): Promise<void> {
 
 export function splitStatements(sql: string): Promise<StatementSpan[]> {
   return call("split_statements", { sql });
+}
+
+/** 문장 안의 `:name` 파라미터를 start 오름차순으로 돌려준다. 나눌 수 없는 text면 거부한다. */
+export function findParameters(sql: string): Promise<ParameterSpan[]> {
+  return call("find_parameters", { sql });
 }
 
 /** 문장 하나의 첫 위험을 돌려준다. 위험이 없거나 문장을 읽을 수 없으면 null이다. */

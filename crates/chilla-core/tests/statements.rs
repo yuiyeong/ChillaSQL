@@ -126,6 +126,81 @@ fn unterminated_text_cannot_be_split() {
     }
 }
 
+/// `(name, 원문 조각)` 목록. 조각은 `:`부터 이름 끝까지다.
+fn parameters(sql: &str) -> Vec<(String, String)> {
+    PgQuerySplitter
+        .parameters(sql)
+        .unwrap()
+        .into_iter()
+        .map(|p| (p.name, sql[p.start..p.end].to_string()))
+        .collect()
+}
+
+fn names(sql: &str) -> Vec<String> {
+    parameters(sql).into_iter().map(|(name, _)| name).collect()
+}
+
+#[test]
+fn finds_named_parameters() {
+    let sql = "SELECT * FROM t WHERE id = :id AND d > :since::date";
+    assert_eq!(
+        parameters(sql),
+        [
+            ("id".to_string(), ":id".to_string()),
+            ("since".to_string(), ":since".to_string())
+        ]
+    );
+}
+
+/// Review Focus 2
+#[test]
+fn slices_casts_strings_and_comments_are_not_parameters() {
+    assert!(
+        names("SELECT a[1:2], a[lo:hi], x::date, ':no', $1 -- :c").is_empty(),
+        "slice, cast, 문자열, $1, 주석"
+    );
+    assert!(names("DO $$ BEGIN x := 1; END $$").is_empty());
+    assert!(names("SELECT 1 /* :c */").is_empty());
+}
+
+#[test]
+fn keyword_names_are_parameters() {
+    assert_eq!(names("SELECT :user, :limit"), ["user", "limit"]);
+}
+
+#[test]
+fn psql_quoted_forms_are_not_parameters() {
+    assert!(names(r#"SELECT :"q""#).is_empty());
+    assert!(names("SELECT :'s'").is_empty());
+}
+
+#[test]
+fn space_after_colon_is_not_a_parameter() {
+    assert!(names("SELECT : id").is_empty());
+}
+
+#[test]
+fn keeps_case_and_repeats() {
+    let sql = "SELECT 1 WHERE :userId = :userId";
+    assert_eq!(names(sql), ["userId", "userId"]);
+    let spans = PgQuerySplitter.parameters(sql).unwrap();
+    assert!(spans[0].start < spans[1].start);
+}
+
+#[test]
+fn parameter_inside_brackets_expression() {
+    assert!(names("SELECT a[:i]").is_empty());
+    assert!(names("SELECT a[:i:j]").is_empty());
+    // 닫힌 뒤에는 다시 본다.
+    assert_eq!(names("SELECT a[1], :id"), ["id"]);
+}
+
+#[test]
+fn unclosed_quote_is_an_error() {
+    let err = PgQuerySplitter.parameters("SELECT ':id").unwrap_err();
+    assert!(err.message.starts_with("unterminated"), "{err}");
+}
+
 #[test]
 fn ten_thousand_statements_split_within_100ms() {
     let sql: String = (0..10_000)

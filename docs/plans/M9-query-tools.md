@@ -266,7 +266,7 @@ git commit -m "feat: 실행한 문장을 기록하고 History에서 찾아 새 �
   function findParameters(sql: string): Promise<ParameterSpan[]>;
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `tests/statements.rs`:
 - `finds_named_parameters`: `SELECT * FROM t WHERE id = :id AND d > :since::date` → `id`, `since`(span이 `:id`, `:since`).
@@ -279,21 +279,21 @@ git commit -m "feat: 실행한 문장을 기록하고 History에서 찾아 새 �
 - `unclosed_quote_is_an_error`.
 - command 쪽: `parameter_spans_are_utf16`(`SELECT '한글', :id` → start 12).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace parameters`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `pg_query::scan`의 token을 차례로 보며 `Ascii91`/`Ascii93`로 bracket 깊이를 센다. 깊이 0의 `Ascii58` 다음 token이 `start == colon.end`이고 (`Ident`이며 원문이 `"`로 시작하지 않음) 또는 `keyword_kind() != NoKeyword`이면 span이다. 주석 token은 건너뛴다. command `find_parameters`는 `split_statements`처럼 UTF-16으로 바꾼다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src

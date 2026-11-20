@@ -30,7 +30,7 @@ pub use session::{
 };
 pub use settings::{EditorSettings, Language, Settings, SettingsError};
 pub use sql_file::{FileStamp, SqlFile, SqlPath, SqlPathError, WriteMode};
-pub use statement::StatementSpan;
+pub use statement::{ParameterSpan, StatementSpan};
 pub use tunnel::{
     DEFAULT_TUNNEL_TIMEOUT, MAX_TUNNEL_TIMEOUT_SECS, TunnelEvent, TunnelFailure, TunnelState,
     TunnelTarget,

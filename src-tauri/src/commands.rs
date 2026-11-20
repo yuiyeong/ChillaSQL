@@ -12,10 +12,11 @@ use chilla_core::application::{
 };
 use chilla_core::domain::{
     Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo, ConstraintKind, Danger,
-    EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, Password, ProfileError, Project,
-    QueryEvent, QueryId, QueryOutcome, Relation, RelationKind, RowBatch, ServerError, SessionId,
-    SessionInfo, SessionState, Settings, SettingsError, SqlFile, StatementSpan, TableDetails,
-    TunnelEvent, TunnelFailure, TunnelState, TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
+    EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, ParameterSpan, Password,
+    ProfileError, Project, QueryEvent, QueryId, QueryOutcome, Relation, RelationKind, RowBatch,
+    ServerError, SessionId, SessionInfo, SessionState, Settings, SettingsError, SqlFile,
+    StatementSpan, TableDetails, TunnelEvent, TunnelFailure, TunnelState, TxEnd, TxMode, TxStatus,
+    TypeInfo, WriteMode,
 };
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
@@ -250,6 +251,34 @@ fn utf16_spans(sql: &str, spans: &[StatementSpan]) -> Vec<StatementSpanDto> {
         .map(|span| StatementSpanDto {
             start: advance_to(span.start),
             end: advance_to(span.end),
+        })
+        .collect()
+}
+
+/// `:name` 파라미터의 위치. `start`는 `:`, `end`는 이름 끝이고 UTF-16 code unit offset이다.
+#[derive(Debug, Clone, Serialize)]
+pub struct ParameterSpanDto {
+    pub name: String,
+    pub start: usize,
+    pub end: usize,
+}
+
+/// `utf16_spans`와 같은 변환을 파라미터에 한다. span은 start 오름차순에 서로 겹치지 않는다.
+fn utf16_parameters(sql: &str, params: &[ParameterSpan]) -> Vec<ParameterSpanDto> {
+    let byte_spans: Vec<StatementSpan> = params
+        .iter()
+        .map(|p| StatementSpan {
+            start: p.start,
+            end: p.end,
+        })
+        .collect();
+    params
+        .iter()
+        .zip(utf16_spans(sql, &byte_spans))
+        .map(|(param, span)| ParameterSpanDto {
+            name: param.name.clone(),
+            start: span.start,
+            end: span.end,
         })
         .collect()
 }
@@ -902,6 +931,16 @@ pub fn split_statements(
 ) -> CommandResult<Vec<StatementSpanDto>> {
     let spans = app.split_statements(&sql)?;
     Ok(utf16_spans(&sql, &spans))
+}
+
+/// 문장 안의 `:name` 파라미터 위치. `pg_query::scan`을 쓰므로 async runtime에서 돈다.
+#[tauri::command(async)]
+pub fn find_parameters(
+    app: State<'_, CoreApp>,
+    sql: String,
+) -> CommandResult<Vec<ParameterSpanDto>> {
+    let params = app.find_parameters(&sql)?;
+    Ok(utf16_parameters(&sql, &params))
 }
 
 /// 문장 하나의 첫 위험을 돌려준다. `pg_query::parse`는 text 길이만큼 걸리므로 async runtime에서 돈다.
@@ -1630,6 +1669,22 @@ mod tests {
             .collect();
         assert_eq!(offsets, [(0, 11), (13, 24), (26, 34)]);
         assert!(utf16_spans(sql, &[]).is_empty());
+    }
+
+    #[test]
+    fn parameter_spans_are_utf16() {
+        let sql = "SELECT '한글', :id";
+        let spans = [ParameterSpan {
+            name: "id".into(),
+            start: sql.find(':').unwrap(),
+            end: sql.len(),
+        }];
+        let params = utf16_parameters(sql, &spans);
+        assert_eq!(params.len(), 1);
+        assert_eq!(
+            (params[0].name.as_str(), params[0].start, params[0].end),
+            ("id", 13, 16)
+        );
     }
 
     /// 이벤트를 낸 쿼리의 text. 오류 위치 16(1부터 센 글자 번호)은 offset 15다.

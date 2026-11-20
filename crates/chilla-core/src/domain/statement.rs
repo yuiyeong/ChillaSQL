@@ -4,3 +4,11 @@ pub struct StatementSpan {
     pub start: usize,
     pub end: usize,
 }
+
+/// `:name` 하나. byte offset이고 `start`는 `:`, `end`는 이름 끝(포함하지 않음)이다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParameterSpan {
+    pub name: String,
+    pub start: usize,
+    pub end: usize,
+}

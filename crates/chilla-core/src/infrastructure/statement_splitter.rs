@@ -1,7 +1,17 @@
-use pg_query::protobuf::Token;
+use pg_query::protobuf::{KeywordKind, ScanResult, Token};
 
 use crate::application::{SplitError, StatementSplitter};
-use crate::domain::StatementSpan;
+use crate::domain::{ParameterSpan, StatementSpan};
+
+fn scan(sql: &str) -> Result<ScanResult, SplitError> {
+    pg_query::scan(sql).map_err(|e| SplitError {
+        // `Scan`의 Display는 영어 접두어("Error scanning: ")를 붙이므로 message만 꺼낸다.
+        message: match e {
+            pg_query::Error::Scan(message) => message,
+            other => other.to_string(),
+        },
+    })
+}
 
 /// `pg_query::scan`의 token으로 문장을 나눈다.
 ///
@@ -11,13 +21,7 @@ pub struct PgQuerySplitter;
 
 impl StatementSplitter for PgQuerySplitter {
     fn split(&self, sql: &str) -> Result<Vec<StatementSpan>, SplitError> {
-        let scanned = pg_query::scan(sql).map_err(|e| SplitError {
-            // `Scan`의 Display는 영어 접두어("Error scanning: ")를 붙이므로 message만 꺼낸다.
-            message: match e {
-                pg_query::Error::Scan(message) => message,
-                other => other.to_string(),
-            },
-        })?;
+        let scanned = scan(sql)?;
 
         let mut spans = Vec::new();
         let mut current: Option<StatementSpan> = None;
@@ -53,5 +57,49 @@ impl StatementSplitter for PgQuerySplitter {
         }
         spans.extend(current);
         Ok(spans)
+    }
+
+    fn parameters(&self, sql: &str) -> Result<Vec<ParameterSpan>, SplitError> {
+        let scanned = scan(sql)?;
+        // 주석은 건너뛰고 남은 token만 본다. `:`와 이름이 붙어 있는지는 offset으로 가린다.
+        let tokens: Vec<_> = scanned
+            .tokens
+            .iter()
+            .filter(|t| !matches!(t.token(), Token::SqlComment | Token::CComment))
+            .collect();
+
+        let mut params = Vec::new();
+        let mut bracket_depth = 0usize;
+        for (i, token) in tokens.iter().enumerate() {
+            match token.token() {
+                Token::Ascii91 => bracket_depth += 1,
+                Token::Ascii93 => bracket_depth = bracket_depth.saturating_sub(1),
+                // `a[lo:hi]`가 `:id`와 같은 모양이라 `[ ]` 안은 보지 않는다.
+                Token::Ascii58 if bracket_depth == 0 => {
+                    let Some(next) = tokens.get(i + 1) else {
+                        continue;
+                    };
+                    if next.start != token.end {
+                        continue;
+                    }
+                    let (start, end) = (next.start as usize, next.end as usize);
+                    let name = &sql[start..end];
+                    // `:"q"`는 psql 변수 문법이라 따옴표로 시작하는 식별자는 뺀다.
+                    let is_name = match next.token() {
+                        Token::Ident => !name.starts_with('"'),
+                        _ => next.keyword_kind() != KeywordKind::NoKeyword,
+                    };
+                    if is_name {
+                        params.push(ParameterSpan {
+                            name: name.to_string(),
+                            start: token.start as usize,
+                            end,
+                        });
+                    }
+                }
+                _ => {}
+            }
+        }
+        Ok(params)
     }
 }

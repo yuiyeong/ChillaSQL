@@ -27,6 +27,7 @@ import {
   openSession,
   readSqlFile,
   saveConnection,
+  findParameters,
   splitStatements,
   testConnection,
   writeSqlFile,
@@ -123,6 +124,11 @@ test("command 이름과 인자 key를 그대로 보낸다", async () => {
   await splitStatements("a; b");
   expect(invokeMock).toHaveBeenLastCalledWith("split_statements", {
     sql: "a; b",
+  });
+
+  await findParameters("a = :id");
+  expect(invokeMock).toHaveBeenLastCalledWith("find_parameters", {
+    sql: "a = :id",
   });
 
   await inspectStatement("delete from s");

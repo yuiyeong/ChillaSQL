@@ -4,9 +4,9 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use crate::domain::{
-    Catalog, Column, ConnectionProfile, Danger, EndOutcome, FileStamp, Password, ProfileError,
-    Project, QueryOutcome, Row, ServerError, SqlFile, SqlPath, StatementSpan, TableDetails,
-    TxStatus, TypeInfo, WriteMode,
+    Catalog, Column, ConnectionProfile, Danger, EndOutcome, FileStamp, ParameterSpan, Password,
+    ProfileError, Project, QueryOutcome, Row, ServerError, SqlFile, SqlPath, StatementSpan,
+    TableDetails, TxStatus, TypeInfo, WriteMode,
 };
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽고 쓴다.
@@ -271,6 +271,9 @@ pub struct SpawnError {
 pub trait StatementSplitter: Send + Sync {
     /// 문장마다 span을 돌려준다. 빈 문장은 만들지 않는다. span은 start 오름차순이고 서로 겹치지 않는다.
     fn split(&self, sql: &str) -> Result<Vec<StatementSpan>, SplitError>;
+
+    /// 문장 안의 `:name`, start 오름차순. 나눌 수 없는 text면 `SplitError`다.
+    fn parameters(&self, sql: &str) -> Result<Vec<ParameterSpan>, SplitError>;
 }
 
 /// 실행할 문장 하나가 위험한지 본다.

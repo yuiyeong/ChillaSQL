@@ -19,9 +19,9 @@ use super::{
     StoreError, TunnelRunner,
 };
 use crate::domain::{
-    Catalog, ConnectionProfile, Danger, EndResult, FileStamp, Password, ProfileError, Project,
-    QueryId, QueryLimits, SessionId, SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError,
-    StatementSpan, TableDetails, TxEnd, TxMode, TypeInfo, WriteMode,
+    Catalog, ConnectionProfile, Danger, EndResult, FileStamp, ParameterSpan, Password,
+    ProfileError, Project, QueryId, QueryLimits, SessionId, SessionInfo, SessionState, SqlFile,
+    SqlPath, SqlPathError, StatementSpan, TableDetails, TxEnd, TxMode, TypeInfo, WriteMode,
 };
 
 /// 쿼리 기록 검색이 돌려주는 최대 개수.
@@ -648,6 +648,11 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     /// SQL text를 문장 단위로 나눈다. 프로젝트나 세션이 없어도 된다.
     pub fn split_statements(&self, sql: &str) -> Result<Vec<StatementSpan>, AppError> {
         Ok(self.splitter.split(sql)?)
+    }
+
+    /// 문장 안의 `:name` 파라미터 위치. 프로젝트나 세션이 없어도 된다.
+    pub fn find_parameters(&self, sql: &str) -> Result<Vec<ParameterSpan>, AppError> {
+        Ok(self.splitter.parameters(sql)?)
     }
 
     /// 문장 하나가 위험한지 본다. 첫 위험 하나를 돌려준다. 프로젝트나 세션이 없어도 된다.
@@ -1483,6 +1488,24 @@ mod tests {
         );
         assert!(matches!(
             f.app.split_statements("a 'b"),
+            Err(AppError::Split(SplitError { .. }))
+        ));
+    }
+
+    #[tokio::test]
+    async fn find_parameters_needs_no_project() {
+        let f = fixture();
+
+        assert_eq!(
+            f.app.find_parameters("a = :id"),
+            Ok(vec![ParameterSpan {
+                name: "id".into(),
+                start: 4,
+                end: 7
+            }])
+        );
+        assert!(matches!(
+            f.app.find_parameters("a 'b"),
             Err(AppError::Split(SplitError { .. }))
         ));
     }
