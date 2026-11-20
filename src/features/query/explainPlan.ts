@@ -28,6 +28,8 @@ export interface Plan {
 /** label 뒤에 오는 첫 괄호. COSTS OFF에서는 공백이 하나만 온다. */
 const STATS_START = /\s+\((?:cost=|actual |never executed\))/;
 const ARROW = /^(\s*)->\s+(.*)$/;
+/** 부모 node의 detail 열에 찍히는, 자식 subtree의 머리 줄 */
+const SUBTREE_HEADER = /^(\s*)(?:InitPlan|SubPlan|CTE )/;
 const ESTIMATED_ROWS = /\(cost=[^)]*?\brows=(\d+(?:\.\d+)?)/;
 const ACTUAL =
   /\(actual (?:time=[\d.]+\.\.([\d.]+) )?rows=(\d+(?:\.\d+)?) loops=(\d+)\)/;
@@ -78,8 +80,11 @@ function millis(line: string, prefix: string): number | null {
 export function parsePlan(lines: string[]): Plan | null {
   const nodes: PlanNode[] = [];
   const parents: (number | null)[] = [];
-  /** 열린 node의 `->` 열. 뿌리는 -1이라 pop되지 않는다. */
-  const stack: { column: number; index: number }[] = [];
+  /**
+   * 열린 node의 `->` 열(뿌리는 -1이라 pop되지 않는다)과 detail 열(뿌리 2, 나머지는 `->` 열 + 6).
+   * `SubPlan`은 부모의 detail 열에 마지막 자식 뒤에도 찍히므로 detail 열로 부모를 찾는다.
+   */
+  const stack: { column: number; detail: number; index: number }[] = [];
   let planningMs: number | null = null;
   let executionMs: number | null = null;
 
@@ -95,14 +100,25 @@ export function parsePlan(lines: string[]): Plan | null {
         stack.pop();
       parents.push(stack.length > 0 ? stack[stack.length - 1].index : null);
       nodes.push(parseNode(arrow[2], stack.length));
-      stack.push({ column, index: nodes.length - 1 });
+      stack.push({ column, detail: column + 6, index: nodes.length - 1 });
       return;
     }
-    if (nodes.length > 0) return;
+    if (nodes.length > 0) {
+      // 이 줄의 들여쓰기가 detail 열인 node가 뒤따르는 `->`의 부모다.
+      const header = SUBTREE_HEADER.exec(line);
+      if (header) {
+        while (
+          stack.length > 1 &&
+          stack[stack.length - 1].detail > header[1].length
+        )
+          stack.pop();
+      }
+      return;
+    }
     if (STATS_START.test(line) || (i === 0 && BARE_LABEL.test(line))) {
       parents.push(null);
       nodes.push(parseNode(line, 0));
-      stack.push({ column: -1, index: 0 });
+      stack.push({ column: -1, detail: 2, index: 0 });
     }
   });
 

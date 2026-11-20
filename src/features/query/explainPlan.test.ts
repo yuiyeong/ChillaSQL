@@ -233,3 +233,87 @@ test("is_plan_result_needs_exactly_the_query_plan_column", () => {
   expect(isPlanResult([])).toBe(false);
   expect(isPlanResult(null)).toBe(false);
 });
+
+/** 실제 PostgreSQL 18.6의 `EXPLAIN (ANALYZE) SELECT a.id, (SELECT count(*) FROM big_table z WHERE z.id = a.id+1) FROM (SELECT id FROM big_table LIMIT 3) a JOIN (SELECT id FROM big_table LIMIT 3) b USING (id)` 출력 */
+const SUBPLAN_AFTER_CHILDREN = [
+  "Hash Join  (cost=0.18..13.73 rows=3 width=16) (actual time=0.059..0.065 rows=3.00 loops=1)",
+  "  Hash Cond: (big_table.id = big_table_1.id)",
+  "  Buffers: shared hit=14",
+  "  ->  Limit  (cost=0.00..0.14 rows=3 width=8) (actual time=0.022..0.023 rows=3.00 loops=1)",
+  "        Buffers: shared hit=2",
+  "        ->  Seq Scan on big_table  (cost=0.00..46245.00 rows=1000000 width=8) (actual time=0.021..0.022 rows=3.00 loops=1)",
+  "              Buffers: shared hit=2",
+  "  ->  Hash  (cost=0.14..0.14 rows=3 width=8) (actual time=0.005..0.005 rows=3.00 loops=1)",
+  "        Buckets: 1024  Batches: 1  Memory Usage: 9kB",
+  "        Buffers: shared hit=2",
+  "        ->  Limit  (cost=0.00..0.14 rows=3 width=8) (actual time=0.002..0.003 rows=3.00 loops=1)",
+  "              Buffers: shared hit=2",
+  "              ->  Seq Scan on big_table big_table_1  (cost=0.00..46245.00 rows=1000000 width=8) (actual time=0.002..0.002 rows=3.00 loops=1)",
+  "                    Buffers: shared hit=2",
+  "  SubPlan 1",
+  "    ->  Aggregate  (cost=4.45..4.46 rows=1 width=8) (actual time=0.007..0.007 rows=1.00 loops=3)",
+  "          Buffers: shared hit=10",
+  "          ->  Index Only Scan using big_table_pkey on big_table z  (cost=0.43..4.45 rows=1 width=0) (actual time=0.006..0.006 rows=1.00 loops=3)",
+  "                Index Cond: (id = (big_table.id + 1))",
+  "                Heap Fetches: 0",
+  "                Index Searches: 3",
+  "                Buffers: shared hit=10",
+  "Planning:",
+  "  Buffers: shared hit=154",
+  "Planning Time: 0.242 ms",
+  "Execution Time: 0.096 ms",
+];
+
+test("subplan_after_the_last_child_attaches_to_the_parent_not_the_child", () => {
+  const plan = parsePlan(SUBPLAN_AFTER_CHILDREN)!;
+  expect(plan.nodes.map((n) => [n.depth, n.label])).toEqual([
+    [0, "Hash Join"],
+    [1, "Limit"],
+    [2, "Seq Scan on big_table"],
+    [1, "Hash"],
+    [2, "Limit"],
+    [3, "Seq Scan on big_table big_table_1"],
+    [1, "Aggregate"],
+    [2, "Index Only Scan using big_table_pkey on big_table z"],
+  ]);
+  // Hash의 자식은 Limit 하나뿐이라 self time이 0으로 눌리지 않는다.
+  expect(plan.nodes[3].selfMs).toBeCloseTo(0.002, 6);
+  // Aggregate는 loops=3이라 0.007 x 3
+  expect(plan.nodes[6].totalMs).toBeCloseTo(0.021, 6);
+});
+
+/** 실제 PostgreSQL 18.6의 `EXPLAIN (ANALYZE) WITH x AS MATERIALIZED (SELECT id FROM big_table LIMIT 5) SELECT * FROM x JOIN x y USING (id)` 출력 */
+const CTE = [
+  "Hash Join  (cost=0.39..0.56 rows=5 width=8) (actual time=0.021..0.024 rows=5.00 loops=1)",
+  "  Hash Cond: (x.id = y.id)",
+  "  Buffers: shared hit=2",
+  "  CTE x",
+  "    ->  Limit  (cost=0.00..0.23 rows=5 width=8) (actual time=0.008..0.009 rows=5.00 loops=1)",
+  "          Buffers: shared hit=2",
+  "          ->  Seq Scan on big_table  (cost=0.00..46245.00 rows=1000000 width=8) (actual time=0.007..0.008 rows=5.00 loops=1)",
+  "                Buffers: shared hit=2",
+  "  ->  CTE Scan on x  (cost=0.00..0.10 rows=5 width=8) (actual time=0.009..0.009 rows=5.00 loops=1)",
+  "        Storage: Memory  Maximum Storage: 17kB",
+  "        Buffers: shared hit=2",
+  "  ->  Hash  (cost=0.10..0.10 rows=5 width=8) (actual time=0.005..0.005 rows=5.00 loops=1)",
+  "        Buckets: 1024  Batches: 1  Memory Usage: 9kB",
+  "        ->  CTE Scan on x y  (cost=0.00..0.10 rows=5 width=8) (actual time=0.000..0.002 rows=5.00 loops=1)",
+  "              Storage: Memory  Maximum Storage: 17kB",
+  "Planning:",
+  "  Buffers: shared hit=151",
+  "Planning Time: 0.185 ms",
+  "Execution Time: 0.051 ms",
+];
+
+test("cte_header_before_the_children_keeps_the_cte_body_under_its_parent", () => {
+  const plan = parsePlan(CTE)!;
+  expect(plan.nodes.map((n) => [n.depth, n.label])).toEqual([
+    [0, "Hash Join"],
+    [1, "Limit"],
+    [2, "Seq Scan on big_table"],
+    [1, "CTE Scan on x"],
+    [1, "Hash"],
+    [2, "CTE Scan on x y"],
+  ]);
+  expect(plan.planningMs).toBeCloseTo(0.185, 6);
+});
