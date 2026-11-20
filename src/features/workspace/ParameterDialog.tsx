@@ -1,7 +1,9 @@
-import { useId, useState, type KeyboardEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { useStore } from "zustand";
 import { rt } from "../../shared/i18n/rich";
 import { t } from "../../shared/i18n/t";
+import { viewShowing } from "../editor/documents";
+import { useTabs } from "../editor/tabsStore";
 import { Button } from "../../shared/ui/Button";
 import { Kbd } from "../../shared/ui/Kbd";
 import { noTextCorrection } from "../../shared/ui/noTextCorrection";
@@ -31,6 +33,20 @@ function serialOf(request: ParameterRequest): number {
  */
 export function ParameterDialog() {
   const request = useStore(useParameterPrompt, (s) => s.request);
+  // 물음이 닫히면(Run, Cancel) 그 탭이 아직 활성일 때 에디터로 focus를 돌린다. 다른 물음으로 바뀐 것은
+  // 닫힌 것이 아니다.
+  const askedTab = useRef<string | null>(null);
+  useEffect(() => {
+    if (request !== null) {
+      askedTab.current = request.tabId;
+      return;
+    }
+    const tabId = askedTab.current;
+    askedTab.current = null;
+    if (tabId !== null && useTabs.getState().activeId === tabId) {
+      viewShowing(tabId)?.focus();
+    }
+  }, [request]);
   if (request === null) return null;
   return <Form key={serialOf(request)} request={request} />;
 }
@@ -38,6 +54,7 @@ export function ParameterDialog() {
 function Form({ request }: { request: ParameterRequest }) {
   const [values, setValues] = useState(request.values);
   const headingId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
   // 앞의 값이 없는 이름이 있으면 그 첫 입력란에, 모두 있으면 첫 입력란에 둔다.
   const firstEmpty = Math.max(
     0,
@@ -45,29 +62,42 @@ function Form({ request }: { request: ParameterRequest }) {
   );
   const complete = request.names.every((name) => values[name].trim() !== "");
 
+  // 물음이 떠 있는 동안은 focus가 어디 있든 Esc와 Cmd+Enter가 듣는다. Enter는 이 dialog의 입력란에서만
+  // 보낸다(에디터의 Enter는 줄바꿈이고, 버튼의 Enter는 그 버튼을 누르는 것이다). 전역 단축키는 물음이
+  // 떠 있는 동안 꺼져 있다.
+  useEffect(() => {
+    function onKeyDown(event: globalThis.KeyboardEvent) {
+      // 한글 조합 중의 key는 조합을 끝내는 것이다. WKWebView는 조합을 끝낸 뒤의 Enter에 isComposing을
+      // false로 보내므로 keyCode 229도 본다. key가 "Process"라서 code로 판별한다.
+      if (event.isComposing || event.keyCode === 229) return;
+      if (event.code === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        answerParameters(null);
+      } else if (event.code === "Enter") {
+        const inField =
+          event.target instanceof HTMLInputElement &&
+          dialogRef.current?.contains(event.target) === true;
+        if (!inField && !event.metaKey) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (complete) answerParameters(values);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [values, complete]);
+
   function submit() {
     if (complete) answerParameters(values);
   }
 
-  function keyDown(event: KeyboardEvent) {
-    // 한글 조합 중의 Enter와 Escape는 조합을 끝내는 key다. key가 "Process"라서 code로 판별한다.
-    if (event.nativeEvent.isComposing) return;
-    if (event.code === "Escape") {
-      event.preventDefault();
-      answerParameters(null);
-    } else if (event.code === "Enter") {
-      // Enter와 Cmd+Enter가 같다. 전역 Run 단축키는 물음이 떠 있는 동안 꺼져 있다.
-      event.preventDefault();
-      submit();
-    }
-  }
-
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-labelledby={headingId}
       className="border-line-2 bg-bg-2 shadow-dialog absolute right-4 bottom-4 z-10 flex w-[330px] flex-col gap-2.5 rounded-[10px] border p-3.5"
-      onKeyDown={keyDown}
     >
       <h2 id={headingId} className="text-body font-semibold">
         {t("params.title")}
