@@ -22,7 +22,7 @@ import {
   type Header,
 } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { Cell } from "../../shared/api/types";
+import type { Cell, ResultColumn, TypeInfo } from "../../shared/api/types";
 import { formatCount, t, tc } from "../../shared/i18n/t";
 import { Button } from "../../shared/ui/Button";
 import { SpinnerIcon } from "../../shared/ui/icons";
@@ -44,7 +44,9 @@ import {
   shouldFetch,
   tsv,
   type Selection,
+  type FitColumn,
 } from "./grid";
+import { valueKind, type ValueKind } from "./cellDisplay";
 import {
   dropGridView,
   runKeyOf,
@@ -54,11 +56,14 @@ import {
 } from "./gridViews";
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
+import { useColumnTypes } from "./typesStore";
 
 /** 지금 선택을 복사할 text와 알림 문구. 선택이 없으면 null */
 export type CopyTarget = { text: string; message: string } | null;
 
 interface ResultGridProps {
+  /** 결과를 낸 탭의 접속. 컬럼의 type을 이 접속에서 읽는다. */
+  connection: string | null;
   /** 결과를 낸 탭. 탭을 바꿨다 돌아오면 그 탭의 view(너비, 선택, 스크롤)를 이어 간다. */
   tabId: string;
   /** columns가 null이 아니다 */
@@ -79,6 +84,7 @@ const features = tableFeatures({ columnSizingFeature, columnResizingFeature });
 type Features = typeof features;
 const NO_ROWS: Cell[][] = [];
 const NO_COLUMNS: string[] = [];
+const NO_RESULT_COLUMNS: ResultColumn[] = [];
 
 /** 첫 render가 쓰는 viewport 크기. 실제 크기는 ResizeObserver가 알려 준다. */
 const INITIAL_RECT = { width: 800, height: 400 };
@@ -111,6 +117,7 @@ function isShownRun(tabId: string, runKey: string): boolean {
 
 function Grid({
   tabId,
+  connection,
   runKey,
   result,
   endRows,
@@ -126,6 +133,13 @@ function Grid({
     () => resultColumns?.map((column) => column.name) ?? NO_COLUMNS,
     [resultColumns],
   );
+  // type은 늦게 오거나(결과가 먼저 도착), 접속의 schema를 새로 읽으면 사라질 수 있다. 모르면 text다.
+  const columnTypes = useColumnTypes(
+    connection,
+    resultColumns ?? NO_RESULT_COLUMNS,
+  );
+  const kinds = useMemo(() => columnTypes.map(valueKind), [columnTypes]);
+  const fits = useMemo(() => columnTypes.map(fitColumnOf), [columnTypes]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 떠날 때 저장한 view. 그 사이 앞 행이 버려졌으면 보던 행이 그 자리에 오게 스크롤을 당긴다.
@@ -142,8 +156,17 @@ function Grid({
     }
   }, [restored]);
 
+  // 자동으로 맞춘 너비. 저장한 view를 이은 열은 사용자가 정한 너비라 자동으로 맞추지 않는다.
+  const [initialSizing] = useState(() => {
+    if (restored !== undefined) {
+      return { sizing: restored.columnSizing, fitted: {} as FittedSizes };
+    }
+    const sizing = fitColumns(columns, rows, fits);
+    return { sizing, fitted: fittedSizes(sizing, fits) };
+  });
+  const autoFit = useRef(initialSizing.fitted);
   const [columnSizing, setColumnSizing] = useState<ColumnSizingState>(
-    () => restored?.columnSizing ?? fitColumns(columns, rows),
+    initialSizing.sizing,
   );
   const columnDefs = useMemo(
     (): ColumnDef<Features, Cell[]>[] =>
@@ -244,6 +267,34 @@ function Grid({
     anchored.current = true;
   }, [firstRow]);
 
+  // type이 너비를 정한 뒤에 도착하면, 아직 끌지 않은 열은 type을 센 너비로 다시 맞춘다.
+  useEffect(() => {
+    const { columnSizing: sizing, rows: held } = latest.current;
+    const fitted = autoFit.current;
+    let next: ColumnSizingState | null = null;
+    columns.forEach((name, index) => {
+      const id = String(index);
+      const entry = fitted[id];
+      if (
+        entry === undefined ||
+        entry.type === fits[index].type ||
+        sizing[id] !== entry.size
+      ) {
+        return;
+      }
+      const size = fitWidth(
+        name,
+        columnValues(held, index),
+        headerMeasure(),
+        fits[index],
+      );
+      fitted[id] = { size, type: fits[index].type };
+      next ??= { ...sizing };
+      next[id] = size;
+    });
+    if (next !== null) setColumnSizing(next);
+  }, [columns, fits]);
+
   useEffect(() => {
     // 위치를 당긴 commit의 lastVisible은 당기기 전 scroll 위치로 셌다. 당긴 뒤의 scroll event가 다시 센다.
     if (anchored.current) {
@@ -323,16 +374,17 @@ function Grid({
 
   // 행은 누른 때의 것을 읽는다. 그래서 batch가 와도 header를 다시 그리지 않는다.
   const fitColumn = useCallback(
-    (index: number) =>
-      setColumnSizing((old) => ({
-        ...old,
-        [String(index)]: fitWidth(
-          columns[index],
-          columnValues(latest.current.rows, index),
-          headerMeasure(),
-        ),
-      })),
-    [columns],
+    (index: number) => {
+      const size = fitWidth(
+        columns[index],
+        columnValues(latest.current.rows, index),
+        headerMeasure(),
+        fits[index],
+      );
+      autoFit.current[String(index)] = { size, type: fits[index].type };
+      setColumnSizing((old) => ({ ...old, [String(index)]: size }));
+    },
+    [columns, fits],
   );
 
   const numberWidth = rowNumberWidth(receivedRows(result));
@@ -372,6 +424,7 @@ function Grid({
       <HeaderRow
         headers={headers}
         columns={columns}
+        types={columnTypes}
         columnSizing={columnSizing}
         resizing={resizing}
         onFit={fitColumn}
@@ -402,6 +455,7 @@ function Grid({
             <Row
               key={item.key}
               cells={rows[item.index]}
+              kinds={kinds}
               rowNumber={rowNumber}
               top={item.start - HEADER_HEIGHT}
               selected={
@@ -431,6 +485,8 @@ function Grid({
 interface HeaderRowProps {
   headers: Header<Features, Cell[]>[];
   columns: string[];
+  /** 컬럼의 type. 아직 모르면 undefined */
+  types: (TypeInfo | undefined)[];
   /** 너비가 바뀌면 다시 그린다. header object는 그대로라 크기는 이것으로 안다. */
   columnSizing: ColumnSizingState;
   /** 끄는 중인 column의 id. 없으면 false */
@@ -442,6 +498,7 @@ interface HeaderRowProps {
 const HeaderRow = memo(function HeaderRow({
   headers,
   columns,
+  types,
   resizing,
   onFit,
 }: HeaderRowProps) {
@@ -455,10 +512,17 @@ const HeaderRow = memo(function HeaderRow({
         <div
           key={header.id}
           role="columnheader"
-          className="border-line-1 relative flex min-w-0 items-center border-r px-2.5"
+          className={
+            valueKind(types[index]) === "number" ? HEADER_RIGHT : HEADER
+          }
           style={{ width: header.getSize() }}
         >
           <span className="truncate">{columns[index]}</span>
+          {types[index] !== undefined && (
+            <span className="text-label text-fg-3 min-w-0 truncate font-mono font-normal">
+              {types[index].name}
+            </span>
+          )}
           <div
             role="separator"
             aria-orientation="vertical"
@@ -472,6 +536,10 @@ const HeaderRow = memo(function HeaderRow({
     </div>
   );
 });
+
+const HEADER =
+  "border-line-1 relative flex min-w-0 items-center gap-1.5 border-r px-2.5";
+const HEADER_RIGHT = [HEADER, "justify-end"].join(" ");
 
 const HANDLE =
   "absolute inset-y-0 right-0 z-10 w-1.5 cursor-col-resize after:absolute after:inset-y-0 after:right-0 after:w-0.5 hover:after:bg-accent";
@@ -487,15 +555,31 @@ const ROW_NUMBER_SELECTED = [ROW_NUMBER_BASE, "text-fg"].join(" ");
 const CELL = "truncate border-r border-bg-2 px-2.5";
 const CELL_SELECTED =
   "bg-accent/16 shadow-[inset_0_0_0_1.5px_var(--color-accent)]";
-/** [selected][tone]. tone은 0 보통, 1 muted, 2 muted italic(NULL) */
+/** 0 보통, 1 muted, 2 muted italic(NULL), 3 숫자 */
+const TONES = [
+  [],
+  ["text-fg-3"],
+  ["text-fg-3", "italic"],
+  ["text-syntax-number"],
+];
+/** [selected][tone][right]. 숫자 열은 오른쪽 정렬이다. */
 const CELL_CLASSES = [false, true].map((selected) =>
-  [[], ["text-fg-3"], ["text-fg-3", "italic"]].map((tone) =>
-    [CELL, ...tone, ...(selected ? [CELL_SELECTED] : [])].join(" "),
+  TONES.map((tone) =>
+    [false, true].map((right) =>
+      [
+        CELL,
+        ...tone,
+        ...(right ? ["text-right"] : []),
+        ...(selected ? [CELL_SELECTED] : []),
+      ].join(" "),
+    ),
   ),
 );
 
 interface RowProps {
   cells: Cell[];
+  /** 열마다 값을 그리는 방법 */
+  kinds: readonly ValueKind[];
   /** 0부터 센 결과 안의 행 번호 */
   rowNumber: number;
   /** 몸통 위에서부터의 px */
@@ -508,6 +592,7 @@ interface RowProps {
 // 스크롤하는 동안 props가 그대로인 행은 다시 그리지 않는다.
 const Row = memo(function Row({
   cells,
+  kinds,
   rowNumber,
   top,
   selected,
@@ -529,8 +614,10 @@ const Row = memo(function Row({
         {formatCount(rowNumber + 1)}
       </div>
       {cells.map((value, column) => {
-        const { text, muted, italic } = cellDisplay(value);
+        const kind = kinds[column] ?? "text";
+        const { text, dim, muted, italic } = cellDisplay(value, kind);
         const isSelected = column === selectedColumn;
+        const tone = italic ? 2 : muted ? 1 : kind === "number" ? 3 : 0;
         return (
           <div
             key={column}
@@ -538,10 +625,11 @@ const Row = memo(function Row({
             aria-selected={isSelected || undefined}
             data-col={column}
             className={
-              CELL_CLASSES[isSelected ? 1 : 0][italic ? 2 : muted ? 1 : 0]
+              CELL_CLASSES[isSelected ? 1 : 0][tone][kind === "number" ? 1 : 0]
             }
           >
             {text}
+            {dim !== null && <span className="text-fg-3"> {dim}</span>}
           </div>
         );
       })}
@@ -598,9 +686,15 @@ function* columnValues(
   for (const row of rows) yield row[column];
 }
 
+/** 열 너비를 맞출 때 쓰는 type 표시. 모르는 type이면 비어 있다. */
+function fitColumnOf(type: TypeInfo | undefined): FitColumn {
+  return { type: type?.name, kind: valueKind(type) };
+}
+
 function fitColumns(
   columns: readonly string[],
   rows: readonly Cell[][],
+  fits: readonly FitColumn[],
 ): ColumnSizingState {
   const sizing: ColumnSizingState = {};
   const measureHeader = headerMeasure();
@@ -609,9 +703,25 @@ function fitColumns(
       name,
       columnValues(rows, index),
       measureHeader,
+      fits[index],
     );
   });
   return sizing;
+}
+
+/** 자동으로 맞춘 열의 너비와 그때 header에 쓴 type 이름. 열 id로 찾는다. */
+type FittedSizes = Record<string, { size: number; type: string | undefined }>;
+
+function fittedSizes(
+  sizing: ColumnSizingState,
+  fits: readonly FitColumn[],
+): FittedSizes {
+  return Object.fromEntries(
+    fits.map((fit, index) => [
+      String(index),
+      { size: sizing[String(index)], type: fit.type },
+    ]),
+  );
 }
 
 /** Shift로 넓힐 때의 기준 행. 고른 것이 없으면 누른 행이다. */

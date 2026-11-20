@@ -292,6 +292,106 @@ test("실패는 message, detail, hint, 위치를 보여 준다", () => {
   expect(screen.getByText("SQLSTATE 42P01")).toBeInTheDocument();
 });
 
+function failedWith(
+  code: string,
+  message: string,
+  connectionName: string | null,
+) {
+  useRuns.setState({
+    runs: {
+      t: {
+        status: "finished",
+        result: result({ elapsedMicros: 3_000 }),
+        outcome: {
+          outcome: "failed",
+          error: { code, message, detail: null, hint: null, position: null },
+        },
+      },
+    },
+  });
+  render(<ResultPane tabId="t" hasConnection connection={connectionName} />);
+}
+
+test("timeout_shows_the_timed_out_panel", () => {
+  openProjectWith([connection("local", { statementTimeout: 30 })]);
+  failedWith("57014", "canceling statement due to statement timeout", "local");
+
+  expect(screen.getByText("Timed out")).toBeInTheDocument();
+  expect(
+    screen.getByText("canceling statement due to statement timeout"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "SQLSTATE 57014 · This connection's statement_timeout is 30s.",
+    ),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("SQLSTATE 57014")).toBeNull();
+});
+
+test("57014_without_a_timeout_is_a_plain_error", () => {
+  openProjectWith([connection("local")]);
+  failedWith("57014", "canceling statement due to user request", "local");
+
+  expect(screen.queryByText("Timed out")).toBeNull();
+  expect(screen.getByText("SQLSTATE 57014")).toBeInTheDocument();
+  expect(screen.queryByText(/statement_timeout is/)).toBeNull();
+});
+
+test("a_timeout_code_on_another_error_is_not_a_timeout", () => {
+  openProjectWith([connection("local", { statementTimeout: 30 })]);
+  failedWith("42601", "syntax error at end of input", "local");
+
+  expect(screen.queryByText("Timed out")).toBeNull();
+  expect(screen.getByText("SQLSTATE 42601")).toBeInTheDocument();
+});
+
+test("read_only_rejection_explains_it", () => {
+  openProjectWith([connection("prod", { readOnly: true })]);
+  failedWith(
+    "25006",
+    "cannot execute DELETE in a read-only transaction",
+    "prod",
+  );
+
+  expect(
+    screen.getByText("cannot execute DELETE in a read-only transaction"),
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "SQLSTATE 25006 · prod is a read-only connection, so the database rejected the write. Nothing changed.",
+    ),
+  ).toBeInTheDocument();
+});
+
+test("25006_on_a_writable_connection_is_a_plain_error", () => {
+  openProjectWith([connection("local")]);
+  failedWith(
+    "25006",
+    "cannot execute DELETE in a read-only transaction",
+    "local",
+  );
+
+  expect(screen.getByText("SQLSTATE 25006")).toBeInTheDocument();
+  expect(screen.queryByText(/is a read-only connection/)).toBeNull();
+});
+
+test("user_cancel_is_not_a_timeout", () => {
+  openProjectWith([connection("local", { statementTimeout: 30 })]);
+  useRuns.setState({
+    runs: {
+      t: {
+        status: "finished",
+        result: result(),
+        outcome: { outcome: "cancelled" },
+      },
+    },
+  });
+  render(<ResultPane tabId="t" hasConnection connection="local" />);
+
+  expect(screen.queryByText("Timed out")).toBeNull();
+  expect(screen.getByText("Cancelled")).toBeInTheDocument();
+});
+
 describe("오류 위치", () => {
   const sent = "SELEC 2";
   const position = 6;

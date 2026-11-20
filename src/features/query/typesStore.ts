@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { create } from "zustand";
 import { describeTypes } from "../../shared/api/commands";
 import type { ResultColumn, TypeInfo } from "../../shared/api/types";
@@ -85,5 +86,22 @@ export function useColumnType(
     connection === null
       ? undefined
       : state.types[connection]?.[typeKey(column.typeOid, column.typeModifier)],
+  );
+}
+
+/** `useColumnType`을 컬럼마다 한꺼번에. 그 접속의 type cache가 바뀔 때만 새 배열이다. */
+export function useColumnTypes(
+  connection: string | null,
+  columns: readonly ResultColumn[],
+): (TypeInfo | undefined)[] {
+  const known = useTypes((state) =>
+    connection === null ? undefined : state.types[connection],
+  );
+  return useMemo(
+    () =>
+      columns.map(
+        (column) => known?.[typeKey(column.typeOid, column.typeModifier)],
+      ),
+    [known, columns],
   );
 }

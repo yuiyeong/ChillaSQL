@@ -1,5 +1,6 @@
 import type { Cell } from "../../shared/api/types";
 import { formatCount } from "../../shared/i18n/t";
+import { cellText, type ValueKind } from "./cellDisplay";
 import type { FetchState } from "./runReducer";
 
 export const ROW_HEIGHT = 26;
@@ -16,6 +17,10 @@ const HALF_WIDTH = 6.5;
  * 글자 평균이 7~8.7px이다(`amount` 7.96, `name` 8.65). 넉넉히 잡는다.
  */
 const HEADER_HALF_WIDTH = 9;
+/** header에서 이름과 type 사이의 간격(`gap-1.5`) */
+const HEADER_GAP = 6;
+/** header의 type(D2Coding 12px) 반각 한 칸 */
+const TYPE_HALF_WIDTH = 6;
 /** 칸 좌우의 padding(`px-2.5`) */
 const CELL_PADDING = 20;
 /** 칸의 `border-r`. box-sizing이 border-box라 칸 너비 안에 든다. */
@@ -95,24 +100,43 @@ export function headerMeasure(): MeasureText {
   return headerMeasureCache;
 }
 
+/** 열 하나의 type 표시. 모르는 type이면 둘 다 비운다. */
+export interface FitColumn {
+  /** header에 이름 옆에 쓰는 type 이름 */
+  type?: string;
+  kind?: ValueKind;
+}
+
 /**
- * header와 앞 `FIT_SAMPLE`개 값 중 가장 넓은 것에 맞춘 열 너비(px).
- * 값은 D2Coding 반각으로 세고, header는 `measureHeader`로 잰다.
+ * header(이름과 type)와 앞 `FIT_SAMPLE`개 값 중 가장 넓은 것에 맞춘 열 너비(px).
+ * 값은 표에 그리는 대로(`kind`에 맞게 줄인 것) D2Coding 반각으로 세고, header 이름은 `measureHeader`로 잰다.
  */
 export function fitWidth(
   header: string,
   values: Iterable<Cell>,
   measureHeader: MeasureText = estimateHeaderWidth,
+  { type, kind = "text" }: FitColumn = {},
 ): number {
   let widest = 0;
   let seen = 0;
   for (const value of values) {
     if (seen++ === FIT_SAMPLE) break;
-    widest = Math.max(widest, displayColumns(value ?? "NULL"));
+    widest = Math.max(widest, valueColumns(value, kind));
   }
-  const content = Math.max(measureHeader(header), widest * HALF_WIDTH);
+  const headerWidth =
+    measureHeader(header) +
+    (type === undefined
+      ? 0
+      : HEADER_GAP + displayColumns(type) * TYPE_HALF_WIDTH);
+  const content = Math.max(headerWidth, widest * HALF_WIDTH);
   const width = content + CELL_PADDING + CELL_BORDER;
   return Math.ceil(Math.min(MAX_FIT, Math.max(MIN_FIT, width)));
+}
+
+function valueColumns(value: Cell, kind: ValueKind): number {
+  if (kind === "text" || value === null) return displayColumns(value ?? "NULL");
+  const { text, dim } = cellText(value, kind);
+  return displayColumns(dim === null ? text : `${text} ${dim}`);
 }
 
 /** 행 번호 column의 너비(px). 가장 큰 행 번호(`lastRow`, 1부터 셈)가 잘리지 않는다. */
@@ -126,20 +150,27 @@ function isHighSurrogate(code: number): boolean {
   return code >= 0xd800 && code <= 0xdbff;
 }
 
-export function cellDisplay(value: Cell): {
+/** 표의 한 칸. `kind`에 맞게 줄인 text를 `CELL_LIMIT`자로 자른다. */
+export function cellDisplay(
+  value: Cell,
+  kind: ValueKind = "text",
+): {
   text: string;
+  /** fg-3로 그릴 꼬리 */
+  dim: string | null;
   muted: boolean;
   italic: boolean;
 } {
-  if (value === null) return { text: "NULL", muted: true, italic: true };
-  if (value === "") return { text: "''", muted: true, italic: false };
-  if (value.length <= CELL_LIMIT)
-    return { text: value, muted: false, italic: false };
+  const { text, dim } = cellText(value, kind);
+  if (value === null) return { text, dim, muted: true, italic: true };
+  if (value === "") return { text, dim, muted: true, italic: false };
+  if (text.length <= CELL_LIMIT)
+    return { text, dim, muted: false, italic: false };
   // surrogate pair를 가르지 않는다.
-  const end = isHighSurrogate(value.charCodeAt(CELL_LIMIT - 1))
+  const end = isHighSurrogate(text.charCodeAt(CELL_LIMIT - 1))
     ? CELL_LIMIT - 1
     : CELL_LIMIT;
-  return { text: `${value.slice(0, end)}…`, muted: false, italic: false };
+  return { text: `${text.slice(0, end)}…`, dim, muted: false, italic: false };
 }
 
 export function copyCell(value: Cell): string {

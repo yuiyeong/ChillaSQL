@@ -4,19 +4,23 @@ import {
   type ReactElement,
   type RefObject,
 } from "react";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
-import type { Cell } from "../../shared/api/types";
+import type { Cell, ResultColumn, TypeInfo } from "../../shared/api/types";
 import { resultColumns } from "../../test/fixtures";
 import { stubLayout } from "../../test/layout";
 import { fitWidth } from "./grid";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { emptyResult, type ResultData } from "./runReducer";
+import { typeKey, useTypes } from "./typesStore";
 
 type Props = ComponentProps<typeof ResultGrid>;
 
 // 결과 panel 크기의 viewport로 둔다.
-beforeEach(() => stubLayout({ width: 800, height: 400 }));
+beforeEach(() => {
+  stubLayout({ width: 800, height: 400 });
+  useTypes.getState().reset();
+});
 
 function rowsOf(count: number, from = 0): Cell[][] {
   return Array.from({ length: count }, (_, i) => [
@@ -47,6 +51,7 @@ function result(patch: Partial<ResultData> = {}): ResultData {
 function props(patch: Partial<Props> = {}): Props {
   return {
     tabId: "t",
+    connection: "local",
     result: result(),
     endRows: null,
     onFetchMore: vi.fn(),
@@ -389,4 +394,150 @@ test("다른 key와 grid 안의 버튼에서 온 key는 그대로 둔다", () =>
     }),
   ).toBe(true);
   expect(grid().scrollTop).toBe(13_000);
+});
+
+/** 접속 local이 아는 type으로 컬럼을 만든다. OID는 index로 구분한다. */
+function typedColumns(
+  ...specs: [name: string, type: string, category: string][]
+): ResultColumn[] {
+  const infos: TypeInfo[] = specs.map(([, name, category], i) => ({
+    oid: 100 + i,
+    modifier: -1,
+    name,
+    category,
+  }));
+  useTypes.setState({
+    types: {
+      local: Object.fromEntries(
+        infos.map((info) => [typeKey(info.oid, info.modifier), info]),
+      ),
+    },
+  });
+  return specs.map(([name], i) => ({
+    name,
+    typeOid: 100 + i,
+    typeModifier: -1,
+  }));
+}
+
+test("header_shows_the_type", () => {
+  setup({
+    result: result({
+      columns: typedColumns(["id", "bigint", "N"], ["email", "text", "S"]),
+      rows: rowsOf(1),
+    }),
+  });
+
+  const id = columnHeader("id");
+  expect(within(id).getByText("bigint")).toHaveClass(
+    "font-mono",
+    "text-label",
+    "text-fg-3",
+    "font-normal",
+  );
+  expect(within(columnHeader("email")).getByText("text")).toBeInTheDocument();
+});
+
+test("header_has_no_type_until_it_arrives", () => {
+  const columns = resultColumns("id");
+  setup({ result: result({ columns, rows: [["1"]] }) });
+
+  expect(columnHeader("id")).not.toHaveClass("justify-end");
+  expect(within(columnHeader("id")).queryByText("bigint")).toBeNull();
+  // type을 모르는 열은 왼쪽 정렬이다.
+  expect(screen.getAllByRole("gridcell")[0]).not.toHaveClass("text-right");
+});
+
+test("the_type_shows_up_when_it_arrives_later", () => {
+  const columns: ResultColumn[] = [
+    { name: "id", typeOid: 100, typeModifier: -1 },
+  ];
+  setup({ result: result({ columns, rows: [["1"]] }) });
+  const before = columnHeader("id").style.width;
+  expect(within(columnHeader("id")).queryByText("bigint")).toBeNull();
+
+  act(() =>
+    useTypes.setState({
+      types: {
+        local: {
+          [typeKey(100, -1)]: {
+            oid: 100,
+            modifier: -1,
+            name: "bigint",
+            category: "N",
+          },
+        },
+      },
+    }),
+  );
+
+  expect(within(columnHeader("id")).getByText("bigint")).toBeInTheDocument();
+  expect(screen.getAllByRole("gridcell")[0]).toHaveClass("text-right");
+  // 아직 끌지 않은 열은 type을 센 너비로 다시 맞춘다.
+  expect(columnHeader("id").style.width).toBe(
+    `${fitWidth("id", ["1"], undefined, { type: "bigint", kind: "number" })}px`,
+  );
+  expect(columnHeader("id").style.width).not.toBe(before);
+});
+
+test("numbers_are_right_aligned", () => {
+  setup({
+    result: result({
+      columns: typedColumns(["n", "numeric(10,2)", "N"], ["s", "text", "S"]),
+      rows: [
+        ["10482.50", "abc"],
+        [null, null],
+      ],
+    }),
+  });
+
+  expect(cell("10482.50")).toHaveClass("text-right", "text-syntax-number");
+  expect(cell("abc")).not.toHaveClass("text-right");
+  expect(cell("abc")).not.toHaveClass("text-syntax-number");
+  expect(columnHeader("n")).toHaveClass("justify-end");
+  expect(columnHeader("s")).not.toHaveClass("justify-end");
+  // NULL은 숫자 색이 아니라 muted이고, 숫자 열이라 오른쪽에 붙는다.
+  const [nullNumber, nullText] = screen.getAllByText("NULL");
+  expect(nullNumber).toHaveClass("text-right", "text-fg-3", "italic");
+  expect(nullNumber).not.toHaveClass("text-syntax-number");
+  expect(nullText).not.toHaveClass("text-right");
+});
+
+test("json_and_vector_cells_are_shortened", () => {
+  setup({
+    result: result({
+      columns: typedColumns(
+        ["profile", "jsonb", "U"],
+        ["embedding", "vector(4)", "U"],
+      ),
+      rows: [['{"plan": "pro", "billing": {"cycle": "yearly"}}', "[1,2,3,4]"]],
+    }),
+  });
+
+  expect(
+    screen.getByText('{"plan": "pro", "billing": {…}}'),
+  ).toBeInTheDocument();
+  const vector = screen.getByText("[1, 2, 3, …");
+  expect(within(vector).getByText("4 values")).toHaveClass("text-fg-3");
+});
+
+test("header_width_counts_the_type", () => {
+  const rows = [["1"]];
+  setup({
+    result: result({
+      columns: typedColumns([
+        "account_identifier",
+        "timestamp with time zone",
+        "D",
+      ]),
+      rows,
+    }),
+  });
+
+  expect(columnHeader("account_identifier").style.width).toBe(
+    `${fitWidth("account_identifier", ["1"], undefined, { type: "timestamp with time zone" })}px`,
+  );
+  expect(columnHeader("account_identifier").style.width).not.toBe(
+    `${fitWidth("account_identifier", ["1"])}px`,
+  );
 });

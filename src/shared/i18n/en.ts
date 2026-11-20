@@ -232,6 +232,11 @@ export const en = {
   "result.done": "Done",
   "result.errorLocation": "Ln {line}, Col {column}",
   "result.sqlstate": "SQLSTATE {code}",
+  "result.timedOut": "Timed out",
+  "result.timeoutDetail": "This connection's statement_timeout is {secs}s.",
+  "result.readOnlyDetail":
+    "{connection} is a read-only connection, so the database rejected the write. Nothing changed.",
+  "result.vectorValues": "{count} values",
   "result.goToError": "Go to error",
   "result.copyMessage": "Copy message",
   "result.cancelled": "Cancelled",

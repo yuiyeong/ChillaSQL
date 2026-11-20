@@ -54,6 +54,27 @@ test("fitWidth는 header를 header용 너비로 잰다", () => {
   expect(fitWidth("h", ["x".repeat(20)], () => 10)).toBe(20 * 6.5 + 20 + 1);
 });
 
+test("fitWidth는 header의 type 이름도 센다", () => {
+  const plain = fitWidth("id", ["1"]);
+  // 이름 뒤 gap 6px과 mono 12px 반각 6px씩
+  expect(fitWidth("id", ["1"], undefined, { type: "bigint" })).toBe(
+    Math.ceil(2 * 9 + 6 + 6 * 6 + 20 + 1),
+  );
+  expect(fitWidth("id", ["1"], undefined, { type: "bigint" })).toBeGreaterThan(
+    plain,
+  );
+  expect(fitWidth("id", ["1"], undefined, { type: undefined })).toBe(plain);
+});
+
+test("fitWidth는 줄여 그린 값의 너비로 센다", () => {
+  const vector = `[${Array.from({ length: 1536 }, () => "0.0213").join(",")}]`;
+  // `[0.0213, 0.0213, 0.0213, …` 26칸과 ` 1,536 values` 13칸
+  expect(fitWidth("v", [vector], () => 10, { kind: "vector" })).toBe(
+    Math.ceil(39 * 6.5 + 20 + 1),
+  );
+  expect(fitWidth("v", [vector], () => 10)).toBe(480);
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   document.documentElement.removeAttribute("style");
@@ -177,14 +198,40 @@ test("selectedRows는 보관된 행만 위에서 아래로", () => {
 test("cellDisplay", () => {
   expect(cellDisplay(null)).toEqual({
     text: "NULL",
+    dim: null,
     muted: true,
     italic: true,
   });
-  expect(cellDisplay("")).toEqual({ text: "''", muted: true, italic: false });
+  expect(cellDisplay("")).toEqual({
+    text: "''",
+    dim: null,
+    muted: true,
+    italic: false,
+  });
   expect(cellDisplay("abc")).toEqual({
     text: "abc",
+    dim: null,
     muted: false,
     italic: false,
+  });
+});
+
+test("cellDisplay는 type에 맞게 줄인 뒤에 300자로 자른다", () => {
+  expect(cellDisplay('{"a":{"b":1}}', "json").text).toBe('{"a": {…}}');
+  expect(cellDisplay("[1,2,3,4]", "vector")).toEqual({
+    text: "[1, 2, 3, …",
+    dim: "4 values",
+    muted: false,
+    italic: false,
+  });
+  // 접은 결과가 300자를 넘을 때만 자른다. 접기 전 원문 길이는 상관없다.
+  const wide = `{"a": {${'"k": 1,'.repeat(200)}"z": 1}}`;
+  expect(cellDisplay(wide, "json").text).toBe('{"a": {…}}');
+  const long = `[${Array.from({ length: 200 }, () => "0.123456").join(",")}]`;
+  expect(cellDisplay(long, "text").text).toBe(`${long.slice(0, 300)}…`);
+  expect(cellDisplay(null, "number")).toMatchObject({
+    text: "NULL",
+    muted: true,
   });
 });
 

@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { copyText } from "../../shared/api/clipboard";
-import type { Outcome } from "../../shared/api/types";
+import type { Connection, Outcome } from "../../shared/api/types";
 import { formatCount, t, tc } from "../../shared/i18n/t";
 import { Button } from "../../shared/ui/Button";
 import { IconButton } from "../../shared/ui/IconButton";
@@ -18,6 +18,7 @@ import {
   CopyIcon,
   ErrorIcon,
   LinkBrokenIcon,
+  LockIcon,
   TrashIcon,
   WarningIcon,
 } from "../../shared/ui/icons";
@@ -25,6 +26,7 @@ import { Kbd } from "../../shared/ui/Kbd";
 import { useNow } from "../../shared/ui/useNow";
 import { Toast, useToast } from "../../shared/ui/Toast";
 import { useTunnel } from "../connections/tunnelsStore";
+import { useConnection } from "../project/projectStore";
 import { useEditorStatus } from "../editor/editorStatus";
 import { anchorLocation, anchorOf, goToError } from "../editor/runMarks";
 import {
@@ -59,6 +61,11 @@ import {
 } from "./TunnelPanels";
 
 const LIVE_MS = 100;
+
+/** query_canceled. statement_timeout이 끊은 문장도 이 코드다. */
+const TIMEOUT_CODE = "57014";
+/** read_only_sql_transaction */
+const READ_ONLY_CODE = "25006";
 
 /** 받다 만 결과를 닫는 시간(분). core의 `QueryLimits.idle_result_timeout`(600초)과 같다. 설정은 M8이다. */
 const IDLE_RESULT_MINUTES = 10;
@@ -101,6 +108,7 @@ export const ResultPane = memo(function ResultPane({
     tabId === null ? false : s.discardedByEnd[tabId] === true,
   );
   const tunnel = useTunnel(connection);
+  const tabConnection = useConnection(connection);
   const toast = useToast();
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
@@ -147,6 +155,7 @@ export const ResultPane = memo(function ResultPane({
     <ResultGrid
       // 실행 상태가 있으면 tabId는 null이 아니다.
       tabId={tabId!}
+      connection={connection}
       result={result}
       endRows={endRows}
       onFetchMore={onFetchMore}
@@ -237,6 +246,7 @@ export const ResultPane = memo(function ResultPane({
               tabId={tabId}
               result={result}
               outcome={outcome}
+              connection={tabConnection}
               stopped={stopped}
               copy={copy}
               failedTransaction={
@@ -616,6 +626,7 @@ function ServerError({
   tabId,
   result,
   outcome,
+  connection,
   stopped,
   copy,
   failedTransaction,
@@ -623,6 +634,8 @@ function ServerError({
   tabId: string | null;
   result: ResultData;
   outcome: Extract<Outcome, { outcome: "failed" }>;
+  /** 탭의 접속. 없으면 timeout과 read-only의 설명을 붙일 수 없다. */
+  connection: Connection | undefined;
   /** 여러 문장의 실행이 이 오류에서 멈췄으면 그 안내 */
   stopped: string | null;
   copy(text: string, message: string): Promise<void>;
@@ -641,11 +654,37 @@ function ServerError({
     error.position === null
       ? null
       : errorLocation(result, error.position, moved ?? result.origin);
+  // 접속의 statement_timeout이 끊은 문장은 서버 오류 57014로 온다. 접속에 timeout이 없으면 사용자의 cancel 등 다른 이유다.
+  const timeout =
+    error.code === TIMEOUT_CODE ? (connection?.statementTimeout ?? null) : null;
+  const readOnly =
+    error.code === READ_ONLY_CODE && connection?.readOnly === true;
+  const explanation =
+    timeout !== null
+      ? t("result.timeoutDetail", { secs: timeout })
+      : readOnly
+        ? t("result.readOnlyDetail", { connection: connection.name })
+        : null;
   return (
-    <MessageBlock icon={failedTransaction ? WarningIcon : ErrorIcon}>
+    <MessageBlock
+      icon={
+        failedTransaction
+          ? WarningIcon
+          : timeout !== null
+            ? ClockIcon
+            : readOnly
+              ? LockIcon
+              : ErrorIcon
+      }
+    >
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
         {failedTransaction && (
           <TransactionFailedHeader {...failedTransaction} />
+        )}
+        {timeout !== null && (
+          <p className="text-small text-fg font-medium">
+            {t("result.timedOut")}
+          </p>
         )}
         <p className="text-body font-mono break-words">{error.message}</p>
         {stopped !== null && <p className="text-small text-fg-2">{stopped}</p>}
@@ -656,7 +695,11 @@ function ServerError({
           <p className="text-small text-fg-2">{error.hint}</p>
         )}
         <div className="text-small text-fg-2 flex gap-4">
-          <span>{t("result.sqlstate", { code: error.code })}</span>
+          <span>
+            {explanation === null
+              ? t("result.sqlstate", { code: error.code })
+              : `${t("result.sqlstate", { code: error.code })} · ${explanation}`}
+          </span>
           {location !== null && (
             <span>
               {t("result.errorLocation", {

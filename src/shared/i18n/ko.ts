@@ -234,6 +234,11 @@ export const ko: Record<MessageKey, string> = {
   "result.done": "완료",
   "result.errorLocation": "줄 {line}, 열 {column}",
   "result.sqlstate": "SQLSTATE {code}",
+  "result.timedOut": "시간 초과",
+  "result.timeoutDetail": "이 접속의 statement_timeout은 {secs}초입니다.",
+  "result.readOnlyDetail":
+    "{connection}은 읽기 전용 접속이라 데이터베이스가 쓰기를 거절했습니다. 바뀐 것은 없습니다.",
+  "result.vectorValues": "{count}개 값",
   "result.goToError": "오류 위치로 이동",
   "result.copyMessage": "메시지 복사",
   "result.cancelled": "취소됨",
