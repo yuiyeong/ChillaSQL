@@ -119,10 +119,10 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **범위**: Formatting(sql-formatter, 선택 영역 또는 파일 전체, Opt+Cmd+L), DB가 알려준 오류 위치 밑줄, 파일 전체 실행과 문장별 결과 탭(오류 난 문장에서 멈춤), 타입별 표시(JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, 긴 값 줄임), 읽기 전용 접속(4.8), 접속별 타임아웃(4.5), 저장하지 않은 탭 내용을 SQLite에 보관하고 재시작 후 복원, 최근 프로젝트 목록과 프로젝트 바꾸기 menu(Cmd+O), 읽기 전용 접속에서는 위험 쿼리 확인을 건너뜀(4.8, M6은 모든 접속에서 확인), 결과 column header의 type 표시, 셀을 고르면 옆 panel에 전체 값(Shift+Enter), 에디터에서 실행될 문장 범위 강조(배경과 왼쪽 선), 접속 sheet의 `read_only`와 `statement_timeout` 칸과 Advanced 접기, 전역 설정 파일 `~/.config/chilla/config.toml`(5장), 한국어 dictionary(`ko`)와 `language` 설정, Rust 오류 message의 한국어(오류 `kind`별로 화면이 번역), 결과 오류 화면의 Go to error(에디터 오류 밑줄로 이동), 빈 상태의 Reformat 안내(`⌥⌘L Reformat`), toolbar menu의 Run file 항목 켜기, 에디터 글꼴과 크기 설정, 접속 테스트 성공 문구의 server version, 받다 만 결과를 닫는 시간 설정(M6은 600초 고정, `QueryLimits.idle_result_timeout`)
 - **완료 기준 (3단계)**: 하루 업무를 DataGrip 없이 처리
 - **먼저 확인할 것**:
-  - simple query protocol은 컬럼의 type OID를 주지 않는다(M2 결정). 타입별 표시에 필요한 type을 `TxTap`이 RowDescription을 읽어 얻을지, `prepare`로 Describe할지 정한다
-  - 실행될 문장 범위 강조를 커서가 움직일 때마다 계산해도 1만 줄 파일에서 입력이 늦어지지 않는지(`split_statements`는 1만 줄에 약 40ms)
-  - 접속 sheet에 둘 key 이름(캔버스는 `read_only`, `statement_timeout`으로 제안)
-  - M3는 마지막 프로젝트를 `localStorage`에 두고, 앱을 끝낼 때 저장하지 않은 탭을 묻지 않는다. 최근 프로젝트 목록과 자동 보관이 이 둘을 대신한다
+  - simple query protocol은 컬럼의 type OID를 주지 않는다(M2 결정). 타입별 표시에 필요한 type을 `TxTap`이 RowDescription을 읽어 얻을지, `prepare`로 Describe할지 정한다 → 정함: `TxTap`이 RowDescription마다 컬럼별 `(type OID, typmod)`를 queue에 넣고 `PgRows`가 하나씩 꺼낸다. `prepare`는 실행마다 round trip이 하나 더 들고 Parse 오류가 Manual 트랜잭션을 실패 상태로 만든다. type 이름은 catalog connection이 `format_type`으로 답한다
+  - 실행될 문장 범위 강조를 커서가 움직일 때마다 계산해도 1만 줄 파일에서 입력이 늦어지지 않는지(`split_statements`는 1만 줄에 약 40ms) → 정함: 커서가 움직일 때마다 계산하지 않는다. span을 문서 StateField에 두고 변경을 따라 옮기며(`mapPos`), 마지막 입력 뒤 150ms 동안 입력이 없으면 비동기로 다시 나눈다
+  - 접속 sheet에 둘 key 이름(캔버스는 `read_only`, `statement_timeout`으로 제안) → 정함: `read_only = true`(없으면 false), `statement_timeout = 30`(초 단위 정수, 1~86400). 둘 다 startup option으로 보낸다
+  - M3는 마지막 프로젝트를 `localStorage`에 두고, 앱을 끝낼 때 저장하지 않은 탭을 묻지 않는다. 최근 프로젝트 목록과 자동 보관이 이 둘을 대신한다 → 정함: `localStorage`의 값은 옮기지 않고 쓰지 않는다. 자동 보관이 있으므로 프로젝트를 바꿀 때도 저장하지 않은 탭을 묻지 않는다(탭 닫기의 확인은 그대로)
 
 ---
 

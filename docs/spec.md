@@ -80,7 +80,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 접속 테스트 | 저장 전에 연결 가능 여부 확인. 터널 명령이 있으면 터널까지 포함해 확인 |
 | 접속별 색상 | 창 상단 bar(창 전체 폭), 탭, toolbar의 접속 표시에만 색을 써서 어느 DB인지 구분. 오류, 트랜잭션 같은 상태 표시에는 접속 색을 쓰지 않고 icon과 문장으로 구분. 고를 수 있는 색은 green, yellow, red, blue, purple. `chilla.toml`의 `color`에 다른 값이 있으면 프로젝트를 열지 않는다(모르는 key와 같다) |
 | 탭의 접속 | 탭마다 접속 하나. 탭의 접속은 toolbar에서만 바꾸고, sidebar의 접속 목록은 추가와 수정에만 씀 |
-| 읽기 전용 | 접속 단위로 켜고 끔 |
+| 읽기 전용 | 접속 단위로 켜고 끔. `chilla.toml`의 `read_only = true`(없으면 false)이면 세션과 스키마 조회 연결을 `default_transaction_read_only=on`으로 열어 서버가 쓰기를 거절함(SQLSTATE `25006`). 위험 쿼리 확인은 하지 않음. 임시 테이블도 거절됨. 이 값과 `statement_timeout`을 바꿔 저장하면 연결 대상을 바꾼 저장처럼 그 접속을 쓰는 탭의 세션을 닫고 스키마를 다시 읽음(열린 트랜잭션이 있으면 먼저 확인). 비밀번호는 지우지 않음 |
 | SSL | `sslmode`로 선택: `disable`(기본값), `require`(암호화만), `verify-full`(서버 인증서와 host 이름까지 확인). `verify-full`은 `sslrootcert`로 신뢰할 CA 파일을 정할 수 있고, 없으면 macOS의 trust store로 확인 |
 
 ### 4.2 터널 연결 (선택)
@@ -120,12 +120,12 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 기능 | 동작 |
 | --- | --- |
 | Highlighting | PostgreSQL 문법 기준 (`::` 캐스팅, `$$` 블록, JSONB 연산자 포함) |
-| Formatting | 단축키로 선택 영역 또는 파일 전체 정렬. 화면 문구는 DataGrip을 따라 "Reformat" |
+| Formatting | `Opt+Cmd+L`이나 toolbar 버튼으로 선택 영역이 있으면 그것만, 없으면 파일 전체를 정렬(`sql-formatter`, PostgreSQL 방언, keyword 대소문자 유지, 2칸 들여쓰기). 실행 취소 한 번으로 돌아감. 정렬하지 못하면(닫히지 않은 따옴표나 `/*` 등) 문서를 그대로 두고 이유를 toast로 알림. 화면 문구는 DataGrip을 따라 "Reformat" |
 | 자동완성 | 키워드, 스키마, 테이블, 컬럼, 함수. 쿼리 안의 테이블 별칭 인식. 입력하면 바로 뜨고 키워드는 대문자로 넣음 |
-| 오류 위치 | DB가 알려준 오류 위치를 에디터에 밑줄로 표시 |
+| 오류 위치 | DB가 알려준 오류 위치부터 그 자리의 단어 끝까지(단어가 아니면 한 글자) 에디터에 wavy underline으로 표시. 보낸 문장의 위치는 그 뒤의 편집을 따라 옮김. 밑줄은 그 탭의 다음 실행이나 밑줄 범위를 건드리는 편집에서 지움. 결과의 오류 화면에서 Ln/Col을 보이고 Go to error로 그 자리에 커서를 둠 |
 | 탭 | 여러 SQL 파일을 탭으로 열기 |
 | 파일 저장 | 프로젝트 디렉토리에 `.sql` 파일로 저장. 연 뒤에 밖에서 바뀐 파일은 덮어쓰기 전에 확인하고, 밖에서 지워진 파일은 확인한 뒤 다시 만듦. 줄 끝이 CRLF인 파일은 CRLF로 저장 |
-| 자동 보관 | 저장하지 않은 탭 내용도 앱 내부 저장소에 보관해 재시작 후 복원 |
+| 자동 보관 | 프로젝트마다 열려 있던 탭(순서, 활성 탭, 접속, 모드)과 저장하지 않은 내용을 앱 내부 저장소에 보관함. 마지막 변경 1초 뒤, 프로젝트를 바꾸기 전, 앱을 끝내기 전에 저장하고 프로젝트를 열면 복원함. 세션과 트랜잭션은 복원하지 않음. 그래서 프로젝트를 바꿀 때 저장하지 않은 탭을 묻지 않음(탭 닫기의 확인은 그대로). 앱을 시작하면 가장 최근 프로젝트를 열고, 열지 못하면 최근 프로젝트 목록 화면을 보임(최근 10개) |
 
 ### 4.5 쿼리 실행
 
@@ -133,9 +133,9 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | --- | --- |
 | 실행 범위 | 커서가 있는 문장, 선택 영역, 파일 전체. 커서가 문장 밖이면 같은 줄의 앞 문장, 없으면 같은 줄의 뒤 문장을 실행하고, 그것도 없으면 실행하지 않음. 실행될 범위를 에디터에 배경과 왼쪽 선으로 표시하고, 실행 버튼 label도 범위에 맞춰 바뀜(문장 / 선택 영역) |
 | 문장 나누기 | pg\_query의 scanner(PostgreSQL의 lexer)로 문장 경계를 판별. `$$` 블록, 문자열, 주석 안의 `;`는 경계로 보지 않음. 문법 오류가 있는 문장도 문장으로 나눔 |
-| 여러 문장 실행 | 순서대로 실행하고 오류가 나면 그 문장에서 멈춤. 결과는 문장마다 별도 결과 탭으로 표시 |
+| 여러 문장 실행 | 선택 영역이 문장 둘 이상이거나 Run file이면 순서대로 실행하고 `completed`가 아니면(오류, Cancel, 연결 끊김) 그 문장에서 멈추며 나머지는 `Not run`. 결과는 문장마다 별도 결과 탭으로 표시. 마지막이 아닌 문장은 Rust가 끝까지 읽고 첫 batch(500행, 4 MiB)만 보냄(`drain`). 버리면 cancel이 되어 `UPDATE … RETURNING`의 변경이 되돌려지기 때문임. 위험한 문장은 그 문장 차례에 확인함 |
 | 취소 | 실행 중인 쿼리를 DB 쪽에서 중단 |
-| 타임아웃 | 접속별 기본값 설정 |
+| 타임아웃 | 접속별 기본값 설정. `chilla.toml`의 `statement_timeout`(초 단위 정수, 1~86400, 없으면 서버 기본값)을 startup option으로 보냄. 시간이 지나 서버가 끊으면(SQLSTATE `57014`) "Timed out" 화면으로 알림 |
 | 실행 정보 | 소요 시간, 영향받은 행 수 표시 |
 | 파라미터 | `:id` 같은 변수에 값을 입력해 실행. pg\_query의 scanner로 `::` 캐스팅과 구분 |
 | 실행 계획 | EXPLAIN ANALYZE 결과를 tree로 보기. 가장 오래 걸린 노드를 강조하고 원문도 볼 수 있음 |
@@ -148,7 +148,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 받다 만 결과 | 같은 탭에서 다음 쿼리를 실행하면 남은 결과를 버림. 10분(기본값) 동안 더 가져오지 않으면 자동으로 닫아(`expired`) DB에 쿼리가 열려 있지 않게 함. 트랜잭션 안에서는 문장마다 savepoint를 두고, 버리거나 Cancel한 문장은 cancel한 뒤 savepoint로 되돌려 트랜잭션을 열린 채 둠 |
 | 보관 상한 | 탭당 10만 행을 넘으면 앞쪽 행부터 버림. 버려진 구간은 자동으로 다시 조회하지 않고 "다시 실행해야 볼 수 있음"으로 표시. 행은 화면이 보관하고, 어디부터 보관할지는 Rust가 알려 줌 |
 | 가상 스크롤 | 화면에 보이는 행만 그림 |
-| 타입별 표시 | JSONB 펼쳐보기, timestamptz, 배열, NULL과 빈 문자열 구분, vector 같은 긴 값 줄임 표시. 셀을 고르면 옆 panel에 전체 값을 보여 줌(Shift+Enter) |
+| 타입별 표시 | header에 컬럼 type을 보이고 숫자 type은 오른쪽 정렬. JSON/JSONB는 한 줄로 그리고 둘째 단계부터의 object와 array를 접음, 배열은 서버 text 그대로, NULL과 빈 문자열 구분, vector 같은 긴 값 줄임 표시. timestamptz는 세션을 열 때 Mac의 time zone을 startup option `TimeZone`으로 보내 서버가 Mac 시간으로 text를 만듦(이름을 못 얻으면 보내지 않고, 사용자의 `SET TimeZone`은 그대로 들음). 셀을 고르고 Shift+Enter를 누르면 옆 panel에 전체 값을 보여 줌(JSON은 들여쓰고 색을 칠함) |
 | 표 조작 | 컬럼 너비 조절, 화면 내 정렬. 일부만 받은 결과를 정렬하면 받은 행만 정렬됐다고 표시 |
 | 복사와 내보내기 | 셀, 행 복사(행은 header 없는 TSV, NULL은 빈 칸. 복사하면 알림). CSV, JSON 내보내기 |
 | 셀 편집 | PK가 있는 단일 테이블 결과에서 셀을 고치면 UPDATE로 반영 |
@@ -187,7 +187,7 @@ DataGrip의 macOS 기본 키맵과 같게 한다. 예: 쿼리 실행 Cmd+Enter, 
 | 범위 | 실행, Formatting, Commit, Rollback, 탭 이동처럼 ChillaSQL에 있는 기능만 맞춤 |
 | 변경 | 전역 설정 파일에서 키를 바꿀 수 있음 (5장) |
 | M3의 키 | 실행 Cmd+Enter, 취소 Cmd+F2, 저장 Cmd+S, 새 탭 Shift+Cmd+L, 탭 닫기 Cmd+W, 다음 탭 Shift+Cmd+], 이전 탭 Shift+Cmd+[. 입력 소스와 무관하게 key의 위치로 판별. 접속 form이 열려 있는 동안은 동작하지 않음 |
-| M4 이후의 키 | Formatting Opt+Cmd+L, 프로젝트 열기 Cmd+O, 값 보기 Shift+Enter, Commit Opt+Shift+Cmd+Enter, Rollback Opt+Shift+Cmd+Z. 나머지는 DataGrip 키맵과 같은지 확인한 뒤 정함(9장). Commit은 DataGrip의 `Console.Transaction.Commit`과 같고, DataGrip에 단축키가 없는 Rollback은 디자인의 값을 씀 |
+| M4 이후의 키 | Formatting Opt+Cmd+L, 프로젝트 열기 Cmd+O(macOS 관례. DataGrip의 Cmd+O는 database object 찾기이고 프로젝트 열기 단축키는 없음), 값 보기 Shift+Enter(DataGrip의 "Open in Value Editor"와 같음), Commit Opt+Shift+Cmd+Enter, Rollback Opt+Shift+Cmd+Z. Commit은 DataGrip의 `Console.Transaction.Commit`과 같고, DataGrip에 단축키가 없는 Rollback은 디자인의 값을 씀 |
 
 ## 5. 프로젝트 디렉토리
 
@@ -240,9 +240,10 @@ color = "green"
 | 저장 위치 | 들어가는 것 |
 | --- | --- |
 | 프로젝트 디렉토리 | 설정 파일(접속 정보와 터널 명령, 비밀번호 제외), `.sql` 파일. git에 올려도 안전 |
-| 전역 설정 파일 `~/.config/chilla/config.toml` | 단축키, 결과 보관 상한, 화면 언어(`language = "en"` 또는 `"ko"`), 에디터 글꼴과 크기처럼 모든 프로젝트에 적용되는 설정 |
+| 전역 설정 파일 `~/.config/chilla/config.toml` | 단축키(M10), 결과 보관 상한, 화면 언어, 에디터 글꼴과 크기처럼 모든 프로젝트에 적용되는 설정. 앱 시작 때 한 번 읽고 바꾸면 다시 시작해야 반영됨. 파일이 없으면 기본값이고 만들지 않음. 형식이 틀리거나 모르는 key, 범위를 벗어난 값이 있으면 기본값으로 시작하고 첫 화면에 오류 dialog로 이유를 보임 |
+| 전역 설정의 key | `language`(`"en"` \| `"ko"`, 기본 `"en"`), `editor.font`(CSS font-family 이름, 기본 `"D2Coding"`, 없으면 D2Coding으로 대신 그림), `editor.font_size`(px, 10~32, 기본 15), `results.retained_rows`(1000~1000000, 기본 100000), `results.idle_timeout`(받다 만 결과를 닫는 초, 60~86400, 기본 600) |
 | macOS 키체인 | 모든 접속의 비밀번호. 프로젝트 경로와 접속 이름으로 구분하므로 디렉토리를 옮기면 다시 입력 |
-| 앱 내부 저장소 (SQLite) | 쿼리 기록, 열려 있던 탭과 저장하지 않은 내용, 최근 프로젝트 목록 |
+| 앱 내부 저장소 (SQLite) | 쿼리 기록, 열려 있던 탭과 저장하지 않은 내용, 최근 프로젝트 목록. 위치는 `~/Library/Application Support/com.yuiyeong.chillasql/chilla.sqlite3`. 열지 못하면 최근 프로젝트와 자동 보관 없이 앱이 뜨고 오류 dialog를 보임 |
 
 ## 6. 성능 기준
 
@@ -298,7 +299,5 @@ color = "green"
 
 디자인(2026-11-18)에서 남은 것은 괄호 안의 마일스톤에서 정한다.
 
-- [ ] 접속 설정의 key 이름. 디자인은 `read_only`와 `statement_timeout`(M8)으로 제안
-- [ ] 프로젝트 열기 Cmd+O, 값 보기 Shift+Enter가 DataGrip 키맵과 같은지(M8)
 - [ ] 파라미터 값을 SQL text에 그대로 넣을지(M9)
 - [ ] 내보내기가 받은 행만 저장하는지, 전체를 다시 조회하는지(M10)

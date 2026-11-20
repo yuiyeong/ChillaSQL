@@ -22,7 +22,7 @@ crates/chilla-core/src/
 | --- | --- | --- |
 | `domain` | 접속 정보, 세션, 쿼리 같은 개념과 규칙 | 다른 layer에 의존하지 않는다. 외부 crate는 I/O가 없는 것(`serde` 등)만 쓴다 |
 | `application` | use case, port trait | `domain`. 외부 crate는 `tokio`의 runtime 기능(`sync`, `task`, `time`)만 쓴다. I/O는 하지 않는다 |
-| `infrastructure` | port 구현: `tokio-postgres`, keychain, 터널 프로세스(`tokio::process`, `libc`), `pg_query` | `application`, `domain`, 외부 crate |
+| `infrastructure` | port 구현: `tokio-postgres`, keychain, 터널 프로세스(`tokio::process`, `libc`), `pg_query`, 앱 내부 저장소(`rusqlite`), Mac의 time zone 이름(`iana-time-zone`) | `application`, `domain`, 외부 crate |
 | `src-tauri` | Tauri command. 화면에서 받은 입력으로 use case를 부르고 결과를 돌려준다 | `chilla-core`, `tauri` |
 
 ### 기획서 3장 구성요소의 위치
@@ -39,8 +39,8 @@ compiler는 같은 crate 안의 module 사이 의존 방향을 막지 못한다.
 
 | layer | 쓸 수 없는 경로 |
 | --- | --- |
-| `domain` | `crate::application`, `crate::infrastructure`, `tokio`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `toml_edit`, `pg_query`, `std::fs`, `std::net`, `std::process`, `libc` |
-| `application` | `crate::infrastructure`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `toml_edit`, `pg_query`, `std::fs`, `std::net`, `std::process`, `tokio::net`, `tokio::fs`, `tokio::process`, `libc` |
+| `domain` | `crate::application`, `crate::infrastructure`, `tokio`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `toml_edit`, `pg_query`, `rusqlite`, `iana_time_zone`, `std::fs`, `std::net`, `std::process`, `libc` |
+| `application` | `crate::infrastructure`, `tokio_postgres`, `tokio_rustls`, `rustls`, `keyring_core`, `apple_native_keyring_store`, `toml`, `toml_edit`, `pg_query`, `rusqlite`, `iana_time_zone`, `std::fs`, `std::net`, `std::process`, `tokio::net`, `tokio::fs`, `tokio::process`, `libc` |
 
 I/O를 하는 crate를 새로 들이면 이 표와 test의 목록에 함께 넣는다.
 

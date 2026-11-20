@@ -4,10 +4,10 @@
 
 ## 지금
 
-- **진행 중**: 없음. M7 스키마 트리와 자동완성을 끝냄(2026-11-20, [M7](plans/M7-schema-autocomplete.md)). 다음은 M8 에디터·실행 편의(3단계의 마지막)
-- **작업 위치**: main. branch `m7-schema-autocomplete`를 2026-11-20에 fast-forward로 합치고 지움. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
+- **진행 중**: M8 에디터·실행 편의(3단계의 마지막). 2026-11-20 시작, [M8 계획](plans/M8-editor-run.md). Task 1(결정 기록)을 끝냄
+- **작업 위치**: branch `m8-editor-run`(main `57515cb`에서 갈라짐). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: M8 계획(`superpowers:writing-plans`, `docs/plans/M8-<name>.md`). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: M8 Task 2([계획](plans/M8-editor-run.md)). 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -39,7 +39,7 @@
 | M5 터널 | 2 | 완료 | [M5](plans/M5-tunnel.md) | 2026-11-19 | 2026-11-19 |
 | M6 트랜잭션과 안전장치 | 2 | 완료 | [M6](plans/M6-transaction-safety.md) | 2026-11-19 | 2026-11-19 |
 | M7 스키마 트리와 자동완성 | 3 | 완료 | [M7](plans/M7-schema-autocomplete.md) | 2026-11-20 | 2026-11-20 |
-| M8 에디터·실행 편의 | 3 | 대기 | | | |
+| M8 에디터·실행 편의 | 3 | 진행 중 | [M8](plans/M8-editor-run.md) | 2026-11-20 | |
 | M9 쿼리 도구 | 4 | 대기 | | | |
 | M10 결과 표 확장 | 4 | 대기 | | | |
 
@@ -97,7 +97,7 @@
 | 2026-11-12 | M3 | dev 빌드는 cargo runner script(`scripts/cargo-runner.sh`)에서 이 Mac의 code signing identity로 서명함(identifier `com.yuiyeong.chillasql`). `CHILLA_DEV_IDENTITY`가 있으면 그것을, 없으면 첫 유효 identity를 쓰고, identity가 없으면 서명 없이 실행. release 빌드의 서명은 M4에서 정함 | M1에서 ad-hoc 빌드는 다시 빌드할 때마다 키체인 확인 창이 떴음. `tauri dev`는 `cargo run`이라 cargo의 runner가 걸림. self-signed identity를 새로 만들지 않고 이미 있는 identity를 씀 |
 | 2026-11-12 | M3 | menu를 직접 만들고 Close Window를 뺌. `Cmd+W`는 탭을 닫고 창은 `Cmd+Q`나 닫기 버튼으로 닫음. Edit의 undo, redo, cut, copy, paste, select all은 둠 | 기본 menu의 `close_window`(`Cmd+W`)가 webview의 `keydown`보다 먼저 잡힘. Edit menu가 없으면 WKWebView에서 `Cmd+C`/`Cmd+V`가 되지 않음 |
 | 2026-11-12 | M3 | M3의 단축키: 실행 `Cmd+Enter`, 취소 `Cmd+F2`, 저장 `Cmd+S`, 새 탭 `Shift+Cmd+L`, 탭 닫기 `Cmd+W`, 다음 탭 `Shift+Cmd+]`, 이전 탭 `Shift+Cmd+[`. `KeyboardEvent.code`로 판별 | DataGrip macOS 키맵(4.10). 한글 입력 상태에서 `key`는 `ㄴ` 같은 자모임 |
-| 2026-11-12 | M3 | 마지막으로 연 프로젝트 디렉토리를 `localStorage`(`chilla.lastProjectDir`)에 두고 시작할 때 엶 | 최근 프로젝트 목록(M8)이 생기면 SQLite로 옮김 |
+| 2026-11-12 | M3 | 마지막으로 연 프로젝트 디렉토리를 `localStorage`(`chilla.lastProjectDir`)에 두고 시작할 때 엶 | 최근 프로젝트 목록(M8)이 생기면 SQLite로 옮김. M8은 옮기지 않고 쓰지 않기로 함(2026-11-20 M8 "최근 프로젝트" 줄) |
 | 2026-11-12 | M3 | `chilla.toml`이 없는 디렉토리는 앱이 `[project]`만 든 파일을 만들어 프로젝트로 만들 수 있음 | 새 디렉토리도 설정 파일을 손으로 만들지 않고 앱에서 프로젝트로 열 수 있게 함 |
 | 2026-11-12 | M3 | 접속 저장은 `toml_edit`로 그 접속의 table만 고침. 저장 전에 결과를 `load`와 같은 검사로 다시 읽어 봄. `sslrootcert`가 프로젝트 디렉토리 안이면 상대 경로로 씀 | 주석, 다른 접속, 순서를 그대로 둠. 7장의 "저장 시 검사" |
 | 2026-11-12 | M3 | 접속 이름은 만든 뒤에 바꿀 수 없고 접속 지우기는 만들지 않음. `tunnel`(M5)과 `color`(M6)는 form에 없고 저장할 때 그대로 둠 | 필요하면 `chilla.toml`을 직접 고침 |
@@ -108,7 +108,7 @@
 | 2026-11-12 | M3 | 임시 표는 첫 batch(최대 500행)만 보여 주고 `fetch_more`를 부르지 않음. 받다 만 결과는 다음 실행, 취소, 탭 닫기에서 버려짐. `retainedFrom`보다 앞의 행은 reducer가 버림 | 결과 표와 "다시 실행해야 볼 수 있음" 표시는 M4 |
 | 2026-11-12 | M3 | 앱이 끝날 때 `close_all_sessions`를 부름 | 실행 중인 쿼리가 서버에 남지 않게 함 |
 | 2026-11-12 | M3 | CodeMirror의 `autocompletion()`은 켜지 않음 | 자동완성은 M7 |
-| 2026-11-12 | M3 | 저장하지 않은 변경은 탭을 닫을 때와 프로젝트를 바꿀 때만 묻고 앱을 끝낼 때는 묻지 않음. 가상 스크롤과 이어서 가져오기(M4), 터널과 접속별 색상(M5, M6), 트랜잭션 표시(M6), 자동완성(M7), 오류 위치 밑줄·여러 문장 실행·저장하지 않은 탭 자동 보관·최근 프로젝트 목록(M8)은 넣지 않음 | M8의 자동 보관이 앱을 끝낼 때의 확인을 대신함. 나머지는 각 마일스톤의 범위 |
+| 2026-11-12 | M3 | 저장하지 않은 변경은 탭을 닫을 때와 프로젝트를 바꿀 때만 묻고 앱을 끝낼 때는 묻지 않음. 가상 스크롤과 이어서 가져오기(M4), 터널과 접속별 색상(M5, M6), 트랜잭션 표시(M6), 자동완성(M7), 오류 위치 밑줄·여러 문장 실행·저장하지 않은 탭 자동 보관·최근 프로젝트 목록(M8)은 넣지 않음 | M8의 자동 보관이 앱을 끝낼 때의 확인을 대신함. 나머지는 각 마일스톤의 범위. M8은 프로젝트를 바꿀 때의 확인도 없앰(2026-11-20 M8 "자동 보관과 복원" 줄) |
 | 2026-11-12 | M3 | dev 빌드 서명 확정. runner로 서명한 binary가 키체인 항목을 만들고(`KEYCHAIN_PROBE 18.89 created`), 다시 빌드한 binary가 확인 창 없이 읽음(`lib.rs`에 빈 줄을 더해 다시 빌드 `9.03 existing`, probe 문구를 바꿔 CDHash가 바뀐 binary `9.669 existing`). `codesign -dvv`는 `Identifier=com.yuiyeong.chillasql`, Authority 줄 3개, `Signature=adhoc` 없음. cargo의 `runner` 상대 경로는 `.cargo/`가 있는 디렉토리 기준으로 풀림(tauri CLI가 `src-tauri/`에서 cargo를 불러도 됨) | 기준(확인 창 없음, 500ms 이내) 안. 빈 줄만 더한 빌드는 binary가 바뀌지 않았을 수 있어 code를 바꿔 한 번 더 잼. `pnpm tauri dev`에서 잼 |
 | 2026-11-12 | M3 | CSP 확정(위 값 그대로). `pnpm tauri build --debug --no-bundle`로 만든 binary에서 `CSP_PROBE {"violations":[],"cmStyled":true,"channelChars":20000}`. `dangerousDisableAssetCspModification`은 필요 없음 | CodeMirror의 `<style>`이 막히지 않고(`.cm-scroller`의 `overflow-x`가 `auto`), 8,192 byte를 넘어 fetch 경로를 타는 20,000자 Channel 메시지도 `connect-src`에 막히지 않음. `style-src`에 nonce가 붙지 않아 `'unsafe-inline'`이 그대로 들음 |
 | 2026-11-12 | M3 | 접속의 연결 대상을 바꿔 저장하면 `chilla.toml`을 쓰기 전에 저장된 비밀번호를 지움(입력한 비밀번호는 파일을 쓴 뒤에 저장). 지우기가 실패하면 파일을 쓰지 않음. 계획의 순서(쓴 뒤에 지움)를 바꿈 | 쓰기가 실패하거나 `ProjectChanged`가 나도 새 host에 옛 비밀번호가 남지 않아야 함(7장의 "대상을 바꿔 저장하면 지움"). 대가로 쓰기가 실패하면 대상은 그대로인데 비밀번호만 지워져 다시 입력해야 함(Ruling 6) |
@@ -183,7 +183,7 @@
 | 2026-11-18 | M4 | 저장 경로 dialog와 접속 form은 dialog 틀과 input class를 공유하지 않음 | 저장 경로 dialog는 캔버스 Dialogs(radius 12px, input 32px `bg-0`)를 따르고, 접속 form은 M3의 모양(radius 10px, input 28px `bg-1`)이라 하나로 모으면 어느 한쪽이 바뀜. 접속 form은 M5에서 캔버스의 sheet로 다시 만들 때 맞춤(simplify에서 뺀 항목) |
 | 2026-11-18 | M4 | 결과 표의 view(열 너비, 선택, 스크롤 위치)를 탭마다 하나씩 module의 Map(`gridViews.ts`)에 둠. 표가 사라질 때(layout effect cleanup) 한 번 저장하고, 같은 실행(`startedAt`과 `sql`)으로 돌아오면 이어 감. 그 사이 앞 행이 버려졌으면 스크롤을 그만큼 당김. 다시 실행하면 처음부터 그리고, `release`(탭 닫기, 접속 바꾸기)와 `reset`(프로젝트 바꾸기)이 지움 | 결과 panel 하나를 모든 탭이 같이 써서 탭을 바꿨다 돌아오면 표가 다시 mount되어 직접 맞춘 너비, 선택, 스크롤을 잃고 자동 너비를 다시 셌음. 스크롤마다 저장하지 않아 frame마다 하는 일은 늘지 않음(code-review) |
 | 2026-11-18 | M4 | `fetch_more`가 실패해도 `fetch`를 `fetching`에서 되돌리거나 다시 요청하지 않음 | Rust의 `fetch_more`는 그 세션이 발급한 query id면 끝난 쿼리에도 `Ok`(M2)라 실패는 세션이 없어졌을 때뿐이고, 그때는 `release`/`reset`이 상태를 지우거나 `connection_lost`로 끝남. 실패마다 다시 요청하면 되풀이될 수 있음. 틀렸다면 Run again 전까지 spinner가 남음(code-review에서 고치지 않은 지적) |
-| 2026-11-18 | M4 | Run again은 처음 실행의 `origin`(문서 안 위치)을 그대로 씀 | 다시 보내는 text가 지금 문서에 없을 수 있어, 그 text를 가져온 때의 위치가 정해진 유일한 위치임. 고친 문서에 맞춰 옮기는 것은 M8의 오류 위치로 가기와 함께 다룸. 그 사이 문서를 고쳤으면 오류의 Ln/Col이 옛 자리를 가리킬 수 있음(code-review에서 고치지 않은 지적) |
+| 2026-11-18 | M4 | Run again은 처음 실행의 `origin`(문서 안 위치)을 그대로 씀 | 다시 보내는 text가 지금 문서에 없을 수 있어, 그 text를 가져온 때의 위치가 정해진 유일한 위치임. 고친 문서에 맞춰 옮기는 것은 M8의 오류 위치로 가기와 함께 다룸. 그 사이 문서를 고쳤으면 오류의 Ln/Col이 옛 자리를 가리킬 수 있음(code-review에서 고치지 않은 지적). M8은 처음 text와 옮겨진 위치를 씀(2026-11-20 M8 "오류 위치" 줄) |
 | 2026-11-18 | M4 | 결과 탭 label과 행 수 문구는 SQL을 token으로 나눠 정함. 문자열(`'…'`, `E'…'`, `$tag$…$tag$`)과 주석은 건너뛰고, 앞의 `(`를 건너뛰고, 대상 앞의 `IF NOT EXISTS`, `IF EXISTS`, `ONLY`를 건너뜀. `WITH`는 CTE 목록 뒤 같은 괄호 깊이의 첫 `INSERT`/`UPDATE`/`DELETE`/`MERGE`/`SELECT`를 본 문장으로 봄. 첫 단어가 없으면 label은 `Result`. 함수 안의 `FROM`(`extract(year FROM ts)`)은 가려내지 않음 | 함수 안의 `FROM`을 가려내려면 parser가 필요함. 틀려도 label이 조금 이상할 뿐임(code-review에서 일부만 고친 지적) |
 | 2026-11-19 | M5 | 1단계 결과를 써 보는 기간 없이 M5를 시작함 | 1단계는 기능이 모자라 실제로 쓸 수 없음(사용자 결정). 기획서 8장을 고침 |
 | 2026-11-19 | M5 | M5 완료 확인은 사용자가 고른 실제 터널 접속으로 하고, 그 명령과 서버 이름은 문서에 적지 않음. 문서의 예시는 지어낸 값(`ssh -N -L 25432:db.internal:5432 bastion`)을 씀 | 실제 명령은 private이고 저장소는 public이 될 수 있음(사용자 지시) |
@@ -253,6 +253,32 @@
 | 2026-11-20 | M7 | 글자 크기 token `--text-tiny`(11px)를 더함. 스키마 트리 icon과 자동완성 kind 글자에 씀 | 캔버스(Sidebar, Tools)가 11px를 쓰고, 글자 크기는 token으로만 씀 |
 | 2026-11-20 | M7 | 자동완성 footer의 legend는 popup 너비(340px)를 넘으면 다음 줄로 내림. 스키마 트리 줄의 오른쪽 표시(type 등)는 줄 너비의 반까지만 쓰고 말줄임 | 앱 확인에서 legend가 popup 밖으로 넘치고 `timestamp with time zone`이 컬럼 이름을 가렸음 |
 | 2026-11-20 | M7 | 탭이 없으면 Schema 화면에 Choose connection 버튼을 두지 않음 | 접속을 정할 탭이 없어 menu가 아무것도 하지 않음(code-review) |
+| 2026-11-20 | M8 | 먼저 확인한 것: 결과 컬럼의 type은 `prepare`가 아니라 `TxTap`이 RowDescription(`T`)을 읽어 얻음. `TxTap`이 컬럼별 `(type OID, typmod)`를 queue에 넣고 `start_query`가 보내기 전에 비우며 `PgRows`가 RowDescription을 받을 때 앞에서 하나 꺼냄 | `tokio-postgres` 0.7.18의 `SimpleColumn`은 `name()`만 공개함. `prepare`는 실행마다 round trip이 하나 더 들고 Parse 오류가 Manual 트랜잭션을 실패 상태로 만듦. tap은 message를 해석하기 전에 byte를 봄 |
+| 2026-11-20 | M8 | type 이름은 M7 스키마 트리와 같은 `format_type`(캔버스의 `int8` 대신 `bigint`). catalog connection이 `unnest($1::oid[], $2::int4[])`로 한 번에 답함 | test DB(PostgreSQL 18.6)에서 `format_type(oid, typmod)`과 `pg_type.typcategory`로 확인함(`1043,259` → `character varying(255)`/`S`, `1700,655366` → `numeric(10,2)`/`N`). 스키마 트리와 같은 이름이어야 함 |
+| 2026-11-20 | M8 | 실행될 문장의 span은 문서 StateField에 두고 변경을 따라 옮김(`mapPos`). 마지막 입력 뒤 150ms 동안 입력이 없으면 비동기로 다시 나누고, 커서 이동은 둔 span만 봄. 실행할 때 span이 지금 문서의 것이면 다시 나누지 않음 | `split_statements`가 1만 줄에 약 40ms이고 IPC로 text 전체를 보내서 커서가 움직일 때마다 부르면 화살표 key를 누르고 있을 때 밀림 |
+| 2026-11-20 | M8 | 접속 key는 `read_only = true`(없으면 false)와 `statement_timeout = 30`(초 단위 정수, 1~86400, 없으면 서버 기본값)이고 둘 다 startup option(`default_transaction_read_only=on`, `statement_timeout`)으로 보냄 | 캔버스의 제안(`read_only`, `statement_timeout`)을 test DB에서 확인함: 읽기 전용 세션은 `CREATE TEMP TABLE`을 거절하고 `pg_sleep(2)`는 SQLSTATE `57014`로 끊김. `tunnel_timeout`과 단위를 맞춤. 기획서 9장에서 지움 |
+| 2026-11-20 | M8 | 값 보기는 Shift+Enter, 프로젝트 열기는 Cmd+O | DataGrip에서 Shift+Enter는 "Open in Value Editor"이고 Cmd+O는 database object 찾기라 프로젝트 열기 단축키가 없음. ChillaSQL에는 object 찾기가 없음(기획서 1장 "만들지 않는 것"). 기획서 9장에서 지움 |
+| 2026-11-20 | M8 | Reformat은 `sql-formatter` 15.9.1(`language: "postgresql"`, `keywordCase: "preserve"`, `tabWidth: 2`). `::` 캐스팅, `$$ … $$` 본문, `->>`, `@>`, 따옴표 식별자, 한글 식별자와 주석은 의미가 바뀌지 않음. 닫히지 않은 `/*`는 `/ * abc`로 바꿔 의미가 바뀌므로 Reformat하지 않고 toast로 알림. 문법 오류는 막지 않고 서식만 바꿈. 동기로 부름 | 직접 돌려 확인함: 닫히지 않은 `'`, `"`, `$$`는 `Parse error`로 throw, `SELEC 1 FROM`은 throw하지 않음, 2,000문장(17만 자)이 195ms |
+| 2026-11-20 | M8 | 결과 컬럼의 type: `Columns` event의 컬럼마다 `type_oid`, `type_modifier`가 붙고 화면은 접속별 cache에 없는 type만 `describe_types`로 물음. 답이 오기 전과 실패하면 header에 type이 없고 왼쪽 정렬 | type 이름 조회가 느리거나 실패해도 결과 표시는 막지 않음 |
+| 2026-11-20 | M8 | 타입별 표시: header는 이름 옆에 type(mono 12px, fg-3). typcategory `N`은 오른쪽 정렬. `json`/`jsonb`는 한 줄로 그리고 둘째 단계부터의 object와 array를 `{…}`, `[…]`로 접음(parse가 안 되면 text 그대로). `vector(…)`/`halfvec(…)`이고 값이 4개 이상이면 앞 3개와 `…`, `{n} values`. 배열은 서버 text 그대로 | 캔버스 Tools M8의 표시 규칙 |
+| 2026-11-20 | M8 | timestamptz는 세션을 열 때 startup option `TimeZone`에 Mac의 IANA time zone 이름(`iana-time-zone` crate)을 넣어 서버가 Mac 시간으로 text를 만듦. 이름을 못 얻으면 넣지 않고 사용자의 `SET TimeZone`은 그대로 들음 | pgJDBC를 쓰는 DataGrip과 같은 동작이고 화면이 text를 다시 해석하지 않아도 됨. 기획서 4.6에 반영 |
+| 2026-11-20 | M8 | 값 보기 panel: 결과 표에서 셀을 고르고 Shift+Enter를 누르면 결과 panel 오른쪽에 340px panel이 열림(다시 누르기, 닫기 버튼, Esc로 닫음). `json`/`jsonb`는 2칸 들여쓰고 에디터 syntax token 색으로 칠함. 열린 채 다른 셀을 고르면 그 셀을 보이고 화면을 닫으면 잊음 | 캔버스 Tools M8. DataGrip의 Value Editor와 같은 key |
+| 2026-11-20 | M8 | 여러 문장 실행: 선택 영역이 문장 둘 이상이거나 toolbar menu의 Run file이면 문장을 차례로 실행함. 마지막이 아닌 문장은 Rust가 끝까지 읽고 첫 batch(500행, 4 MiB)만 보냄(`drain`). `completed`가 아니면 거기서 멈추고 나머지는 Not run. 위험한 문장은 그 문장 차례에 확인하고 Run file에는 단축키를 두지 않음 | `drain`이 아니라 버리면 cancel이 되어 `UPDATE … RETURNING`의 변경이 되돌려짐. 앞 문장이 실패했는데 뒤 문장을 실행하면 의도와 다른 결과가 됨 |
+| 2026-11-20 | M8 | 결과 탭(States "여러 문장"): 문장이 둘 이상이면 결과 panel header에 탭 줄(`resultLabel(sql)`, 오류는 `Error`, 실행하지 않은 문장은 `Not run`으로 누를 수 없음). 실행 중에는 지금 문장, 멈추면 멈춘 문장의 탭을 고르고 오류 화면 아래에 `Stopped at statement {n}. {rest}`. 앞 문장의 결과는 고정된 snapshot이라 이어서 가져오지 않음 | 캔버스 States의 여러 문장 화면. 앞 문장의 batch를 이어서 가져오려면 그 문장의 결과를 열어 두어야 함 |
+| 2026-11-20 | M8 | 오류 위치: 실행할 때 보낸 문장의 문서 offset을 문서 StateField에 두고 변경을 따라 옮기고, 오류 `position`에서 단어 끝까지(단어가 아니면 한 글자) danger 색 wavy underline을 그음. 그 탭의 다음 실행이나 밑줄 범위를 건드리는 편집에서 지움. Ln/Col과 Go to error는 옮겨진 위치를 쓰고 Run again은 처음 보낸 text와 옮겨진 위치를 씀(M4의 "Run again은 처음 `origin`"을 대신함) | M4에서 문서를 고치면 Ln/Col이 옛 자리를 가리킬 수 있어 고치지 않은 지적이 있었음 |
+| 2026-11-20 | M8 | 실행될 범위 강조: 선택 영역이 없을 때 커서의 문장(`statementAt`)이 걸친 줄에 `accent/7` 배경과 왼쪽 2px accent 선. 선택 영역이 있거나 문장이 없거나 나눌 수 없으면 그리지 않음 | 캔버스 Main. Cmd+Enter가 무엇을 실행할지 미리 보이려고 |
+| 2026-11-20 | M8 | Reformat: `Opt+Cmd+L`, toolbar의 icon 버튼, 빈 상태 안내. 선택 영역이 있으면 그것만, 없으면 문서 전체를 바꾸고 실행 취소 한 번으로 돌아감. 실패하면 문서를 그대로 두고 toast `Couldn't reformat: {첫 줄}` | DataGrip의 Reformat Code와 같은 단축키 |
+| 2026-11-20 | M8 | 읽기 전용 접속: `read_only = true`면 세션과 catalog connection을 `default_transaction_read_only=on`으로 열고 위험 쿼리 확인을 하지 않음. 서버가 SQLSTATE `25006`으로 거절하면 오류 화면의 설명 줄에 `{접속} is a read-only connection, so the database rejected the write. Nothing changed.`. 자물쇠 icon을 sidebar 접속 목록, 접속 menu, toolbar chip에 그림 | 캔버스 Safety C. 쓸 수 없는 접속에서 확인을 물을 이유가 없음. 서버가 막으므로 클라이언트가 SQL을 추측하지 않음 |
+| 2026-11-20 | M8 | statement timeout: `statement_timeout`이 있는 접속에서 outcome이 `failed`이고 SQLSTATE가 `57014`면 Timed out 화면(제목 `Timed out`, 서버 메시지, `This connection's statement_timeout is {n}s.`). 사용자의 Cancel은 `cancelled`로 옴 | 캔버스 States의 Timed out. 사용자 Cancel도 `57014`가 아니라 outcome으로 구분됨 |
+| 2026-11-20 | M8 | `read_only`나 `statement_timeout`을 바꿔 저장하면 연결 대상을 바꾼 저장처럼 그 접속을 쓰는 탭의 세션을 놓고 catalog를 다시 읽음(열린 트랜잭션이 있으면 먼저 물음). 비밀번호는 지우지 않음. Rust `same_session`과 화면 `sessionChanged`가 이 비교 | startup option은 세션을 열 때만 적용되므로 열린 세션에는 바뀐 값이 닿지 않음 |
+| 2026-11-20 | M8 | 접속 sheet(ConnectionForm B): `tunnel` 아래에 `read_only` switch, 그 아래 접힌 Advanced(`statement_timeout · tunnel_timeout · sslrootcert`). 기존 값이 있는 칸이 있으면 펼친 채 엶. 테스트 성공은 `Connected · PostgreSQL {version}`과 `{ms} ms`(version은 `SHOW server_version`의 첫 단어) | 캔버스 ConnectionForm B |
+| 2026-11-20 | M8 | 전역 설정 파일 `~/.config/chilla/config.toml`: key는 `language`, `editor.font`, `editor.font_size`, `results.retained_rows`, `results.idle_timeout`(모두 생략 가능). 앱 시작 때 한 번 읽고 바꾸면 다시 시작해야 반영됨. 파일이 없으면 기본값이고 만들지 않음. 틀린 형식, 모르는 key, 범위를 벗어난 값은 기본값으로 시작하고 첫 화면에 오류 dialog로 이유를 보임. `[keys]`는 M10 | 접속 설정은 프로젝트의 `chilla.toml`에 있고 사용자 전체 설정은 따로 있어야 함. 조용히 무시하면 설정이 안 먹는 이유를 알 수 없음. 기획서 5장에 반영 |
+| 2026-11-20 | M8 | 언어: `language`의 dictionary(`en`, `ko`)로 화면을 그림. `ko`는 `Record<MessageKey, string>`이라 빠진 key를 typecheck가 잡음. Commit, Rollback, Auto, Manual, SQL keyword, 설정 key, 단축키 기호는 영어 그대로. 숫자 묶음은 두 언어 모두 `en-US`. Rust 오류는 `CommandError`에 `params`를 더하고 화면이 `error.<kind>` 문구에 넣음. macOS menu는 Rust가 `language`로 고른 label로 만듦 | 기술 용어와 UI 요소 이름이 두 언어에서 같아야 검색과 대화가 맞음. Rust message를 번역하지 않고 화면 dictionary 하나로 모음 |
+| 2026-11-20 | M8 | 앱 내부 저장소: `<app_data_dir>/chilla.sqlite3`(`~/Library/Application Support/com.yuiyeong.chillasql/`), `rusqlite`. table은 `recent_projects`와 `workspaces`, schema 판은 `PRAGMA user_version = 1`. 열지 못하면 최근 프로젝트와 자동 보관 없이 앱이 뜨고 오류 dialog를 보임. 쿼리 기록(M9)은 이 파일에 table을 더함 | 최근 프로젝트와 탭 snapshot은 프로젝트 밖의 앱 상태이고 `localStorage`는 dev와 `.app`이 따로이며 Rust가 읽을 수 없음. 저장소가 망가져도 앱은 떠야 함. 기획서 5장에 반영 |
+| 2026-11-20 | M8 | 최근 프로젝트: 프로젝트를 열거나 만들 때마다 Rust가 기록하고 최근 10개만 남김. 앱을 시작하면 가장 최근 프로젝트를 엶. 열지 못하면 Welcome A(오류, Open Project… Cmd+O, Recent Projects 목록), `chilla.toml`이 없는 디렉토리는 Welcome B의 sheet로 물음. sidebar의 프로젝트 이름을 누르면 Sidebar D menu. M3의 `localStorage`(`chilla.lastProjectDir`)는 쓰지 않고 값을 옮기지 않음. 없는 디렉토리도 목록에 남고 열 때 오류를 보임 | M3 결정 기록 "마지막 프로젝트를 `localStorage`에"의 약속(SQLite로 옮김)을 옮기지 않는 쪽으로 바꿈: 혼자 쓰는 앱이고 한 번 직접 열면 되며 dev와 `.app`의 값이 따로라 옮길 값이 불확실함 |
+| 2026-11-20 | M8 | 자동 보관과 복원: 프로젝트마다 탭 snapshot(JSON, `version: 1`: 탭 순서, 활성 탭, 탭마다 `title`, `path`, `stamp`, `connection`, `mode`, `text`)을 보관함. `text`는 저장하지 않은 변경이 있거나 파일이 없는 탭만. 마지막 변경 1초 뒤에 저장하고 프로젝트를 바꾸기 전과 `quit_app` 앞에는 바로 저장함. 복원한 dirty 탭의 저장은 보관한 `stamp`로 M3의 덮어쓰기 확인을 탐. 세션과 트랜잭션은 되살리지 않고 모드는 되살림. **프로젝트를 바꿀 때 저장하지 않은 탭을 묻지 않음**(M3의 확인을 없앰), 탭 닫기의 확인은 그대로 | 자동 보관이 있으면 바꿀 때 잃는 것이 없어 앱 종료(M3에서 묻지 않기로 함)와 같아짐. 저장하지 않은 text는 `localStorage`가 아니라 앱 내부 저장소에 둠 |
+| 2026-11-20 | M8 | 에디터 글꼴: `editor.font`, `editor.font_size`를 `.cm-content`와 gutter에 씀(`font-family: "{font}", "D2Coding", monospace`, line-height는 `round(size × 1.6)`px). 결과 표는 D2Coding 그대로 | 프로젝트 규칙: 결과 data는 D2Coding. 글꼴이 없으면 D2Coding으로 대신 그림 |
+| 2026-11-20 | M8 | 받다 만 결과를 닫는 시간(`results.idle_timeout`)과 보관 상한(`results.retained_rows`)이 `QueryLimits`가 되고 화면의 `IDLE_RESULT_MINUTES`는 설정에서 받음 | M6에서 상수로 둔 값을 사용자가 고칠 수 있게 함 |
 
 ## 작업 로그
 
@@ -260,6 +286,7 @@
 
 ### 2026-11-20
 
+- M8 Task 1(branch `m8-editor-run`): 계획의 결정을 결정 기록, 기획서(4.1, 4.4, 4.5, 4.6, 4.10, 5장, 9장), 마일스톤, 구조 문서에 옮김. `sql-formatter` 15.9.1을 설치해 확인함. 닫히지 않은 `/*`만 의미가 바뀌어(`/ * abc`) 그 입력은 Reformat하지 않음(Task 10 test `rejects_unclosed_block_comment`)
 - branch `m7-schema-autocomplete`를 main에 fast-forward로 합치고 branch를 지움
 - M7 완료(branch `m7-schema-autocomplete`, `cb28bfa`..). Task 1 결정 기록, Task 2 catalog SQL(`infrastructure/postgres/catalog.rs`, test DB integration test 3개. oid 0에서 domain 제약조건이 잡혀 `contypid = 0`을 더함), Task 3 App의 catalog connection(접속마다 slot 하나, 터널 lease 공유, 끊기면 한 번 다시 연결. 첫 구현에서 프로젝트 바꾸기가 여는 중인 slot을 기다려 test가 멈춰서 쓰는 중인 slot은 background에서 닫게 함), Task 4 command 셋, Task 5 화면 store와 불러오는 때, Task 6 Schema 화면, Task 7 menu·Copy name·Select first rows, Task 8 자동완성 source, Task 9 popup(kind 글자, footer)
 - M7 simplify: catalog 쿼리를 `try_join!`으로 함께 보내고 relation당 한 줄(`array_agg`), 자동완성 source를 `EditorState.languageData`로(keyword는 `sql({ upperCaseKeywords })`), `shared/sql/catalog.ts`의 색인(WeakMap), details 불러오기를 store `toggle` 하나로. 고치지 않은 것: catalog connection을 actor로 바꾸기(큰 재구성, 지금 구조가 test로 검증됨), generation 확인을 `connect()`로 옮기기(`open_session`의 확인은 insert와 같은 lock 안이어야 함), 트리 렌더 가상화(큰 schema에서 느리면 그때)
