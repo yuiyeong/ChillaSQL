@@ -111,9 +111,10 @@ fn object_type(kind: RelationKind) -> &'static str {
 }
 
 fn create_statement(ddl: &RelationDdl) -> String {
-    let with = match ddl.options.is_empty() {
-        true => String::new(),
-        false => format!(" WITH ({})", ddl.options.join(", ")),
+    let with = if ddl.options.is_empty() {
+        String::new()
+    } else {
+        format!(" WITH ({})", ddl.options.join(", "))
     };
     let view = match ddl.kind {
         RelationKind::View => Some("VIEW"),
@@ -130,16 +131,13 @@ fn create_statement(ddl: &RelationDdl) -> String {
     let unlogged = if ddl.unlogged { "UNLOGGED " } else { "" };
     let mut sql = format!("CREATE {unlogged}TABLE {}", ddl.name);
     let body = body_lines(ddl);
+    let columns = (!body.is_empty()).then(|| format!(" (\n{}\n)", body.join(",\n")));
     if let Some(partition) = &ddl.partition_of {
         sql.push_str(&format!(" PARTITION OF {}", partition.parent));
-        if !body.is_empty() {
-            sql.push_str(&format!(" (\n{}\n)", body.join(",\n")));
-        }
+        sql.push_str(columns.as_deref().unwrap_or_default());
         sql.push_str(&format!("\n  {}", partition.bound));
-    } else if body.is_empty() {
-        sql.push_str(" ()");
     } else {
-        sql.push_str(&format!(" (\n{}\n)", body.join(",\n")));
+        sql.push_str(columns.as_deref().unwrap_or(" ()"));
     }
     if !ddl.inherits.is_empty() {
         sql.push_str(&format!(" INHERITS ({})", ddl.inherits.join(", ")));

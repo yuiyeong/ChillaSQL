@@ -152,7 +152,6 @@ fn finds_named_parameters() {
     );
 }
 
-/// Review Focus 2
 #[test]
 fn slices_casts_strings_and_comments_are_not_parameters() {
     assert!(
@@ -161,6 +160,13 @@ fn slices_casts_strings_and_comments_are_not_parameters() {
     );
     assert!(names("DO $$ BEGIN x := 1; END $$").is_empty());
     assert!(names("SELECT 1 /* :c */").is_empty());
+}
+
+#[test]
+fn an_unclosed_bracket_does_not_hide_the_next_statement() {
+    assert_eq!(names("SELECT a[1; SELECT :id"), ["id"]);
+    // 괄호 안의 `;`는 문장을 끝내지 않는다.
+    assert!(names("SELECT (a[1; :id)").is_empty());
 }
 
 #[test]

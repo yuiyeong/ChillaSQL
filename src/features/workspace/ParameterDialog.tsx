@@ -14,19 +14,6 @@ import {
 } from "./parameterPrompt";
 import { shortcutKeys, shortcutLabel } from "./shortcuts";
 
-/** 물음마다 입력란의 state를 새로 시작하려고 request object에 붙이는 번호 */
-const serials = new WeakMap<ParameterRequest, number>();
-let nextSerial = 0;
-
-function serialOf(request: ParameterRequest): number {
-  let serial = serials.get(request);
-  if (serial === undefined) {
-    serial = nextSerial++;
-    serials.set(request, serial);
-  }
-  return serial;
-}
-
 /**
  * 에디터 영역 오른쪽 아래에 뜨는 파라미터 값 물음. 실행에 `:name`이 있으면 `askParameters`가 열고,
  * 에디터 영역 안(`relative`)에 둔다. 캔버스 Tools의 M9 파라미터를 따른다.
@@ -48,7 +35,7 @@ export function ParameterDialog() {
     }
   }, [request]);
   if (request === null) return null;
-  return <Form key={serialOf(request)} request={request} />;
+  return <Form key={request.id} request={request} />;
 }
 
 function Form({ request }: { request: ParameterRequest }) {

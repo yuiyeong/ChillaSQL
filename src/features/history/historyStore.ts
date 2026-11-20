@@ -7,7 +7,7 @@ import { useProject } from "../project/projectStore";
 /** 입력이 멈추고 이만큼 지나면 찾는다. */
 const SEARCH_WAIT_MS = 150;
 
-export interface HistoryState {
+interface HistoryState {
   query: string;
   entries: HistoryEntry[];
   /** `entries`의 index. 목록이 비면 null */

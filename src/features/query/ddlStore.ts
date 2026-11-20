@@ -58,7 +58,7 @@ export function closeDdl(tabId: string): void {
   setView(tabId, undefined);
 }
 
-/** 모든 탭의 DDL을 지운다(test와 프로젝트 전환용). */
+/** 모든 탭의 DDL을 지운다(test의 `resetStores`용). 프로젝트 전환은 탭마다 `release()`가 지운다. */
 export function resetDdl(): void {
   latest.clear();
   useDdl.setState({ views: {} });

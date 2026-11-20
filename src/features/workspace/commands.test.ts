@@ -2360,7 +2360,7 @@ test("explain_error_position_maps_to_the_document", async () => {
       },
     });
 
-  // 보낸 text `EXPLAIN ANALYZE SELECT foo FROM t`에서 foo는 22(0부터)이고 문서에서는 17이다.
+  // 보낸 text `EXPLAIN ANALYZE SELECT foo FROM t`에서 foo는 23(0부터)이고 문서에서는 17이다.
   fail(23);
 
   expect(marksOf(id).error).toMatchObject({ from: 17 });

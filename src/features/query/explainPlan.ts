@@ -73,13 +73,15 @@ function millis(line: string, prefix: string): number | null {
 /**
  * text 출력을 한 줄씩 받아 node 목록으로 바꾼다. node 줄이 없으면 null이다.
  *
- * 뿌리는 `->` 없는 첫 node 줄이고 자식은 `->`로 시작하는 줄이다. 부모는 `->`의 열 위치로 정한다.
- * 그래서 `InitPlan 1`, `SubPlan 1` 줄은 node가 아니고, 그 아래 `->` node는 위 node의 자식이 된다.
+ * 뿌리는 `->` 없는 첫 node 줄이고 자식은 `->`로 시작하는 줄이다. 부모는 보통 `->`의 열 위치로
+ * 정한다. `InitPlan 1`, `SubPlan 1`, `CTE x` header 줄은 node가 아니고, 그 줄이 찍힌 detail 열의
+ * node가 아래 `->` node의 부모가 된다(SubPlan은 부모의 마지막 자식 뒤에도 온다).
  * 나머지 줄은 detail이라 `Planning Time:`과 `Execution Time:`만 읽는다.
  */
 export function parsePlan(lines: string[]): Plan | null {
   const nodes: PlanNode[] = [];
-  const parents: (number | null)[] = [];
+  /** node마다 자식들의 total 합 */
+  const childMs: number[] = [];
   /**
    * 열린 node의 `->` 열(뿌리는 -1이라 pop되지 않는다)과 detail 열(뿌리 2, 나머지는 `->` 열 + 6).
    * `SubPlan`은 부모의 detail 열에 마지막 자식 뒤에도 찍히므로 detail 열로 부모를 찾는다.
@@ -98,8 +100,11 @@ export function parsePlan(lines: string[]): Plan | null {
       const column = arrow[1].length;
       while (stack.length > 0 && stack[stack.length - 1].column >= column)
         stack.pop();
-      parents.push(stack.length > 0 ? stack[stack.length - 1].index : null);
-      nodes.push(parseNode(arrow[2], stack.length));
+      const node = parseNode(arrow[2], stack.length);
+      if (stack.length > 0)
+        childMs[stack[stack.length - 1].index] += node.totalMs ?? 0;
+      nodes.push(node);
+      childMs.push(0);
       stack.push({ column, detail: column + 6, index: nodes.length - 1 });
       return;
     }
@@ -116,18 +121,14 @@ export function parsePlan(lines: string[]): Plan | null {
       return;
     }
     if (STATS_START.test(line) || (i === 0 && BARE_LABEL.test(line))) {
-      parents.push(null);
       nodes.push(parseNode(line, 0));
+      childMs.push(0);
       stack.push({ column: -1, detail: 2, index: 0 });
     }
   });
 
   if (nodes.length === 0) return null;
 
-  const childMs = new Array<number>(nodes.length).fill(0);
-  parents.forEach((parent, index) => {
-    if (parent !== null) childMs[parent] += nodes[index].totalMs ?? 0;
-  });
   let slowest: number | null = null;
   nodes.forEach((node, index) => {
     if (node.totalMs === null) return;

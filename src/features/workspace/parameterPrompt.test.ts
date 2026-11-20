@@ -14,6 +14,7 @@ beforeEach(() => {
 test("remembers_values_per_tab", async () => {
   const first = askParameters("t1", ["id", "since"]);
   expect(useParameterPrompt.getState().request).toEqual({
+    id: expect.any(Number),
     tabId: "t1",
     names: ["id", "since"],
     values: { id: "", since: "" },

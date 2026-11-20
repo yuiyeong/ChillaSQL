@@ -37,6 +37,7 @@ import type {
   RunRequest,
   ScriptStep,
 } from "../query/runReducer";
+import { startsWithWord } from "../query/format";
 import { prepend, substitute } from "../query/rewrite";
 import { endable, useRuns, type ConfirmStep } from "../query/runsStore";
 import { useTypes } from "../query/typesStore";
@@ -298,39 +299,6 @@ export function runSteps(
 const EXPLAIN_PREFIX = "EXPLAIN ANALYZE ";
 
 /**
- * 첫 단어가 EXPLAIN인가. 앞의 공백과 주석(한 줄 `--`, 중첩하는 블록 주석)은 건너뛰고 대소문자는
- * 구분하지 않는다. `explained`처럼 단어가 더 이어지면 아니다.
- */
-function startsWithExplain(sql: string): boolean {
-  let i = 0;
-  while (i < sql.length) {
-    if (/\s/.test(sql[i])) {
-      i += 1;
-    } else if (sql.startsWith("--", i)) {
-      const end = sql.indexOf("\n", i);
-      i = end === -1 ? sql.length : end + 1;
-    } else if (sql.startsWith("/*", i)) {
-      let depth = 1;
-      i += 2;
-      while (i < sql.length && depth > 0) {
-        if (sql.startsWith("/*", i)) {
-          depth += 1;
-          i += 2;
-        } else if (sql.startsWith("*/", i)) {
-          depth -= 1;
-          i += 2;
-        } else {
-          i += 1;
-        }
-      }
-    } else {
-      break;
-    }
-  }
-  return /^explain(?![\p{L}\p{N}_$])/iu.test(sql.slice(i));
-}
-
-/**
  * Explain이 보낼 문장. 문장이 둘 이상이면 실행하지 않고, 이미 EXPLAIN으로 시작하면 그대로, 아니면
  * `EXPLAIN ANALYZE `를 앞에 붙인다. 값을 넣은 뒤에 불리므로 접두어가 `:name`의 자리를 밀지 않는다.
  */
@@ -339,7 +307,9 @@ function explainFinish(steps: ScriptStep[]): ScriptStep[] | Rejection {
     return { title: t("run.explainOneStatement"), detail: null };
   }
   const [step] = steps;
-  return [startsWithExplain(step.sql) ? step : prepend(step, EXPLAIN_PREFIX)];
+  return [
+    startsWithWord(step.sql, "EXPLAIN") ? step : prepend(step, EXPLAIN_PREFIX),
+  ];
 }
 
 /** command를 실행한다. 대부분은 활성 탭에 대해서이고, 탭이 없으면 아무것도 하지 않는다. */

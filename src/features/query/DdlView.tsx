@@ -94,7 +94,7 @@ export function DdlView({
           <Code text={view.text} />
         </pre>
       ) : (
-        <div className="text-small text-fg-2 flex min-h-0 flex-1 items-start gap-1.5 p-3">
+        <div className="text-small text-fg-2 flex min-h-0 flex-1 items-start gap-1.5 px-4 py-3">
           {view.status === "loading" ? (
             <>
               <SpinnerIcon size={11} className="mt-[3px]" />

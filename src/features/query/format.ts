@@ -1,6 +1,6 @@
 import { lineColumn } from "../editor/statementAt";
 import { t, tc } from "../../shared/i18n/t";
-import { sourceOffset, sourceText } from "./rewrite";
+import { sourceText } from "./rewrite";
 import type { Origin, ResultData } from "./runReducer";
 
 /** 1 ms 밑은 소수 둘째 자리 ms, 1 s 밑은 정수 ms, 그 위는 소수 둘째 자리 s. 반올림한 값으로 단위를 고른다. */
@@ -12,8 +12,8 @@ export function formatElapsed(micros: number): string {
 }
 
 /**
- * 서버가 준 오류 위치(보낸 text의 UTF-16 offset)를 문서의 줄과 칸으로 바꾼다. 고쳐 보냈으면 문서의 문장
- * text 기준으로 센다. `origin`은 문서의 문장이 지금 문서에서 시작하는 곳이다. 편집을 따라 옮긴 값을
+ * 오류 위치(문서 문장 text의 UTF-16 offset. `runsStore`가 보낸 text에서 옮겨 둔다)를 문서의 줄과
+ * 칸으로 바꾼다. `origin`은 문서의 문장이 지금 문서에서 시작하는 곳이다. 편집을 따라 옮긴 값을
  * 넘기고, 없으면 실행한 때의 값을 쓴다.
  */
 export function errorLocation(
@@ -21,10 +21,7 @@ export function errorLocation(
   position: number,
   origin: Origin = result.origin,
 ): { line: number; column: number } {
-  const { line, column } = lineColumn(
-    sourceText(result),
-    sourceOffset(result.rewrite, position),
-  );
+  const { line, column } = lineColumn(sourceText(result), position);
   return line === 1
     ? { line: origin.line, column: origin.column + column - 1 }
     : { line: origin.line + line - 1, column };
@@ -191,6 +188,15 @@ class Cursor {
 
 function isWord(token: Token | undefined, ...words: string[]): boolean {
   return token?.kind === "word" && words.includes(token.text.toUpperCase());
+}
+
+/**
+ * 공백과 주석 뒤의 첫 token이 단어 `word`(대문자)인가. 대소문자는 구분하지 않고, 앞의 `(`는 건너뛰지
+ * 않는다. `explained`처럼 단어가 더 이어지면 아니다.
+ */
+export function startsWithWord(sql: string, word: string): boolean {
+  const first = tokensOf(sql).next();
+  return first.done !== true && isWord(first.value, word);
 }
 
 /** WITH 뒤의 본 문장이 될 수 있는 단어 */

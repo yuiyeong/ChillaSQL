@@ -25,7 +25,7 @@ import { useHistory } from "../history/historyStore";
 import { useProject } from "../project/projectStore";
 import { closeDdl } from "./ddlStore";
 import { clearGridViews, dropGridView } from "./gridViews";
-import { sourceOffset } from "./rewrite";
+import { sourceOffset, type Rewrite } from "./rewrite";
 import {
   emptyResult,
   reduce,
@@ -556,7 +556,8 @@ export const useRuns = create<RunsState>()((set, get) => {
         // 실행 하나는 첫 rows나 버리지 않은 finished에서 한 번 기록한다.
         let recorded = false;
 
-        const onEvent = (event: QueryEvent) => {
+        const onEvent = (sent: QueryEvent) => {
+          const event = inSource(sent, step.rewrite);
           // 서버에 가서 답이 온 실행은 화면이 밀려난 것이어도 기록한다. 버린 실행(discarded)은 답이
           // 아니므로 기록하지 않는다.
           if (
@@ -588,11 +589,7 @@ export const useRuns = create<RunsState>()((set, get) => {
             event.outcome === "failed" &&
             event.error.position !== null
           ) {
-            markServerError(
-              tabId,
-              runKey,
-              sourceOffset(step.rewrite, event.error.position),
-            );
+            markServerError(tabId, runKey, event.error.position);
           }
           // header의 type 이름은 접속의 catalog connection이 답한다. 밀려난 실행이 묻으면 이미 닫은
           // catalog connection(과 터널)을 다시 연다.
@@ -828,3 +825,25 @@ export const useRuns = create<RunsState>()((set, get) => {
     },
   };
 });
+
+/**
+ * 실패한 문장의 오류 위치를 보낸 text의 offset에서 문서 문장 text의 offset으로 옮긴다. 저장한 결과의
+ * position은 언제나 문서 문장 기준이라 밑줄, Ln/Col, Go to error가 따로 옮기지 않는다.
+ */
+function inSource(event: QueryEvent, rewrite: Rewrite | undefined): QueryEvent {
+  if (
+    rewrite === undefined ||
+    event.type !== "finished" ||
+    event.outcome !== "failed" ||
+    event.error.position === null
+  ) {
+    return event;
+  }
+  return {
+    ...event,
+    error: {
+      ...event.error,
+      position: sourceOffset(rewrite, event.error.position),
+    },
+  };
+}

@@ -264,9 +264,13 @@ const DDL_COLUMN_COMMENTS_SQL: &str = "\
 /// relation 하나의 DDL 재료. 테이블, partitioned table, view, materialized view가 아니면 `None`이다.
 ///
 /// `pg_get_*`와 `format_type`은 search_path에 보이는 object의 schema를 떼므로 pg_dump처럼 빈
-/// search_path로 읽는다. 기본 type과 `pg_catalog` 함수는 그래도 schema 없이 나온다. transaction
-/// 하나에서 읽으므로 snapshot도 하나이고, `SET LOCAL`은 transaction이 끝나면 돌아온다. 이 연결은
-/// catalog 자리 하나가 차례로 쓰므로 그사이 다른 읽기가 바뀐 search_path를 보지 않는다.
+/// search_path로 읽는다. 기본 type과 `pg_catalog` 함수는 그래도 schema 없이 나온다. transaction은
+/// `SET LOCAL`을 가두기 위한 것이다(READ COMMITTED라 쿼리마다 snapshot을 따로 잡는다). search_path는
+/// transaction이 끝나면 돌아온다. 이 연결은 catalog 자리 하나가 차례로 쓰므로 그사이 다른 읽기가
+/// 바뀐 search_path를 보지 않는다.
+///
+/// 이 future는 도중에 버리면 안 된다. 버리면 COMMIT도 ROLLBACK도 보내지 않아 catalog 연결이
+/// search_path `''`인 채 idle in transaction으로 남는다. 지금은 이것을 cancel하는 caller가 없다.
 pub(super) async fn read_ddl(
     client: &Client,
     relation: u32,
@@ -308,13 +312,10 @@ async fn read_ddl_parts(client: &Client, relation: u32) -> Result<Option<Relatio
     let is_partition: bool = row.get(4);
     let mut parents: Vec<String> = row.get(8);
     // partition의 부모는 하나다. 같은 쿼리에서 읽었으므로 비어 있지 않다.
-    let partition_of = match is_partition && !parents.is_empty() {
-        true => Some(PartitionOf {
-            parent: parents.remove(0),
-            bound: row.get(6),
-        }),
-        false => None,
-    };
+    let partition_of = (is_partition && !parents.is_empty()).then(|| PartitionOf {
+        parent: parents.remove(0),
+        bound: row.get(6),
+    });
     let strings = |rows: Vec<tokio_postgres::Row>| -> Vec<String> {
         rows.iter().map(|row| row.get(0)).collect()
     };

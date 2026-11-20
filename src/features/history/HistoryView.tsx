@@ -1,8 +1,15 @@
-import { useEffect, useRef, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
 import type { HistoryEntry } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
 import { ErrorIcon, SearchIcon } from "../../shared/ui/icons";
 import { Kbd } from "../../shared/ui/Kbd";
+import { SECTION_LABEL } from "../../shared/ui/sectionLabel";
 import { useNow } from "../../shared/ui/useNow";
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { viewShowing } from "../editor/documents";
@@ -12,13 +19,11 @@ import { formatElapsed } from "../query/format";
 import { useHistory } from "./historyStore";
 import { dayLabel, timeOfDay } from "./when";
 
-const LABEL = "text-label text-fg-2 m-0 font-semibold tracking-[0.04em]";
-
 /**
  * 기록의 SQL로 새 탭을 연다. 기록의 접속이 지금 프로젝트에 있으면 그 접속을 고르고, 없으면 새 탭의
  * 기본 접속을 둔다. 실행하지 않는다. 새 탭이 활성이 되면 에디터에 focus를 준다.
  */
-export function openHistoryEntry(entry: HistoryEntry): void {
+function openHistoryEntry(entry: HistoryEntry): void {
   const tabs = useTabs.getState();
   const id = tabs.newTab({ text: entry.sql });
   const known = useProject
@@ -30,6 +35,9 @@ export function openHistoryEntry(entry: HistoryEntry): void {
 }
 
 interface Group {
+  /** 지역 날짜(`toDateString`) */
+  day: string;
+  /** React key. 같은 날이 떨어져 두 번 나와도 겹치지 않게 첫 항목의 index를 붙인다 */
   key: string;
   label: string;
   /** `entries`의 index와 함께 */
@@ -40,10 +48,15 @@ interface Group {
 function groupByDay(entries: readonly HistoryEntry[], now: number): Group[] {
   const groups: Group[] = [];
   entries.forEach((entry, index) => {
-    const key = new Date(entry.executedAt).toDateString();
+    const day = new Date(entry.executedAt).toDateString();
     let group = groups[groups.length - 1];
-    if (group?.key !== key) {
-      group = { key, label: dayLabel(entry.executedAt, now), items: [] };
+    if (group?.day !== day) {
+      group = {
+        day,
+        key: `${day}#${index}`,
+        label: dayLabel(entry.executedAt, now),
+        items: [],
+      };
       groups.push(group);
     }
     group.items.push({ entry, index });
@@ -53,7 +66,7 @@ function groupByDay(entries: readonly HistoryEntry[], now: number): Group[] {
 
 function Message({ children }: { children: ReactNode }) {
   return (
-    <div className="text-small text-fg-2 px-4 py-4 leading-normal">
+    <div className="text-small text-fg-2 mx-1.5 px-4 py-4 leading-normal">
       {children}
     </div>
   );
@@ -88,24 +101,24 @@ export function HistoryView() {
     selectedItem.current?.scrollIntoView?.({ block: "nearest" });
   }, [selected]);
 
-  const groups = groupByDay(entries, now);
-
-  function openSelected() {
-    const { entries: current, selected: index } = useHistory.getState();
-    if (index !== null) openHistoryEntry(current[index]);
-  }
+  // 검색어 입력과 화살표 키마다 다시 그려지므로 묶음과 접속 찾기는 목록이 바뀔 때만 만든다.
+  const groups = useMemo(() => groupByDay(entries, now), [entries, now]);
+  const profiles = useMemo(
+    () => new Map(connections?.map((c) => [c.name, c])),
+    [connections],
+  );
 
   function onKeyDown(event: KeyboardEvent<HTMLElement>) {
     // 한글 입력기가 조합 중일 때의 키는 입력기의 것이다.
     if (event.nativeEvent.isComposing) return;
-    const { move } = useHistory.getState();
+    const { move, entries: current, selected: index } = useHistory.getState();
     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
       event.preventDefault();
       move(event.key === "ArrowDown" ? 1 : -1);
-    } else if (event.key === "Enter" && selected !== null) {
-      // 항목 button의 click(선택)이 뒤따르지 않게 한다.
+    } else if (event.key === "Enter" && index !== null) {
+      // 항목 button의 click(선택)이 뒤따르지 않게 한다. 연 때만 막는다.
       event.preventDefault();
-      openSelected();
+      openHistoryEntry(current[index]);
     }
   }
 
@@ -129,25 +142,25 @@ export function HistoryView() {
         />
       </label>
 
+      {status === "failed" && error !== null && (
+        <div
+          role="alert"
+          className="text-small text-fg-2 mx-1.5 flex shrink-0 items-start gap-1.5 px-2.5 py-2 break-words"
+        >
+          <ErrorIcon className="mt-[3px] shrink-0" />
+          {error}
+        </div>
+      )}
+      {status === "ready" && entries.length === 0 && (
+        <Message>
+          {query.trim() === "" ? t("history.empty") : t("history.noMatch")}
+        </Message>
+      )}
       <div
         role="listbox"
         aria-label={t("history.label")}
         className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-1.5"
       >
-        {status === "failed" && error !== null && (
-          <div
-            role="alert"
-            className="text-small text-fg-2 flex items-start gap-1.5 px-2.5 py-2 break-words"
-          >
-            <ErrorIcon className="mt-[3px] shrink-0" />
-            {error}
-          </div>
-        )}
-        {status === "ready" && entries.length === 0 && (
-          <Message>
-            {query.trim() === "" ? t("history.empty") : t("history.noMatch")}
-          </Message>
-        )}
         {groups.map((group) => (
           <div
             key={group.key}
@@ -155,13 +168,14 @@ export function HistoryView() {
             aria-label={group.label}
             className="flex flex-col gap-0.5"
           >
-            <span aria-hidden="true" className={`${LABEL} px-2.5 pt-2 pb-1`}>
+            <span
+              aria-hidden="true"
+              className={`${SECTION_LABEL} px-2.5 pt-2 pb-1`}
+            >
               {group.label}
             </span>
             {group.items.map(({ entry, index }) => {
-              const profile = connections?.find(
-                (c) => c.name === entry.connection,
-              );
+              const profile = profiles.get(entry.connection);
               const isSelected = index === selected;
               return (
                 <button

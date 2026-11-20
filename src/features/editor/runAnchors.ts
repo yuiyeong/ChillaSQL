@@ -1,5 +1,4 @@
 import type { Text, TransactionSpec } from "@codemirror/state";
-import { sourceOffset } from "../query/rewrite";
 import { useRuns } from "../query/runsStore";
 import { dispatchToDocument, findDocument, viewShowing } from "./documents";
 import {
@@ -79,10 +78,7 @@ export function goToError(tabId: string): void {
   if (position === null || anchor === null) return;
   const spec: TransactionSpec = {
     selection: {
-      anchor: Math.min(
-        anchor.offset + sourceOffset(state.result.rewrite, position),
-        anchor.doc.length,
-      ),
+      anchor: Math.min(anchor.offset + position, anchor.doc.length),
     },
     scrollIntoView: true,
   };

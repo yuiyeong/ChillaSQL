@@ -15,6 +15,7 @@ import {
   TunnelIcon,
 } from "../../shared/ui/icons";
 import { IconButton } from "../../shared/ui/IconButton";
+import { SECTION_LABEL } from "../../shared/ui/sectionLabel";
 import {
   buildTree,
   projectInitials,
@@ -26,8 +27,6 @@ import { useProject } from "./projectStore";
 import { useHome } from "./recent";
 import { SchemaView } from "../schema/SchemaView";
 import { t } from "../../shared/i18n/t";
-
-const LABEL = "text-label text-fg-2 m-0 font-semibold tracking-[0.04em]";
 
 interface Row {
   node: TreeNode;
@@ -156,7 +155,7 @@ export function Sidebar({
         className="border-line-1 flex flex-col gap-px border-b px-1.5 pb-3"
       >
         <div className="flex items-center justify-between px-2 pb-1">
-          <h3 className={LABEL}>{t("sidebar.connections")}</h3>
+          <h3 className={SECTION_LABEL}>{t("sidebar.connections")}</h3>
           <IconButton
             size={22}
             label={t("sidebar.addConnection")}
@@ -233,7 +232,7 @@ export function Sidebar({
           className="flex min-h-0 flex-1 flex-col gap-px px-1.5 py-1"
         >
           <div className="flex items-center justify-between px-2 pb-1">
-            <h3 className={LABEL}>{t("sidebar.files")}</h3>
+            <h3 className={SECTION_LABEL}>{t("sidebar.files")}</h3>
             <IconButton
               size={22}
               label={t("sidebar.refresh")}

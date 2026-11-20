@@ -111,6 +111,46 @@ test("enter_opens_the_selected_entry_in_a_new_tab", async () => {
   expect(tabs[0].connection).toBe("staging");
 });
 
+test("enter_without_a_selection_is_not_swallowed", async () => {
+  vi.mocked(searchHistory).mockResolvedValue([]);
+  await renderView();
+  const search = screen.getByRole("searchbox", { name: "Search history" });
+
+  const notPrevented = fireEvent.keyDown(search, { key: "Enter" });
+
+  expect(notPrevented).toBe(true);
+  expect(useTabs.getState().tabs).toHaveLength(0);
+});
+
+test("a_day_that_appears_twice_keeps_unique_group_keys", async () => {
+  // 시계가 거꾸로 간 기록처럼 같은 날이 떨어져 두 번 나온다.
+  vi.mocked(searchHistory).mockResolvedValue([
+    entry(3, "SELECT 1", "local", new Date(2026, 10, 20, 9, 0)),
+    entry(2, "SELECT 2", "local", new Date(2026, 10, 19, 9, 0)),
+    entry(1, "SELECT 3", "local", new Date(2026, 10, 20, 8, 0)),
+  ]);
+  const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+  await renderView();
+
+  const labels = screen
+    .getAllByRole("group")
+    .map((group) => group.getAttribute("aria-label"));
+  expect(labels).toEqual(["Today", "Yesterday", "Today"]);
+  expect(consoleError).not.toHaveBeenCalled();
+  consoleError.mockRestore();
+});
+
+test("messages_are_outside_the_listbox", async () => {
+  vi.mocked(searchHistory).mockResolvedValue([]);
+  await renderView();
+
+  const listbox = screen.getByRole("listbox");
+  expect(
+    within(listbox).queryByText("Queries you run appear here"),
+  ).not.toBeInTheDocument();
+  expect(screen.getByText("Queries you run appear here")).toBeInTheDocument();
+});
+
 test("double_click_opens", async () => {
   await renderView();
 
@@ -188,6 +228,9 @@ test("store_unavailable_shows_the_error", async () => {
   );
   expect(useHistory.getState().error).not.toBeNull();
   expect(screen.queryAllByRole("option")).toHaveLength(0);
+  expect(
+    within(screen.getByRole("listbox")).queryByRole("alert"),
+  ).not.toBeInTheDocument();
 });
 
 test("empty_and_no_match_messages", async () => {

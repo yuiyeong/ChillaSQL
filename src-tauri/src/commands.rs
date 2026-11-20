@@ -229,10 +229,13 @@ pub struct StatementSpanDto {
     pub end: usize,
 }
 
-/// byte offset의 span을 UTF-16 code unit offset으로 바꾼다. text를 한 번만 훑는다.
+/// byte offset의 `(start, end)`를 UTF-16 code unit offset으로 바꾼다. text를 한 번만 훑는다.
 ///
-/// span은 start 오름차순에 서로 겹치지 않는다고 가정한다(`StatementSplitter::split`의 약속).
-fn utf16_spans(sql: &str, spans: &[StatementSpan]) -> Vec<StatementSpanDto> {
+/// 범위는 start 오름차순에 서로 겹치지 않는다고 가정한다(`StatementSplitter`의 약속).
+fn utf16_ranges(
+    sql: &str,
+    ranges: impl IntoIterator<Item = (usize, usize)>,
+) -> Vec<(usize, usize)> {
     let mut chars = sql.char_indices().peekable();
     let mut units = 0;
     // `byte` 앞의 글자를 모두 지나며 UTF-16 code unit을 센다. offset은 앞으로만 간다.
@@ -246,12 +249,16 @@ fn utf16_spans(sql: &str, spans: &[StatementSpan]) -> Vec<StatementSpanDto> {
         }
         units
     };
-    spans
-        .iter()
-        .map(|span| StatementSpanDto {
-            start: advance_to(span.start),
-            end: advance_to(span.end),
-        })
+    ranges
+        .into_iter()
+        .map(|(start, end)| (advance_to(start), advance_to(end)))
+        .collect()
+}
+
+fn utf16_spans(sql: &str, spans: &[StatementSpan]) -> Vec<StatementSpanDto> {
+    utf16_ranges(sql, spans.iter().map(|s| (s.start, s.end)))
+        .into_iter()
+        .map(|(start, end)| StatementSpanDto { start, end })
         .collect()
 }
 
@@ -263,22 +270,15 @@ pub struct ParameterSpanDto {
     pub end: usize,
 }
 
-/// `utf16_spans`와 같은 변환을 파라미터에 한다. span은 start 오름차순에 서로 겹치지 않는다.
 fn utf16_parameters(sql: &str, params: &[ParameterSpan]) -> Vec<ParameterSpanDto> {
-    let byte_spans: Vec<StatementSpan> = params
-        .iter()
-        .map(|p| StatementSpan {
-            start: p.start,
-            end: p.end,
-        })
-        .collect();
+    let ranges = utf16_ranges(sql, params.iter().map(|p| (p.start, p.end)));
     params
         .iter()
-        .zip(utf16_spans(sql, &byte_spans))
-        .map(|(param, span)| ParameterSpanDto {
+        .zip(ranges)
+        .map(|(param, (start, end))| ParameterSpanDto {
             name: param.name.clone(),
-            start: span.start,
-            end: span.end,
+            start,
+            end,
         })
         .collect()
 }

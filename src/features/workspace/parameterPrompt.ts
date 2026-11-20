@@ -2,6 +2,8 @@ import { create } from "zustand";
 
 /** 값을 묻고 있는 `:name`들. `values`는 입력란의 처음 값(앞에 쓴 값, 없으면 빈 text)이다. */
 export interface ParameterRequest {
+  /** 물음마다 다른 번호. dialog가 이것으로 입력란의 state를 새로 시작한다 */
+  id: number;
   tabId: string;
   names: string[];
   values: Record<string, string>;
@@ -11,6 +13,7 @@ export const useParameterPrompt = create<{ request: ParameterRequest | null }>(
   () => ({ request: null }),
 );
 
+let nextId = 0;
 /** 떠 있는 물음의 답을 기다리는 쪽. 물음은 하나뿐이다. */
 let pending: ((values: Record<string, string> | null) => void) | null = null;
 /** 탭마다 이름별로 마지막에 쓴 값. 메모리에만 두고 프로젝트를 바꾸면 잊는다. */
@@ -28,7 +31,9 @@ export function askParameters(
   );
   return new Promise((resolve) => {
     pending = resolve;
-    useParameterPrompt.setState({ request: { tabId, names, values } });
+    useParameterPrompt.setState({
+      request: { id: nextId++, tabId, names, values },
+    });
   });
 }
 

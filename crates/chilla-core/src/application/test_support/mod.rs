@@ -574,11 +574,16 @@ impl AppStore for FakeStore {
         limit: usize,
     ) -> Result<Vec<HistoryEntry>, StoreError> {
         self.check()?;
+        // 실제 저장소의 LIKE처럼 영문 대소문자만 구분하지 않는다.
+        let words: Vec<String> = words.iter().map(|w| w.to_ascii_lowercase()).collect();
         let history = self.history.lock().unwrap();
         let found = history
             .iter()
             .rev()
-            .filter(|(d, e)| d == dir && words.iter().all(|w| e.sql.contains(w.as_str())))
+            .filter(|(d, e)| {
+                let sql = e.sql.to_ascii_lowercase();
+                d == dir && words.iter().all(|w| sql.contains(w.as_str()))
+            })
             .take(limit)
             .map(|(_, e)| e.clone())
             .collect();

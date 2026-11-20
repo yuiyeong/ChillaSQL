@@ -155,6 +155,10 @@ test("server_error_is_marked_at_the_source_offset", async () => {
       errorRange(doc, 10 + sql.indexOf("nope")),
     );
     expect(doc.sliceString(10 + sql.indexOf("nope"))).toBe("nope");
+    // 저장한 결과의 position도 문서 문장 기준이다(Ln/Col과 Go to error가 이것을 읽는다).
+    expect(useRuns.getState().runs.t).toMatchObject({
+      outcome: { error: { position: sql.indexOf("nope") } },
+    });
   } finally {
     closeDocument("t");
   }

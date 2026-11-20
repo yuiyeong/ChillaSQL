@@ -51,6 +51,7 @@ import { isPlanResult, parsePlan, type Plan } from "./explainPlan";
 import { DdlView } from "./DdlView";
 import { useDdl } from "./ddlStore";
 import { ExplainView } from "./ExplainView";
+import { ResultBar, SingleTab } from "./ResultBar";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData, type RunState } from "./runReducer";
 import { endable, useRuns, type ScriptRun } from "./runsStore";
@@ -162,6 +163,16 @@ export const ResultPane = memo(function ResultPane({
       ? stoppedText(script.stoppedAt, script.steps.length)
       : null;
 
+  // tree를 그릴 EXPLAIN인지는 결과가 바뀔 때만 다시 parse한다.
+  const completed =
+    state?.status === "finished" && state.outcome.outcome === "completed"
+      ? state.result
+      : null;
+  const plan = useMemo(
+    () => (completed === null ? null : planOf(completed)),
+    [completed],
+  );
+
   let header: ReactNode = null;
   let notice: ReactNode = null;
   let grid: ReactNode = null;
@@ -248,7 +259,6 @@ export const ResultPane = memo(function ResultPane({
               </Centered>
             );
           } else {
-            const plan = planOf(result);
             if (plan !== null) {
               // 앞 행을 버리지 않았고 node 줄이 있는 EXPLAIN은 표 대신 tree로 그린다.
               explain = (
@@ -447,7 +457,7 @@ export const ResultPane = memo(function ResultPane({
       ) : (
         <>
           {header !== null && (
-            <div className="border-line-1 flex h-9 shrink-0 items-center gap-3 border-b px-3">
+            <ResultBar>
               {header}
               <div className="flex-1" />
               {grid !== null && (
@@ -459,7 +469,7 @@ export const ResultPane = memo(function ResultPane({
                   <CopyIcon />
                 </IconButton>
               )}
-            </div>
+            </ResultBar>
           )}
           {notice}
           {explain}
@@ -518,22 +528,7 @@ function Header({
   const label = useMemo(() => resultLabel(sql), [sql]);
   return (
     <>
-      {tabs ?? (
-        <div
-          role="tablist"
-          aria-label={t("result.tabs")}
-          className="flex gap-0.5"
-        >
-          <button
-            type="button"
-            role="tab"
-            aria-selected="true"
-            className={`${TAB_CLASS} bg-bg-3 text-fg cursor-default`}
-          >
-            {label}
-          </button>
-        </div>
-      )}
+      {tabs ?? <SingleTab>{label}</SingleTab>}
       {children}
     </>
   );

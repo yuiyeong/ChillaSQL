@@ -326,8 +326,8 @@ pub struct HistoryEntry {
     pub elapsed_micros: i64,
 }
 
-/// 앱 내부 저장소. 최근 프로젝트, 프로젝트별 탭 snapshot, 프로젝트별 쿼리 기록을 둔다. 프로젝트 디렉토리 밖의,
-/// 사용자가 읽지 않는 상태다.
+/// 앱 내부 저장소. 최근 프로젝트, 프로젝트별 탭 snapshot, 프로젝트별 쿼리 기록을 둔다.
+/// 프로젝트 디렉토리 밖의, 사용자가 읽지 않는 상태다.
 pub trait AppStore: Send + Sync {
     /// 최근 것부터 최대 10개.
     fn recent_projects(&self) -> Result<Vec<RecentProject>, StoreError>;

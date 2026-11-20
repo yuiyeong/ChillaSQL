@@ -70,8 +70,13 @@ impl StatementSplitter for PgQuerySplitter {
 
         let mut params = Vec::new();
         let mut bracket_depth = 0usize;
+        let mut paren_depth = 0usize;
         for (i, token) in tokens.iter().enumerate() {
             match token.token() {
+                Token::Ascii40 => paren_depth += 1,
+                Token::Ascii41 => paren_depth = paren_depth.saturating_sub(1),
+                // 문장이 끝나면 닫히지 않은 `[`가 다음 문장의 파라미터를 가리지 않게 한다.
+                Token::Ascii59 if paren_depth == 0 => bracket_depth = 0,
                 Token::Ascii91 => bracket_depth += 1,
                 Token::Ascii93 => bracket_depth = bracket_depth.saturating_sub(1),
                 // `a[lo:hi]`가 `:id`와 같은 모양이라 `[ ]` 안은 보지 않는다.

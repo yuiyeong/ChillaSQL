@@ -29,9 +29,9 @@
 - **파라미터(기획서 9장 "파라미터 값을 SQL text에 그대로 넣을지").** 넣는다. 값은 SQL로 그대로 들어가고 문자열은 사용자가 따옴표를 쓴다(Tools M9의 안내 문구). simple query protocol에는 bind가 없다(M2 결정).
 - **파라미터 dialog(Tools M9).** 실행(문장, 선택 영역, 파일, Explain)할 문장에 파라미터가 있으면 보내기 전에 에디터 오른쪽 아래(right 16px, bottom 16px)에 330px dialog `Parameter values`를 띄운다. 이름마다 한 줄(`:name` mono 13, 64px | input), 여러 문장이면 처음 나온 순서로 한 번씩 묻는다. 안내 `Values are inserted as SQL. Quote strings. ::date is a cast, not a parameter.`, 버튼 Cancel과 `Run ⌘↵`. 값이 빈 칸이 있으면 Run을 누를 수 없다. `Enter`와 `Cmd+Enter`는 Run, `Esc`는 Cancel(실행하지 않는다). 떠 있는 동안 문서의 `:name`에 `accent/16` 배경을 칠하고 다른 단축키는 동작하지 않는다. 값은 탭마다 이름별로 기억해 다음 dialog에 채운다(프로젝트를 바꾸면 잊는다). 위험 쿼리 확인과 기록은 값을 넣은 text를 본다. Run again과 터널 오류의 Try again은 같은 값으로 다시 보낸다(묻지 않는다).
 - **보낸 text와 문서의 offset(`Rewrite`).** 값을 넣거나 `EXPLAIN ANALYZE `를 앞에 붙인 실행은 문서의 문장 text(`source`)와 바꾼 자리 목록을 갖는다. 서버 오류의 position은 이것으로 문서 자리로 옮긴 뒤 밑줄, Ln/Col, Go to error에 쓴다. 넣은 값 안이나 붙인 앞부분 안의 position은 그 `:name`(또는 문장 처음)을 가리킨다.
-- **EXPLAIN 보기(Tools M9).** 결과가 컬럼 하나 `QUERY PLAN`이고 `completed`이고 앞 행을 버리지 않았고 node 줄이 있으면 결과 표 대신 tree를 그린다. header는 `EXPLAIN` 탭, `Execution {t} · Planning {t}`(mono, 없는 값은 뺀다), 오른쪽 `Show raw`(누르면 서버 text를 mono pre로 보이고 버튼은 `Show tree`). 표는 `Node | Actual time | Rows (est → actual) | Loops`(grid `minmax(0,1fr) 90px 120px 60px`, 줄 28px, mono 13, 들여쓰기 `10 + 깊이 × 16`px). Actual time은 node가 자식까지 포함해 쓴 시간(`actual time` 끝 값 × loops), 가장 오래 걸린 node는 자기 시간(자기 total − 자식 total 합, 0 미만이면 0)이 가장 큰 node이고 weight 600과 `bg-0` 배경이다. ANALYZE가 없으면 time과 loops가 비고 rows는 추정값만, 강조가 없다. `never executed` node는 time 칸에 fg-3 `never executed`. 받는 중인 `QUERY PLAN` 결과는 끝까지 이어서 가져온다(500행을 넘는 plan).
+- **EXPLAIN 보기(Tools M9).** 결과가 컬럼 하나 `QUERY PLAN`이고 `completed`이고 앞 행을 버리지 않았고 node 줄이 있으면 결과 표 대신 tree를 그린다. header는 `EXPLAIN` 탭, `Execution {t} · Planning {t}`(mono, 없는 값은 뺀다), 오른쪽 `Show raw`(누르면 서버 text를 mono pre로 보이고 버튼은 `Show tree`). 표는 `Node | Actual time | Rows (est → actual) | Loops`(grid `minmax(0,1fr) 90px 120px 60px`, 줄 28px, mono 13, 들여쓰기 `10 + 깊이 × 16`px). Actual time은 node가 자식까지 포함해 쓴 시간(`actual time` 끝 값 × loops), 가장 오래 걸린 node는 자기 시간(자기 total − 자식 total 합, 0 미만이면 0)이 가장 큰 node이고 weight 600과 `bg-1` 배경이다. ANALYZE가 없으면 time과 loops가 비고 rows는 추정값만, 강조가 없다. `never executed` node는 time 칸에 fg-3 `never executed`. 받는 중인 `QUERY PLAN` 결과는 끝까지 이어서 가져온다(500행을 넘는 plan).
 - **Explain 버튼(Main toolbar).** Reformat 옆 icon 버튼 `Explain plan (EXPLAIN ANALYZE)`. 실행 버튼과 같은 문장(커서 문장 또는 선택 영역)을 `EXPLAIN ANALYZE `를 붙여 실행한다. 문장이 둘 이상이면 실행하지 않고 `Explain runs one statement. Select a single statement.`를 결과 panel에 보인다. 이미 `EXPLAIN`으로 시작하는 문장은 그대로 보낸다. 단축키는 없다(DataGrip에도 기본 키가 없다). 위험 쿼리 확인은 M6대로 `EXPLAIN ANALYZE`의 안쪽 문장을 본다.
-- **DDL 보기(Tools M9, Sidebar A).** 스키마 트리의 테이블, partitioned table, view, materialized view menu에 `Show DDL`(Select first rows와 Copy name 사이). 활성 탭의 결과 panel에 `DDL {name}` 탭과 Copy(ghost), Open in new tab, Close를 그리고 본문은 에디터 syntax 색을 칠한 mono 13 pre(line-height 1.6, `bg-0`)다. 읽는 동안 `Loading DDL…`, 실패하면 오류 message. Copy는 toast `Copied DDL`, Open in new tab은 그 text로 같은 접속의 새 탭. **Close는 캔버스에 없지만 더한다**(지난 결과로 돌아갈 방법이 다시 실행뿐이면 받다 만 결과를 잃는다). 그 탭의 다음 실행이나 탭 닫기가 DDL을 지운다. DDL을 보는 동안에도 실행 중인 쿼리는 그대로 받는다.
+- **DDL 보기(Tools M9, Sidebar A).** 스키마 트리의 테이블, partitioned table, view, materialized view menu에 `Show DDL`(Select first rows와 Copy name 사이). 활성 탭의 결과 panel에 `DDL {name}` 탭과 Copy(ghost), Open in new tab, Close를 그리고 본문은 에디터 syntax 색을 칠한 mono 13 pre(line-height 1.6, `bg-1`)다. 읽는 동안 `Loading DDL…`, 실패하면 오류 message. Copy는 toast `Copied DDL`, Open in new tab은 그 text로 같은 접속의 새 탭. **Close는 캔버스에 없지만 더한다**(지난 결과로 돌아갈 방법이 다시 실행뿐이면 받다 만 결과를 잃는다). 그 탭의 다음 실행이나 탭 닫기가 DDL을 지운다. DDL을 보는 동안에도 실행 중인 쿼리는 그대로 받는다.
 - **DDL 형식.** `CREATE [UNLOGGED] TABLE schema.name (` 컬럼 줄(2칸 들여쓰기, 이름을 가장 긴 이름 + 1칸으로 맞춤)과 `CONSTRAINT name def` 줄, `)` 뒤 `INHERITS (…)`, `PARTITION BY …`, `WITH (…)`, `;`. 컬럼 줄은 `name type [COLLATE c] [GENERATED ALWAYS|BY DEFAULT AS IDENTITY] [GENERATED ALWAYS AS (expr) STORED|VIRTUAL] [NOT NULL] [DEFAULT expr]`이고 NOT NULL은 identity 컬럼과 primary key 컬럼에는 쓰지 않는다(Tools M9 예시). partition은 `CREATE TABLE schema.name PARTITION OF parent\n  FOR VALUES …;`(컬럼과 상속한 제약을 쓰지 않는다). 그 뒤 줄마다 인덱스(`pg_get_indexdef;`), trigger(`pg_get_triggerdef;`), `COMMENT ON TABLE …`, `COMMENT ON COLUMN …`. 이름은 모두 schema를 붙이고 `quote_ident`로 감싼다. 제약 순서는 p, u, f, c, x, 그 안에서 이름 순.
 
 ## Global Constraints
@@ -80,7 +80,7 @@ test가 없으면 사용자가 가장 먼저 부딪힐 입력과 상황이다. �
 | `src/features/query/{ddlStore.ts,DdlView.tsx}` (새) | DDL 상태와 화면 |
 | `src/features/query/ResultPane.tsx` | EXPLAIN과 DDL을 그림 |
 | `src/features/editor/{runAnchors,extensions}.ts`, `parameterMarks.ts`, `highlightSql.ts` (새) | 오류 위치 대응, `:name` 칠하기, DDL 색 |
-| `src/features/workspace/{commands,shortcuts}.ts`, `{parameterPrompt.ts,ParameterPrompt.tsx}` (새), `Toolbar.tsx`, `Workspace.tsx` | 파라미터 묻기, Explain 명령과 버튼 |
+| `src/features/workspace/{commands,shortcuts}.ts`, `{parameterPrompt.ts,ParameterDialog.tsx}` (새), `Toolbar.tsx`, `Workspace.tsx` | 파라미터 묻기, Explain 명령과 버튼 |
 | `src/features/schema/SchemaView.tsx` | Show DDL menu |
 | `src/shared/ui/icons.tsx` | `ExplainIcon`, `SearchIcon` |
 
@@ -277,7 +277,7 @@ git commit -m "feat: 실행한 문장을 기록하고 History에서 찾아 새 �
 - `keeps_case_and_repeats`: `:userId = :userId` → span 둘, 이름 `userId`.
 - `parameter_inside_brackets_expression`: `a[:i]`는 slice라 없음(`[ ]` 안이라 보지 않는다).
 - `unclosed_quote_is_an_error`.
-- command 쪽: `parameter_spans_are_utf16`(`SELECT '한글', :id` → start 12).
+- command 쪽: `parameter_spans_are_utf16`(`SELECT '한글', :id` → start 13).
 
 - [x] **Step 2: 실패를 확인한다**
 
@@ -363,7 +363,7 @@ git commit -m "feat: 바꿔 보낸 text의 오류 위치를 문서 자리로 옮
 ### Task 6: 파라미터 dialog
 
 **Files:**
-- Create: `src/features/workspace/parameterPrompt.ts`, `src/features/workspace/ParameterPrompt.tsx`, `src/features/editor/parameterMarks.ts`와 각 test
+- Create: `src/features/workspace/parameterPrompt.ts`, `src/features/workspace/ParameterDialog.tsx`, `src/features/editor/parameterMarks.ts`와 각 test
 - Modify: `src/features/workspace/{commands,shortcuts}.ts`, `src/features/workspace/Workspace.tsx`, `src/features/editor/extensions.ts`, `src/shared/i18n/{en,ko}.ts`
 
 **Interfaces:**
@@ -388,7 +388,7 @@ git commit -m "feat: 바꿔 보낸 text의 오류 위치를 문서 자리로 옮
 - [x] **Step 1: test를 쓴다**
 
 - `parameterPrompt.test.ts`: `remembers_values_per_tab`, `a_second_ask_cancels_the_first`, `reset_forgets_values`.
-- `ParameterPrompt.test.tsx`: `one_row_per_name_in_order`, `run_is_disabled_while_a_value_is_empty`, `enter_and_cmd_enter_run`, `escape_cancels`, `focuses_the_first_empty_input`.
+- `ParameterDialog.test.tsx`: `one_row_per_name_in_order`, `run_is_disabled_while_a_value_is_empty`, `enter_and_cmd_enter_run`, `escape_cancels`, `focuses_the_first_empty_input`.
 - `commands.test.ts`: `asks_before_running_a_statement_with_parameters`(보낸 sql에 값), `cancel_does_not_run`, `script_asks_once_for_all_statements`(이름이 두 문장에 걸쳐 한 번씩), `no_parameters_no_prompt`, `danger_check_sees_the_substituted_text`, `split_error_runs_without_asking`.
 - `shortcuts.test.ts`: `shortcuts_are_ignored_while_the_prompt_is_open`.
 - `parameterMarks.test.ts`: `marks_follow_edits_and_clear`.
@@ -638,7 +638,7 @@ Expected: FAIL
 - [x] **Step 3: 구현한다**
 
 - `highlightSql`은 `@lezer/highlight`의 `highlightCode`에 에디터가 쓰는 SQL dialect의 parser와, `syntaxStyle`과 같은 tag를 `text-syntax-*` class로 옮긴 `tagHighlighter`를 넘긴다(HighlightStyle의 CSS는 에디터 밖에 mount되지 않는다). dialect를 `extensions.ts`에서 export한다.
-- ResultPane은 그 탭의 DDL이 있으면 다른 상태보다 먼저 DdlView를 그린다. header는 `DDL {name}` 탭, 빈 칸, Copy(ghost 24px), Open in new tab(secondary 24px), Close(icon). 본문 pre는 `bg-0`, padding 12px 16px.
+- ResultPane은 그 탭의 DDL이 있으면 다른 상태보다 먼저 DdlView를 그린다. header는 `DDL {name}` 탭, 빈 칸, Copy(ghost 24px), Open in new tab(secondary 24px), Close(icon). 본문 pre는 `bg-1`, padding 12px 16px.
 - `runsStore.run`과 `release`가 `closeDdl(tabId)`를 부른다.
 - menu 항목의 이름은 `schema.name`(quote 없이 화면 표시용)이다.
 

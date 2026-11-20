@@ -10,6 +10,9 @@ const GRID = "minmax(0,1fr) 90px 120px 60px";
 /** node 하나가 한 단계 깊어질 때 들여쓰는 너비와 뿌리의 왼쪽 padding(px) */
 const INDENT = 16;
 const BASE_PADDING = 10;
+/** 시간, 행, loops 칸. 오른쪽에 붙인다 */
+const NUMBER_CELL =
+  "flex items-center justify-end overflow-hidden px-2.5 whitespace-nowrap";
 
 /** `Execution 41 ms · Planning 0.40 ms`. 없는 값은 뺀다. 둘 다 없으면 null이다. */
 function timingsOf(plan: Plan): string | null {
@@ -56,9 +59,7 @@ function PlanRow({ node, slowest }: { node: PlanNode; slowest: boolean }) {
       </div>
       <div
         role="cell"
-        className={`flex items-center justify-end overflow-hidden px-2.5 whitespace-nowrap ${
-          node.neverExecuted ? "text-fg-3" : ""
-        }`}
+        className={`${NUMBER_CELL} ${node.neverExecuted ? "text-fg-3" : ""}`}
       >
         {node.neverExecuted
           ? t("explain.neverExecuted")
@@ -66,16 +67,10 @@ function PlanRow({ node, slowest }: { node: PlanNode; slowest: boolean }) {
             ? ""
             : formatElapsed(node.totalMs * 1000)}
       </div>
-      <div
-        role="cell"
-        className="flex items-center justify-end overflow-hidden px-2.5 whitespace-nowrap"
-      >
+      <div role="cell" className={NUMBER_CELL}>
         {rowsOf(node)}
       </div>
-      <div
-        role="cell"
-        className="flex items-center justify-end overflow-hidden px-2.5 whitespace-nowrap"
-      >
+      <div role="cell" className={NUMBER_CELL}>
         {node.loops === null ? "" : formatCount(node.loops)}
       </div>
     </div>
@@ -137,24 +132,17 @@ export function ExplainView({
               <div role="columnheader" className="flex items-center px-2.5">
                 {t("explain.node")}
               </div>
-              <div
-                role="columnheader"
-                className="flex items-center justify-end px-2.5"
-              >
-                {t("explain.actualTime")}
-              </div>
-              <div
-                role="columnheader"
-                className="flex items-center justify-end px-2.5"
-              >
-                {t("explain.rows")}
-              </div>
-              <div
-                role="columnheader"
-                className="flex items-center justify-end px-2.5"
-              >
-                {t("explain.loops")}
-              </div>
+              {(
+                ["explain.actualTime", "explain.rows", "explain.loops"] as const
+              ).map((key) => (
+                <div
+                  key={key}
+                  role="columnheader"
+                  className="flex items-center justify-end px-2.5"
+                >
+                  {t(key)}
+                </div>
+              ))}
             </div>
           </div>
           <div role="rowgroup">
