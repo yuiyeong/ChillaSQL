@@ -4,13 +4,12 @@ mod menu;
 
 use std::sync::Arc;
 
+use chilla_core::application::AppStore;
+use chilla_core::domain::Settings;
 use chilla_core::infrastructure::{
     FsSqlFileStore, KeychainPasswordStore, PgConnector, PgQueryInspector, PgQuerySplitter,
     ShellTunnelRunner, SqliteAppStore, TomlProjectStore, load_settings, settings_path,
 };
-
-use chilla_core::application::AppStore;
-use chilla_core::domain::Settings;
 use commands::{CoreApp, LoadedSettings, TunnelEventDto};
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
@@ -21,11 +20,12 @@ const TUNNEL_EVENT: &str = "tunnel";
 const QUIT_REQUESTED_EVENT: &str = "quit-requested";
 
 /// `<app_data_dir>/chilla.sqlite3`를 연다. 디렉토리가 없으면 만든다.
-fn open_store(handle: &tauri::AppHandle) -> Result<SqliteAppStore, String> {
+fn open_store(handle: &tauri::AppHandle) -> Result<Arc<dyn AppStore>, String> {
     let dir = handle.path().app_data_dir().map_err(|e| e.to_string())?;
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let path = dir.join("chilla.sqlite3");
-    SqliteAppStore::open(&path).map_err(|e| format!("{}: {e}", path.display()))
+    let store = SqliteAppStore::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
+    Ok(Arc::new(store))
 }
 
 pub fn run() {
@@ -59,7 +59,7 @@ pub fn run() {
             let limits = settings.limits;
             // 저장소를 열지 못하면 최근 프로젝트와 탭 복원 없이 시작하고 이유는 화면이 보여 준다.
             let (store, store_error) = match open_store(&handle) {
-                Ok(store) => (Some(Arc::new(store)), None),
+                Ok(store) => (Some(store), None),
                 Err(message) => (None, Some(message)),
             };
             app.manage(LoadedSettings {
@@ -81,7 +81,7 @@ pub fn run() {
                     let _ = handle.emit(TUNNEL_EVENT, TunnelEventDto::from(event));
                 }),
                 limits,
-                store.map(|store| store as Arc<dyn AppStore>),
+                store,
             );
             app.manage(core);
             Ok(())

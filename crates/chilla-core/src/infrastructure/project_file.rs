@@ -8,7 +8,10 @@ use toml_edit::{DocumentMut, Item, Table, TableLike, Value};
 
 use super::atomic_write::{Missing, create_new_file, write_atomically};
 use crate::application::{ProjectError, ProjectStore};
-use crate::domain::{ConnectionColor, ConnectionProfile, Project, SslMode};
+use crate::domain::{
+    ConnectionColor, ConnectionProfile, MAX_STATEMENT_TIMEOUT_SECS, MAX_TUNNEL_TIMEOUT_SECS,
+    Project, SslMode,
+};
 
 const FILE_NAME: &str = "chilla.toml";
 
@@ -195,12 +198,7 @@ fn write_fields(
         ),
         ("sslrootcert", sslrootcert.map(Value::from)),
         ("tunnel", profile.tunnel.as_deref().map(Value::from)),
-        (
-            "tunnel_timeout",
-            profile
-                .tunnel_timeout
-                .map(|timeout| Value::from(i64::try_from(timeout.as_secs()).unwrap_or(i64::MAX))),
-        ),
+        ("tunnel_timeout", profile.tunnel_timeout.map(seconds_value)),
         (
             "color",
             profile.color.map(|color| Value::from(color.as_str())),
@@ -209,9 +207,7 @@ fn write_fields(
         ("read_only", profile.read_only.then(|| Value::from(true))),
         (
             "statement_timeout",
-            profile
-                .statement_timeout
-                .map(|timeout| Value::from(i64::try_from(timeout.as_secs()).unwrap_or(i64::MAX))),
+            profile.statement_timeout.map(seconds_value),
         ),
     ];
     for (key, value) in fields {
@@ -341,8 +337,18 @@ fn connection(
         .map(str::parse)
         .transpose()
         .map_err(invalid)?;
-    let tunnel_timeout = seconds(&name, "tunnel_timeout", "300", raw.tunnel_timeout)?;
-    let statement_timeout = seconds(&name, "statement_timeout", "86400", raw.statement_timeout)?;
+    let tunnel_timeout = seconds(
+        &name,
+        "tunnel_timeout",
+        MAX_TUNNEL_TIMEOUT_SECS,
+        raw.tunnel_timeout,
+    )?;
+    let statement_timeout = seconds(
+        &name,
+        "statement_timeout",
+        MAX_STATEMENT_TIMEOUT_SECS,
+        raw.statement_timeout,
+    )?;
     let profile = ConnectionProfile {
         name: name.clone(),
         host: raw.host,
@@ -362,12 +368,16 @@ fn connection(
     Ok(profile)
 }
 
+fn seconds_value(timeout: Duration) -> Value {
+    Value::from(i64::try_from(timeout.as_secs()).unwrap_or(i64::MAX))
+}
+
 /// 초 단위 정수인 key를 읽는다. 정수가 아니거나 음수면 key 이름이 든 오류를 낸다. 범위는
 /// `validate`가 본다.
 fn seconds(
     connection: &str,
     key: &str,
-    max: &str,
+    max: u64,
     value: Option<toml::Value>,
 ) -> Result<Option<Duration>, ProjectError> {
     let message = match value {

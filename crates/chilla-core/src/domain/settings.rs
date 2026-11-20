@@ -1,5 +1,7 @@
 //! 앱 전역 설정. `~/.config/chilla/config.toml`의 값이며 앱을 시작할 때 한 번 읽는다.
 
+use std::str::FromStr;
+
 use super::QueryLimits;
 
 /// 화면 문구와 앱 menu의 언어.
@@ -7,6 +9,27 @@ use super::QueryLimits;
 pub enum Language {
     En,
     Ko,
+}
+
+impl Language {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Language::En => "en",
+            Language::Ko => "ko",
+        }
+    }
+}
+
+impl FromStr for Language {
+    type Err = ();
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "en" => Ok(Language::En),
+            "ko" => Ok(Language::Ko),
+            _ => Err(()),
+        }
+    }
 }
 
 /// SQL 에디터의 글꼴.
@@ -57,5 +80,15 @@ mod tests {
         assert_eq!(settings.editor.font, "D2Coding");
         assert_eq!(settings.editor.font_size, 15);
         assert_eq!(settings.limits, QueryLimits::default());
+    }
+
+    #[test]
+    fn language_round_trips() {
+        for name in ["en", "ko"] {
+            assert_eq!(name.parse::<Language>().unwrap().as_str(), name);
+        }
+        for name in ["EN", "fr", ""] {
+            assert!(name.parse::<Language>().is_err(), "{name}");
+        }
     }
 }

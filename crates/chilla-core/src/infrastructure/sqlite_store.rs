@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::application::{AppStore, RecentProject, StoreError};
 
@@ -116,13 +116,14 @@ impl AppStore for SqliteAppStore {
     }
 
     fn load_workspace(&self, dir: &Path) -> Result<Option<String>, StoreError> {
-        let connection = self.connection();
-        let mut statement = connection.prepare("SELECT snapshot FROM workspaces WHERE dir = ?1")?;
-        let mut rows = statement.query([key(dir)])?;
-        match rows.next()? {
-            Some(row) => Ok(Some(row.get(0)?)),
-            None => Ok(None),
-        }
+        self.connection()
+            .query_row(
+                "SELECT snapshot FROM workspaces WHERE dir = ?1",
+                [key(dir)],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(Into::into)
     }
 
     fn save_workspace(&self, dir: &Path, snapshot: &str, saved_at: i64) -> Result<(), StoreError> {

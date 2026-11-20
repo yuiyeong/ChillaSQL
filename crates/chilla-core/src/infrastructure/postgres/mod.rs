@@ -43,6 +43,7 @@ const APPLICATION_NAME: &str = "ChillaSQL";
 pub struct PgConnector {
     connect_timeout: Duration,
     /// 세션의 `TimeZone`으로 보낼 Mac의 time zone(IANA 이름). 알 수 없으면 서버 기본값을 쓴다.
+    /// 안전한 값인지는 `startup_options`가 검사한다.
     time_zone: Option<String>,
 }
 
@@ -55,9 +56,7 @@ impl PgConnector {
     pub fn with_connect_timeout(timeout: Duration) -> Self {
         Self {
             connect_timeout: timeout,
-            time_zone: iana_time_zone::get_timezone()
-                .ok()
-                .filter(|zone| is_safe_option_value(zone)),
+            time_zone: iana_time_zone::get_timezone().ok(),
         }
     }
 }
@@ -246,6 +245,14 @@ pub struct PgConnection {
     connect_timeout: Duration,
 }
 
+impl PgConnection {
+    /// catalog 읽기는 쌓인 RowDescription type을 꺼내지 않으므로 읽기 전에 비운다.
+    fn catalog_client(&self) -> &Client {
+        self.row_types.clear();
+        &self.client
+    }
+}
+
 impl DbConnection for PgConnection {
     type Rows = PgRows;
     type Cancel = PgCancel;
@@ -287,18 +294,15 @@ impl DbConnection for PgConnection {
     }
 
     async fn read_catalog(&self) -> Result<Catalog, QueryError> {
-        self.row_types.clear();
-        catalog::read_catalog(&self.client).await
+        catalog::read_catalog(self.catalog_client()).await
     }
 
     async fn read_table_details(&self, relation: u32) -> Result<TableDetails, QueryError> {
-        self.row_types.clear();
-        catalog::read_table_details(&self.client, relation).await
+        catalog::read_table_details(self.catalog_client(), relation).await
     }
 
     async fn describe_types(&self, types: &[(u32, i32)]) -> Result<Vec<TypeInfo>, QueryError> {
-        self.row_types.clear();
-        catalog::describe_types(&self.client, types).await
+        catalog::describe_types(self.catalog_client(), types).await
     }
 
     fn cancel_handle(&self) -> PgCancel {

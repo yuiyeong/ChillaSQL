@@ -29,6 +29,10 @@ fn params<const N: usize>(pairs: [(&'static str, String); N]) -> Params {
     BTreeMap::from(pairs)
 }
 
+fn message_param(message: &str) -> Params {
+    params([("message", message.to_string())])
+}
+
 fn path_param(path: &Path) -> (&'static str, String) {
     ("path", path.display().to_string())
 }
@@ -37,7 +41,7 @@ impl From<AppError> for CommandError {
     fn from(error: AppError) -> Self {
         let message = error.to_string();
         // 한 kind가 message가 다른 variant를 묶으면 화면이 고를 수 없으므로 message 전체를 넘긴다.
-        let whole = || params([("message", message.clone())]);
+        let whole = || message_param(&message);
         let (kind, params): (&'static str, Params) = match &error {
             AppError::NoProject => ("no_project", Params::new()),
             AppError::ProjectChanged => ("project_changed", Params::new()),
@@ -64,11 +68,9 @@ impl From<AppError> for CommandError {
             AppError::Project(_) => ("project_invalid", whole()),
             AppError::InvalidProfile(_) => ("invalid_connection", whole()),
             AppError::PasswordStore(PasswordStoreError { message }) => {
-                ("password_store", params([("message", message.clone())]))
+                ("password_store", message_param(message))
             }
-            AppError::Split(SplitError { message }) => {
-                ("split_failed", params([("message", message.clone())]))
-            }
+            AppError::Split(SplitError { message }) => ("split_failed", message_param(message)),
             AppError::EmptyStatement => ("empty_statement", Params::new()),
             AppError::MultipleStatements { count } => (
                 "multiple_statements",
@@ -77,16 +79,10 @@ impl From<AppError> for CommandError {
             AppError::QueryNotActive { query } => {
                 ("query_not_active", params([("query", query.0.to_string())]))
             }
-            AppError::Cancel(CancelError { message }) => {
-                ("cancel_failed", params([("message", message.clone())]))
-            }
+            AppError::Cancel(CancelError { message }) => ("cancel_failed", message_param(message)),
             AppError::InvalidPath(_) => ("invalid_path", whole()),
-            AppError::Catalog(query) => {
-                ("catalog_failed", params([("message", query.to_string())]))
-            }
-            AppError::Store(StoreError { message }) => {
-                ("store_failed", params([("message", message.clone())]))
-            }
+            AppError::Catalog(query) => ("catalog_failed", message_param(&query.to_string())),
+            AppError::Store(StoreError { message }) => ("store_failed", message_param(message)),
             AppError::StoreUnavailable => ("store_unavailable", Params::new()),
             AppError::File(file) => match file {
                 FileError::NotFound { path } => {
@@ -106,9 +102,7 @@ impl From<AppError> for CommandError {
                 FileError::OutsideProject { .. } => ("invalid_path", whole()),
             },
             AppError::Tunnel(tunnel) => match &tunnel.failure {
-                TunnelFailure::Spawn { message } => {
-                    ("tunnel_spawn", params([("message", message.clone())]))
-                }
+                TunnelFailure::Spawn { message } => ("tunnel_spawn", message_param(message)),
                 TunnelFailure::Exited { .. } => ("tunnel_exited", whole()),
                 TunnelFailure::Timeout { secs, .. } => (
                     "tunnel_timeout",
@@ -121,25 +115,17 @@ impl From<AppError> for CommandError {
                 TunnelFailure::Cancelled => ("tunnel_cancelled", Params::new()),
             },
             AppError::Connect(connect) => match connect {
-                ConnectError::Unreachable { message } => {
-                    ("unreachable", params([("message", message.clone())]))
-                }
+                ConnectError::Unreachable { message } => ("unreachable", message_param(message)),
                 ConnectError::Timeout => ("timeout", Params::new()),
                 ConnectError::TlsNotSupported => ("tls_not_supported", Params::new()),
-                ConnectError::Certificate { message } => {
-                    ("certificate", params([("message", message.clone())]))
-                }
+                ConnectError::Certificate { message } => ("certificate", message_param(message)),
                 ConnectError::PasswordRequired => ("password_required", Params::new()),
-                ConnectError::AuthFailed { message } => {
-                    ("auth_failed", params([("message", message.clone())]))
-                }
+                ConnectError::AuthFailed { message } => ("auth_failed", message_param(message)),
                 ConnectError::Database { code, message } => (
                     "database",
                     params([("code", code.clone()), ("message", message.clone())]),
                 ),
-                ConnectError::Other { message } => {
-                    ("other", params([("message", message.clone())]))
-                }
+                ConnectError::Other { message } => ("other", message_param(message)),
             },
         };
         let output = match &error {

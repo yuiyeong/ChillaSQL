@@ -202,9 +202,7 @@ impl<S> TxTap<S> {
             self.skip = payload;
         }
     }
-}
 
-impl<S> TxTap<S> {
     fn finish_row_description(&mut self) {
         let payload = self.row_description.take().unwrap_or_default();
         // 모양이 틀리면 넣지 않는다. 읽는 쪽은 type이 없는 열로 다룬다.

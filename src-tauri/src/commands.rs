@@ -12,10 +12,9 @@ use chilla_core::domain::{
     Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo, ConstraintKind, Danger,
     EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, Password, ProfileError, Project,
     QueryEvent, QueryId, QueryOutcome, Relation, RelationKind, RowBatch, ServerError, SessionId,
-    SessionInfo, SessionState, SqlFile, StatementSpan, TableDetails, TunnelEvent, TunnelFailure,
-    TunnelState, TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
+    SessionInfo, SessionState, Settings, SettingsError, SqlFile, StatementSpan, TableDetails,
+    TunnelEvent, TunnelFailure, TunnelState, TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
 };
-use chilla_core::domain::{Language, Settings, SettingsError};
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -1009,10 +1008,7 @@ impl From<&LoadedSettings> for SettingsDto {
     fn from(loaded: &LoadedSettings) -> Self {
         let settings = &loaded.settings;
         Self {
-            language: match settings.language {
-                Language::En => "en",
-                Language::Ko => "ko",
-            },
+            language: settings.language.as_str(),
             editor: EditorSettingsDto {
                 font: settings.editor.font.clone(),
                 font_size: settings.editor.font_size,
@@ -1084,7 +1080,9 @@ pub fn quit_app(app: tauri::AppHandle) {
 mod tests {
     use std::collections::BTreeSet;
 
-    use chilla_core::domain::{ConnectionColor, SslMode, TunnelEvent, TunnelFailure, TunnelState};
+    use chilla_core::domain::{
+        ConnectionColor, Language, SslMode, TunnelEvent, TunnelFailure, TunnelState,
+    };
     use serde_json::json;
 
     use super::*;

@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use serde::Deserialize;
 
-use crate::domain::{Language, Settings, SettingsError};
+use crate::domain::{Settings, SettingsError};
 
 const FONT_SIZE: (i64, i64) = (10, 32);
 const RETAINED_ROWS: (i64, i64) = (1_000, 1_000_000);
@@ -74,15 +74,9 @@ fn parse(text: &str) -> Result<Settings, String> {
     let raw: RawFile = toml::from_str(text).map_err(|e| e.to_string())?;
     let mut settings = Settings::default();
     if let Some(language) = raw.language {
-        settings.language = match language.as_str() {
-            "en" => Language::En,
-            "ko" => Language::Ko,
-            other => {
-                return Err(format!(
-                    "language must be \"en\" or \"ko\", got \"{other}\""
-                ));
-            }
-        };
+        settings.language = language
+            .parse()
+            .map_err(|()| format!("language must be \"en\" or \"ko\", got \"{language}\""))?;
     }
     if let Some(font) = raw.editor.font {
         if font.trim().is_empty() {
