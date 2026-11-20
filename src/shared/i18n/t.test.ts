@@ -1,6 +1,6 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test } from "vitest";
 import { en } from "./en";
-import { formatCount, t, tc } from "./t";
+import { formatCount, setLanguage, t, tc } from "./t";
 
 describe("t", () => {
   test("param을 채운다", () => {
@@ -47,4 +47,23 @@ test("복수형 key는 one과 other가 짝이다", () => {
   for (const key of keys.filter((k) => k.endsWith(".one"))) {
     expect(keys).toContain(`${key.slice(0, -4)}.other`);
   }
+});
+
+describe("language", () => {
+  afterEach(() => setLanguage("en"));
+
+  test("t uses the selected language", () => {
+    setLanguage("ko");
+    expect(t("tabs.close", { title: "a.sql" })).toBe("a.sql 닫기");
+
+    setLanguage("en");
+    expect(t("tabs.close", { title: "a.sql" })).toBe("Close a.sql");
+  });
+
+  test("plurals follow the language", () => {
+    setLanguage("ko");
+    expect(tc("toast.copiedRows", 1)).toBe("1행 복사됨 (탭으로 구분)");
+    expect(tc("toast.copiedRows", 12000)).toBe("12,000행 복사됨 (탭으로 구분)");
+    expect(tc("tx.statements", 0)).toBe("직접 실행한 BEGIN");
+  });
 });

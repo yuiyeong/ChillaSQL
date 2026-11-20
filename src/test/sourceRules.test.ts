@@ -59,7 +59,11 @@ function offendersOf(
 }
 
 test("화면 code에 한글 문구가 없다", () => {
-  expect(offendersOf((literal) => HANGUL.test(literal), true)).toEqual([]);
+  // ko.ts는 한국어 dictionary라서 뺀다.
+  const offenders = offendersOf((literal) => HANGUL.test(literal), true);
+  expect(
+    offenders.filter((place) => !place.startsWith("shared/i18n/ko.ts:")),
+  ).toEqual([]);
 });
 
 test("기본 palette class를 쓰지 않는다", () => {

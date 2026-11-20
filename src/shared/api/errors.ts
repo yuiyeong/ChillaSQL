@@ -1,3 +1,5 @@
+import { isMessageKey, t, template } from "../i18n/t";
+
 /**
  * Rust의 `CommandError { kind, message, params }`. 화면은 `kind`로 다음 행동을 고르고,
  * `params`로 `kind`의 문구를 번역한다. 번역이 없으면 `message`를 보여 준다.
@@ -60,9 +62,24 @@ export function toCommandError(value: unknown): CommandError {
   return new CommandError("internal", messageOf(value));
 }
 
-/** 사용자에게 보일 문구. Error면 그 message, 아니면 문자열로 바꾼 값이다. */
+/**
+ * 사용자에게 보일 문구. `error.<kind>` 문구가 있는 CommandError면 고른 언어의 그 문구에 params를 넣는다.
+ * 문구의 빈칸에 넣을 param이 하나라도 없거나 문구가 없는 kind면 Rust의 message, Error면 그 message,
+ * 아니면 문자열로 바꾼 값이다.
+ */
 export function messageOf(error: unknown): string {
+  if (error instanceof CommandError) {
+    const key = `error.${error.kind}`;
+    if (isMessageKey(key) && fillsTemplate(template(key), error.params))
+      return t(key, error.params);
+  }
   return error instanceof Error ? error.message : String(error);
+}
+
+function fillsTemplate(text: string, params: Record<string, string>): boolean {
+  return [...text.matchAll(/\{(\w+)\}/g)].every(([, name]) =>
+    Object.prototype.hasOwnProperty.call(params, name),
+  );
 }
 
 /** `kind`의 CommandError인가 */

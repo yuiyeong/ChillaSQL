@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 
 vi.mock("./shared/api/commands");
@@ -12,14 +12,19 @@ vi.mock("./shared/api/path");
 import App from "./App";
 import { resetStores } from "./test/resetStores";
 import { LAST_PROJECT_KEY } from "./features/project/projectStore";
-import { listSqlFiles, openProject } from "./shared/api/commands";
+import { listSqlFiles, loadSettings, openProject } from "./shared/api/commands";
 import { homeDir } from "./shared/api/path";
 import { ask } from "./shared/ui/dialogs";
+import { useSettings } from "./features/settings/settingsStore";
+import { deferred } from "./test/deferred";
+import { settingsFixture } from "./test/fixtures";
+import type { Settings } from "./shared/api/types";
 
 beforeEach(async () => {
   await resetStores();
   vi.resetAllMocks();
   vi.mocked(homeDir).mockResolvedValue("/Users/jo");
+  vi.mocked(loadSettings).mockResolvedValue(settingsFixture());
   localStorage.clear();
 });
 
@@ -60,5 +65,64 @@ test("프로젝트를 열기 전에도 확인 dialog를 그린다", async () => 
 
   expect(
     screen.getByRole("alertdialog", { name: "Any question?" }),
+  ).toBeInTheDocument();
+});
+
+test("waits for settings before the project", async () => {
+  localStorage.setItem(LAST_PROJECT_KEY, "/p");
+  vi.mocked(openProject).mockRejectedValue(new Error("not reached"));
+  const settings = deferred<Settings>();
+  vi.mocked(loadSettings).mockReturnValue(settings.promise);
+
+  render(<App />);
+
+  await act(() => Promise.resolve());
+  expect(openProject).not.toHaveBeenCalled();
+  expect(screen.queryByRole("button")).toBeNull();
+
+  vi.mocked(openProject).mockResolvedValue({
+    name: "demo",
+    dir: "/p",
+    connections: [],
+  });
+  vi.mocked(listSqlFiles).mockResolvedValue([]);
+  await act(async () => settings.resolve(settingsFixture({ language: "ko" })));
+
+  expect(
+    await screen.findByRole("button", { name: "프로젝트 바꾸기" }),
+  ).toHaveTextContent("demo");
+  expect(openProject).toHaveBeenCalledWith("/p");
+});
+
+test("shows settings errors in a dialog", async () => {
+  vi.mocked(loadSettings).mockResolvedValue(
+    settingsFixture({
+      error: "config.toml: TOML parse error at line 1\n  |\n1 | x =\n  |    ^",
+      storeError: "database is locked",
+    }),
+  );
+
+  render(<App />);
+
+  const first = await screen.findByRole("alertdialog", {
+    name: "Settings were not applied",
+  });
+  expect(first).toHaveTextContent("TOML parse error at line 1");
+  expect(screen.getByText(/TOML parse error/)).toHaveClass(
+    "whitespace-pre-wrap",
+  );
+  fireEvent.click(screen.getByRole("button", { name: "OK" }));
+
+  const second = await screen.findByRole("alertdialog", {
+    name: "Recent projects and unsaved tabs are not kept",
+  });
+  expect(second).toHaveTextContent("database is locked");
+  expect(useSettings.getState().errors).not.toEqual([]);
+  fireEvent.click(screen.getByRole("button", { name: "OK" }));
+
+  await vi.waitFor(() => expect(useSettings.getState().errors).toEqual([]));
+  expect(screen.queryByRole("alertdialog")).toBeNull();
+  expect(
+    screen.getByRole("button", { name: "Open Project…" }),
   ).toBeInTheDocument();
 });

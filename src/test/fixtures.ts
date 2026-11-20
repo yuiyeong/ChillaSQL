@@ -5,6 +5,7 @@ import type {
   Relation,
   RelationKind,
   ResultColumn,
+  Settings,
   TxMode,
 } from "../shared/api/types";
 import { useTabs, type Tab } from "../features/editor/tabsStore";
@@ -118,6 +119,18 @@ export function catalogFixture(patch: Partial<Catalog> = {}): Catalog {
       { schema: "public", name: "add_one" },
     ],
     reservedWords: ["select", "user"],
+    ...patch,
+  };
+}
+
+/** 오류 없는 기본 설정. 바꿀 값만 `patch`로 준다. */
+export function settingsFixture(patch: Partial<Settings> = {}): Settings {
+  return {
+    language: "en",
+    editor: { font: "D2Coding", fontSize: 15 },
+    idleTimeoutSecs: 600,
+    error: null,
+    storeError: null,
     ...patch,
   };
 }

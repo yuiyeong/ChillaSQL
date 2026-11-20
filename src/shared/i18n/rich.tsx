@@ -1,5 +1,6 @@
 import { Fragment, type ReactNode } from "react";
-import { en, type MessageKey } from "./en";
+import type { MessageKey } from "./en";
+import { template } from "./t";
 
 /**
  * 문구의 `{name}`을 넘긴 node로 바꾼다(굵은 이름, code 같은 inline 요소를 문장 안에 넣을 때 쓴다).
@@ -10,14 +11,16 @@ export function rt(
   params: Record<string, ReactNode>,
 ): ReactNode {
   // 홀수 자리가 placeholder의 이름이다.
-  return en[key].split(/\{(\w+)\}/).map((part, index) => {
-    if (index % 2 === 0) return part;
-    return part in params ? (
-      <Fragment key={index}>{params[part]}</Fragment>
-    ) : (
-      `{${part}}`
-    );
-  });
+  return template(key)
+    .split(/\{(\w+)\}/)
+    .map((part, index) => {
+      if (index % 2 === 0) return part;
+      return part in params ? (
+        <Fragment key={index}>{params[part]}</Fragment>
+      ) : (
+        `{${part}}`
+      );
+    });
 }
 
 /** 본문 안에서 이름을 fg로 굵게 보인다. */

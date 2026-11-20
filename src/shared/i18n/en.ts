@@ -3,6 +3,8 @@
  * key는 `<영역>.<이름>`이다. 개수에 따라 달라지는 문구는 `<이름>.one`과 `<이름>.other`를 짝으로 두고 `tc`로 쓴다.
  * 0개일 때 다른 문구가 필요하면 `<이름>.none`을 더한다.
  * PostgreSQL 오류 메시지, SQL, 설정 파일의 key, 결과 data는 여기 두지 않는다.
+ * `error.<kind>`는 Rust `CommandError`의 kind별 문구다. 영어는 Rust message와 같고, 빈칸 이름은
+ * `errorKinds.json`의 param 이름이다. 한 kind가 여러 message를 묶으면 `{message}`가 message 전체다.
  */
 export const en = {
   "common.cancel": "Cancel",
@@ -282,6 +284,53 @@ export const en = {
   "toast.copiedCell": "Copied cell",
   "toast.copiedRows.one": "Copied 1 row (tab-separated)",
   "toast.copiedRows.other": "Copied {count} rows (tab-separated)",
+
+  "settings.errorTitle": "Settings were not applied",
+  "settings.storeErrorTitle": "Recent projects and unsaved tabs are not kept",
+
+  "error.no_project": "Open a project first",
+  "error.project_changed":
+    "The project was reopened in the meantime. Try again",
+  "error.unknown_connection": "Connection '{name}' is not in the project",
+  "error.unknown_session": "Session {id} does not exist",
+  "error.project_not_found": "{path} was not found",
+  "error.password_in_config":
+    "Connection '{connection}' has a password entry. Passwords are stored in the keychain, not in the config file",
+  "error.project_exists": "{path} already exists",
+  "error.project_write_failed": "Could not write {path}: {message}",
+  "error.project_invalid": "{message}",
+  "error.invalid_connection": "{message}",
+  "error.password_store": "Could not access the keychain: {message}",
+  "error.split_failed": "Could not split the statements: {message}",
+  "error.empty_statement": "There is no statement to run",
+  "error.multiple_statements":
+    "Only one statement can run at a time. This text has {count}",
+  "error.query_not_active": "Query {query} has no more results to fetch",
+  "error.cancel_failed": "Could not send the cancel request: {message}",
+  "error.invalid_path": "{message}",
+  "error.catalog_failed": "Could not read the schema: {message}",
+  "error.store_failed": "Could not use the app database: {message}",
+  "error.store_unavailable":
+    "The app database could not be opened, so recent projects and tabs are not kept",
+  "error.file_not_found": "{path} was not found",
+  "error.file_exists": "{path} already exists",
+  "error.file_changed": "{path} was changed on disk after it was opened",
+  "error.file_too_large":
+    "{path} is too large ({bytes} bytes). Files up to 16 MiB can be opened",
+  "error.file_not_utf8": "{path} is not UTF-8",
+  "error.file_io": "Could not access {path}: {message}",
+  "error.tunnel_spawn": "Could not run the tunnel command: {message}",
+  "error.tunnel_exited": "{message}",
+  "error.tunnel_timeout": "{host}:{port} didn't open within {secs} seconds",
+  "error.tunnel_cancelled": "The tunnel start was cancelled",
+  "error.unreachable": "Could not reach the server: {message}",
+  "error.timeout": "The server did not respond in time",
+  "error.tls_not_supported": "The server does not support SSL",
+  "error.certificate": "Could not verify the server certificate: {message}",
+  "error.password_required": "A password is required",
+  "error.auth_failed": "Authentication failed: {message}",
+  "error.database": "The server refused the connection ({code}): {message}",
+  "error.other": "Connection failed: {message}",
 } as const satisfies { [key: string]: string };
 
 export type MessageKey = keyof typeof en;
