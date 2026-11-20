@@ -10,7 +10,7 @@ use chilla_core::application::{
     App, ConnectError, Connector, QueryError, QuerySink, RowItem, RowSource,
 };
 use chilla_core::domain::{
-    ConnectionProfile, Password, QueryEvent, QueryOutcome, SslMode, TunnelEvent,
+    ConnectionProfile, Password, QueryEvent, QueryLimits, QueryOutcome, SslMode, TunnelEvent,
 };
 use chilla_core::infrastructure::{
     FsSqlFileStore, MemoryPasswordStore, PgConnection, PgConnector, PgQueryInspector,
@@ -210,6 +210,7 @@ pub async fn app_with_toml(toml: &str) -> (TestApp, TempDir, TunnelEvents) {
             let events = events.clone();
             move |event| events.lock().unwrap().push(event)
         }),
+        QueryLimits::default(),
     );
     app.open_project(dir.path()).await.unwrap();
     (app, dir, events)

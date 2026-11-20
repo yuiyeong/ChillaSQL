@@ -80,6 +80,8 @@ pub struct App<C: Connector, T: TunnelRunner> {
     catalogs: Mutex<HashMap<String, CatalogSlot<C::Connection>>>,
     /// `save_connection`을 하나씩 돌린다. 한 번의 저장이 키체인과 파일에 걸쳐 있어서다.
     save_lock: Mutex<()>,
+    /// 세션이 결과를 나눠 보내고 닫는 한도. 설정 파일에서 온다.
+    limits: QueryLimits,
 }
 
 /// 스키마 트리와 자동완성의 catalog를 읽는 연결. 탭 세션과 따로 열고, 같은 접속의 터널을 함께 쓴다.
@@ -121,6 +123,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         connector: C,
         runner: T,
         on_tunnel: TunnelSink,
+        limits: QueryLimits,
     ) -> Self {
         Self {
             projects,
@@ -133,6 +136,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             state: Mutex::new(State::default()),
             catalogs: Mutex::new(HashMap::new()),
             save_lock: Mutex::new(()),
+            limits,
         }
     }
 
@@ -353,7 +357,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             connection: profile.name,
             backend_pid: db.backend_pid(),
         };
-        let handle = session_actor::spawn(db, QueryLimits::default());
+        let handle = session_actor::spawn(db, self.limits);
         state
             .sessions
             .insert(info.id, SessionEntry { handle, tunnel });
@@ -763,6 +767,10 @@ mod tests {
 
     /// `/p`(접속 local, staging)와 `/q`(접속 local)가 프로젝트다.
     fn fixture() -> Fixture {
+        fixture_with(QueryLimits::default())
+    }
+
+    fn fixture_with(limits: QueryLimits) -> Fixture {
         let projects = Arc::new(FakeProjects::default());
         projects.add("/p", &["local", "staging"]);
         projects.add("/q", &["local"]);
@@ -781,6 +789,7 @@ mod tests {
                 connector.clone(),
                 runner.clone(),
                 tunnel_sink,
+                limits,
             ),
             connector,
             projects,
@@ -1263,6 +1272,38 @@ mod tests {
             f.connector.links()[0].sent(),
             ["BEGIN; SAVEPOINT chilla_statement", "SELECT 1", "COMMIT"]
         );
+    }
+
+    #[tokio::test]
+    async fn sessions_use_the_given_limits() {
+        let f = fixture_with(QueryLimits {
+            retained_rows: 1000,
+            ..QueryLimits::default()
+        });
+        f.app.open_project(Path::new("/p")).await.unwrap();
+        let session = session_of(&f).await;
+        let feed = f.connector.links()[0].expect_query();
+        feed.rows(0..1500);
+        feed.complete(1500);
+        let (sink, mut events) = sink();
+        let query = f
+            .app
+            .execute(session, "SELECT n".into(), TxMode::Auto, sink)
+            .await
+            .unwrap();
+
+        let mut retained_from = Vec::new();
+        loop {
+            match next(&mut events).await {
+                QueryEvent::Rows(rows) => {
+                    retained_from.push(rows.retained_from);
+                    f.app.fetch_more(session, query).await.unwrap();
+                }
+                QueryEvent::Finished { .. } => break,
+                _ => {}
+            }
+        }
+        assert_eq!(retained_from, [0, 0, 500]);
     }
 
     #[tokio::test]

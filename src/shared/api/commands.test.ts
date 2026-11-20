@@ -29,6 +29,7 @@ import {
   closeCatalog,
   describeTypes,
   loadCatalog,
+  loadSettings,
   loadTableDetails,
   quitApp,
   restartTunnel,
@@ -231,4 +232,9 @@ test("cancelTunnel과 restartTunnel은 접속 이름을 보낸다", async () => 
 test("quitApp은 인자 없이 quit_app을 부른다", async () => {
   await quitApp();
   expect(invokeMock).toHaveBeenLastCalledWith("quit_app");
+});
+
+test("loadSettings는 인자 없이 load_settings를 부른다", async () => {
+  await loadSettings();
+  expect(invokeMock).toHaveBeenLastCalledWith("load_settings");
 });

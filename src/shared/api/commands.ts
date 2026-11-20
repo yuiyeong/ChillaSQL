@@ -8,6 +8,7 @@ import type {
   Project,
   QueryEvent,
   ServerInfo,
+  Settings,
   Session,
   SqlFile,
   StatementSpan,
@@ -162,4 +163,9 @@ export function writeSqlFile(
 /** 앱을 끝낸다. 열린 세션은 닫히고 서버가 열린 트랜잭션을 되돌린다. */
 export function quitApp(): Promise<void> {
   return call("quit_app");
+}
+
+/** 앱을 시작할 때 읽은 전역 설정. 파일을 고쳐도 앱을 다시 시작해야 바뀐다. */
+export function loadSettings(): Promise<Settings> {
+  return call("load_settings");
 }

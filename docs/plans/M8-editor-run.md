@@ -329,7 +329,7 @@ git commit -m "feat: 접속의 read_only와 statement_timeout을 세션 시작 o
   ```
   command `load_settings() -> SettingsDto { language: "en" | "ko", editor: { font, fontSize }, idleTimeoutSecs, error: string | null }`. Tauri state로 setup에서 읽은 값을 둔다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `tests/settings_file.rs`(임시 디렉토리):
 - `missing_file_is_default`.
@@ -340,23 +340,23 @@ git commit -m "feat: 접속의 read_only와 statement_timeout을 세션 시작 o
 - `app.rs` test: `sessions_use_the_given_limits`(retained_rows 1000으로 만든 App의 세션이 `retained_from(1500) == 500`).
 - `menu.rs` test: `labels_follow_the_language`(ko의 Quit label이 `ChillaSQL 종료`).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace settings`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - serde struct에 `#[serde(deny_unknown_fields)]`, 범위는 읽은 뒤 검사한다. `QueryLimits`의 `batch_rows`, `batch_bytes`는 설정하지 않는다.
 - `lib.rs`의 setup이 `load_settings`를 부르고 `Settings`를 `app.manage`, `limits`를 `CoreApp::new`에 넘긴다. menu는 `.menu(…)`의 closure가 managed settings의 언어를 읽어야 하므로 `Builder::menu` 대신 setup 안에서 `app.set_menu(menu::build(handle, language)?)`로 만든다.
 - `menu::build(handle, language)`: 직접 만드는 항목(Quit, submenu 제목 `Edit`/`편집`, `View`/`보기`, `Window`/`윈도우`)의 label을 언어로 고른다. Predefined 항목은 macOS가 그리는 기본 label을 둔다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src

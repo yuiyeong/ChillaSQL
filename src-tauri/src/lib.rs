@@ -6,10 +6,11 @@ use std::sync::Arc;
 
 use chilla_core::infrastructure::{
     FsSqlFileStore, KeychainPasswordStore, PgConnector, PgQueryInspector, PgQuerySplitter,
-    ShellTunnelRunner, TomlProjectStore,
+    ShellTunnelRunner, TomlProjectStore, load_settings, settings_path,
 };
 
-use commands::{CoreApp, TunnelEventDto};
+use chilla_core::domain::Settings;
+use commands::{CoreApp, LoadedSettings, TunnelEventDto};
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
 
 /// 화면이 터널 상태를 받는 event 이름.
@@ -22,7 +23,6 @@ pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .menu(menu::build)
         // Cmd+Q는 menu의 `quit` 항목이 받는다. 기본 Quit 항목은 `ExitRequested` 없이 바로 끝낸다.
         .on_menu_event(|app, event| {
             if event.id() == menu::QUIT_ID {
@@ -40,6 +40,15 @@ pub fn run() {
             // 여기서만 port 구현을 고른다. command는 `CoreApp`만 안다. 터널 상태를 화면으로
             // 보내려면 AppHandle이 있어야 해서 setup에서 만든다.
             let handle = app.handle().clone();
+            // 설정은 시작할 때 한 번 읽는다. 틀리면 기본값으로 시작하고 이유는 화면이 보여 준다.
+            let (settings, error) = match settings_path() {
+                Some(path) => load_settings(&path),
+                None => (Settings::default(), None),
+            };
+            // menu는 언어를 알아야 해서 `Builder::menu`가 아니라 여기서 만든다.
+            app.set_menu(menu::build(&handle, settings.language)?)?;
+            let limits = settings.limits;
+            app.manage(LoadedSettings { settings, error });
             let passwords = KeychainPasswordStore::new().expect("키체인을 쓸 수 없습니다");
             let core = CoreApp::new(
                 Arc::new(TomlProjectStore),
@@ -53,6 +62,7 @@ pub fn run() {
                     // 화면이 없어 보내지 못해도 터널은 그대로 돈다.
                     let _ = handle.emit(TUNNEL_EVENT, TunnelEventDto::from(event));
                 }),
+                limits,
             );
             app.manage(core);
             Ok(())
@@ -83,6 +93,7 @@ pub fn run() {
             commands::cancel_query,
             commands::cancel_tunnel,
             commands::restart_tunnel,
+            commands::load_settings,
             commands::quit_app,
         ])
         .build(tauri::generate_context!())

@@ -15,6 +15,7 @@ use chilla_core::domain::{
     SessionInfo, SessionState, SqlFile, StatementSpan, TableDetails, TunnelEvent, TunnelFailure,
     TunnelState, TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
 };
+use chilla_core::domain::{Language, Settings, SettingsError};
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
 use tauri::State;
@@ -977,6 +978,52 @@ pub async fn cancel_query(
         .await?)
 }
 
+/// 시작할 때 읽은 전역 설정과, 읽지 못했으면 그 이유. setup이 한 번 만들어 state로 둔다.
+pub struct LoadedSettings {
+    pub settings: Settings,
+    pub error: Option<SettingsError>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SettingsDto {
+    pub language: &'static str,
+    pub editor: EditorSettingsDto,
+    pub idle_timeout_secs: u64,
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditorSettingsDto {
+    pub font: String,
+    pub font_size: u16,
+}
+
+impl From<&LoadedSettings> for SettingsDto {
+    fn from(loaded: &LoadedSettings) -> Self {
+        let settings = &loaded.settings;
+        Self {
+            language: match settings.language {
+                Language::En => "en",
+                Language::Ko => "ko",
+            },
+            editor: EditorSettingsDto {
+                font: settings.editor.font.clone(),
+                font_size: settings.editor.font_size,
+            },
+            idle_timeout_secs: settings.limits.idle_result_timeout.as_secs(),
+            error: loaded.error.as_ref().map(ToString::to_string),
+        }
+    }
+}
+
+/// 시작할 때 읽은 전역 설정. 파일을 고쳐도 앱을 다시 시작해야 바뀐다.
+#[tauri::command]
+pub fn load_settings(settings: State<'_, LoadedSettings>) -> SettingsDto {
+    SettingsDto::from(&*settings)
+}
+
 /// 화면이 확인을 마친 뒤 앱을 끝낸다. `RunEvent::Exit`의 `shutdown`이 세션을 닫고,
 /// 열린 트랜잭션은 서버가 되돌린다. `app.exit(0)`의 `ExitRequested`는 code가 있으므로 막지 않는다.
 #[tauri::command]
@@ -1046,6 +1093,29 @@ mod tests {
                 }],
                 "functions": [{ "schema": "pg_catalog", "name": "now" }],
                 "reservedWords": ["select"],
+            })
+        );
+    }
+
+    #[test]
+    fn settings_dto_uses_the_documented_shape() {
+        let loaded = LoadedSettings {
+            settings: Settings {
+                language: Language::Ko,
+                ..Settings::default()
+            },
+            error: Some(SettingsError {
+                path: "/h/config.toml".into(),
+                message: "unknown field `fontsize`".into(),
+            }),
+        };
+        assert_eq!(
+            serde_json::to_value(SettingsDto::from(&loaded)).unwrap(),
+            serde_json::json!({
+                "language": "ko",
+                "editor": { "font": "D2Coding", "fontSize": 15 },
+                "idleTimeoutSecs": 600,
+                "error": "/h/config.toml: unknown field `fontsize`",
             })
         );
     }

@@ -209,3 +209,12 @@ export interface TunnelEvent {
   connection: string;
   state: TunnelState;
 }
+
+/** 시작할 때 읽은 전역 설정(`~/.config/chilla/config.toml`). `error`가 있으면 기본값이고 그 이유다. */
+export interface Settings {
+  language: "en" | "ko";
+  editor: { font: string; fontSize: number };
+  /** 받다 만 결과를 닫는 초 */
+  idleTimeoutSecs: number;
+  error: string | null;
+}

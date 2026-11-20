@@ -7,6 +7,7 @@ mod password;
 mod project;
 mod query;
 mod session;
+mod settings;
 mod sql_file;
 mod statement;
 mod tunnel;
@@ -27,6 +28,7 @@ pub use query::{
 pub use session::{
     EndOutcome, EndResult, SessionId, SessionInfo, SessionState, TxEnd, TxMode, TxStatus,
 };
+pub use settings::{EditorSettings, Language, Settings, SettingsError};
 pub use sql_file::{FileStamp, SqlFile, SqlPath, SqlPathError, WriteMode};
 pub use statement::StatementSpan;
 pub use tunnel::{
