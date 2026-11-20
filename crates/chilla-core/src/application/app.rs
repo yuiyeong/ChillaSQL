@@ -13,15 +13,19 @@ use tokio::task::JoinSet;
 use super::session_actor::{self, QuerySink, SessionHandle};
 use super::tunnels::{TunnelError, TunnelLease, TunnelSink, Tunnels};
 use super::{
-    AppStore, CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey,
-    PasswordStore, PasswordStoreError, ProjectError, ProjectStore, QueryError, RecentProject,
-    SplitError, SqlFileStore, StatementInspector, StatementSplitter, StoreError, TunnelRunner,
+    AppStore, CancelError, ConnectError, Connector, DbConnection, FileError, HistoryEntry,
+    NewHistoryEntry, PasswordKey, PasswordStore, PasswordStoreError, ProjectError, ProjectStore,
+    QueryError, RecentProject, SplitError, SqlFileStore, StatementInspector, StatementSplitter,
+    StoreError, TunnelRunner,
 };
 use crate::domain::{
     Catalog, ConnectionProfile, Danger, EndResult, FileStamp, Password, ProfileError, Project,
     QueryId, QueryLimits, SessionId, SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError,
     StatementSpan, TableDetails, TxEnd, TxMode, TypeInfo, WriteMode,
 };
+
+/// 쿼리 기록 검색이 돌려주는 최대 개수.
+const HISTORY_SEARCH_LIMIT: usize = 200;
 
 /// `test_connection`이 연결해서 알아낸 서버의 정보.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -208,6 +212,27 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         let dir = self.open_project_dir(dir).await?;
         let saved_at = unix_now();
         Ok(blocking(move || store.save_workspace(&dir, &snapshot, saved_at)).await?)
+    }
+
+    /// `dir` 프로젝트의 쿼리 기록에 더한다. `dir`이 열린 프로젝트가 아니면 저장소를 쓰지 않고
+    /// `ProjectChanged`다(`save_workspace`와 같다).
+    pub async fn record_query(&self, dir: &Path, entry: NewHistoryEntry) -> Result<(), AppError> {
+        let store = self.store()?;
+        let dir = self.open_project_dir(dir).await?;
+        Ok(blocking(move || store.record_query(&dir, &entry)).await?)
+    }
+
+    /// `query`를 공백으로 나눈 단어가 모두 SQL에 든 기록을 최근 것부터 200개. `query`가 비면
+    /// 최근 기록이다. `dir`이 열린 프로젝트가 아니면 `ProjectChanged`다.
+    pub async fn search_history(
+        &self,
+        dir: &Path,
+        query: &str,
+    ) -> Result<Vec<HistoryEntry>, AppError> {
+        let store = self.store()?;
+        let dir = self.open_project_dir(dir).await?;
+        let words: Vec<String> = query.split_whitespace().map(str::to_string).collect();
+        Ok(blocking(move || store.search_history(&dir, &words, HISTORY_SEARCH_LIMIT)).await?)
     }
 
     /// `dir`이 지금 열린 프로젝트의 디렉토리면 그것을 돌려준다.
@@ -2318,6 +2343,82 @@ mod tests {
         );
         assert_eq!(f.app.load_workspace(p()).await, Err(AppError::NoProject));
         assert!(f.store.workspace("/p").is_none());
+    }
+
+    fn new_entry(sql: &str) -> NewHistoryEntry {
+        NewHistoryEntry {
+            connection: "local".into(),
+            sql: sql.into(),
+            executed_at: 1_700_000_000_000,
+            elapsed_micros: 42,
+        }
+    }
+
+    #[tokio::test]
+    async fn history_needs_the_open_project() {
+        let f = opened().await;
+        f.app
+            .record_query(p(), new_entry("select 1"))
+            .await
+            .unwrap();
+        assert_eq!(f.app.search_history(p(), "select").await.unwrap().len(), 1);
+
+        // 다른 dir이면 저장소를 읽거나 쓰지 않고 ProjectChanged다.
+        let q = Path::new("/q");
+        assert_eq!(
+            f.app.record_query(q, new_entry("select 2")).await,
+            Err(AppError::ProjectChanged)
+        );
+        assert_eq!(
+            f.app.search_history(q, "").await,
+            Err(AppError::ProjectChanged)
+        );
+        assert_eq!(f.store.history_len("/q"), 0);
+    }
+
+    #[tokio::test]
+    async fn history_search_splits_the_query_into_words() {
+        let f = opened().await;
+        for sql in ["select email from users", "select name from users"] {
+            f.app.record_query(p(), new_entry(sql)).await.unwrap();
+        }
+
+        let found = f.app.search_history(p(), "  users   email ").await.unwrap();
+
+        assert_eq!(found.len(), 1);
+        assert_eq!(found[0].sql, "select email from users");
+        assert_eq!(f.app.search_history(p(), "   ").await.unwrap().len(), 2);
+    }
+
+    #[tokio::test]
+    async fn search_history_limits_to_200() {
+        let f = opened().await;
+        for i in 0..201 {
+            f.app
+                .record_query(p(), new_entry(&format!("select {i}")))
+                .await
+                .unwrap();
+        }
+
+        let found = f.app.search_history(p(), "").await.unwrap();
+
+        assert_eq!(found.len(), 200);
+        assert_eq!(found[0].sql, "select 200");
+    }
+
+    #[tokio::test]
+    async fn history_fails_without_a_project_or_when_the_store_breaks() {
+        let f = fixture();
+        assert_eq!(
+            f.app.record_query(p(), new_entry("select 1")).await,
+            Err(AppError::NoProject)
+        );
+        let f = opened().await;
+        f.store.fail(true);
+        assert!(matches!(
+            f.app.search_history(p(), "").await,
+            Err(AppError::Store(_))
+        ));
     }
 
     #[tokio::test]

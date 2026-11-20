@@ -223,6 +223,17 @@ export interface Settings {
   storeError: string | null;
 }
 
+/** 저장된 쿼리 기록 하나. */
+export interface HistoryEntry {
+  id: number;
+  /** 접속 이름 */
+  connection: string;
+  sql: string;
+  /** Unix ms. 실행을 시작한 때 */
+  executedAt: number;
+  elapsedMicros: number;
+}
+
 /** 최근에 연 프로젝트. */
 export interface RecentProject {
   dir: string;

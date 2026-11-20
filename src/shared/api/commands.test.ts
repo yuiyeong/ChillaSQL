@@ -20,6 +20,8 @@ import {
   listSqlFiles,
   loadWorkspace,
   recentProjects,
+  recordQuery,
+  searchHistory,
   saveWorkspace,
   openProject,
   openSession,
@@ -269,5 +271,27 @@ test("saveWorkspace는 프로젝트 dir과 snapshot text를 그대로 보낸다"
   expect(invokeMock).toHaveBeenLastCalledWith("save_workspace", {
     dir: "/p",
     snapshot: '{"tabs":[]}',
+  });
+});
+
+test("recordQuery는 프로젝트 dir과 camelCase 항목을 보낸다", async () => {
+  const entry = {
+    connection: "local",
+    sql: "select 1",
+    executedAt: 1700000000000,
+    elapsedMicros: 42,
+  };
+  await recordQuery("/p", entry);
+  expect(invokeMock).toHaveBeenLastCalledWith("record_query", {
+    dir: "/p",
+    entry,
+  });
+});
+
+test("searchHistory는 프로젝트 dir과 검색어를 보낸다", async () => {
+  await searchHistory("/p", "users email");
+  expect(invokeMock).toHaveBeenLastCalledWith("search_history", {
+    dir: "/p",
+    query: "users email",
   });
 });

@@ -116,6 +116,8 @@ pub fn run() {
             commands::recent_projects,
             commands::load_workspace,
             commands::save_workspace,
+            commands::record_query,
+            commands::search_history,
             commands::quit_app,
         ])
         .build(tauri::generate_context!())

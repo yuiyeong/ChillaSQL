@@ -141,7 +141,7 @@ git commit -m "docs: M9 계획과 파라미터, DDL 범위, EXPLAIN parse 결정
   function searchHistory(dir: string, query: string): Promise<HistoryEntry[]>;
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `tests/app_store.rs`:
 - `records_and_searches_newest_first`, `history_is_per_project`.
@@ -152,24 +152,24 @@ git commit -m "docs: M9 계획과 파라미터, DDL 범위, EXPLAIN parse 결정
 - `a_newer_version_is_refused`(판 3).
 - `app.rs` test: `history_needs_the_open_project`(다른 dir이면 `ProjectChanged`), `search_history_limits_to_200`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace history`
 Expected: FAIL (method 없음)
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `migrate`: 0이면 세 table을 만들고 2로, 1이면 `query_history`와 index만 만들고 2로, 2면 그대로.
 - 검색은 단어마다 `sql LIKE '%' || ?n || '%' ESCAPE '\'`를 AND로 묶는다. 단어의 `\`, `%`, `_` 앞에 `\`를 붙인다.
 - 지우기: `DELETE FROM query_history WHERE project_dir = ?1 AND id <= (SELECT id FROM query_history WHERE project_dir = ?1 ORDER BY id DESC LIMIT 1 OFFSET 10000)`. 기록과 같은 transaction이다.
 - command `record_query`, `search_history`. DTO는 camelCase.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src

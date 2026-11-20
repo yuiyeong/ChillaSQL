@@ -7,6 +7,7 @@ import type {
   EndResult,
   Project,
   QueryEvent,
+  HistoryEntry,
   RecentProject,
   ServerInfo,
   Settings,
@@ -198,4 +199,26 @@ export function loadWorkspace(dir: string): Promise<string | null> {
 /** `dir`이 열린 프로젝트가 아니면 저장하지 않고 `project_changed`로 reject한다. */
 export function saveWorkspace(dir: string, snapshot: string): Promise<void> {
   return call("save_workspace", { dir, snapshot });
+}
+
+/**
+ * `dir` 프로젝트의 쿼리 기록에 더한다. `dir`이 열린 프로젝트가 아니면 `project_changed`로
+ * reject한다.
+ */
+export function recordQuery(
+  dir: string,
+  entry: Omit<HistoryEntry, "id">,
+): Promise<void> {
+  return call("record_query", { dir, entry });
+}
+
+/**
+ * 검색어를 공백으로 나눈 단어가 모두 SQL에 든 기록을 최근 것부터 200개. 검색어가 비면 최근
+ * 기록이다. `dir`이 열린 프로젝트가 아니면 `project_changed`로 reject한다.
+ */
+export function searchHistory(
+  dir: string,
+  query: string,
+): Promise<HistoryEntry[]> {
+  return call("search_history", { dir, query });
 }

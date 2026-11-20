@@ -17,9 +17,9 @@ pub(crate) use connection::{FakeCatalog, FakeConnection, FakeFeed, FakeLink, ser
 pub(crate) use tunnel::{FakeRun, FakeRunner, events_sink};
 
 use super::{
-    AppStore, ConnectError, Connector, FileError, PasswordKey, PasswordStore, PasswordStoreError,
-    ProjectError, ProjectStore, QueryError, QuerySink, RecentProject, SplitError, SqlFileStore,
-    StatementInspector, StatementSplitter, StoreError,
+    AppStore, ConnectError, Connector, FileError, HistoryEntry, NewHistoryEntry, PasswordKey,
+    PasswordStore, PasswordStoreError, ProjectError, ProjectStore, QueryError, QuerySink,
+    RecentProject, SplitError, SqlFileStore, StatementInspector, StatementSplitter, StoreError,
 };
 use crate::domain::{
     Catalog, ConnectionColor, ConnectionProfile, Danger, FileStamp, Password, Project, QueryEvent,
@@ -448,6 +448,7 @@ mod tests {
 pub(crate) struct FakeStore {
     recent: Mutex<Vec<RecentProject>>,
     workspaces: Mutex<HashMap<PathBuf, (String, i64)>>,
+    history: Mutex<Vec<(PathBuf, HistoryEntry)>>,
     fail: AtomicBool,
 }
 
@@ -460,6 +461,12 @@ impl FakeStore {
     /// 저장한 snapshot과 `saved_at`.
     pub(crate) fn workspace(&self, dir: &str) -> Option<(String, i64)> {
         self.workspaces.lock().unwrap().get(Path::new(dir)).cloned()
+    }
+
+    /// 그 프로젝트의 쿼리 기록 수.
+    pub(crate) fn history_len(&self, dir: &str) -> usize {
+        let history = self.history.lock().unwrap();
+        history.iter().filter(|(d, _)| d == Path::new(dir)).count()
     }
 
     fn check(&self) -> Result<(), StoreError> {
@@ -500,5 +507,38 @@ impl AppStore for FakeStore {
             .unwrap()
             .insert(dir.to_path_buf(), entry);
         Ok(())
+    }
+
+    fn record_query(&self, dir: &Path, entry: &NewHistoryEntry) -> Result<(), StoreError> {
+        self.check()?;
+        let mut history = self.history.lock().unwrap();
+        let id = history.len() as i64 + 1;
+        let entry = HistoryEntry {
+            id,
+            connection: entry.connection.clone(),
+            sql: entry.sql.clone(),
+            executed_at: entry.executed_at,
+            elapsed_micros: entry.elapsed_micros,
+        };
+        history.push((dir.to_path_buf(), entry));
+        Ok(())
+    }
+
+    fn search_history(
+        &self,
+        dir: &Path,
+        words: &[String],
+        limit: usize,
+    ) -> Result<Vec<HistoryEntry>, StoreError> {
+        self.check()?;
+        let history = self.history.lock().unwrap();
+        let found = history
+            .iter()
+            .rev()
+            .filter(|(d, e)| d == dir && words.iter().all(|w| e.sql.contains(w.as_str())))
+            .take(limit)
+            .map(|(_, e)| e.clone())
+            .collect();
+        Ok(found)
     }
 }

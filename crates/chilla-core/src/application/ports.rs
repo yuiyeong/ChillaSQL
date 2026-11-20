@@ -295,7 +295,29 @@ pub struct RecentProject {
     pub opened_at: i64,
 }
 
-/// 앱 내부 저장소. 최근 프로젝트와 프로젝트별 탭 snapshot을 둔다. 프로젝트 디렉토리 밖의,
+/// 쿼리 기록에 새로 더할 항목.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewHistoryEntry {
+    /// 접속 이름
+    pub connection: String,
+    pub sql: String,
+    /// Unix ms. 실행을 시작한 때
+    pub executed_at: i64,
+    pub elapsed_micros: i64,
+}
+
+/// 저장된 쿼리 기록 하나.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HistoryEntry {
+    pub id: i64,
+    pub connection: String,
+    pub sql: String,
+    /// Unix ms. 실행을 시작한 때
+    pub executed_at: i64,
+    pub elapsed_micros: i64,
+}
+
+/// 앱 내부 저장소. 최근 프로젝트, 프로젝트별 탭 snapshot, 프로젝트별 쿼리 기록을 둔다. 프로젝트 디렉토리 밖의,
 /// 사용자가 읽지 않는 상태다.
 pub trait AppStore: Send + Sync {
     /// 최근 것부터 최대 10개.
@@ -305,6 +327,16 @@ pub trait AppStore: Send + Sync {
     /// `dir` 프로젝트의 탭 snapshot. 화면이 만든 JSON text이고 여기서는 열어 보지 않는다.
     fn load_workspace(&self, dir: &Path) -> Result<Option<String>, StoreError>;
     fn save_workspace(&self, dir: &Path, snapshot: &str, saved_at: i64) -> Result<(), StoreError>;
+    /// `dir` 프로젝트의 기록에 더한다. 그 프로젝트의 기록이 10,000개를 넘으면 오래된 것부터 지운다.
+    fn record_query(&self, dir: &Path, entry: &NewHistoryEntry) -> Result<(), StoreError>;
+    /// `words`가 모두 SQL에 든 기록을 최근 것(id 큰 것)부터 `limit`개. `words`가 비면 전부다.
+    /// 영문 대소문자는 구분하지 않고 `%`, `_`, `\`는 글자 그대로 찾는다.
+    fn search_history(
+        &self,
+        dir: &Path,
+        words: &[String],
+        limit: usize,
+    ) -> Result<Vec<HistoryEntry>, StoreError>;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

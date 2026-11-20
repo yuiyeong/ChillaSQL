@@ -7,7 +7,9 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use chilla_core::application::{App, AppError, RecentProject, ServerInfo};
+use chilla_core::application::{
+    App, AppError, HistoryEntry, NewHistoryEntry, RecentProject, ServerInfo,
+};
 use chilla_core::domain::{
     Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo, ConstraintKind, Danger,
     EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, Password, ProfileError, Project,
@@ -1069,6 +1071,72 @@ pub async fn save_workspace(
     Ok(app.save_workspace(Path::new(&dir), snapshot).await?)
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NewHistoryEntryDto {
+    pub connection: String,
+    pub sql: String,
+    /// Unix ms. 실행을 시작한 때
+    pub executed_at: i64,
+    pub elapsed_micros: i64,
+}
+
+impl From<NewHistoryEntryDto> for NewHistoryEntry {
+    fn from(entry: NewHistoryEntryDto) -> Self {
+        Self {
+            connection: entry.connection,
+            sql: entry.sql,
+            executed_at: entry.executed_at,
+            elapsed_micros: entry.elapsed_micros,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HistoryEntryDto {
+    pub id: i64,
+    pub connection: String,
+    pub sql: String,
+    /// Unix ms. 실행을 시작한 때
+    pub executed_at: i64,
+    pub elapsed_micros: i64,
+}
+
+impl From<HistoryEntry> for HistoryEntryDto {
+    fn from(entry: HistoryEntry) -> Self {
+        Self {
+            id: entry.id,
+            connection: entry.connection,
+            sql: entry.sql,
+            executed_at: entry.executed_at,
+            elapsed_micros: entry.elapsed_micros,
+        }
+    }
+}
+
+/// `dir` 프로젝트의 쿼리 기록에 더한다. `dir`이 열린 프로젝트가 아니면 `project_changed`다.
+#[tauri::command]
+pub async fn record_query(
+    app: State<'_, CoreApp>,
+    dir: String,
+    entry: NewHistoryEntryDto,
+) -> CommandResult<()> {
+    Ok(app.record_query(Path::new(&dir), entry.into()).await?)
+}
+
+/// 검색어를 공백으로 나눈 단어가 모두 SQL에 든 기록을 최근 것부터 200개. 검색어가 비면 최근
+/// 기록이다. `dir`이 열린 프로젝트가 아니면 `project_changed`다.
+#[tauri::command]
+pub async fn search_history(
+    app: State<'_, CoreApp>,
+    dir: String,
+    query: String,
+) -> CommandResult<Vec<HistoryEntryDto>> {
+    let entries = app.search_history(Path::new(&dir), &query).await?;
+    Ok(entries.into_iter().map(Into::into).collect())
+}
+
 /// 화면이 확인을 마친 뒤 앱을 끝낸다. `RunEvent::Exit`의 `shutdown`이 세션을 닫고,
 /// 열린 트랜잭션은 서버가 되돌린다. `app.exit(0)`의 `ExitRequested`는 code가 있으므로 막지 않는다.
 #[tauri::command]
@@ -1102,6 +1170,32 @@ mod tests {
             read_only: true,
             statement_timeout: Some(Duration::from_secs(45)),
         }
+    }
+
+    #[test]
+    fn history_dtos_use_camel_case() {
+        let new: NewHistoryEntryDto = serde_json::from_value(json!({
+            "connection": "local", "sql": "select 1",
+            "executedAt": 1700000000000_i64, "elapsedMicros": 42,
+        }))
+        .unwrap();
+        let new = NewHistoryEntry::from(new);
+        assert_eq!((new.executed_at, new.elapsed_micros), (1700000000000, 42));
+
+        let entry = HistoryEntryDto::from(HistoryEntry {
+            id: 7,
+            connection: "local".into(),
+            sql: "select 1".into(),
+            executed_at: 1700000000000,
+            elapsed_micros: 42,
+        });
+        assert_eq!(
+            serde_json::to_value(entry).unwrap(),
+            json!({
+                "id": 7, "connection": "local", "sql": "select 1",
+                "executedAt": 1700000000000_i64, "elapsedMicros": 42,
+            })
+        );
     }
 
     #[test]
