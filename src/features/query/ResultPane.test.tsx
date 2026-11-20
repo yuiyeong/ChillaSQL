@@ -1813,3 +1813,80 @@ describe("cell editing", () => {
     ).not.toBeNull();
   });
 });
+
+describe("sorting", () => {
+  const idHeader = () =>
+    screen.getByText("id").closest<HTMLElement>("[role=columnheader]")!;
+  const sortId = () => fireEvent.click(within(idHeader()).getByRole("button"));
+  const columns = resultColumns("id", "name");
+
+  test.each<[string, RunState]>([
+    [
+      "running",
+      {
+        status: "running",
+        result: result({ columns, rows: someRows, fetch: "ready" }),
+      },
+    ],
+    [
+      "cancelled",
+      {
+        status: "finished",
+        result: result({ columns, rows: someRows }),
+        outcome: { outcome: "cancelled" },
+      },
+    ],
+    [
+      "expired",
+      {
+        status: "finished",
+        result: result({ columns, rows: someRows }),
+        outcome: { outcome: "expired" },
+      },
+    ],
+    [
+      "firstRow > 0",
+      {
+        status: "finished",
+        result: result({ columns, rows: someRows, firstRow: 1997 }),
+        outcome: { outcome: "completed", rows: 2000 },
+      },
+    ],
+  ])("partial_sorted_result_says_received_rows_only (%s)", (_, state) => {
+    show(state);
+    expect(screen.queryByText(/^Sorted/)).toBeNull();
+
+    sortId();
+    const note = screen.getByText("Sorted 3 received rows only");
+    expect(note).toHaveClass("text-fg-2");
+    // header 줄(meta 뒤)에 있다.
+    expect(note.closest("[role=grid]")).toBeNull();
+
+    sortId();
+    sortId();
+    expect(screen.queryByText(/^Sorted/)).toBeNull();
+  });
+
+  test("partial_sorted_note_groups_thousands", () => {
+    const rows = Array.from({ length: 1200 }, (_, i) => [String(i), "x"]);
+    show({
+      status: "running",
+      result: result({ columns, rows, fetch: "fetching" }),
+    });
+
+    sortId();
+
+    expect(
+      screen.getByText("Sorted 1,200 received rows only"),
+    ).toBeInTheDocument();
+  });
+
+  test("complete_sorted_result_has_no_note", () => {
+    finished({ outcome: "completed", rows: 3 }, { columns, rows: someRows });
+
+    sortId();
+
+    expect(idHeader()).toHaveAttribute("aria-sort", "ascending");
+    expect(screen.queryByText(/^Sorted/)).toBeNull();
+  });
+});

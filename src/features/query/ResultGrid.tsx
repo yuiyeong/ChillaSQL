@@ -50,13 +50,15 @@ import {
   MIN_DRAG,
   ROW_HEIGHT,
   rowNumberWidth,
-  rowSpan,
+  rowViewOf,
   selectedRows,
   selectionRetained,
   shouldFetch,
   tsv,
-  type Selection,
+  viewSpan,
   type FitColumn,
+  type RowView,
+  type Selection,
 } from "./grid";
 import { valueKind, type ValueKind } from "./cellDisplay";
 import {
@@ -69,6 +71,7 @@ import {
 import { ResultNote } from "./ResultNote";
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
+import { nextSort, sortOrder, type SortState } from "./sortRows";
 import { useColumnTypes } from "./typesStore";
 import { ValueViewer } from "./ValueViewer";
 
@@ -95,6 +98,8 @@ interface ResultGridProps {
   statementsRef: RefObject<UpdateStatement[] | null>;
   /** 복사할 선택이 생기거나 없어질 때(고른 행이 모두 버려진 때도). header 복사 버튼의 disabled에 쓴다 */
   onSelectionChange(hasSelection: boolean): void;
+  /** 정렬을 켜거나 끌 때(탭을 바꿔 이어 간 정렬도). ResultPane이 일부만 정렬했다는 안내에 쓴다 */
+  onSortChange(sorted: boolean): void;
 }
 
 // TanStack Table은 column 정의와 너비 조절에만 쓴다. row model은 부르지 않는다.
@@ -147,6 +152,7 @@ function Grid({
   copyTargetRef,
   statementsRef,
   onSelectionChange,
+  onSortChange,
 }: ResultGridProps & { runKey: string }) {
   const { firstRow, rows, fetch } = result;
   const resultColumns = result.columns;
@@ -200,6 +206,19 @@ function Grid({
     const shift = anchorShift(saved.firstRow, firstRow);
     return { ...saved, scrollTop: Math.max(0, saved.scrollTop + shift) };
   });
+  // 화면 내 정렬. 받은 행만 정렬하고, 행 번호와 선택과 편집은 결과 행 번호 그대로다.
+  const [sort, setSort] = useState<SortState>(restored?.sort ?? null);
+  const sortCategory =
+    sort === null ? undefined : columnTypes[sort.column]?.category;
+  const view = useMemo(
+    () => rowViewOf(sortOrder(rows, sort, sortCategory)),
+    [rows, sort, sortCategory],
+  );
+  const onSort = useCallback(
+    (column: number) => setSort((current) => nextSort(current, column)),
+    [],
+  );
+
   // virtualizer가 처음 scroll 위치를 읽기 전에 둔다. 그래서 useVirtualizer보다 앞에 있다.
   useLayoutEffect(() => {
     if (restored !== undefined && scrollRef.current !== null) {
@@ -238,9 +257,10 @@ function Grid({
   });
   const headers = table.getFlatHeaders();
 
+  // 보이는 위치의 행을 결과 행 번호로 가리켜 정렬이 바뀌어도 같은 행의 element를 다시 쓴다.
   const getItemKey = useCallback(
-    (index: number) => firstRow + index,
-    [firstRow],
+    (index: number) => firstRow + (view.order?.[index] ?? index),
+    [firstRow, view],
   );
   // React Compiler는 쓰지 않는다. memo한 Row에는 virtualizer의 함수가 아니라 값만 넘긴다.
   // eslint-disable-next-line react-hooks/incompatible-library
@@ -298,6 +318,8 @@ function Grid({
   const latest = useRef({
     selection,
     columnSizing,
+    sort,
+    view,
     firstRow,
     rows,
     onCopied,
@@ -307,6 +329,8 @@ function Grid({
     const current = latest.current;
     current.selection = selection;
     current.columnSizing = columnSizing;
+    current.sort = sort;
+    current.view = view;
     current.firstRow = firstRow;
     current.rows = rows;
     current.onCopied = onCopied;
@@ -325,10 +349,11 @@ function Grid({
         dropGridView(tabId);
         return;
       }
-      const { columnSizing, selection, firstRow } = current;
+      const { columnSizing, selection, sort, firstRow } = current;
       saveGridView(tabId, runKey, {
         columnSizing,
         selection,
+        sort,
         firstRow,
         scrollTop: element?.scrollTop ?? 0,
       });
@@ -381,16 +406,26 @@ function Grid({
       anchored.current = false;
       return;
     }
-    if (shouldFetch(lastVisible, rows.length, fetch)) {
+    // 정렬한 동안은 보이는 끝이 결과의 끝이 아니므로 다음 batch를 요청하지 않는다.
+    if (sort === null && shouldFetch(lastVisible, rows.length, fetch)) {
       latest.current.onFetchMore();
     }
-  }, [lastVisible, rows.length, fetch, firstRow]);
+  }, [lastVisible, rows.length, fetch, firstRow, sort]);
 
   // 고른 행이 모두 버려졌으면 복사할 것이 없다. header 복사 버튼은 이것으로 disabled가 된다.
-  const hasSelection = selectionRetained(selection, firstRow, rows.length);
+  const hasSelection = selectionRetained(
+    selection,
+    firstRow,
+    rows.length,
+    view,
+  );
   useEffect(() => {
     onSelectionChange(hasSelection);
   }, [hasSelection, onSelectionChange]);
+  const sorted = sort !== null;
+  useEffect(() => {
+    onSortChange(sorted);
+  }, [sorted, onSortChange]);
 
   useImperativeHandle(
     copyTargetRef,
@@ -579,7 +614,8 @@ function Grid({
   }, [headers, columns, columnSizing, numberWidth]);
   const resizing = table.state.columnResizing.isResizingColumn;
 
-  const rowRange = rowSpan(selection);
+  // 행 선택의 범위는 보이는 위치로 센다.
+  const rowRange = viewSpan(selection, firstRow, rows.length, view);
 
   // Apply가 보낼 UPDATE 문. 바뀐 값이 있고 편집할 수 있는 결과일 때만 있다.
   const statements = useMemo(() => {
@@ -629,6 +665,8 @@ function Grid({
             kinds={kinds}
             columnSizing={columnSizing}
             resizing={resizing}
+            sort={sort}
+            onSort={onSort}
             onFit={fitColumn}
           />
           <div
@@ -654,11 +692,12 @@ function Grid({
               </div>
             )}
             {items.map((item) => {
-              const rowNumber = firstRow + item.index;
+              const index = view.order?.[item.index] ?? item.index;
+              const rowNumber = firstRow + index;
               return (
                 <Row
                   key={item.key}
-                  cells={rows[item.index]}
+                  cells={rows[index]}
                   kinds={kinds}
                   attnums={attnums}
                   changed={changes?.get(rowNumber)}
@@ -666,8 +705,8 @@ function Grid({
                   top={item.start - HEADER_HEIGHT}
                   selected={
                     rowRange !== null &&
-                    rowNumber >= rowRange[0] &&
-                    rowNumber <= rowRange[1]
+                    item.index >= rowRange[0] &&
+                    item.index <= rowRange[1]
                   }
                   selectedColumn={
                     selection?.kind === "cell" && selection.row === rowNumber
@@ -683,7 +722,9 @@ function Grid({
                 label={t("edit.editor", { name: columns[editing.column] })}
                 value={editing.value}
                 style={editorBox(
-                  editing,
+                  editing.column,
+                  view.position?.[editing.row - firstRow] ??
+                    editing.row - firstRow,
                   firstRow,
                   numberWidth,
                   headers.map((header) => header.getSize()),
@@ -775,16 +816,17 @@ function shownValue(
   return cells[column];
 }
 
-/** editor의 자리. 그 셀과 같은 left, top, width다. */
+/** editor의 자리. 그 셀(보이는 위치 `position`의 행)과 같은 left, top, width다. */
 function editorBox(
-  { row, column }: { row: number; column: number },
+  column: number,
+  position: number,
   firstRow: number,
   numberWidth: number,
   sizes: readonly number[],
 ): CSSProperties {
   let left = numberWidth;
   for (let index = 0; index < column; index++) left += sizes[index];
-  const top = (firstRow > 0 ? GAP_HEIGHT : 0) + (row - firstRow) * ROW_HEIGHT;
+  const top = (firstRow > 0 ? GAP_HEIGHT : 0) + position * ROW_HEIGHT;
   return { left, top, width: sizes[column] };
 }
 
@@ -799,6 +841,9 @@ interface HeaderRowProps {
   columnSizing: ColumnSizingState;
   /** 끄는 중인 column의 id. 없으면 false */
   resizing: string | false;
+  sort: SortState;
+  /** 이름 부분을 누르면 그 열의 다음 정렬로 */
+  onSort(index: number): void;
   onFit(index: number): void;
 }
 
@@ -809,6 +854,8 @@ const HeaderRow = memo(function HeaderRow({
   types,
   kinds,
   resizing,
+  sort,
+  onSort,
   onFit,
 }: HeaderRowProps) {
   return (
@@ -817,32 +864,64 @@ const HeaderRow = memo(function HeaderRow({
       className="border-line-1 bg-bg-1 sticky top-0 z-10 grid h-8 w-(--row-width) min-w-full grid-cols-(--grid-cols) border-b font-sans font-semibold select-none"
     >
       <div role="columnheader" className="border-line-1 border-r" />
-      {headers.map((header, index) => (
-        <div
-          key={header.id}
-          role="columnheader"
-          className={kinds[index] === "number" ? HEADER_RIGHT : HEADER}
-          style={{ width: header.getSize() }}
-        >
-          <span className="truncate">{columns[index]}</span>
-          {types[index] !== undefined && (
-            <span className="text-label text-fg-3 min-w-0 truncate font-mono font-normal">
-              {types[index].name}
-            </span>
-          )}
+      {headers.map((header, index) => {
+        const right = kinds[index] === "number";
+        const direction = sort?.column === index ? sort.direction : null;
+        return (
           <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label={t("result.resizeColumn", { name: columns[index] })}
-            className={resizing === header.id ? HANDLE_ACTIVE : HANDLE}
-            onMouseDown={header.getResizeHandler()}
-            onDoubleClick={() => onFit(index)}
-          />
-        </div>
-      ))}
+            key={header.id}
+            role="columnheader"
+            aria-sort={direction === null ? undefined : SORT_ARIA[direction]}
+            className={right ? HEADER_RIGHT : HEADER}
+            style={{ width: header.getSize() }}
+          >
+            {/* 리사이즈 handle은 이 button 밖에 있어 끌거나 두 번 눌러도 정렬하지 않는다. */}
+            <button
+              type="button"
+              aria-label={
+                direction === null
+                  ? undefined
+                  : t(SORT_LABEL[direction], { name: columns[index] })
+              }
+              className={right ? SORT_BUTTON_RIGHT : SORT_BUTTON}
+              onClick={() => onSort(index)}
+            >
+              <span className="truncate">{columns[index]}</span>
+              {types[index] !== undefined && (
+                <span className="text-label text-fg-3 min-w-0 truncate font-mono font-normal">
+                  {types[index].name}
+                </span>
+              )}
+              {direction !== null && (
+                <span aria-hidden className="text-fg-2 font-normal">
+                  {SORT_ARROW[direction]}
+                </span>
+              )}
+            </button>
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={t("result.resizeColumn", { name: columns[index] })}
+              className={resizing === header.id ? HANDLE_ACTIVE : HANDLE}
+              onMouseDown={header.getResizeHandler()}
+              onDoubleClick={() => onFit(index)}
+            />
+          </div>
+        );
+      })}
     </div>
   );
 });
+
+const SORT_ARIA = { asc: "ascending", desc: "descending" } as const;
+const SORT_LABEL = {
+  asc: "result.sortAscending",
+  desc: "result.sortDescending",
+} as const;
+const SORT_ARROW = { asc: "↑", desc: "↓" } as const;
+const SORT_BUTTON =
+  "flex h-full min-w-0 flex-1 cursor-default items-center gap-1.5 text-left";
+const SORT_BUTTON_RIGHT = [SORT_BUTTON, "justify-end"].join(" ");
 
 const HEADER =
   "border-line-1 relative flex min-w-0 items-center gap-1.5 border-r px-2.5";
@@ -1049,10 +1128,12 @@ function copyTargetOf({
   selection,
   firstRow,
   rows,
+  view,
 }: {
   selection: Selection;
   firstRow: number;
   rows: readonly Cell[][];
+  view: RowView;
 }): CopyTarget {
   if (selection === null) return null;
   if (selection.kind === "cell") {
@@ -1063,7 +1144,7 @@ function copyTargetOf({
       message: t("toast.copiedCell"),
     };
   }
-  const picked = selectedRows(selection, firstRow, rows);
+  const picked = selectedRows(selection, firstRow, rows, view);
   if (picked.length === 0) return null;
   return { text: tsv(picked), message: tc("toast.copiedRows", picked.length) };
 }

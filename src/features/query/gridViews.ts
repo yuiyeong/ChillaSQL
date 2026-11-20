@@ -1,11 +1,13 @@
 import type { ColumnSizingState } from "@tanstack/react-table";
 import type { Selection } from "./grid";
 import type { ResultData } from "./runReducer";
+import type { SortState } from "./sortRows";
 
 /** 결과 표를 떠날 때의 모습. 같은 실행을 다시 보여 주면 이것으로 이어 간다. */
 export interface GridView {
   columnSizing: ColumnSizingState;
   selection: Selection;
+  sort: SortState;
   scrollTop: number;
   /** 저장할 때의 `firstRow`. 그 사이 앞 행이 버려졌으면 스크롤을 그만큼 당긴다. */
   firstRow: number;

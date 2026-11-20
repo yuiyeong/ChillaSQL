@@ -536,7 +536,7 @@ git commit -m "feat: 고친 셀을 Apply로 반영하고 실패하면 이유와 
   ```
   문구 key: `result.sortedPartial`(`Sorted {count} received rows only`), `result.sortAscending`, `result.sortDescending`(header 버튼 aria-label).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `sortRows.test.ts`:
   - `numbers_sort_by_value`: `["10", "9", "-2", "9007199254740993", "9007199254740992", "NaN", "Infinity", "-Infinity", "1.50", "1.5"]` 오름차순 → `-Infinity, -2, 1.50, 1.5, 9, 10, 9007199254740992, 9007199254740993, Infinity, NaN`(같은 값 `1.50`/`1.5`는 원래 순서).
@@ -544,12 +544,12 @@ git commit -m "feat: 고친 셀을 Apply로 반영하고 실패하면 이유와 
 - `ResultGrid.test.tsx`: `header_click_sorts_and_shows_arrow`(aria-sort), `row_numbers_keep_result_order`, `shift_click_range_follows_view_order`(복사한 TSV가 보이는 순서), `sorted_grid_does_not_fetch_on_scroll`, `arriving_batch_is_sorted_in`, `resize_handle_does_not_sort`, `sort_survives_tab_switch`.
 - `ResultPane.test.tsx`: `partial_sorted_result_says_received_rows_only`(running, cancelled, `firstRow > 0`), `complete_sorted_result_has_no_note`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query/sortRows.test.ts src/features/query/ResultGrid.test.tsx src/features/query/ResultPane.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `compareNumeric`은 정규식 `^-?\d+(\.\d+)?$`인 두 값을 부호, 정수부 길이(앞 0 제거), 정수부 문자열, 소수부(뒤 0 제거) 순으로 비교한다. `NaN`, `Infinity`, `-Infinity`는 이 계획의 순서. `Number`로 바꾸지 않는다(2^53 넘는 bigint).
 - 정렬은 rows index 배열을 stable sort(`Array.prototype.sort`는 stable)하고 NULL을 앞뒤로 모은 뒤 `Int32Array`로 돌려준다.
@@ -557,12 +557,12 @@ Expected: FAIL
 - header는 이름 영역 button이 `nextSort`, 리사이즈 handle은 event를 막는다. 화살표는 type 뒤에 fg-2.
 - ResultGrid가 `onSortChange(sorted: boolean)`로 ResultPane에 알리고, ResultPane은 결과가 일부일 때 meta 뒤에 `result.sortedPartial`을 그린다(count는 `rows.length`).
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

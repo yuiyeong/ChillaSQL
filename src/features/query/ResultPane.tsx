@@ -56,7 +56,12 @@ import { changedCount, useEdits } from "./editsStore";
 import { runKeyOf } from "./gridViews";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { ResultNote } from "./ResultNote";
-import { receivedRows, type ResultData, type RunState } from "./runReducer";
+import {
+  isPartialResult,
+  receivedRows,
+  type ResultData,
+  type RunState,
+} from "./runReducer";
 import { applyBlocked, endable, useRuns, type ScriptRun } from "./runsStore";
 import {
   failedHintOf,
@@ -134,6 +139,7 @@ export const ResultPane = memo(function ResultPane({
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
   const statementsRef = useRef<UpdateStatement[] | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
+  const [sorted, setSorted] = useState(false);
 
   const onFetchMore = useCallback(() => {
     if (tabId !== null) void useRuns.getState().fetchMore(tabId);
@@ -197,6 +203,7 @@ export const ResultPane = memo(function ResultPane({
       copyTargetRef={copyTargetRef}
       statementsRef={statementsRef}
       onSelectionChange={setHasSelection}
+      onSortChange={setSorted}
     />
   );
 
@@ -457,6 +464,15 @@ export const ResultPane = memo(function ResultPane({
       ? changedCount(tabEdits)
       : 0;
 
+  // 일부만 받은 결과를 정렬했으면 받은 행만 정렬했다고 알린다. 수는 표에 남은 행이다.
+  const sortedPartial =
+    grid !== null &&
+    sorted &&
+    (state?.status === "running" || state?.status === "finished") &&
+    isPartialResult(state)
+      ? tc("result.sortedPartial", state.result.rows.length)
+      : null;
+
   const apply = async () => {
     const statements = statementsRef.current;
     if (tabId === null || !statements?.length) return;
@@ -480,6 +496,9 @@ export const ResultPane = memo(function ResultPane({
           {header !== null && (
             <ResultBar>
               {header}
+              {sortedPartial !== null && (
+                <span className="text-small text-fg-2">{sortedPartial}</span>
+              )}
               {changed > 0 && (
                 <span className="text-small text-fg-2">
                   {tc("edit.changed", changed)}

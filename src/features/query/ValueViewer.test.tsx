@@ -81,6 +81,7 @@ function setup(
       copyTargetRef={createRef() as RefObject<(() => CopyTarget) | null>}
       statementsRef={createRef()}
       onSelectionChange={vi.fn()}
+      onSortChange={vi.fn()}
     />,
   );
   return { onCopied, grid: screen.getByRole("grid") };

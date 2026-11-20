@@ -83,6 +83,25 @@ export type RunState =
   | { status: "finished"; result: ResultData; outcome: Outcome }
   | { status: "rejected"; rejection: Rejection };
 
+/**
+ * 표에 있는 행이 결과의 일부인지. 받는 중, `cancelled`, `expired`, 앞 행을 버림(`firstRow > 0`),
+ * 첫 batch만 받은 여러 문장의 앞 문장이면 true다. 정렬과 내보내기의 안내가 같은 판단을 쓴다.
+ */
+export function isPartialResult(state: RunState): boolean {
+  if (state.status === "running") return true;
+  if (state.status !== "finished") return false;
+  const { result, outcome } = state;
+  switch (outcome.outcome) {
+    case "cancelled":
+    case "expired":
+      return true;
+    case "completed":
+      return result.firstRow > 0 || receivedRows(result) < outcome.rows;
+    default:
+      return result.firstRow > 0;
+  }
+}
+
 export function emptyResult(
   { sql, rewrite, from, origin }: ScriptStep,
   runKey: string,

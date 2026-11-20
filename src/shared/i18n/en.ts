@@ -300,6 +300,10 @@ export const en = {
   "result.end.one": "End · 1 row",
   "result.end.other": "End · {count} rows",
   "result.resizeColumn": "Resize {name}",
+  "result.sortAscending": "{name}, sorted ascending",
+  "result.sortDescending": "{name}, sorted descending",
+  "result.sortedPartial.one": "Sorted 1 received row only",
+  "result.sortedPartial.other": "Sorted {count} received rows only",
 
   "edit.changed.one": "1 cell changed",
   "edit.changed.other": "{count} cells changed",

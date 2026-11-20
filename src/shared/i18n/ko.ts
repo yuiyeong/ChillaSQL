@@ -301,6 +301,10 @@ export const ko: Record<MessageKey, string> = {
   "result.end.one": "끝 · 1행",
   "result.end.other": "끝 · {count}행",
   "result.resizeColumn": "{name} 크기 조절",
+  "result.sortAscending": "{name}, 오름차순 정렬됨",
+  "result.sortDescending": "{name}, 내림차순 정렬됨",
+  "result.sortedPartial.one": "받은 1행만 정렬함",
+  "result.sortedPartial.other": "받은 {count}행만 정렬함",
 
   "edit.changed.one": "셀 1개 바뀜",
   "edit.changed.other": "셀 {count}개 바뀜",

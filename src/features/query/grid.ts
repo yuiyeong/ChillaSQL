@@ -217,26 +217,68 @@ export type Selection =
   | { kind: "rows"; anchor: number; focus: number }
   | null;
 
-/** 행 선택이면 위아래 끝 행 번호(둘 다 포함), 아니면 null이다. */
-export function rowSpan(selection: Selection): [number, number] | null {
-  if (selection?.kind !== "rows") return null;
-  return [
-    Math.min(selection.anchor, selection.focus),
-    Math.max(selection.anchor, selection.focus),
-  ];
+/** 행의 보이는 순서. 정렬이 없으면 둘 다 null이고 rows index가 곧 보이는 위치다. */
+export interface RowView {
+  /** 보이는 위치 → rows index */
+  order: Int32Array | null;
+  /** rows index → 보이는 위치 */
+  position: Int32Array | null;
 }
 
-/** 행 선택 범위 중 보관한 행만, 위에서 아래 순서로 돌려준다. 행 선택이 아니면 빈 배열이다. */
+/** 정렬하지 않은 결과 순서 */
+export const RESULT_ORDER: RowView = { order: null, position: null };
+
+/** `order`(보이는 위치 → rows index)의 view. 정렬이 없으면 `RESULT_ORDER`다. */
+export function rowViewOf(order: Int32Array | null): RowView {
+  if (order === null) return RESULT_ORDER;
+  const position = new Int32Array(order.length);
+  order.forEach((index, at) => {
+    position[index] = at;
+  });
+  return { order, position };
+}
+
+/**
+ * 행 선택의 위아래 끝을 보이는 위치(둘 다 포함)로 센다. 선택은 결과 행 번호 그대로다.
+ * 결과 순서면 버린 끝을 보관한 행 안으로 줄이고, 정렬한 view에서 끝 행이 버려졌으면 범위를 셀 수 없어 null이다.
+ * 보관한 행에 걸치지 않거나 행 선택이 아니어도 null이다.
+ */
+export function viewSpan(
+  selection: Selection,
+  firstRow: number,
+  retained: number,
+  view: RowView,
+): [number, number] | null {
+  if (selection?.kind !== "rows") return null;
+  const anchor = selection.anchor - firstRow;
+  const focus = selection.focus - firstRow;
+  const { position } = view;
+  if (position === null) {
+    const from = Math.max(Math.min(anchor, focus), 0);
+    const to = Math.min(Math.max(anchor, focus), retained - 1);
+    return from <= to ? [from, to] : null;
+  }
+  const inside = (index: number) => index >= 0 && index < retained;
+  if (!inside(anchor) || !inside(focus)) return null;
+  const [a, b] = [position[anchor], position[focus]];
+  return [Math.min(a, b), Math.max(a, b)];
+}
+
+/** 행 선택 범위 중 보관한 행만, 보이는 순서로 돌려준다. 행 선택이 아니면 빈 배열이다. */
 export function selectedRows(
   selection: Selection,
   firstRow: number,
   rows: readonly Cell[][],
+  view: RowView,
 ): Cell[][] {
-  const span = rowSpan(selection);
+  const span = viewSpan(selection, firstRow, rows.length, view);
   if (span === null) return [];
-  const from = Math.max(span[0] - firstRow, 0);
-  const to = Math.min(span[1] - firstRow, rows.length - 1);
-  return rows.slice(from, Math.max(to + 1, from));
+  const { order } = view;
+  if (order === null) return rows.slice(span[0], span[1] + 1);
+  return Array.from(
+    order.subarray(span[0], span[1] + 1),
+    (index) => rows[index],
+  );
 }
 
 /** 선택 중 보관한 행(`firstRow`부터 `retained`개)에 남은 것이 있는지. 행을 복사하지 않고 범위만 본다. */
@@ -244,12 +286,11 @@ export function selectionRetained(
   selection: Selection,
   firstRow: number,
   retained: number,
+  view: RowView,
 ): boolean {
   if (selection === null) return false;
-  const last = firstRow + retained - 1;
   if (selection.kind === "cell") {
-    return selection.row >= firstRow && selection.row <= last;
+    return selection.row >= firstRow && selection.row < firstRow + retained;
   }
-  const [top, bottom] = rowSpan(selection)!;
-  return bottom >= firstRow && top <= last;
+  return viewSpan(selection, firstRow, retained, view) !== null;
 }

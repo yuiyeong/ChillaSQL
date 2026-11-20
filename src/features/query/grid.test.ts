@@ -9,7 +9,8 @@ import {
   fitWidth,
   headerMeasure,
   rowNumberWidth,
-  rowSpan,
+  RESULT_ORDER,
+  rowViewOf,
   selectedRows,
   selectionRetained,
   shouldFetch,
@@ -188,28 +189,36 @@ test("anchorShift는 버린 행만큼 당기고 처음 생긴 버린 구간 줄�
   expect(anchorShift(500, 0)).toBe(0);
 });
 
-test("rowSpan은 행 선택의 위아래 끝이다", () => {
-  expect(rowSpan({ kind: "rows", anchor: 12, focus: 9 })).toEqual([9, 12]);
-  expect(rowSpan({ kind: "rows", anchor: 3, focus: 3 })).toEqual([3, 3]);
-  expect(rowSpan({ kind: "cell", row: 1, column: 0 })).toBeNull();
-  expect(rowSpan(null)).toBeNull();
-});
-
 test("selectedRows는 보관된 행만 위에서 아래로", () => {
   const rows = [["a"], ["b"], ["c"]];
   expect(
-    selectedRows({ kind: "rows", anchor: 12, focus: 9 }, 10, rows),
+    selectedRows(
+      { kind: "rows", anchor: 12, focus: 9 },
+      10,
+      rows,
+      RESULT_ORDER,
+    ),
   ).toEqual([["a"], ["b"], ["c"]]);
   expect(
-    selectedRows({ kind: "rows", anchor: 11, focus: 11 }, 10, rows),
+    selectedRows(
+      { kind: "rows", anchor: 11, focus: 11 },
+      10,
+      rows,
+      RESULT_ORDER,
+    ),
   ).toEqual([["b"]]);
   expect(
-    selectedRows({ kind: "rows", anchor: 1, focus: 10 }, 10, rows),
+    selectedRows(
+      { kind: "rows", anchor: 1, focus: 10 },
+      10,
+      rows,
+      RESULT_ORDER,
+    ),
   ).toEqual([["a"]]);
-  expect(selectedRows(null, 10, rows)).toEqual([]);
-  expect(selectedRows({ kind: "cell", row: 10, column: 0 }, 10, rows)).toEqual(
-    [],
-  );
+  expect(selectedRows(null, 10, rows, RESULT_ORDER)).toEqual([]);
+  expect(
+    selectedRows({ kind: "cell", row: 10, column: 0 }, 10, rows, RESULT_ORDER),
+  ).toEqual([]);
 });
 
 test("cellDisplay", () => {
@@ -261,20 +270,77 @@ test("cellDisplay는 긴 값을 surrogate pair를 가르지 않고 자른다", (
 
 test("selectionRetained는 선택이 보관한 행에 걸치는지 본다", () => {
   // 보관한 행은 100~199번이다.
-  expect(selectionRetained(null, 100, 100)).toBe(false);
+  expect(selectionRetained(null, 100, 100, RESULT_ORDER)).toBe(false);
   expect(
-    selectionRetained({ kind: "cell", row: 99, column: 0 }, 100, 100),
+    selectionRetained(
+      { kind: "cell", row: 99, column: 0 },
+      100,
+      100,
+      RESULT_ORDER,
+    ),
   ).toBe(false);
   expect(
-    selectionRetained({ kind: "cell", row: 100, column: 0 }, 100, 100),
+    selectionRetained(
+      { kind: "cell", row: 100, column: 0 },
+      100,
+      100,
+      RESULT_ORDER,
+    ),
   ).toBe(true);
   expect(
-    selectionRetained({ kind: "cell", row: 200, column: 0 }, 100, 100),
+    selectionRetained(
+      { kind: "cell", row: 200, column: 0 },
+      100,
+      100,
+      RESULT_ORDER,
+    ),
   ).toBe(false);
   expect(
-    selectionRetained({ kind: "rows", anchor: 120, focus: 10 }, 100, 100),
+    selectionRetained(
+      { kind: "rows", anchor: 120, focus: 10 },
+      100,
+      100,
+      RESULT_ORDER,
+    ),
   ).toBe(true);
   expect(
-    selectionRetained({ kind: "rows", anchor: 99, focus: 10 }, 100, 100),
+    selectionRetained(
+      { kind: "rows", anchor: 99, focus: 10 },
+      100,
+      100,
+      RESULT_ORDER,
+    ),
   ).toBe(false);
+});
+
+test("rowViewOf_inverts_the_order", () => {
+  expect(rowViewOf(null)).toBe(RESULT_ORDER);
+  const view = rowViewOf(Int32Array.from([2, 0, 1]));
+  expect(Array.from(view.position!)).toEqual([1, 2, 0]);
+});
+
+test("selected_rows_follow_the_view_order", () => {
+  // 보관한 행은 10~13번이고, 보이는 순서는 13, 11, 10, 12번이다.
+  const rows = [["a"], ["b"], ["c"], ["d"]];
+  const view = rowViewOf(Int32Array.from([3, 1, 0, 2]));
+  // 11번에서 Shift로 12번까지 고르면 보이는 위치 1~3이다.
+  expect(
+    selectedRows({ kind: "rows", anchor: 11, focus: 12 }, 10, rows, view),
+  ).toEqual([["b"], ["a"], ["c"]]);
+  expect(
+    selectedRows({ kind: "rows", anchor: 12, focus: 13 }, 10, rows, view),
+  ).toEqual([["d"], ["b"], ["a"], ["c"]]);
+  // 정렬한 표에서 끝 행이 버려지면 범위를 셀 수 없다.
+  expect(
+    selectedRows({ kind: "rows", anchor: 9, focus: 12 }, 10, rows, view),
+  ).toEqual([]);
+  expect(
+    selectionRetained({ kind: "rows", anchor: 9, focus: 12 }, 10, 4, view),
+  ).toBe(false);
+  expect(
+    selectionRetained({ kind: "rows", anchor: 11, focus: 12 }, 10, 4, view),
+  ).toBe(true);
+  expect(
+    selectionRetained({ kind: "cell", row: 13, column: 0 }, 10, 4, view),
+  ).toBe(true);
 });

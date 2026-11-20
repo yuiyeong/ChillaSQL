@@ -25,6 +25,7 @@ import { fitWidth, rowNumberWidth } from "./grid";
 import { runKeyOf } from "./gridViews";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { emptyResult, type ResultData } from "./runReducer";
+import { useRuns } from "./runsStore";
 import { typeKey, useTypes } from "./typesStore";
 
 type Props = ComponentProps<typeof ResultGrid>;
@@ -77,6 +78,7 @@ function props(patch: Partial<Props> = {}): Props {
     copyTargetRef: createRef() as RefObject<(() => CopyTarget) | null>,
     statementsRef: createRef(),
     onSelectionChange: vi.fn(),
+    onSortChange: vi.fn(),
     ...patch,
   };
 }
@@ -942,4 +944,199 @@ test("the_editor_opens_on_the_result_row_after_dropped_rows", async () => {
     new Map([[5001, new Map([[2, "moved@x"]])]]),
   );
   expect(cellAt(5001, 2)).toHaveTextContent("moved@x");
+});
+
+/** id(bigint)와 email(text) 열의 끝난 결과. 결과 순서의 id는 10, 9, 100, 50이다. */
+function sortable(patch: Partial<ResultData> = {}): ResultData {
+  return result({
+    columns: typedColumns(["id", "bigint", "N"], ["email", "text", "S"]),
+    rows: [
+      ["10", "b"],
+      ["9", "c"],
+      ["100", "a"],
+      ["50", "d"],
+    ],
+    fetch: "none",
+    ...patch,
+  });
+}
+
+function sortButton(name: string): HTMLElement {
+  return within(columnHeader(name)).getByRole("button");
+}
+
+/** 보이는 순서(위에서 아래)의 행 번호 */
+function shownRowNumbers(): string[] {
+  return screen
+    .getAllByRole("rowheader")
+    .map((header) => header.textContent ?? "");
+}
+
+test("header_click_sorts_and_shows_arrow", () => {
+  const { props: p } = setup({ result: sortable() });
+  expect(columnHeader("id")).not.toHaveAttribute("aria-sort");
+
+  fireEvent.click(sortButton("id"));
+  expect(columnHeader("id")).toHaveAttribute("aria-sort", "ascending");
+  expect(sortButton("id")).toHaveAccessibleName("id, sorted ascending");
+  expect(within(columnHeader("id")).getByText("↑")).toHaveClass("text-fg-2");
+  expect(columnHeader("email")).not.toHaveAttribute("aria-sort");
+  expect(shownRowNumbers()).toEqual(["2", "1", "4", "3"]);
+  // 9가 든 결과 2번째 행이 맨 위에 그려진다.
+  expect(
+    document.querySelector<HTMLElement>('[data-row="1"]')!.style.transform,
+  ).toBe("translateY(0px)");
+  expect(p.onSortChange).toHaveBeenLastCalledWith(true);
+
+  fireEvent.click(sortButton("id"));
+  expect(columnHeader("id")).toHaveAttribute("aria-sort", "descending");
+  expect(sortButton("id")).toHaveAccessibleName("id, sorted descending");
+  expect(within(columnHeader("id")).getByText("↓")).toHaveClass("text-fg-2");
+  expect(shownRowNumbers()).toEqual(["3", "4", "1", "2"]);
+
+  fireEvent.click(sortButton("id"));
+  expect(columnHeader("id")).not.toHaveAttribute("aria-sort");
+  expect(within(columnHeader("id")).queryByText("↑")).toBeNull();
+  expect(within(columnHeader("id")).queryByText("↓")).toBeNull();
+  expect(shownRowNumbers()).toEqual(["1", "2", "3", "4"]);
+  expect(p.onSortChange).toHaveBeenLastCalledWith(false);
+
+  // 글자 열은 code unit 순이다.
+  fireEvent.click(sortButton("email"));
+  expect(shownRowNumbers()).toEqual(["3", "1", "2", "4"]);
+});
+
+test("row_numbers_keep_result_order", () => {
+  setup({ result: sortable() });
+
+  fireEvent.click(sortButton("id"));
+
+  const row = cell("100").closest<HTMLElement>("[role=row]")!;
+  expect(within(row).getByRole("rowheader")).toHaveTextContent("3");
+  expect(row).toHaveAttribute("aria-rowindex", "4");
+  expect(screen.getAllByRole("rowheader")[0]).toHaveTextContent("2");
+});
+
+test("shift_click_range_follows_view_order", () => {
+  const { props: p, grid } = setup({ result: sortable() });
+  fireEvent.click(sortButton("id"));
+
+  // 보이는 순서는 2, 1, 4, 3번 행이다. 2번에서 4번까지면 2, 1, 4번이다.
+  fireEvent.click(rowHeader("2"));
+  fireEvent.click(rowHeader("4"), { shiftKey: true });
+
+  expect(
+    screen
+      .getAllByRole("row")
+      .filter((row) => row.getAttribute("aria-selected") === "true")
+      .map((row) => within(row).getByRole("rowheader").textContent),
+  ).toEqual(["2", "1", "4"]);
+  const { setData } = copy(grid());
+  expect(setData).toHaveBeenCalledWith("text/plain", "9\tc\n10\tb\n50\td");
+  expect(p.onCopied).toHaveBeenCalledWith("Copied 3 rows (tab-separated)");
+  expect(p.copyTargetRef.current?.()?.text).toBe("9\tc\n10\tb\n50\td");
+});
+
+test("sorted_grid_does_not_fetch_on_scroll", () => {
+  const { props: p, grid } = setup({
+    result: result({ rows: rowsOf(500), fetch: "ready" }),
+  });
+  fireEvent.click(sortButton("id"));
+
+  grid().scrollTop = 500 * 26;
+  fireEvent.scroll(grid());
+  expect(p.onFetchMore).not.toHaveBeenCalled();
+
+  // 정렬을 풀면 끝 가까이라 다음 batch를 요청한다.
+  fireEvent.click(sortButton("id"));
+  fireEvent.click(sortButton("id"));
+  expect(p.onFetchMore).toHaveBeenCalledTimes(1);
+});
+
+test("arriving_batch_is_sorted_in", () => {
+  const first = sortable({ fetch: "fetching" });
+  const { props: p, rerender } = setup({ result: first });
+  fireEvent.click(sortButton("id"));
+  expect(shownRowNumbers()).toEqual(["2", "1", "4", "3"]);
+
+  rerender({
+    result: {
+      ...first,
+      rows: [...first.rows, ["1", "e"], ["95", "f"]],
+      fetch: "ready",
+    },
+  });
+
+  expect(shownRowNumbers()).toEqual(["5", "2", "1", "4", "6", "3"]);
+  expect(columnHeader("id")).toHaveAttribute("aria-sort", "ascending");
+  expect(p.onFetchMore).not.toHaveBeenCalled();
+});
+
+test("resize_handle_does_not_sort", () => {
+  setup({ result: sortable() });
+  const handle = within(columnHeader("id")).getByRole("separator");
+
+  fireEvent.mouseDown(handle, { clientX: 500 });
+  fireEvent.mouseMove(document, { clientX: 470 });
+  fireEvent.mouseUp(document, { clientX: 470 });
+  fireEvent.click(handle);
+  fireEvent.doubleClick(handle);
+
+  expect(columnHeader("id")).not.toHaveAttribute("aria-sort");
+  expect(shownRowNumbers()).toEqual(["1", "2", "3", "4"]);
+  fireEvent.click(sortButton("id"));
+  expect(columnHeader("id")).toHaveAttribute("aria-sort", "ascending");
+});
+
+test("sort_survives_tab_switch", () => {
+  const shown = sortable();
+  // 탭 t가 아직 이 실행을 보여 줄 수 있어야 떠날 때 view를 저장한다.
+  useRuns.setState({
+    runs: {
+      t: {
+        status: "finished",
+        result: shown,
+        outcome: { outcome: "completed", rows: 4 },
+      },
+    },
+  });
+  try {
+    const { props: p, rerender } = setup({ result: shown });
+    fireEvent.click(sortButton("id"));
+    fireEvent.click(sortButton("id"));
+
+    rerender({ tabId: "u" });
+    expect(columnHeader("id")).not.toHaveAttribute("aria-sort");
+    expect(p.onSortChange).toHaveBeenLastCalledWith(false);
+
+    rerender({ tabId: "t" });
+    expect(columnHeader("id")).toHaveAttribute("aria-sort", "descending");
+    expect(shownRowNumbers()).toEqual(["3", "4", "1", "2"]);
+    expect(p.onSortChange).toHaveBeenLastCalledWith(true);
+  } finally {
+    useRuns.setState({ runs: {} });
+  }
+});
+
+test("editing_a_sorted_view_edits_the_result_row", async () => {
+  await setupEditable();
+  // id는 type을 모르는 열이라 글자 순이다. 내림차순이면 결과 3, 2, 1번째 행 순이다.
+  fireEvent.click(sortButton("id"));
+  fireEvent.click(sortButton("id"));
+
+  fireEvent.doubleClick(cellAt(0, 1));
+  const input = editor()!;
+  expect(input.value).toBe("a@x");
+  // 결과 첫 행은 맨 아래(보이는 위치 2)에 있다.
+  expect(input.style.top).toBe(`${2 * 26}px`);
+
+  change(input, "new@x");
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  expect(useEdits.getState().edits.t?.changes).toEqual(
+    new Map([[0, new Map([[2, "new@x"]])]]),
+  );
+  expect(cellAt(0, 1)).toHaveTextContent("new@x");
+  expect(cellAt(0, 1)).toHaveAttribute("data-changed", "true");
+  expect(cellAt(1, 1)).toHaveTextContent("b@x");
 });

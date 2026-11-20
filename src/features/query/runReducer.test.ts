@@ -1,7 +1,13 @@
 import { expect, test } from "vitest";
-import type { QueryEvent } from "../../shared/api/types";
+import type { Outcome, QueryEvent } from "../../shared/api/types";
 import { resultColumns } from "../../test/fixtures";
-import { emptyResult, reduce, requestFetch, type RunState } from "./runReducer";
+import {
+  emptyResult,
+  isPartialResult,
+  reduce,
+  requestFetch,
+  type RunState,
+} from "./runReducer";
 
 const origin = { line: 1, column: 1 };
 
@@ -287,4 +293,25 @@ test("rows가 오면 fetching에서 ready로 돌아간다", () => {
   const state = reduce(fetching, { ...rowsEvent, firstRow: 1 });
 
   expect(state.status === "running" && state.result.fetch).toBe("ready");
+});
+
+test("partial_result_is_running_stopped_dropped_or_drained", () => {
+  const result = emptyResult({ sql: "SELECT 1", from: 0, origin }, "r", 1);
+  const rows = [["1"], ["2"]];
+  const done = (outcome: Outcome, patch: Partial<typeof result> = {}) =>
+    isPartialResult({
+      status: "finished",
+      result: { ...result, rows, ...patch },
+      outcome,
+    });
+
+  expect(isPartialResult({ status: "running", result })).toBe(true);
+  expect(done({ outcome: "cancelled" })).toBe(true);
+  expect(done({ outcome: "expired" })).toBe(true);
+  // 끝까지 받았지만 앞 행을 버렸다.
+  expect(done({ outcome: "completed", rows: 5 }, { firstRow: 3 })).toBe(true);
+  // 여러 문장의 앞 문장은 첫 batch만 받는다.
+  expect(done({ outcome: "completed", rows: 900 })).toBe(true);
+  expect(done({ outcome: "completed", rows: 2 })).toBe(false);
+  expect(isPartialResult({ status: "idle" })).toBe(false);
 });
