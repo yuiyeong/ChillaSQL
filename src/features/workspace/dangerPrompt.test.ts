@@ -7,6 +7,7 @@ import type { Danger } from "../../shared/api/types";
 import { answerDialog, textOf } from "../../test/dialogs";
 import { connection, openProjectWith, setTabMode } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
+import { useProject } from "../project/projectStore";
 import { useDialogs } from "../../shared/ui/dialogs";
 import { useRuns } from "../query/runsStore";
 import { confirmDanger } from "./dangerPrompt";
@@ -175,6 +176,16 @@ test("read_only_connection_is_not_asked", async () => {
 
 test("a_writable_connection_in_the_project_is_still_asked", async () => {
   openProjectWith([connection("staging")]);
+
+  const { allowed } = await confirmWith(deleteAll);
+
+  expect(allowed).toBe(false);
+});
+
+test("a_read_only_save_that_was_not_applied_is_still_asked", async () => {
+  const writable = connection("staging");
+  openProjectWith([connection("staging", { readOnly: true })]);
+  useProject.setState({ unapplied: { staging: writable } });
 
   const { allowed } = await confirmWith(deleteAll);
 

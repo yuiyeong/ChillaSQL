@@ -35,13 +35,12 @@ import {
 import { anchorOf, runMarksField } from "../editor/runMarks";
 import { setStatementSpans } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
-import { useProject } from "../project/projectStore";
+import { connectionInUse, useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import { useTypes } from "../query/typesStore";
 import {
   applySavedProject,
   applySavedProjectKeepingSessions,
-  connectionInUse,
   changeConnection,
   closeTab,
   execute,
@@ -1445,6 +1444,42 @@ test("run_again_asks_too", async () => {
 
   expect(executeQuery).toHaveBeenCalledTimes(1);
   expect(runOf(id)).toMatchObject({ status: "finished" });
+});
+
+test("read_only_connection_never_opens_the_danger_dialog_on_the_run_path", async () => {
+  useProject.setState({
+    project: {
+      ...project,
+      connections: [connection("local", { readOnly: true })],
+    },
+  });
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 8 },
+    { start: 10, end: 31 },
+  ]);
+  vi.mocked(inspectStatement).mockResolvedValue(deleteAll);
+  const id = tabWith("SELECT 1;\nDELETE FROM sessions;");
+
+  await execute("runFile");
+  onEventOf(0)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 1,
+  });
+  await vi.waitFor(() => expect(executeQuery).toHaveBeenCalledTimes(2));
+  onEventOf(1)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 1,
+  });
+  await runAgain(id);
+
+  expect(useDialogs.getState().current).toBeNull();
+  expect(inspectStatement).not.toHaveBeenCalled();
 });
 
 test("danger_is_confirmed_when_its_step_comes", async () => {

@@ -137,6 +137,12 @@ export const useProject = create<ProjectState>()((set, get) => {
   };
 });
 
+/** 탭의 세션이 쓰는 그 이름의 접속. Commit이 실패해 반영하지 못한 저장이 있으면 그 앞의 값이다. */
+export function connectionInUse(name: string): Connection | undefined {
+  const { project, unapplied } = useProject.getState();
+  return unapplied[name] ?? project?.connections.find((c) => c.name === name);
+}
+
 /** 열린 프로젝트의 그 이름의 접속. 없으면 undefined다. */
 export function useConnection(name: string | null): Connection | undefined {
   return useProject((s) =>

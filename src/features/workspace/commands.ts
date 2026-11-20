@@ -7,7 +7,6 @@ import {
 import { pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import type {
-  Connection,
   Project,
   Relation,
   StatementSpan,
@@ -24,7 +23,7 @@ import { anchorLocation, anchorOf } from "../editor/runMarks";
 import { lineColumn, statementAt } from "../editor/statementAt";
 import { statementSpansField } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
-import { useProject } from "../project/projectStore";
+import { connectionInUse, useProject } from "../project/projectStore";
 import type {
   Rejection,
   Retry,
@@ -417,12 +416,6 @@ export async function changeConnection(
   const released = useRuns.getState().release(tabId);
   useTabs.getState().setConnection(tabId, connection);
   await released;
-}
-
-/** 탭의 세션이 쓰는 그 이름의 접속. Commit이 실패해 반영하지 못한 저장이 있으면 그 앞의 값이다. */
-export function connectionInUse(name: string): Connection | undefined {
-  const { project, unapplied } = useProject.getState();
-  return unapplied[name] ?? project?.connections.find((c) => c.name === name);
 }
 
 /**

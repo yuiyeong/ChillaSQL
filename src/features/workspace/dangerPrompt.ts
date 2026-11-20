@@ -5,7 +5,7 @@ import { bold, rt, sqlCode } from "../../shared/i18n/rich";
 import { t } from "../../shared/i18n/t";
 import { ask, type DialogSpec } from "../../shared/ui/dialogs";
 import { modeOf, useTabs } from "../editor/tabsStore";
-import { useProject } from "../project/projectStore";
+import { connectionInUse } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 
 function keyword(text: string): ReactNode {
@@ -124,10 +124,9 @@ export async function confirmDanger(
   tabId: string,
   request: DangerRequest,
 ): Promise<boolean> {
-  const connections = useProject.getState().project?.connections ?? [];
-  if (connections.find((c) => c.name === request.connection)?.readOnly) {
-    return true;
-  }
+  // 세션이 실제로 쓰는 접속을 본다. read_only를 켜고 저장했지만 Commit이 실패했으면 세션은 아직
+  // 쓰기가 되는 앞 접속이다.
+  if (connectionInUse(request.connection)?.readOnly) return true;
   let danger: Danger | null;
   try {
     danger = await inspectStatement(request.sql);

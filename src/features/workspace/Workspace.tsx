@@ -13,7 +13,7 @@ import { saveTab } from "../editor/saveTab";
 import { SqlEditor } from "../editor/SqlEditor";
 import { TabBar } from "../editor/TabBar";
 import { selectActiveConnection, useTabs } from "../editor/tabsStore";
-import { useProject } from "../project/projectStore";
+import { connectionInUse, useProject } from "../project/projectStore";
 import { Sidebar } from "../project/Sidebar";
 import { Hints, ResultPane } from "../query/ResultPane";
 import { useSchema } from "../schema/schemaStore";
@@ -22,7 +22,6 @@ import { colorOf, connectionColor } from "../connections/colors";
 import {
   applySavedProject,
   applySavedProjectKeepingSessions,
-  connectionInUse,
   closeTab,
   execute,
   switchProject,
