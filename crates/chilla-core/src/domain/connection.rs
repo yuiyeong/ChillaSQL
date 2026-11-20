@@ -196,14 +196,6 @@ impl ConnectionProfile {
             && *sslrootcert == other.sslrootcert
             && *tunnel == other.tunnel
     }
-
-    /// `same_target`이고 `read_only`와 `statement_timeout`도 같은가. 다르면 열려 있는 세션에는
-    /// 바뀐 값이 닿지 않으므로 세션을 새로 열어야 한다.
-    pub fn same_session(&self, other: &ConnectionProfile) -> bool {
-        self.same_target(other)
-            && self.read_only == other.read_only
-            && self.statement_timeout == other.statement_timeout
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -464,30 +456,6 @@ mod tests {
             ProfileError::StatementTimeoutRange { secs: 0 }.to_string(),
             "statement_timeout must be 1 to 86400 seconds, not 0"
         );
-    }
-
-    #[test]
-    fn same_session_compares_read_only_and_timeout() {
-        let saved = local();
-        assert!(saved.same_session(&local()));
-        assert!(saved.same_session(&ConnectionProfile {
-            color: Some(ConnectionColor::Red),
-            tunnel_timeout: Some(Duration::from_secs(30)),
-            ..local()
-        }));
-        assert!(!saved.same_session(&ConnectionProfile {
-            read_only: true,
-            ..local()
-        }));
-        assert!(!saved.same_session(&ConnectionProfile {
-            statement_timeout: Some(Duration::from_secs(30)),
-            ..local()
-        }));
-        // 연결 대상이 다르면 세션 설정이 같아도 다른 세션이다.
-        assert!(!saved.same_session(&ConnectionProfile {
-            host: "other.example".into(),
-            ..local()
-        }));
     }
 
     #[test]
