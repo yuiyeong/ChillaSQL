@@ -480,6 +480,39 @@ test("the_type_shows_up_when_it_arrives_later", () => {
   expect(columnHeader("id").style.width).not.toBe(before);
 });
 
+test("a_dragged_column_keeps_its_width_when_the_type_arrives", () => {
+  const columns: ResultColumn[] = [
+    { name: "id", typeOid: 100, typeModifier: -1 },
+  ];
+  setup({ result: result({ columns, rows: [["1"]] }) });
+  const header = columnHeader("id");
+  const handle = within(header).getByRole("separator");
+  const fit = fitWidth("id", ["1"]);
+
+  fireEvent.mouseDown(handle, { clientX: 500 });
+  fireEvent.mouseMove(document, { clientX: 540 });
+  fireEvent.mouseUp(document, { clientX: 540 });
+  expect(header.style.width).toBe(`${fit + 40}px`);
+
+  act(() =>
+    useTypes.setState({
+      types: {
+        local: {
+          [typeKey(100, -1)]: {
+            oid: 100,
+            modifier: -1,
+            name: "bigint",
+            category: "N",
+          },
+        },
+      },
+    }),
+  );
+
+  expect(within(columnHeader("id")).getByText("bigint")).toBeInTheDocument();
+  expect(columnHeader("id").style.width).toBe(`${fit + 40}px`);
+});
+
 test("numbers_are_right_aligned", () => {
   setup({
     result: result({

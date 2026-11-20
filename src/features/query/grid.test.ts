@@ -75,6 +75,23 @@ test("fitWidth는 줄여 그린 값의 너비로 센다", () => {
   expect(fitWidth("v", [vector], () => 10)).toBe(480);
 });
 
+test("fitWidth는 큰 JSON을 parse하지 않고 넓은 값으로 센다", () => {
+  const parse = vi.spyOn(JSON, "parse");
+  const big = `{"a": {"b": "${"x".repeat(5000)}"}}`;
+  const values = Array.from({ length: 2000 }, () => big);
+
+  // 앞 300자가 반각이라 480px 상한까지 넓어진다.
+  expect(fitWidth("p", values, () => 10, { kind: "json" })).toBe(480);
+  expect(parse).not.toHaveBeenCalled();
+
+  // 작은 JSON은 접은 너비로 센다.
+  expect(fitWidth("p", ['{"a": {"b": 1}}'], () => 10, { kind: "json" })).toBe(
+    Math.ceil(10 * 6.5 + 20 + 1),
+  );
+  expect(parse).toHaveBeenCalledTimes(1);
+  parse.mockRestore();
+});
+
 afterEach(() => {
   vi.unstubAllGlobals();
   document.documentElement.removeAttribute("style");

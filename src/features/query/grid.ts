@@ -31,6 +31,8 @@ export const MIN_DRAG = 48;
 const MIN_ROW_NUMBER_WIDTH = 52;
 /** 자동 너비는 앞 이만큼의 값만 보고 정한다. */
 const FIT_SAMPLE = 2000;
+/** 열 너비를 맞출 때 이보다 긴 JSON은 접지 않는다. 2000개를 한꺼번에 parse하지 않기 위해서다. */
+const FIT_JSON_LIMIT = 4000;
 /** 이보다 긴 값은 앞부분만 그리고 센다. */
 const CELL_LIMIT = 300;
 
@@ -135,6 +137,10 @@ export function fitWidth(
 
 function valueColumns(value: Cell, kind: ValueKind): number {
   if (kind === "text" || value === null) return displayColumns(value ?? "NULL");
+  // 큰 JSON은 접는 비용이 크다. 열 너비는 넓은 값으로 보고 원문 앞부분의 칸 수로 센다.
+  if (kind === "json" && value.length > FIT_JSON_LIMIT) {
+    return displayColumns(value);
+  }
   const { text, dim } = cellText(value, kind);
   return displayColumns(dim === null ? text : `${text} ${dim}`);
 }
