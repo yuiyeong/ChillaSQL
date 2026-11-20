@@ -1,9 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useRef,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
+import { useEffect, useId, useRef } from "react";
 import { pickDirectory } from "../../shared/api/dialog";
 import { messageOf } from "../../shared/api/errors";
 import { t } from "../../shared/i18n/t";
@@ -13,6 +8,7 @@ import { ErrorIcon } from "../../shared/ui/icons";
 import { isDialogOpen } from "../../shared/ui/dialogs";
 import { Kbd } from "../../shared/ui/Kbd";
 import { MODAL_PANEL, Scrim } from "../../shared/ui/Modal";
+import { useModalKeys } from "../../shared/ui/useModalKeys";
 import { useNow } from "../../shared/ui/useNow";
 import { enterProject } from "../workspace/commands";
 import {
@@ -87,7 +83,7 @@ function Welcome() {
   return (
     <main className="bg-bg-0 text-fg flex h-screen flex-col">
       <div data-tauri-drag-region className="h-[38px] shrink-0" />
-      <div className="mx-auto mt-6 flex w-[480px] flex-col gap-5">
+      <div className="mx-auto mt-6 flex min-h-0 w-[480px] flex-1 flex-col gap-5 overflow-y-auto pb-6">
         <div className="flex items-center justify-between">
           <h1 className="text-title">ChillaSQL</h1>
           <Button
@@ -178,15 +174,8 @@ function MissingSheet({
   const bodyId = useId();
   const panel = useRef<HTMLDivElement>(null);
 
-  function onKeyDown(event: ReactKeyboardEvent) {
-    // 한글 입력 중에는 key가 "Process"라서 code로 판별한다.
-    if (event.code === "Escape") {
-      event.preventDefault();
-      dismissMissing();
-    } else if (event.code === "Tab") {
-      keepFocusInside(event, panel.current);
-    }
-  }
+  // Escape는 Welcome으로 돌아간다. 위에 확인 dialog가 떠 있으면 그 dialog의 key다.
+  useModalKeys(panel, dismissMissing, isDialogOpen);
 
   return (
     <Scrim>
@@ -197,7 +186,6 @@ function MissingSheet({
         aria-labelledby={titleId}
         aria-describedby={bodyId}
         className={MODAL_PANEL}
-        onKeyDown={onKeyDown}
       >
         <div className="flex flex-col gap-1.5">
           <h2 id={titleId} className="text-title">
@@ -225,19 +213,4 @@ function MissingSheet({
       </div>
     </Scrim>
   );
-}
-
-/** Tab이 sheet 밖으로 나가지 않게 한다. 끝에서 넘어가면 반대쪽 끝으로 돌린다. */
-function keepFocusInside(event: ReactKeyboardEvent, panel: HTMLElement | null) {
-  const buttons = Array.from(
-    panel?.querySelectorAll<HTMLElement>("button:not(:disabled)") ?? [],
-  );
-  const first = buttons[0];
-  const last = buttons[buttons.length - 1];
-  if (first === undefined || last === undefined) return;
-  const focused = document.activeElement;
-  if (event.shiftKey ? focused === first : focused === last) {
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus();
-  }
 }

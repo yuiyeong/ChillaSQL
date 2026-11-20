@@ -9,8 +9,7 @@ import {
 } from "./dialogs";
 import { ClockIcon, WarningIcon } from "./icons";
 import { MODAL_PANEL, Scrim } from "./Modal";
-
-const FOCUSABLE = "button:not(:disabled)";
+import { useModalKeys } from "./useModalKeys";
 
 /**
  * 확인 dialog를 그리는 자리. `ask`가 띄운 dialog를 한 번에 하나씩 보인다.
@@ -27,25 +26,7 @@ function Dialog({ spec }: { spec: DialogSpec }) {
   const dialog = useRef<HTMLDivElement>(null);
   const cancel = useRef<HTMLButtonElement>(null);
 
-  // 열려 있는 동안만 쓰는 listener라서 dialog가 바뀌어도 다시 달지 않는다.
-  useEffect(() => {
-    const before = document.activeElement;
-    function onKeyDown(event: KeyboardEvent) {
-      // 한글 입력 중에는 key가 "Process"라서 code로 판별한다.
-      if (event.code === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        resolveDialog("cancel");
-      } else if (event.code === "Tab") {
-        keepFocusInside(event, dialog.current);
-      }
-    }
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => {
-      window.removeEventListener("keydown", onKeyDown, true);
-      if (before instanceof HTMLElement && before.isConnected) before.focus();
-    };
-  }, []);
+  useModalKeys(dialog, () => resolveDialog("cancel"));
 
   // 처음 focus는 Cancel이다. 다음 차례의 dialog도 Cancel에서 시작한다.
   useEffect(() => cancel.current?.focus(), [spec]);
@@ -173,20 +154,4 @@ function ActionButton({
       </Button>
     </>
   );
-}
-
-/** Tab이 dialog 밖으로 나가지 않게 한다. 끝에서 넘어가면 반대쪽 끝으로 돌린다. */
-function keepFocusInside(event: KeyboardEvent, dialog: HTMLElement | null) {
-  const buttons = Array.from(
-    dialog?.querySelectorAll<HTMLElement>(FOCUSABLE) ?? [],
-  );
-  const first = buttons[0];
-  const last = buttons[buttons.length - 1];
-  if (first === undefined || last === undefined) return;
-  const focused = document.activeElement;
-  const outside = !(focused instanceof Node && dialog?.contains(focused));
-  if (outside || (event.shiftKey ? focused === first : focused === last)) {
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus();
-  }
 }

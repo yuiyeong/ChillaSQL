@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -422,4 +423,63 @@ test("cmd_o_on_welcome_opens_the_folder_picker", async () => {
 
   expect(event.defaultPrevented).toBe(true);
   await waitFor(() => expect(pickDirectory).toHaveBeenCalledTimes(1));
+});
+
+/** sheet를 띄운다. */
+async function openSheet() {
+  await renderWelcome(recents(`${home}/work/billing`));
+  vi.mocked(openProject).mockRejectedValue(
+    new CommandError("project_not_found", "chilla.toml이 없습니다"),
+  );
+  vi.mocked(pickDirectory).mockResolvedValue("/new");
+  await click(screen.getByRole("button", { name: "Open Project…" }));
+  return screen.findByRole("alertdialog");
+}
+
+function press(target: Element, code: string, init: KeyboardEventInit = {}) {
+  const event = new KeyboardEvent("keydown", {
+    code,
+    bubbles: true,
+    cancelable: true,
+    ...init,
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+test("escape_closes_the_sheet_when_focus_is_outside_it", async () => {
+  await openSheet();
+  // 막을 눌렀거나 picker가 닫힌 뒤처럼 focus가 body에 있다.
+  (document.activeElement as HTMLElement).blur();
+  expect(document.body).toHaveFocus();
+
+  act(() => {
+    press(document.body, "Escape");
+  });
+
+  expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+  expect(useProject.getState().status).toBe("none");
+});
+
+test("tab_stays_inside_the_sheet_when_focus_is_outside_it", async () => {
+  const sheet = await openSheet();
+  const behind = screen.getByRole("button", { name: /billing/ });
+  behind.focus();
+
+  const event = press(behind, "Tab");
+
+  expect(event.defaultPrevented).toBe(true);
+  expect(sheet).toContainElement(document.activeElement as HTMLElement);
+  // 끝의 Create에서 Tab은 처음으로, 처음에서 Shift+Tab은 끝으로 돈다.
+  const create = within(sheet).getByRole("button", {
+    name: "Create chilla.toml",
+  });
+  const choose = within(sheet).getByRole("button", {
+    name: "Choose another folder…",
+  });
+  create.focus();
+  press(create, "Tab");
+  expect(choose).toHaveFocus();
+  press(choose, "Tab", { shiftKey: true });
+  expect(create).toHaveFocus();
 });
