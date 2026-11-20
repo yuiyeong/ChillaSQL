@@ -324,7 +324,7 @@ git commit -m "feat: scanner token으로 문장 안의 :name 파라미터를 찾
   ```
   `ScriptStep`과 `ResultData`에 `rewrite?: Rewrite`(바꾼 것이 없으면 없다). `emptyResult`가 step에서 옮긴다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `rewrite.test.ts`:
 - `substitutes_values_from_the_end`: `WHERE id = :id AND d > :since::date`, `{id: "10482", since: "'2026-11-01'"}` → `WHERE id = 10482 AND d > '2026-11-01'::date`.
@@ -336,22 +336,22 @@ git commit -m "feat: scanner token으로 문장 안의 :name 파라미터를 찾
 - `runsStore.test.ts`: `server_error_is_marked_at_the_source_offset`.
 - `commands.test.ts`: `run_again_keeps_the_rewrite`(Run again이 같은 sql과 `rewrite`를 보낸다).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query src/features/workspace/commands.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - 서버 오류의 position을 anchor에 더하는 자리는 모두 `sourceOffset(result.rewrite, position)`을 쓴다: `runsStore`의 `markServerError` 호출, `runAnchors.goToError`, `format.errorLocation`(`lineColumn(sourceText(result), …)`).
 - `movedStep`과 `retryRun`이 `rewrite`를 그대로 옮긴다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

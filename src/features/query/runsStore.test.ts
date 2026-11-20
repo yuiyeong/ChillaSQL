@@ -20,6 +20,7 @@ import type {
   TxStatus,
 } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
+import { prepend, substitute } from "./rewrite";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
 import { useTypes } from "./typesStore";
@@ -29,6 +30,12 @@ import {
   resultColumns,
   setTabMode,
 } from "../../test/fixtures";
+import {
+  closeDocument,
+  documentState,
+  openDocument,
+} from "../editor/documents";
+import { errorRange, runMarksField } from "../editor/runMarks";
 import { modeOf, useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 
@@ -105,6 +112,50 @@ test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () =>
       startedAt: expect.any(Number),
     },
   });
+});
+
+test("server_error_is_marked_at_the_source_offset", async () => {
+  openDocument("t", "SELECT 1;\nSELECT :v FROM nope");
+  try {
+    const sql = "SELECT :v FROM nope";
+    const step = prepend(
+      substitute(
+        { sql, from: 10, origin: { line: 2, column: 1 } },
+        [{ name: "v", start: 7, end: 9 }],
+        { v: "'abc'" },
+      ),
+      "EXPLAIN ",
+    );
+    await useRuns
+      .getState()
+      .run("t", () => ({ connection: "local", steps: [step] }));
+    expect(vi.mocked(executeQuery).mock.calls[0][1]).toBe(
+      "EXPLAIN SELECT 'abc' FROM nope",
+    );
+
+    onEventOf(0)({
+      type: "finished",
+      outcome: "failed",
+      elapsedMicros: 10,
+      tx: null,
+      error: {
+        code: "42P01",
+        message: 'relation "nope" does not exist',
+        detail: null,
+        hint: null,
+        // 보낸 text의 `nope`
+        position: "EXPLAIN SELECT 'abc' FROM ".length,
+      },
+    });
+
+    const doc = documentState("t").doc;
+    expect(documentState("t").field(runMarksField).error).toEqual(
+      errorRange(doc, 10 + sql.indexOf("nope")),
+    );
+    expect(doc.sliceString(10 + sql.indexOf("nope"))).toBe("nope");
+  } finally {
+    closeDocument("t");
+  }
 });
 
 test("같은 탭의 다음 실행은 세션을 다시 쓴다", async () => {

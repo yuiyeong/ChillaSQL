@@ -1,5 +1,6 @@
 import { lineColumn } from "../editor/statementAt";
 import { t, tc } from "../../shared/i18n/t";
+import { sourceOffset, sourceText } from "./rewrite";
 import type { Origin, ResultData } from "./runReducer";
 
 /** 1 ms 밑은 소수 둘째 자리 ms, 1 s 밑은 정수 ms, 그 위는 소수 둘째 자리 s. 반올림한 값으로 단위를 고른다. */
@@ -11,15 +12,19 @@ export function formatElapsed(micros: number): string {
 }
 
 /**
- * 서버가 준 오류 위치(보낸 text의 UTF-16 offset)를 문서의 줄과 칸으로 바꾼다. `origin`은 보낸 text가
- * 지금 문서에서 시작하는 곳이다. 편집을 따라 옮긴 값을 넘기고, 없으면 실행한 때의 값을 쓴다.
+ * 서버가 준 오류 위치(보낸 text의 UTF-16 offset)를 문서의 줄과 칸으로 바꾼다. 고쳐 보냈으면 문서의 문장
+ * text 기준으로 센다. `origin`은 문서의 문장이 지금 문서에서 시작하는 곳이다. 편집을 따라 옮긴 값을
+ * 넘기고, 없으면 실행한 때의 값을 쓴다.
  */
 export function errorLocation(
   result: ResultData,
   position: number,
   origin: Origin = result.origin,
 ): { line: number; column: number } {
-  const { line, column } = lineColumn(result.sql, position);
+  const { line, column } = lineColumn(
+    sourceText(result),
+    sourceOffset(result.rewrite, position),
+  );
   return line === 1
     ? { line: origin.line, column: origin.column + column - 1 }
     : { line: origin.line + line - 1, column };

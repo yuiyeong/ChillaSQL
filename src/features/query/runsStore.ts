@@ -24,6 +24,7 @@ import { markRunStart, markServerError } from "../editor/runAnchors";
 import { useHistory } from "../history/historyStore";
 import { useProject } from "../project/projectStore";
 import { clearGridViews, dropGridView } from "./gridViews";
+import { sourceOffset } from "./rewrite";
 import {
   emptyResult,
   reduce,
@@ -584,7 +585,11 @@ export const useRuns = create<RunsState>()((set, get) => {
             event.outcome === "failed" &&
             event.error.position !== null
           ) {
-            markServerError(tabId, runKey, event.error.position);
+            markServerError(
+              tabId,
+              runKey,
+              sourceOffset(step.rewrite, event.error.position),
+            );
           }
           // header의 type 이름은 접속의 catalog connection이 답한다. 밀려난 실행이 묻으면 이미 닫은
           // catalog connection(과 터널)을 다시 연다.

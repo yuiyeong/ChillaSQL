@@ -4,6 +4,7 @@ import type {
   QueryEvent,
   ResultColumn,
 } from "../../shared/api/types";
+import type { Rewrite } from "./rewrite";
 
 /** 보낸 text가 문서에서 시작한 곳. 1부터 센다. */
 export interface Origin {
@@ -16,7 +17,10 @@ export type FetchState = "none" | "ready" | "fetching";
 
 /** 실행할 문장 하나와 그것이 문서에서 시작한 곳. */
 export interface ScriptStep {
+  /** 서버에 보낼 text. `rewrite`가 있으면 문서의 문장을 고친 것이다. */
   sql: string;
+  /** 문서의 문장을 고쳐 보낼 때만 있다(파라미터 값, `EXPLAIN ANALYZE `). 바꾼 것이 없으면 없다. */
+  rewrite?: Rewrite;
   /**
    * 문서 offset. 실행한 뒤의 편집은 문서가 따라 옮긴다(`anchorOf`). 문서에 그 자리가 없으면(지워진
    * 자리의 text를 다시 실행) null이고, 오류 밑줄과 Go to error를 쓰지 않는다.
@@ -50,6 +54,8 @@ export interface Rejection {
 export interface ResultData {
   /** 서버에 보낸 text */
   sql: string;
+  /** 보낸 text를 문서의 문장에서 고쳤으면 그 대응. 없으면 보낸 text가 문서의 문장이다. */
+  rewrite?: Rewrite;
   /** 실행을 가리키는 key. 에디터 문서가 그 실행의 현재 위치를 이 key로 둔다. */
   runKey: string;
   /** 실행할 때의 문서 offset. 지금 위치는 `anchorOf(tabId, runKey)`다. 문서에 자리가 없으면 null */
@@ -78,12 +84,13 @@ export type RunState =
   | { status: "rejected"; rejection: Rejection };
 
 export function emptyResult(
-  { sql, from, origin }: ScriptStep,
+  { sql, rewrite, from, origin }: ScriptStep,
   runKey: string,
   startedAt: number,
 ): ResultData {
   return {
     sql,
+    ...(rewrite !== undefined && { rewrite }),
     runKey,
     from,
     origin,

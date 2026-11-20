@@ -6,6 +6,7 @@ import {
   formatLive,
   resultLabel,
 } from "./format";
+import { prepend, substitute } from "./rewrite";
 import { emptyResult } from "./runReducer";
 
 test("formatElapsed", () => {
@@ -34,6 +35,30 @@ test("errorLocation은 보낸 text의 위치를 문서의 줄과 칸으로 바�
     line: 6,
     column: 6,
   });
+});
+
+test("error_location_uses_the_source_text", () => {
+  // 값에 줄바꿈이 있어도 줄과 칸은 문서 기준이다.
+  const sql = "SELECT :v,\n  nope";
+  const step = substitute(
+    { sql, from: 0, origin: { line: 3, column: 5 } },
+    [{ name: "v", start: 7, end: 9 }],
+    { v: "'a\nb\nc'" },
+  );
+  const result = emptyResult(step, "run-0", 0);
+  const at = (text: string) => result.sql.indexOf(text);
+
+  // 값 안(줄바꿈 뒤)은 `:v`의 자리다.
+  expect(errorLocation(result, at("b"))).toEqual({ line: 3, column: 12 });
+  // 값 뒤의 글자는 문서의 같은 글자다.
+  expect(errorLocation(result, at("nope"))).toEqual({ line: 4, column: 3 });
+  expect(errorLocation(result, at("nope"), { line: 5, column: 1 })).toEqual({
+    line: 6,
+    column: 3,
+  });
+  // 앞에 붙인 text 안은 문장의 처음이다.
+  const explained = emptyResult(prepend(step, "EXPLAIN "), "run-1", 0);
+  expect(errorLocation(explained, 2)).toEqual({ line: 3, column: 5 });
 });
 
 test("formatLive는 소수 한 자리 초로 쓴다", () => {

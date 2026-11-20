@@ -304,10 +304,11 @@ function runStep(tabId: string, step: ScriptStep): Promise<void> {
 function movedStep(
   tabId: string,
   runKey: string,
-  { sql, origin }: Pick<ScriptStep, "sql" | "origin">,
+  { sql, rewrite, origin }: Pick<ScriptStep, "sql" | "rewrite" | "origin">,
 ): ScriptStep {
   return {
     sql,
+    ...(rewrite !== undefined && { rewrite }),
     from: anchorOf(tabId, runKey),
     origin: anchorLocation(tabId, runKey) ?? origin,
   };

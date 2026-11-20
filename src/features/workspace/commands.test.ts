@@ -39,6 +39,7 @@ import { runMarksField } from "../editor/runMarks";
 import { setStatementSpans } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { connectionInUse, useProject } from "../project/projectStore";
+import { prepend, substitute } from "../query/rewrite";
 import { useRuns } from "../query/runsStore";
 import { useTypes } from "../query/typesStore";
 import {
@@ -1115,6 +1116,41 @@ test("run_again_uses_the_moved_position", async () => {
   expect(anchorOf(id, key)).toBe(12);
 });
 
+test("run_again_keeps_the_rewrite", async () => {
+  const id = tabWith("SELECT :n");
+  const source = "SELECT :n";
+  const step = substitute(
+    { sql: source, from: 0, origin: { line: 1, column: 1 } },
+    [{ name: "n", start: 7, end: 9 }],
+    { n: "42" },
+  );
+  await useRuns
+    .getState()
+    .run(id, () => ({ connection: "local", steps: [step] }));
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    3,
+    "SELECT 42",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+
+  await runAgain(id);
+
+  expect(executeQuery).toHaveBeenCalledTimes(2);
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    3,
+    "SELECT 42",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  expect(runOf(id)).toMatchObject({
+    status: "running",
+    result: { sql: "SELECT 42", rewrite: step.rewrite },
+  });
+});
+
 test("runAgain은 결과가 없으면 아무것도 하지 않는다", async () => {
   const id = tabWith("SELECT 1");
 
@@ -1778,6 +1814,37 @@ test("try_again_uses_the_moved_anchor", async () => {
     { sql: "SELECT 2", from: 12, origin: { line: 4, column: 1 } },
   ]);
   expect(executeQuery).toHaveBeenCalledTimes(1);
+});
+
+test("try_again_keeps_the_rewrite", async () => {
+  vi.mocked(openSession).mockRejectedValueOnce(
+    new CommandError("tunnel_timeout", "localhost:25432 didn't open"),
+  );
+  const id = tabWith("SELECT :n");
+  const step = prepend(
+    { sql: "SELECT :n", from: 0, origin: { line: 1, column: 1 } },
+    "EXPLAIN ",
+  );
+  await useRuns
+    .getState()
+    .run(id, () => ({ connection: "local", steps: [step] }));
+  const failed = runOf(id);
+  const retry = failed.status === "rejected" ? failed.rejection.retry : null;
+  expect(retry).toMatchObject({ connection: "local" });
+
+  await retryRun(id, retry!);
+
+  expect(useRuns.getState().scripts[id]).toBeUndefined();
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    3,
+    "EXPLAIN SELECT :n",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  expect(runOf(id)).toMatchObject({
+    result: { sql: "EXPLAIN SELECT :n", rewrite: step.rewrite },
+  });
 });
 
 test("saving_a_changed_target_reloads_its_catalog", async () => {

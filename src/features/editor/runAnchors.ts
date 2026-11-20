@@ -1,4 +1,5 @@
 import type { Text, TransactionSpec } from "@codemirror/state";
+import { sourceOffset } from "../query/rewrite";
 import { useRuns } from "../query/runsStore";
 import { dispatchToDocument, findDocument, viewShowing } from "./documents";
 import {
@@ -54,7 +55,7 @@ export function markRunStart(
   });
 }
 
-/** 서버 오류의 `position`(보낸 text 기준)에 밑줄을 긋는다. 그 실행의 anchor가 없으면 긋지 않는다. */
+/** 문서 문장 text 기준 `position`에 밑줄을 긋는다. 그 실행의 anchor가 없으면 긋지 않는다. */
 export function markServerError(
   tabId: string,
   runKey: string,
@@ -78,7 +79,10 @@ export function goToError(tabId: string): void {
   if (position === null || anchor === null) return;
   const spec: TransactionSpec = {
     selection: {
-      anchor: Math.min(anchor.offset + position, anchor.doc.length),
+      anchor: Math.min(
+        anchor.offset + sourceOffset(state.result.rewrite, position),
+        anchor.doc.length,
+      ),
     },
     scrollIntoView: true,
   };
