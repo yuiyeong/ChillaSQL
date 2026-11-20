@@ -577,27 +577,27 @@ git commit -m "feat: 한국어 dictionary와 언어 설정, Rust 오류를 kind�
   `CommandId`에 `"reformat"`(`Opt+Cmd+L`, `KeyL` + `altKey` + `metaKey`). toolbar의 Reformat icon 버튼은 Auto/Manual 오른쪽 빈 공간 뒤, 실행 버튼 앞 구분선 앞에 둔다(Main).
 - 문구: `toolbar.reformat` "Reformat (Opt+Cmd+L)", `result.hintReformat` "Reformat", `toast.reformatFailed` "Couldn't reformat: {reason}".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `reformat.test.ts`: `formats_the_whole_document`, `formats_only_the_selection`(앞뒤 text는 그대로, 선택 영역이 새 text를 감쌈), `one_undo_restores_the_text`, `failure_leaves_the_document`(`SELECT 'unclosed` → `ok: false`, 문서 그대로), `keeps_casts_and_dollar_bodies`(Task 1에서 확인한 입력: `::date`, `$$ … ; … $$`, `->>`, `@>`, `"Order Items"`, 한글 식별자와 주석), `rejects_unclosed_block_comment`(`SELECT 1 /* abc` → `ok: false`, 문서 그대로. `sql-formatter`는 이것을 throw하지 않고 `/ * abc`로 바꾸기 때문이다).
 - `shortcuts.test.ts`: `opt_cmd_l_is_reformat`(한글 입력기 상태의 `key`여도 `code`로).
 - `Toolbar.test.tsx`: `reformat_button_runs_the_command`. ResultPane의 `Hints`: `hints_include_reformat`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/editor/reformat.test.ts src/features/workspace`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `documentState(tabId)`에 transaction 하나(`changes` + 새 selection)를 적용해 `setDocumentState`, 보이는 탭이면 view에도 같은 transaction을 보낸다(문서 변경 경로는 `SqlEditor`가 쓰는 것과 같게 해서 dirty와 자동 보관이 따라오게 한다). 닫히지 않은 `/*`는 `sql-formatter`를 부르기 전에 알아보고 `ok: false`로 돌려준다(reason은 `unclosed block comment`). 실패는 `Toast`로 보인다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src package.json pnpm-lock.yaml
@@ -626,7 +626,7 @@ git commit -m "feat: Opt+Cmd+L과 toolbar 버튼으로 선택 영역이나 문�
   ```
   `statementToRun`은 `statementSpansField`가 fresh면 그 span을 쓰고, 아니면 지금처럼 `splitStatements`를 부른다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `statementAt.test.ts`: 기존 test를 `Text.of(…)`로 돌린다.
 - `statementSpans.test.ts`(EditorView, fake timer, `splitStatements` mock):
@@ -637,21 +637,21 @@ git commit -m "feat: Opt+Cmd+L과 toolbar 버튼으로 선택 영역이나 문�
   - `highlights_the_lines_of_the_cursor_statement`(두 줄 문장 → 두 줄에 `cm-runRange`), `no_highlight_with_a_selection`, `no_highlight_when_split_failed`.
 - `commands.test.ts`: `run_uses_fresh_spans_without_splitting`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/editor src/features/workspace/commands.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 `cm-runRange`: `background: color-mix(in srgb, var(--color-accent) 7%, transparent)`, `box-shadow: inset 2px 0 0 var(--color-accent)`(Main의 현재 문장). `editorExtensions()`에 field, plugin, highlight를 더한다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -681,7 +681,7 @@ git commit -m "feat: 문장 span을 문서에 두고 커서 문장의 줄을 배
   ```
   `RunRequest`, `ResultData`에 `runKey: string`과 문서 offset `from: number`를 더한다(`origin`의 Ln/Col은 표시할 때 `anchorOf`로 다시 계산한다). 문구: `result.goToError` "Go to error".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `runMarks.test.ts`:
 - `anchor_moves_with_edits_before_it`, `anchor_is_null_when_its_text_is_deleted`.
@@ -693,23 +693,23 @@ git commit -m "feat: 문장 span을 문서에 두고 커서 문장의 줄을 배
 - `error_location_follows_edits`(위에 줄을 넣으면 `Ln 3`).
 `commands.test.ts`: `run_again_uses_the_moved_position`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/editor/runMarks.test.ts src/features/query src/features/workspace/commands.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `runsStore.run`이 실행을 시작할 때 `setRunAnchor`를 그 탭 문서에 넣고(보이는 탭이면 view로) 이전 `setErrorMark(null)`. `finished`가 `failed`이고 `position`이 있으면 `anchorOf + position`(`ServerError.position`은 보낸 text의 0-based UTF-16 offset)에서 `errorRange`로 `setErrorMark`.
 - `cm-errorMark`: `text-decoration: underline wavy var(--color-danger)`, `text-underline-offset: 4px`(States).
 - 오류 화면의 버튼 순서는 States대로 Go to error, Copy message.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -747,7 +747,7 @@ git commit -m "feat: 서버 오류 위치에 밑줄을 긋고 Go to error로 그
   ```
   `CommandId`에 `"runFile"`. toolbar menu의 Run file을 켠다. 문구: `result.notRun` "Not run", `result.errorTab` "Error", `result.stoppedAt` "Stopped at statement {n}.", `result.notRunRest.one` "Statement {first} was not run.", `result.notRunRest.other` "Statements {first}–{last} were not run.".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `runsStore.test.ts`:
 - `runs_steps_in_order_on_one_session`(`openSession` 한 번, `executeQuery`가 차례로, 마지막만 `drain: false`).
@@ -764,23 +764,23 @@ git commit -m "feat: 서버 오류 위치에 밑줄을 긋고 Go to error로 그
 - `script_shows_result_tabs`(`1 SELECT users`, `2 UPDATE 12`, `3 Error`, `4 Not run`(disabled)), `stopped_message_names_the_rest`, `choosing_a_tab_shows_its_result`, `single_statement_has_no_tabs`.
 `Toolbar.test.tsx`: `run_file_is_enabled`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query src/features/workspace`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `runsStore`: `runs[tabId]`는 지금 문장의 `RunState`로 두어 fetch, cancel, 트랜잭션 계산을 그대로 쓴다. 문장이 `completed`로 끝나면 그 `RunState`를 `done`에 옮기고 같은 token과 세션으로 다음 문장을 보낸다. token이 바뀌면(새 실행, release) 다음 문장을 보내지 않는다.
 - `commands.ts`: 선택 영역은 `splitStatements`로 나눠 둘 이상이면 step 여러 개(나눌 수 없으면 지금처럼 그대로 하나). `runFile`은 문서 전체를 나눈 span 전부. 위험 확인은 `confirmStep`으로 넘긴다(`confirmDanger`를 step마다).
 - `gridViews`의 key에 문장 번호를 넣어 탭마다 컬럼 너비를 따로 둔다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -806,7 +806,7 @@ git commit -m "feat: 파일 전체와 여러 문장 선택을 차례로 실행�
   ```
   문구: `result.timedOut` "Timed out", `result.timeoutDetail` "This connection's statement_timeout is {secs}s.", `result.readOnlyDetail` "{connection} is a read-only connection, so the database rejected the write. Nothing changed.", `result.vectorValues` "{count} values".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `cellDisplay.test.ts`:
 - `numeric_category_is_a_number`, `json_and_jsonb_are_json`, `vector_and_halfvec_are_vectors`(`vector(1536)`), `unknown_type_is_text`.
@@ -818,21 +818,21 @@ git commit -m "feat: 파일 전체와 여러 문장 선택을 차례로 실행�
 - `timeout_shows_the_timed_out_panel`(접속 `statementTimeout: 30`, `failed` `57014` → `Timed out`과 `statement_timeout is 30s`), `57014_without_a_timeout_is_a_plain_error`.
 - `read_only_rejection_explains_it`(read-only 접속, `25006`).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 Tools M8의 모양: header `gap-1.5`, 이름 13px semibold, type mono 12px fg-3. number는 `justify-end`와 에디터의 숫자 syntax token 색. M4의 300자 자르기는 `cellText` 다음에 한다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -860,7 +860,7 @@ git commit -m "feat: 결과 header에 type을 보이고 숫자, JSON, vector를 
   ```
   결과 표가 focus를 가진 채 셀이 골라져 있을 때 `Shift+Enter`가 열고 닫는다(전역 단축키가 아니다). 문구: `viewer.label` "Value viewer", `viewer.copy` "Copy value", `viewer.close` "Close value viewer", `viewer.meta` "{type} · row {row}", `toast.copiedValue` "Copied value".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `ValueViewer.test.tsx`:
 - `shift_enter_opens_and_closes`, `escape_closes`, `follows_the_selected_cell`.
@@ -868,21 +868,21 @@ git commit -m "feat: 결과 header에 type을 보이고 숫자, JSON, vector를 
 - `text_wraps_and_null_is_marked`, `copy_copies_the_full_value`(300자를 넘는 값도 전체).
 - `header_shows_name_type_and_row`(`profile`, `jsonb · row 1`).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query/ValueViewer.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 Tools M8: `aside` 340px, `border-l border-line`, `bg-bg-1`, 머리 줄 36px, Copy와 Close는 `IconButton`. 열린 상태는 `ResultPane`의 state다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -911,7 +911,7 @@ git commit -m "feat: Shift+Enter로 고른 셀의 전체 값을 오른쪽 panel�
   `applySavedProject`, 저장 전 트랜잭션 확인(`saveTarget`)은 `targetChanged` 대신 `sessionChanged`를 쓴다. 비밀번호를 지운다는 안내는 `targetChanged` 그대로다. `confirmDanger`는 탭의 접속이 `readOnly`면 묻지 않고 true.
 - 문구: `connectionForm.readOnlyHint` "Opens sessions read-only so the database rejects writes", `connectionForm.advancedKeys` "statement_timeout · tunnel_timeout · sslrootcert", `connectionForm.statementTimeoutHint` "Seconds. Empty means none", `connectionForm.statementTimeoutRange` "statement_timeout must be 1 to 86400 seconds", `connectionForm.connectedVersion` "Connected · PostgreSQL {version}", `common.readOnly` "Read-only".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `connectionValues.test.ts`: `statement_timeout_is_parsed_and_checked`, `session_changed_includes_session_settings`, `target_changed_ignores_them`.
 - `ConnectionForm.test.tsx`(ConnectionForm B): `read_only_switch_saves`, `advanced_is_collapsed_and_lists_its_keys`, `advanced_opens_when_a_value_is_set`, `test_success_shows_the_version`.
@@ -919,21 +919,21 @@ git commit -m "feat: Shift+Enter로 고른 셀의 전체 값을 오른쪽 panel�
 - `dangerPrompt.test.ts`: `read_only_connection_is_not_asked`.
 - `Sidebar.test.tsx`, `Toolbar.test.tsx`: `read_only_connections_show_the_lock`(sidebar 목록, 접속 menu, toolbar chip).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/connections src/features/project src/features/workspace`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 ConnectionForm B의 배치: `tunnel` 다음 group에 switch 줄(`read_only` mono 13 + 설명 13 fg-3, 오른쪽 switch), 그 아래 disclosure 버튼(chevron, `Advanced`, mono fg-3의 key 목록). 펼치면 `statement_timeout`, `tunnel_timeout`, `sslrootcert` 칸을 이 순서로 둔다(M5의 두 칸을 옮긴다). 자물쇠 icon은 Main/TabsConn의 12px path를 쓴다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -971,7 +971,7 @@ git commit -m "feat: 접속 sheet에 read_only와 Advanced의 statement_timeout�
   ```
   문구: `autosave.skipped.one` "Couldn't reopen {path}", `autosave.skipped.other` "Couldn't reopen {count} files".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `autosave.test.ts`(fake timer):
 - `saves_one_second_after_the_last_change`, `clean_file_tabs_store_no_text`, `untitled_and_dirty_tabs_store_text`.
@@ -981,23 +981,23 @@ git commit -m "feat: 접속 sheet에 read_only와 Advanced의 statement_timeout�
 `commands.test.ts`: `switching_projects_flushes_and_does_not_ask_about_unsaved_tabs`, `opening_a_project_restores_its_tabs`.
 `quit.test.ts`: `flushes_before_quit`(`saveWorkspace`가 `quitApp`보다 먼저).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/workspace src/features/editor/tabsStore.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - 문서 변경은 `onDocChange`(이미 dirty를 표시하는 경로)에서 autosave에 알린다. 저장 실패는 무시한다(다음 변경이 다시 저장한다).
 - `switchProject`의 `askProjectDir`에서 dirty 확인을 지운다. 순서: 트랜잭션 확인 → 폴더 고르기 → `flushAutosave` → `open` → reset → `restore`. `ProjectGate`가 처음 연 프로젝트도 `restore`한다.
 - 새 탭 제목 번호는 복원한 탭의 `Untitled-{n}` 다음부터다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -1033,7 +1033,7 @@ git commit -m "feat: 탭과 저장하지 않은 내용을 앱 저장소에 보�
   `CommandId`에 `"openProject"`(`Cmd+O`, `KeyO` + `metaKey`). home 경로는 `src/shared/api/path.ts`에 `homeDir()`를 더한다(`@tauri-apps/api/path`).
 - 문구: `project.recent` "Recent Projects", `project.recentShort` "Recent", `project.openShortcut` "Open Project…", `project.missingTitle` "{dir} has no chilla.toml", `project.missingBody` "Create a chilla.toml with only [project] and open the folder as a project. Add connections after it opens.", `project.chooseAnother` "Choose another folder…", `project.create` "Create chilla.toml", `when.justNow` "Just now", `when.today` "Today", `when.yesterday` "Yesterday".
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `recent.test.ts`: `initials_from_words_and_single_names`, `short_path_uses_tilde`, `opened_when_buckets`(59초 전, 오늘 아침, 어제, 11월 9일 — en `Nov 9`, ko `11월 9일`).
 - `projectStore.test.ts`: `boot_opens_the_most_recent_project`, `boot_shows_welcome_when_it_fails`(오류와 목록), `boot_without_recents_shows_welcome`, `local_storage_is_not_used`.
@@ -1041,23 +1041,23 @@ git commit -m "feat: 탭과 저장하지 않은 내용을 앱 저장소에 보�
 - `ProjectMenu.test.tsx`(Sidebar D): `menu_lists_other_recent_projects`(지금 프로젝트는 머리에, 목록에는 없음), `choosing_one_switches_project`(`switchProject(dir)`), `open_project_item_opens_the_picker`.
 - `shortcuts.test.ts`: `cmd_o_is_open_project`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/project src/features/workspace/shortcuts.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - Welcome A, B와 Sidebar D의 배치를 `docs/design/canvas/Welcome.dc.html`, `Sidebar.dc.html`에서 읽어 따른다. Welcome B는 M4의 `Modal`로 그린다.
 - `LAST_PROJECT_KEY`와 `localStorage` 읽기·쓰기를 지운다.
 - 프로젝트를 열거나 만든 뒤 `refreshRecent`.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
@@ -1075,26 +1075,26 @@ git commit -m "feat: 최근 프로젝트로 시작하고 Welcome 화면과 sideb
 - Consumes: Task 9의 `useSettings`의 `editor`, `idleTimeoutSecs`
 - Produces: `editorFontTheme(font: string, size: number): Extension`(`.cm-content`, `.cm-gutters`의 font-family, font-size, line-height `round(size × 1.6)`px). `SqlEditor`가 `Compartment`로 넣는다.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `SqlEditor.test.tsx`: `uses_the_editor_font_setting`(`"JetBrains Mono"`, 13 → content style에 `"JetBrains Mono", "D2Coding", monospace`, 13px, 21px).
 - `ResultPane.test.tsx`: `expired_message_uses_the_setting`(`idleTimeoutSecs: 1200` → 20분 문구).
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/editor/SqlEditor.test.tsx src/features/query/ResultPane.test.tsx`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 기본 설정(`D2Coding`, 15)에서 지금 화면(15px, line-height 24px)과 같게 보이도록 기본값의 line-height만 24px로 둔다(`round(15 × 1.6) = 24`).
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src
