@@ -27,6 +27,7 @@ import { useNow } from "../../shared/ui/useNow";
 import { Toast, useToast } from "../../shared/ui/Toast";
 import { useTunnel } from "../connections/tunnelsStore";
 import { useConnection } from "../project/projectStore";
+import { useSettings } from "../settings/settingsStore";
 import { useEditorStatus } from "../editor/editorStatus";
 import { anchorLocation, anchorOf, goToError } from "../editor/runMarks";
 import {
@@ -67,9 +68,6 @@ const TIMEOUT_CODE = "57014";
 /** read_only_sql_transaction */
 const READ_ONLY_CODE = "25006";
 
-/** 받다 만 결과를 닫는 시간(분). core의 `QueryLimits.idle_result_timeout`(600초)과 같다. 설정은 M8이다. */
-const IDLE_RESULT_MINUTES = 10;
-
 /**
  * 결과 panel. header 아래에 표나 상태 화면이 온다.
  * running과 finished가 같은 자리에 같은 component로 표를 그린다. 끝나도 표가 다시 mount되지 않아 스크롤 위치가 남는다.
@@ -109,6 +107,7 @@ export const ResultPane = memo(function ResultPane({
   );
   const tunnel = useTunnel(connection);
   const tabConnection = useConnection(connection);
+  const idleTimeoutSecs = useSettings((s) => s.idleTimeoutSecs);
   const toast = useToast();
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
@@ -285,7 +284,7 @@ export const ResultPane = memo(function ResultPane({
             ) : (
               <Notice icon={<ClockIcon />} title={t("result.expired")}>
                 {tc("result.expiredRows", retained, {
-                  minutes: IDLE_RESULT_MINUTES,
+                  minutes: Math.round(idleTimeoutSecs / 60),
                 })}
               </Notice>
             );

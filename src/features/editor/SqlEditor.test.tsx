@@ -21,6 +21,7 @@ import { SqlEditor } from "./SqlEditor";
 import { catalogField } from "./completion";
 import { documentState } from "./documents";
 import { catalogFixture } from "../../test/fixtures";
+import { useSettings } from "../settings/settingsStore";
 
 beforeEach(() => {
   vi.mocked(splitStatements).mockReset();
@@ -30,6 +31,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  useSettings.setState(useSettings.getInitialState(), true);
   closeDocument("a");
   closeDocument("b");
 });
@@ -49,6 +51,45 @@ test("tab의 문서를 그린다", () => {
 
   expect(container.querySelector(".cm-content")?.textContent).toContain(
     "SELECT 1",
+  );
+});
+
+/** CodeMirror가 head에 넣은 style의 text. computed style은 jsdom이 따옴표를 지우므로 원문을 본다. */
+function editorCss(): string {
+  return Array.from(document.querySelectorAll("style"))
+    .map((style) => style.textContent ?? "")
+    .join("\n");
+}
+
+test("에디터 글꼴 설정을 content와 gutter에 쓴다", () => {
+  useSettings.setState({ editor: { font: "JetBrains Mono", fontSize: 13 } });
+  const { container, rerender } = render(
+    <SqlEditor tabId="a" catalog={null} onDocChange={vi.fn()} />,
+  );
+
+  const style = (selector: string) => {
+    const el = container.querySelector<HTMLElement>(selector);
+    if (el === null) throw new Error(`${selector}가 없습니다`);
+    return getComputedStyle(el);
+  };
+  expect(style(".cm-content").fontFamily).toContain("JetBrains Mono");
+  expect(style(".cm-content").fontSize).toBe("13px");
+  expect(style(".cm-line").lineHeight).toBe("21px");
+  expect(style(".cm-gutters").fontSize).toBe("13px");
+  const css = editorCss();
+  expect(css).toContain('font-family: "JetBrains Mono", "D2Coding", monospace');
+
+  // 다른 tab으로 바꿔도 같은 글꼴이다.
+  rerender(<SqlEditor tabId="b" catalog={null} onDocChange={vi.fn()} />);
+  expect(style(".cm-content").fontSize).toBe("13px");
+});
+
+test("글꼴 이름의 따옴표와 역슬래시는 escape한다", () => {
+  useSettings.setState({ editor: { font: 'A"B\\C', fontSize: 14 } });
+  render(<SqlEditor tabId="a" catalog={null} onDocChange={vi.fn()} />);
+
+  expect(editorCss()).toContain(
+    'font-family: "A\\"B\\\\C", "D2Coding", monospace',
   );
 });
 

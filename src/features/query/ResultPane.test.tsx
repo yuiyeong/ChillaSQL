@@ -42,6 +42,7 @@ import { fitWidth } from "./grid";
 import { emptyResult, type ResultData, type RunState } from "./runReducer";
 import { shortcutLabel } from "../workspace/shortcuts";
 import { useRuns } from "./runsStore";
+import { useSettings } from "../settings/settingsStore";
 
 const realFetchMore = useRuns.getInitialState().fetchMore;
 
@@ -54,6 +55,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   vi.useRealTimers();
+  useSettings.setState(useSettings.getInitialState(), true);
   useRuns.setState({ fetchMore: realFetchMore });
 });
 
@@ -567,6 +569,19 @@ test("expired면 닫았다고 알리고 받은 행은 표에 남긴다", () => {
   expect(screen.getByText("3 rows · 41 ms")).toBeInTheDocument();
   expect(screen.getByRole("columnheader", { name: /id/ })).toBeInTheDocument();
   expect(screen.queryByText(/^End/)).toBeNull();
+});
+
+test("expired의 안내는 설정의 시간(분)을 쓴다", () => {
+  useSettings.setState({ idleTimeoutSecs: 1200 });
+  finished(
+    { outcome: "expired" },
+    { columns: resultColumns("id"), rows: [["1"]] },
+  );
+  expect(
+    screen.getByText(
+      "Nothing was fetched for 20 minutes, so the query was closed on the database. The 1 row received stays visible.",
+    ),
+  ).toBeInTheDocument();
 });
 
 test("expired의 받은 행이 하나면 단수로 쓴다", () => {

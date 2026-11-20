@@ -18,7 +18,7 @@ import {
   syntaxHighlighting,
 } from "@codemirror/language";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
-import type { Extension } from "@codemirror/state";
+import { Compartment, type Extension } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -50,12 +50,9 @@ const editorTheme = EditorView.theme(
     "&.cm-focused": { outline: "none" },
     ".cm-scroller": { fontFamily: "var(--font-mono)" },
     ".cm-content": {
-      fontSize: "15px",
-      lineHeight: "24px",
       fontVariantLigatures: "none",
       caretColor: color("fg"),
     },
-    ".cm-line": { lineHeight: "24px" },
     // 실행될 문장의 줄. 캔버스 Main의 현재 문장이다.
     ".cm-runRange": {
       backgroundColor: `color-mix(in srgb, ${color("accent")} 7%, transparent)`,
@@ -166,6 +163,28 @@ const editorTheme = EditorView.theme(
   },
   { dark: true },
 );
+
+/** CSS 문자열 값으로 쓴다. 설정 파일의 값이므로 따옴표와 역슬래시, 줄바꿈을 escape한다. */
+function cssString(value: string): string {
+  return `"${value.replace(/[\\"]/g, "\\$&").replace(/\n/g, "\\a ")}"`;
+}
+
+/**
+ * 설정의 에디터 글꼴과 크기. `.cm-content`와 gutter에 쓴다. 결과 표는 D2Coding 그대로다.
+ * line-height는 크기의 1.6배다(기본 15px는 24px).
+ */
+export function editorFontTheme(font: string, size: number): Extension {
+  const fontFamily = `${cssString(font)}, "D2Coding", monospace`;
+  const lineHeight = `${Math.round(size * 1.6)}px`;
+  return EditorView.theme({
+    ".cm-content": { fontFamily, fontSize: `${size}px`, lineHeight },
+    ".cm-line": { lineHeight },
+    ".cm-gutters": { fontFamily, fontSize: `${size}px`, lineHeight },
+  });
+}
+
+/** 문서마다 state가 따로이므로 설정의 글꼴은 `SqlEditor`가 이 compartment에 넣는다. */
+export const editorFontCompartment = new Compartment();
 
 /** 문법 색. 테스트가 이 style의 rule을 읽는다. */
 export const syntaxStyle = HighlightStyle.define([
@@ -284,6 +303,7 @@ function createExtensions(): Extension {
     runRangeHighlight,
     runMarksField,
     editorTheme,
+    editorFontCompartment.of(editorFontTheme("D2Coding", 15)),
     syntaxHighlighting(syntaxStyle),
   ];
 }

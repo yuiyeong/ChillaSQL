@@ -1,5 +1,5 @@
 import { EditorView } from "@codemirror/view";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { Catalog } from "../../shared/api/types";
 import { catalogField, setCatalog } from "./completion";
 import {
@@ -9,6 +9,8 @@ import {
   setDocumentState,
 } from "./documents";
 import { useEditorStatus } from "./editorStatus";
+import { editorFontCompartment, editorFontTheme } from "./extensions";
+import { useSettings } from "../settings/settingsStore";
 
 interface SqlEditorProps {
   tabId: string;
@@ -24,6 +26,11 @@ export function SqlEditor({ tabId, catalog, onDocChange }: SqlEditorProps) {
   // view가 들고 있는 state의 tab. dispatchTransactions가 이 값을 본다.
   const shownTabRef = useRef(tabId);
   const onDocChangeRef = useRef(onDocChange);
+  const { font, fontSize } = useSettings((s) => s.editor);
+  const fontTheme = useMemo(
+    () => editorFontTheme(font, fontSize),
+    [font, fontSize],
+  );
 
   useEffect(() => {
     onDocChangeRef.current = onDocChange;
@@ -75,6 +82,14 @@ export function SqlEditor({ tabId, catalog, onDocChange }: SqlEditorProps) {
     if (view.state.field(catalogField, false) === catalog) return;
     view.dispatch({ effects: setCatalog.of(catalog) });
   }, [catalog, tabId]);
+
+  // 탭마다 state가 따로이므로 탭을 바꾼 뒤에도 설정의 글꼴을 그 state에 넣는다.
+  useEffect(() => {
+    const view = viewRef.current;
+    if (view === null) return;
+    if (editorFontCompartment.get(view.state) === fontTheme) return;
+    view.dispatch({ effects: editorFontCompartment.reconfigure(fontTheme) });
+  }, [fontTheme, tabId]);
 
   return <div ref={parentRef} className="h-full" />;
 }
