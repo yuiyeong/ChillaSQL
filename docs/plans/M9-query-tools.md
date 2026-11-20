@@ -622,7 +622,7 @@ git commit -m "feat: catalog에서 테이블과 view의 생성문을 조립함"
   ```
   문구 key: `schema.menu.showDdl`(`Show DDL`), `ddl.tab`(`DDL {name}`), `ddl.copy`, `ddl.copied`(`Copied DDL`), `ddl.openInNewTab`, `ddl.close`, `ddl.loading`(`Loading DDL…`).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `highlightSql.test.ts`: `keywords_types_and_functions_get_classes`(`CREATE TABLE`, `bigint`, `now()`), `keeps_every_character`(조각을 이으면 원문).
 - `ddlStore.test.ts`: `shows_loading_then_text`, `failure_keeps_the_message`, `a_stale_answer_is_dropped`, `close_removes_it`.
@@ -630,24 +630,24 @@ git commit -m "feat: catalog에서 테이블과 view의 생성문을 조립함"
 - `DdlView.test.tsx`: `copy_shows_a_toast`, `open_in_new_tab_uses_the_same_connection`, `close_returns_to_the_result`(Close 뒤 지난 결과 표).
 - `SchemaView.test.tsx`: `table_and_view_menus_have_show_ddl`, `foreign_table_menu_has_no_show_ddl`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query src/features/schema src/features/editor/highlightSql.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `highlightSql`은 `@lezer/highlight`의 `highlightCode`에 에디터가 쓰는 SQL dialect의 parser와, `syntaxStyle`과 같은 tag를 `text-syntax-*` class로 옮긴 `tagHighlighter`를 넘긴다(HighlightStyle의 CSS는 에디터 밖에 mount되지 않는다). dialect를 `extensions.ts`에서 export한다.
 - ResultPane은 그 탭의 DDL이 있으면 다른 상태보다 먼저 DdlView를 그린다. header는 `DDL {name}` 탭, 빈 칸, Copy(ghost 24px), Open in new tab(secondary 24px), Close(icon). 본문 pre는 `bg-0`, padding 12px 16px.
 - `runsStore.run`과 `release`가 `closeDdl(tabId)`를 부른다.
 - menu 항목의 이름은 `schema.name`(quote 없이 화면 표시용)이다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

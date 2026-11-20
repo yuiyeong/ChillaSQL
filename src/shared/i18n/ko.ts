@@ -193,6 +193,7 @@ export const ko: Record<MessageKey, string> = {
   "schema.materialized": "materialized",
   "schema.menu.selectFirstRows": "처음 행 조회",
   "schema.menu.doubleClick": "더블클릭",
+  "schema.menu.showDdl": "DDL 보기",
   "schema.menu.copyName": "이름 복사",
   "schema.copied": "{name} 복사됨",
   "completion.view": "뷰",
@@ -312,6 +313,13 @@ export const ko: Record<MessageKey, string> = {
   "explain.rows": "행 (추정 → 실제)",
   "explain.loops": "Loops",
   "explain.neverExecuted": "never executed",
+
+  "ddl.tab": "DDL {name}",
+  "ddl.copy": "복사",
+  "ddl.copied": "DDL 복사됨",
+  "ddl.openInNewTab": "새 탭에서 열기",
+  "ddl.close": "닫기",
+  "ddl.loading": "DDL을 읽는 중…",
 
   "tx.mode": "트랜잭션 모드",
   "tx.auto": "Auto",

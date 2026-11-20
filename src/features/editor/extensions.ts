@@ -202,6 +202,9 @@ export function editorEditable(editable: boolean): Extension {
   return [EditorView.editable.of(editable), EditorState.readOnly.of(!editable)];
 }
 
+/** 에디터가 쓰는 SQL의 parser. 편집기 밖에서 SQL을 칠할 때(`highlightSql`)도 쓴다. */
+export const sqlParser = PostgreSQL.language.parser;
+
 /** 문법 색. 테스트가 이 style의 rule을 읽는다. */
 export const syntaxStyle = HighlightStyle.define([
   { tag: tags.keyword, color: color("syntax-keyword") },

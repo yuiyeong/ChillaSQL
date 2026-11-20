@@ -17,6 +17,7 @@ import {
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { selectActiveConnection, useTabs } from "../editor/tabsStore";
 import { useConnection } from "../project/projectStore";
+import { showDdl } from "../query/ddlStore";
 import { selectFirstRows } from "../workspace/commands";
 import { isView } from "../../shared/sql/catalog";
 import { schemaRows, type SchemaRow } from "./schemaRows";
@@ -167,6 +168,10 @@ export function SchemaView({
     if (row.kind === "relation") void selectFirstRows(row.relation, reserved);
   };
 
+  const openDdl = (row: SchemaRow) => {
+    if (row.kind === "relation") void showDdl(row.relation);
+  };
+
   const copyName = async (row: SchemaRow) => {
     const name = quoteIdent(nameOf(row), reserved);
     try {
@@ -254,6 +259,12 @@ export function SchemaView({
             </span>
           </MenuItem>
         )}
+        {menu?.row.kind === "relation" &&
+          menu.row.relation.kind !== "foreign_table" && (
+            <MenuItem onSelect={() => openDdl(menu.row)}>
+              {t("schema.menu.showDdl")}
+            </MenuItem>
+          )}
         {menu !== null && (
           <MenuItem onSelect={() => void copyName(menu.row)}>
             {t("schema.menu.copyName")}

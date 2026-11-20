@@ -192,6 +192,7 @@ export const en = {
   "schema.materialized": "materialized",
   "schema.menu.selectFirstRows": "Select first rows",
   "schema.menu.doubleClick": "Double-click",
+  "schema.menu.showDdl": "Show DDL",
   "schema.menu.copyName": "Copy name",
   "schema.copied": "Copied {name}",
   "completion.view": "view",
@@ -311,6 +312,13 @@ export const en = {
   "explain.rows": "Rows (est → actual)",
   "explain.loops": "Loops",
   "explain.neverExecuted": "never executed",
+
+  "ddl.tab": "DDL {name}",
+  "ddl.copy": "Copy",
+  "ddl.copied": "Copied DDL",
+  "ddl.openInNewTab": "Open in new tab",
+  "ddl.close": "Close",
+  "ddl.loading": "Loading DDL…",
 
   "tx.mode": "Transaction mode",
   "tx.auto": "Auto",

@@ -20,6 +20,7 @@ import type {
   TxStatus,
 } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
+import { resetDdl, useDdl } from "./ddlStore";
 import { prepend, substitute } from "./rewrite";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
@@ -73,6 +74,7 @@ const rowsEvent: QueryEvent = {
 beforeEach(async () => {
   // 앞 test의 세션을 닫는 호출이 mock 기록을 지우기 전에 끝나게 한다.
   await useRuns.getState().reset();
+  resetDdl();
   useProject.setState(useProject.getInitialState(), true);
   useTabs.getState().reset();
   useTypes.getState().reset();
@@ -2066,4 +2068,33 @@ test("records_into_the_project_the_run_started_in", async () => {
   onEventOf(0)(rowsEvent);
 
   expect(recordQuery).toHaveBeenCalledWith("/p", expect.anything());
+});
+
+test("a_run_closes_the_ddl", async () => {
+  useDdl.setState({
+    views: { t: { name: "public.users", status: "ready", text: "x" } },
+  });
+
+  await useRuns.getState().run("t", prepared());
+
+  expect(useDdl.getState().views.t).toBeUndefined();
+});
+
+test("a_run_that_never_starts_keeps_the_ddl", async () => {
+  const view = { name: "public.users", status: "ready", text: "x" } as const;
+  useDdl.setState({ views: { t: view } });
+
+  await useRuns.getState().run("t", () => null);
+
+  expect(useDdl.getState().views.t).toEqual(view);
+});
+
+test("release_closes_the_ddl", async () => {
+  useDdl.setState({
+    views: { t: { name: "public.users", status: "ready", text: "x" } },
+  });
+
+  await useRuns.getState().release("t");
+
+  expect(useDdl.getState().views.t).toBeUndefined();
 });

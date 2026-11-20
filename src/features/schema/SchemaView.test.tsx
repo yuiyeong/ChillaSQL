@@ -14,7 +14,11 @@ vi.mock("../../shared/api/clipboard");
 vi.mock("../workspace/commands", () => ({ selectFirstRows: vi.fn() }));
 
 import { copyText } from "../../shared/api/clipboard";
-import { loadCatalog, loadTableDetails } from "../../shared/api/commands";
+import {
+  loadCatalog,
+  loadDdl,
+  loadTableDetails,
+} from "../../shared/api/commands";
 import { selectFirstRows } from "../workspace/commands";
 import { useTabs } from "../editor/tabsStore";
 import { SchemaView } from "./SchemaView";
@@ -60,6 +64,7 @@ beforeEach(async () => {
   await resetStores();
   vi.resetAllMocks();
   vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  vi.mocked(loadDdl).mockResolvedValue("CREATE TABLE x ();");
   openProjectWith([
     connection("local", { color: "green", database: "chilla_test" }),
   ]);
@@ -280,11 +285,63 @@ test("context_menu_of_a_table", async () => {
   const items = within(menu).getAllByRole("menuitem");
   expect(items.map((item) => item.textContent)).toEqual([
     "Select first rowsDouble-click",
+    "Show DDL",
     "Copy name",
   ]);
   await click(items[0]);
   expect(selectFirstRows).toHaveBeenCalledTimes(1);
   expect(screen.queryByRole("menu")).toBeNull();
+});
+
+test("table_and_view_menus_have_show_ddl", async () => {
+  activeTab("local");
+  setEntry({
+    catalog: catalogFixture({
+      schemas: ["Sales"],
+      relations: [
+        relation(9, "Sales", "Order Items", [], "partitioned_table"),
+        relation(4, "Sales", "active", [], "materialized_view"),
+        relation(5, "Sales", "recent", [], "view"),
+        relation(6, "Sales", "plain"),
+      ],
+    }),
+    expanded: new Set(
+      [["Sales"], ["Sales", "tables"], ["Sales", "views"]].map(nodeKey),
+    ),
+  });
+  renderView();
+
+  for (const [name, oid] of [
+    ["Order Items", 9],
+    ["active", 4],
+    ["recent", 5],
+    ["plain", 6],
+  ] as const) {
+    fireEvent.contextMenu(row(name), { clientX: 30, clientY: 50 });
+    await click(screen.getByRole("menuitem", { name: "Show DDL" }));
+    expect(loadDdl).toHaveBeenLastCalledWith("local", oid);
+    expect(screen.queryByRole("menu")).toBeNull();
+  }
+  expect(loadDdl).toHaveBeenCalledTimes(4);
+});
+
+test("foreign_table_menu_has_no_show_ddl", () => {
+  activeTab("local");
+  setEntry({
+    catalog: catalogFixture({
+      relations: [relation(7, "public", "remote", [], "foreign_table")],
+    }),
+    expanded: new Set([["public"], ["public", "tables"]].map(nodeKey)),
+  });
+  renderView();
+
+  fireEvent.contextMenu(row("remote"), { clientX: 30, clientY: 50 });
+  const menu = screen.getByRole("menu", { name: "remote" });
+  expect(
+    within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent),
+  ).toEqual(["Select first rowsDouble-click", "Copy name"]);
 });
 
 test("context_menu_of_a_column_only_copies", () => {

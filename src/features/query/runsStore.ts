@@ -23,6 +23,7 @@ import { modeOf, useTabs } from "../editor/tabsStore";
 import { markRunStart, markServerError } from "../editor/runAnchors";
 import { useHistory } from "../history/historyStore";
 import { useProject } from "../project/projectStore";
+import { closeDdl } from "./ddlStore";
 import { clearGridViews, dropGridView } from "./gridViews";
 import { sourceOffset } from "./rewrite";
 import {
@@ -463,6 +464,8 @@ export const useRuns = create<RunsState>()((set, get) => {
       // 그 사이 같은 탭에서 다시 실행했거나 release했다.
       if (attempts.get(tabId) !== attempt) return;
       if (request === null) return;
+      // 보낼 실행이 정해졌다. 결과 panel을 덮고 있던 DDL을 닫아 이 실행의 결과가 보이게 한다.
+      closeDdl(tabId);
       setNotice(tabId, null);
       setEntry("discardedByEnd", tabId, undefined);
       if ("title" in request) {
@@ -792,6 +795,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     },
 
     async release(tabId) {
+      closeDdl(tabId);
       const slot = drop(tabId);
       dropGridView(tabId);
       set((s) => ({

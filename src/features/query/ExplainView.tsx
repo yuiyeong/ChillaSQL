@@ -3,15 +3,13 @@ import { formatCount, t } from "../../shared/i18n/t";
 import { Button } from "../../shared/ui/Button";
 import { formatElapsed } from "./format";
 import type { Plan, PlanNode } from "./explainPlan";
+import { ResultBar, SingleTab } from "./ResultBar";
 
 /** 표의 열. 시간, 행, loops 칸은 고정 너비다. */
 const GRID = "minmax(0,1fr) 90px 120px 60px";
 /** node 하나가 한 단계 깊어질 때 들여쓰는 너비와 뿌리의 왼쪽 padding(px) */
 const INDENT = 16;
 const BASE_PADDING = 10;
-
-const TAB_CLASS =
-  "text-small bg-bg-3 text-fg inline-flex h-6 shrink-0 cursor-default items-center rounded-[6px] border-0 px-2.5 font-medium";
 
 /** `Execution 41 ms · Planning 0.40 ms`. 없는 값은 뺀다. 둘 다 없으면 null이다. */
 function timingsOf(plan: Plan): string | null {
@@ -104,23 +102,8 @@ export function ExplainView({
   const timings = timingsOf(plan);
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-line-1 flex h-9 shrink-0 items-center gap-3 border-b px-3">
-        {tabs ?? (
-          <div
-            role="tablist"
-            aria-label={t("result.tabs")}
-            className="flex gap-0.5"
-          >
-            <button
-              type="button"
-              role="tab"
-              aria-selected="true"
-              className={TAB_CLASS}
-            >
-              {t("explain.tab")}
-            </button>
-          </div>
-        )}
+      <ResultBar>
+        {tabs ?? <SingleTab>{t("explain.tab")}</SingleTab>}
         {timings !== null && (
           <span className="text-small text-fg-2 font-mono">{timings}</span>
         )}
@@ -132,7 +115,7 @@ export function ExplainView({
         >
           {raw ? t("explain.showTree") : t("explain.showRaw")}
         </Button>
-      </div>
+      </ResultBar>
       {raw ? (
         <pre
           data-testid="explain-raw"

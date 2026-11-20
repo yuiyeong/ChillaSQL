@@ -48,6 +48,8 @@ import {
   resultLabel,
 } from "./format";
 import { isPlanResult, parsePlan, type Plan } from "./explainPlan";
+import { DdlView } from "./DdlView";
+import { useDdl } from "./ddlStore";
 import { ExplainView } from "./ExplainView";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData, type RunState } from "./runReducer";
@@ -109,6 +111,7 @@ export const ResultPane = memo(function ResultPane({
   const discardedByEnd = useRuns((s) =>
     tabId === null ? false : s.discardedByEnd[tabId] === true,
   );
+  const ddl = useDdl((s) => (tabId === null ? undefined : s.views[tabId]));
   const tunnel = useTunnel(connection);
   const tabConnection = useConnection(connection);
   const idleTimeoutSecs = useSettings((s) => s.idleTimeoutSecs);
@@ -438,26 +441,33 @@ export const ResultPane = memo(function ResultPane({
   return (
     <section className="bg-bg-0 text-fg relative flex h-full min-h-0 flex-col">
       {banners}
-      {header !== null && (
-        <div className="border-line-1 flex h-9 shrink-0 items-center gap-3 border-b px-3">
-          {header}
-          <div className="flex-1" />
-          {grid !== null && (
-            <IconButton
-              label={t("result.copySelected")}
-              disabled={!hasSelection}
-              onClick={copySelection}
-            >
-              <CopyIcon />
-            </IconButton>
+      {ddl !== undefined && tabId !== null ? (
+        // DDL은 다른 어떤 결과 상태보다 먼저 그린다. 닫으면 지난 결과가 그대로 있다.
+        <DdlView tabId={tabId} view={ddl} />
+      ) : (
+        <>
+          {header !== null && (
+            <div className="border-line-1 flex h-9 shrink-0 items-center gap-3 border-b px-3">
+              {header}
+              <div className="flex-1" />
+              {grid !== null && (
+                <IconButton
+                  label={t("result.copySelected")}
+                  disabled={!hasSelection}
+                  onClick={copySelection}
+                >
+                  <CopyIcon />
+                </IconButton>
+              )}
+            </div>
           )}
-        </div>
-      )}
-      {notice}
-      {explain}
-      {grid}
-      {body !== null && (
-        <div className="min-h-0 flex-1 overflow-auto">{body}</div>
+          {notice}
+          {explain}
+          {grid}
+          {body !== null && (
+            <div className="min-h-0 flex-1 overflow-auto">{body}</div>
+          )}
+        </>
       )}
       <Toast message={toast.message} />
     </section>

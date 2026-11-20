@@ -4,6 +4,7 @@ import { useEditorStatus } from "../features/editor/editorStatus";
 import { useTabs } from "../features/editor/tabsStore";
 import { useHistory } from "../features/history/historyStore";
 import { useProject } from "../features/project/projectStore";
+import { resetDdl } from "../features/query/ddlStore";
 import { useRuns } from "../features/query/runsStore";
 import { useTypes } from "../features/query/typesStore";
 import { useSchema } from "../features/schema/schemaStore";
@@ -19,6 +20,7 @@ import { resetDialogs } from "../shared/ui/dialogs";
  */
 export async function resetStores(): Promise<void> {
   resetAutosave();
+  resetDdl();
   await useRuns.getState().reset();
   // spyOn이 바꾼 state object를 버린다.
   useRuns.setState(useRuns.getInitialState(), true);
