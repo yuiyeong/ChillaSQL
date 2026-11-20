@@ -55,6 +55,7 @@ import { useRuns } from "./runsStore";
 import { useSettings } from "../settings/settingsStore";
 
 const realFetchMore = useRuns.getInitialState().fetchMore;
+const realApplyEdits = useRuns.getInitialState().applyEdits;
 
 beforeEach(async () => {
   // 결과 panel 크기의 viewport로 둔다.
@@ -66,7 +67,7 @@ beforeEach(async () => {
 afterEach(() => {
   vi.useRealTimers();
   useSettings.setState(useSettings.getInitialState(), true);
-  useRuns.setState({ fetchMore: realFetchMore });
+  useRuns.setState({ fetchMore: realFetchMore, applyEdits: realApplyEdits });
 });
 
 function result(patch: Partial<ResultData> = {}): ResultData {
@@ -1681,6 +1682,121 @@ describe("cell editing", () => {
     expect(screen.queryByText("1 cell changed")).toBeNull();
     expect(screen.queryByText("SQL to send on Apply")).toBeNull();
     expect(screen.getByText("a@x")).toBeInTheDocument();
+  });
+
+  test("apply_is_disabled_while_ending_or_applying", async () => {
+    await showEditable();
+    act(() => useEdits.getState().setCell("t", shownKey, 0, 2, "c@x", "a@x"));
+    const apply = () => screen.getByRole("button", { name: "Apply" });
+    expect(apply()).toBeEnabled();
+
+    act(() => useRuns.setState({ ending: { t: {} } }));
+    expect(apply()).toBeDisabled();
+    act(() => useRuns.setState({ ending: {} }));
+    expect(apply()).toBeEnabled();
+
+    act(() => useEdits.setState({ applying: { t: true } }));
+    expect(apply()).toBeDisabled();
+    act(() => useEdits.setState({ applying: {} }));
+    expect(apply()).toBeEnabled();
+
+    // 여러 문장의 실행에서 앞 문장을 보는 동안 지금 문장이 실행 중이다.
+    const shown = useRuns.getState().runs.t;
+    act(() =>
+      useRuns.setState({
+        runs: {
+          t: {
+            status: "running",
+            result: result({ runKey: "run-1", sql: "SELECT 2" }),
+          },
+        },
+        scripts: {
+          t: {
+            steps: [],
+            done: [shown],
+            current: 1,
+            selected: 0,
+            stoppedAt: null,
+          },
+        },
+      }),
+    );
+    expect(apply()).toBeDisabled();
+  });
+
+  test("apply_sends_the_previewed_statements_and_toasts", async () => {
+    const applyEdits = vi.fn(() =>
+      Promise.resolve({
+        outcome: "applied" as const,
+        tx: "idle" as const,
+        rows: [["c@x"]],
+      }),
+    );
+    useRuns.setState({ applyEdits });
+    await showEditable();
+    act(() => useEdits.getState().setCell("t", shownKey, 0, 2, "c@x", "a@x"));
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    });
+
+    expect(applyEdits).toHaveBeenCalledWith("t", shownKey, [
+      {
+        row: 0,
+        sql: "UPDATE public.users SET email = 'c@x' WHERE id = 1 RETURNING email;",
+        attnums: [2],
+      },
+    ]);
+    expect(screen.getByText("Updated 1 row")).toBeInTheDocument();
+    expect(useEdits.getState().edits.t).toBeUndefined();
+  });
+
+  test("failure_note_shows_under_the_header", async () => {
+    await showEditable();
+    act(() => {
+      useEdits.getState().setCell("t", shownKey, 0, 2, "c@x", "a@x");
+      useEdits.setState({
+        failure: { t: "Roll back the failed transaction first." },
+      });
+    });
+
+    const note = screen
+      .getByText("Roll back the failed transaction first.")
+      .closest("[role=status]")!;
+    expect(note).not.toBeNull();
+    const header = screen.getByText("1 cell changed");
+    const grid = screen.getByRole("grid");
+    expect(
+      header.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      note.compareDocumentPosition(grid) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
+  test("failure_note_replaces_the_not_editable_note", async () => {
+    openProjectWith([connection("local", { readOnly: true })]);
+    await showEditable();
+    act(() => {
+      useEdits.getState().setCell("t", shownKey, 0, 2, "c@x", "a@x");
+    });
+    fireEvent.doubleClick(screen.getByText("b@x"));
+    expect(
+      screen.getByText("Not editable: the connection is read-only."),
+    ).toBeInTheDocument();
+
+    act(() =>
+      useEdits.setState({
+        failure: { t: "Roll back the failed transaction first." },
+      }),
+    );
+
+    expect(
+      screen.getByText("Roll back the failed transaction first."),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Not editable: the connection is read-only."),
+    ).toBeNull();
   });
 
   test("read_only_connection_of_the_tab_is_not_editable", async () => {

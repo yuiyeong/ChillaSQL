@@ -59,6 +59,32 @@ export function nextTx(
 }
 
 /**
+ * Apply 뒤. Manual이나 트랜잭션 안이면 문장 수에 count를 더한다(실패한 Apply는 0). Auto의 트랜잭션
+ * 밖이면 Apply가 Commit까지 하므로 `idle`이 온다. Manual의 트랜잭션 밖이면 앱이 연 트랜잭션이 남는다.
+ * `tx`가 null이면(보내지 않았음) 앞 트랜잭션을 그대로 둔다.
+ */
+export function txAfterApply(
+  previous: TxInfo | null,
+  tx: TxStatus | null,
+  mode: TxMode,
+  startedAt: number,
+  count: number,
+): TxInfo | null {
+  if (tx === null) return previous;
+  if (tx === "idle") return null;
+  const status = tx === "failed" ? "failed" : "open";
+  if (previous === null) {
+    return {
+      status,
+      statements: count,
+      openedAt: startedAt,
+      openedBy: mode === "manual" ? "app" : "user",
+    };
+  }
+  return { ...previous, status, statements: previous.statements + count };
+}
+
+/**
  * 문장 수 문구의 key. `.none`(`manual BEGIN`)은 사용자가 쓴 `BEGIN`으로 연 트랜잭션에만 쓴다. 앱이 연
  * 트랜잭션은 문장이 0개여도(첫 문장이 실패) `.other`다.
  */

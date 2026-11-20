@@ -1,8 +1,9 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 
 vi.mock("../../shared/api/commands");
 
 import {
+  applyEdits,
   cancelQuery,
   closeSession,
   describeTypes,
@@ -14,14 +15,18 @@ import {
 } from "../../shared/api/commands";
 import { CommandError } from "../../shared/api/errors";
 import type {
+  ApplyResult,
   EndResult,
   QueryEvent,
+  ResultColumn,
   Session,
   TxStatus,
 } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
 import { resetDdl, useDdl } from "./ddlStore";
+import type { UpdateStatement } from "./editSql";
 import { useEdits } from "./editsStore";
+import { runKeyOf } from "./gridViews";
 import { prepend, substitute } from "./rewrite";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
@@ -2204,4 +2209,315 @@ test("release_drops_the_edits", async () => {
   await useRuns.getState().release("t");
 
   expect(useEdits.getState().edits.t).toBeUndefined();
+});
+
+describe("applyEdits", () => {
+  /** 테이블 a(oid 100)의 id(1), name(2) 두 번, note(3) */
+  const editColumns: ResultColumn[] = [
+    ["id", 1],
+    ["name", 2],
+    ["name", 2],
+    ["note", 3],
+  ].map(([name, columnNumber]) => ({
+    name: name as string,
+    typeOid: 0,
+    typeModifier: -1,
+    tableOid: 100,
+    columnNumber: columnNumber as number,
+  }));
+
+  const nameAndNote: UpdateStatement = {
+    row: 1,
+    sql: "UPDATE a SET name = 'Z', note = 'N' WHERE id = 2 RETURNING name, note;",
+    attnums: [2, 3],
+  };
+  const firstName: UpdateStatement = {
+    row: 0,
+    sql: "UPDATE a SET name = 'Y' WHERE id = 1 RETURNING name;",
+    attnums: [2],
+  };
+
+  /**
+   * 그 탭에서 `SELECT`를 실행해 두 행을 받고 `tx`로 끝낸다. n번째(0부터) executeQuery 호출이다.
+   * 그 결과의 key(`runKeyOf`)를 돌려준다.
+   */
+  async function selected(
+    tabId: string,
+    tx: TxStatus,
+    call = vi.mocked(executeQuery).mock.calls.length,
+  ): Promise<string> {
+    vi.mocked(describeTypes).mockResolvedValue([]);
+    await useRuns
+      .getState()
+      .run(tabId, prepared("SELECT id, name, name, note FROM a"));
+    const onEvent = onEventOf(call);
+    onEvent({ type: "columns", columns: editColumns });
+    onEvent({
+      type: "rows",
+      firstRow: 0,
+      rows: [
+        ["1", "a", "a", "x"],
+        ["2", "b", "b", "y"],
+      ],
+      retainedFrom: 0,
+      elapsedMicros: 5,
+    });
+    onEvent({
+      type: "finished",
+      tx,
+      elapsedMicros: 5,
+      outcome: "completed",
+      rows: 2,
+    });
+    const run = runOf(tabId);
+    if (run.status !== "finished") throw new Error("not finished");
+    return runKeyOf(run.result);
+  }
+
+  function rowsOf(tabId: string) {
+    const run = runOf(tabId);
+    return run.status === "finished" ? run.result.rows : null;
+  }
+
+  test("applied_rows_replace_the_cells", async () => {
+    const key = await selected("t1", "idle");
+    const before = rowsOf("t1")!;
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "applied",
+      tx: "idle",
+      rows: [["Z", null]],
+    });
+
+    const answer = await useRuns
+      .getState()
+      .applyEdits("t1", key, [nameAndNote]);
+
+    expect(answer?.outcome).toBe("applied");
+    expect(applyEdits).toHaveBeenCalledWith(3, [nameAndNote.sql], "auto");
+    const after = rowsOf("t1")!;
+    expect(after).toEqual([
+      ["1", "a", "a", "x"],
+      ["2", "Z", "Z", null],
+    ]);
+    expect(after).not.toBe(before);
+    expect(after[0]).toBe(before[0]);
+  });
+
+  test("applied_rows_replace_a_finished_script_step", async () => {
+    vi.mocked(describeTypes).mockResolvedValue([]);
+    await useRuns
+      .getState()
+      .run("t1", script("SELECT id, name, name, note FROM a", "SELECT 2"));
+    onEventOf(0)({ type: "columns", columns: editColumns });
+    onEventOf(0)({
+      type: "rows",
+      firstRow: 0,
+      rows: [["1", "a", "a", "x"]],
+      retainedFrom: 0,
+      elapsedMicros: 5,
+    });
+    complete(0, "idle");
+    await sent(2);
+    complete(1, "idle");
+    const step = scriptOf("t1").done[0];
+    if (step.status !== "finished") throw new Error("not finished");
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "applied",
+      tx: "idle",
+      rows: [["Y"]],
+    });
+
+    await useRuns
+      .getState()
+      .applyEdits("t1", runKeyOf(step.result), [firstName]);
+
+    const done = scriptOf("t1").done[0];
+    expect(done.status === "finished" && done.result.rows).toEqual([
+      ["1", "Y", "Y", "x"],
+    ]);
+  });
+
+  test("apply_records_history_once", async () => {
+    openProjectWith();
+    const key = await selected("t1", "idle");
+    vi.mocked(recordQuery).mockClear();
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "applied",
+      tx: "idle",
+      rows: [["Y"], ["Z", "N"]],
+    });
+    const before = Date.now();
+
+    await useRuns.getState().applyEdits("t1", key, [firstName, nameAndNote]);
+
+    expect(recordQuery).toHaveBeenCalledTimes(1);
+    expect(recordQuery).toHaveBeenCalledWith("/p", {
+      connection: "local",
+      sql: `${firstName.sql}\n${nameAndNote.sql}`,
+      executedAt: expect.any(Number),
+      elapsedMicros: expect.any(Number),
+    });
+    const [, saved] = vi.mocked(recordQuery).mock.calls[0];
+    expect(saved.executedAt).toBeGreaterThanOrEqual(before);
+  });
+
+  test("apply_that_reached_the_server_is_recorded_even_when_it_failed", async () => {
+    openProjectWith();
+    const key = await selected("t1", "idle");
+    vi.mocked(recordQuery).mockClear();
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "wrong_row_count",
+      index: 0,
+      rows: 0,
+      tx: "idle",
+    });
+    await useRuns.getState().applyEdits("t1", key, [firstName]);
+    expect(recordQuery).toHaveBeenCalledTimes(1);
+
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "transaction_failed",
+      tx: "failed",
+    });
+    await useRuns.getState().applyEdits("t1", key, [firstName]);
+    expect(recordQuery).toHaveBeenCalledTimes(1);
+  });
+
+  test("manual_apply_counts_statements", async () => {
+    setTabMode("t1", "manual");
+    const key = await selected("t1", "in_transaction");
+    expect(txOf("t1")?.statements).toBe(1);
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "applied",
+      tx: "in_transaction",
+      rows: [["Y"], ["Z", "N"]],
+    });
+
+    await useRuns.getState().applyEdits("t1", key, [firstName, nameAndNote]);
+
+    expect(applyEdits).toHaveBeenCalledWith(
+      3,
+      [firstName.sql, nameAndNote.sql],
+      "manual",
+    );
+    expect(txOf("t1")).toEqual(
+      expect.objectContaining({ status: "open", statements: 3 }),
+    );
+  });
+
+  test("a_failed_apply_does_not_count", async () => {
+    setTabMode("t1", "manual");
+    const key = await selected("t1", "in_transaction");
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "wrong_row_count",
+      index: 0,
+      rows: 0,
+      tx: "in_transaction",
+    });
+
+    await useRuns.getState().applyEdits("t1", key, [firstName]);
+
+    expect(txOf("t1")?.statements).toBe(1);
+    expect(rowsOf("t1")?.[0]).toEqual(["1", "a", "a", "x"]);
+  });
+
+  test("auto_apply_outside_a_transaction_leaves_no_transaction", async () => {
+    const key = await selected("t1", "idle");
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "applied",
+      tx: "idle",
+      rows: [["Y"]],
+    });
+
+    await useRuns.getState().applyEdits("t1", key, [firstName]);
+
+    expect(applyEdits).toHaveBeenCalledWith(3, [firstName.sql], "auto");
+    expect(txOf("t1")).toBeUndefined();
+  });
+
+  test("apply_is_not_sent_while_running", async () => {
+    await useRuns.getState().run("t1", prepared("SELECT 1"));
+
+    await expect(
+      useRuns.getState().applyEdits("t1", "any", [firstName]),
+    ).resolves.toBeNull();
+    // 세션이 없는 탭도 보내지 않는다.
+    await expect(
+      useRuns.getState().applyEdits("t2", "any", [firstName]),
+    ).resolves.toBeNull();
+    expect(applyEdits).not.toHaveBeenCalled();
+  });
+
+  test("apply_is_not_sent_while_ending", async () => {
+    await openTwoStatements();
+    const ending = deferred<EndResult>();
+    vi.mocked(endTransaction).mockReturnValue(ending.promise);
+    const committed = useRuns.getState().endTransaction("t1", "commit");
+
+    await expect(
+      useRuns.getState().applyEdits("t1", "any", [firstName]),
+    ).resolves.toBeNull();
+    expect(applyEdits).not.toHaveBeenCalled();
+
+    ending.resolve({ outcome: "ended", tx: "idle" });
+    await committed;
+  });
+
+  test("connection_lost_forgets_the_session", async () => {
+    setTabMode("t1", "manual");
+    const key = await selected("t1", "in_transaction");
+    vi.mocked(applyEdits).mockResolvedValue({
+      outcome: "connection_lost",
+      message: "server closed the connection unexpectedly",
+      tx: null,
+    });
+
+    await useRuns.getState().applyEdits("t1", key, [firstName]);
+
+    expect(closeSession).toHaveBeenCalledWith(3);
+    expect(txOf("t1")).toBeUndefined();
+    expect(useRuns.getState().notices.t1).toEqual({
+      kind: "transactionLost",
+      statements: 1,
+      openedBy: "app",
+    });
+    await useRuns.getState().run("t1", prepared("SELECT 1"));
+    expect(openSession).toHaveBeenCalledTimes(2);
+  });
+
+  test("unknown_session_forgets_the_session", async () => {
+    const key = await selected("t1", "idle");
+    vi.mocked(applyEdits).mockRejectedValue(
+      new CommandError("unknown_session", "unknown session"),
+    );
+
+    await expect(
+      useRuns.getState().applyEdits("t1", key, [firstName]),
+    ).resolves.toEqual({
+      outcome: "client_error",
+      message: "unknown session",
+      tx: null,
+    });
+
+    await useRuns.getState().run("t1", prepared("SELECT 1"));
+    expect(openSession).toHaveBeenCalledTimes(2);
+  });
+
+  test("release_during_apply_ignores_the_answer", async () => {
+    setTabMode("t1", "manual");
+    const key = await selected("t1", "idle");
+    const answer = deferred<ApplyResult>();
+    vi.mocked(applyEdits).mockReturnValue(answer.promise);
+
+    const applying = useRuns.getState().applyEdits("t1", key, [firstName]);
+    await useRuns.getState().release("t1");
+    answer.resolve({
+      outcome: "applied",
+      tx: "in_transaction",
+      rows: [["Y"]],
+    });
+    await applying;
+
+    expect(txOf("t1")).toBeUndefined();
+    expect(runOf("t1")).toBeUndefined();
+  });
 });

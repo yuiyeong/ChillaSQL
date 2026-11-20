@@ -5,6 +5,7 @@ import {
   formatClock,
   nextTx,
   statementsLabel,
+  txAfterApply,
 } from "./transaction";
 
 /** Manual에서 두 문장을 실행한 열린 트랜잭션 */
@@ -182,5 +183,49 @@ describe("formatClock", () => {
 
   it("treats a clock that went backwards as zero", () => {
     expect(formatClock(-5_000)).toBe("0:00");
+  });
+});
+
+describe("txAfterApply", () => {
+  it("adds the applied statements to an open transaction", () => {
+    expect(txAfterApply(openTx, "in_transaction", "auto", 500, 3)).toEqual({
+      ...openTx,
+      statements: 5,
+    });
+  });
+
+  it("opens an app transaction in Manual outside a transaction", () => {
+    expect(txAfterApply(null, "in_transaction", "manual", 500, 2)).toEqual({
+      status: "open",
+      statements: 2,
+      openedAt: 500,
+      openedBy: "app",
+    });
+  });
+
+  it("a failed Apply in Manual outside a transaction opens it empty", () => {
+    expect(txAfterApply(null, "in_transaction", "manual", 500, 0)).toEqual({
+      status: "open",
+      statements: 0,
+      openedAt: 500,
+      openedBy: "app",
+    });
+  });
+
+  it("idle leaves no transaction", () => {
+    expect(txAfterApply(null, "idle", "auto", 500, 2)).toBeNull();
+    expect(txAfterApply(openTx, "idle", "auto", 500, 2)).toBeNull();
+  });
+
+  it("null keeps the previous transaction as it is", () => {
+    expect(txAfterApply(openTx, null, "manual", 500, 0)).toBe(openTx);
+    expect(txAfterApply(null, null, "manual", 500, 0)).toBeNull();
+  });
+
+  it("follows the status the server reports", () => {
+    expect(txAfterApply(openTx, "failed", "manual", 500, 0)).toEqual({
+      ...openTx,
+      status: "failed",
+    });
   });
 });

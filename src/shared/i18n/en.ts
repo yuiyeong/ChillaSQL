@@ -310,6 +310,16 @@ export const en = {
   "edit.revertValue": "Revert value",
   "edit.editor": "Edit {name}",
   "edit.menu": "Cell",
+  "edit.updated.one": "Updated 1 row",
+  "edit.updated.other": "Updated {count} rows",
+  "edit.notFound":
+    "Row {row} was not found. It may have been deleted or its key changed. Nothing was applied.",
+  "edit.matchedMany": "Row {row} matched {count} rows. Nothing was applied.",
+  "edit.failedRow": "Row {row}: {message}. Nothing was applied.",
+  "edit.failedCommit": "{message}. Nothing was applied.",
+  "edit.txFailed": "Roll back the failed transaction first.",
+  "edit.busy":
+    "Another query is still running on this session. Nothing was applied.",
   "edit.notEditable.readOnly": "Not editable: the connection is read-only.",
   "edit.notEditable.running":
     "Not editable while rows are still coming. Cancel keeps the rows received so far.",

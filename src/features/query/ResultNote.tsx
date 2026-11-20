@@ -3,7 +3,7 @@ import { LockIcon } from "../../shared/ui/icons";
 
 /**
  * result header 아래의 note(캔버스 Tools M10의 `.note`). 자물쇠 icon과 문장이고, 색이나 배경으로
- * 구분하지 않는다. 편집할 수 없는 이유를 알린다.
+ * 구분하지 않는다. 편집할 수 없는 이유와 Apply하지 못한 이유를 알린다.
  */
 export function ResultNote({ children }: { children: ReactNode }) {
   return (

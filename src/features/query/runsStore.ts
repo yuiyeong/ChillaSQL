@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import {
+  applyEdits as sendApply,
   cancelQuery,
   closeSession,
   endTransaction as sendEnd,
@@ -13,6 +14,8 @@ import {
   messageOf,
 } from "../../shared/api/errors";
 import type {
+  ApplyResult,
+  Cell,
   EndResult,
   QueryEvent,
   TxEnd,
@@ -26,7 +29,8 @@ import { useProject } from "../project/projectStore";
 import { cancelParameterPrompt } from "../workspace/parameterPrompt";
 import { closeDdl } from "./ddlStore";
 import { isPlanResult } from "./explainPlan";
-import { clearGridViews, dropGridView } from "./gridViews";
+import type { UpdateStatement } from "./editSql";
+import { clearGridViews, dropGridView, runKeyOf } from "./gridViews";
 import { sourceOffset, type Rewrite } from "./rewrite";
 import {
   emptyResult,
@@ -41,6 +45,7 @@ import {
 import {
   canEndTransaction,
   nextTx,
+  txAfterApply,
   type TxCount,
   type TxInfo,
 } from "./transaction";
@@ -174,6 +179,17 @@ interface RunsState {
    * Rollback이 지금 가능한지는 `endable`이 정한다.
    */
   endTransaction(tabId: string, end: TxEnd): Promise<boolean>;
+  /**
+   * 그 탭의 보이는 결과(`runKey`는 `runKeyOf`)에 편집을 반영한다. 세션이 없거나, 실행 중이거나, 끝내기를
+   * 기다리면 보내지 않고 null. applied면 `RETURNING` 값으로 그 결과의 행을 바꾸고(`rows` 배열을 새로
+   * 만든다) 트랜잭션을 갱신한다. 서버에 간 Apply는 문장을 줄바꿈으로 이어 쿼리 기록에 하나로 남긴다.
+   * 명령이 거절되면 `client_error`로 돌려준다.
+   */
+  applyEdits(
+    tabId: string,
+    runKey: string,
+    statements: UpdateStatement[],
+  ): Promise<ApplyResult | null>;
   /**
    * 그 탭의 끝내기가 답을 기다리는 중이면 아무것도 하지 않는다. `prepare`가 끝나기 전에 같은 탭의
    * 다음 동작이 오면 실행하지 않는다. `prepare`가 Rejection을
@@ -412,6 +428,48 @@ export const useRuns = create<RunsState>()((set, get) => {
     lost.delete(tabId);
     sessions.set(tabId, slot);
     return slot;
+  }
+
+  /**
+   * `runKey` 결과의 행을 Apply가 돌려준 `RETURNING` 값으로 바꾼다. 문장마다 `attnums`의 순서로 값이
+   * 오고, 같은 attnum의 결과 열은 모두 바꾼다. 지금 문장과 여러 문장 실행의 끝난 문장에서 찾는다.
+   */
+  function applyRows(
+    tabId: string,
+    runKey: string,
+    statements: UpdateStatement[],
+    returned: Cell[][],
+  ): void {
+    const applied = (run: RunState): RunState => {
+      if (run.status !== "running" && run.status !== "finished") return run;
+      const { result } = run;
+      if (runKeyOf(result) !== runKey) return run;
+      const attnums = result.columns?.map((column) => column.columnNumber);
+      const rows = [...result.rows];
+      statements.forEach((statement, index) => {
+        const row = rows[statement.row - result.firstRow];
+        if (row === undefined) return;
+        rows[statement.row - result.firstRow] = row.map((cell, column) => {
+          const at = statement.attnums.indexOf(attnums?.[column] ?? 0);
+          return at === -1 ? cell : returned[index][at];
+        });
+      });
+      return { ...run, result: { ...result, rows } };
+    };
+    set((s) => {
+      const run = s.runs[tabId];
+      const script = s.scripts[tabId];
+      return {
+        runs: run === undefined ? s.runs : { ...s.runs, [tabId]: applied(run) },
+        scripts:
+          script === undefined
+            ? s.scripts
+            : {
+                ...s.scripts,
+                [tabId]: { ...script, done: script.done.map(applied) },
+              },
+      };
+    });
   }
 
   /** 그 탭의 attempt, token, 세션, 실행을 잊는다. 잊은 세션을 돌려준다. */
@@ -809,6 +867,62 @@ export const useRuns = create<RunsState>()((set, get) => {
         reject(tabId, rejection);
       }
       return result?.outcome === "ended";
+    },
+
+    async applyEdits(tabId, runKey, statements) {
+      const status = get().runs[tabId]?.status;
+      if (
+        get().ending[tabId] ||
+        status === "running" ||
+        status === "connecting"
+      ) {
+        return null;
+      }
+      const slot = sessions.get(tabId);
+      const sessionId = slot?.id ?? null;
+      if (slot === undefined || sessionId === null) return null;
+      const mode = modeOf(useTabs.getState(), tabId);
+      const projectDir = useProject.getState().project?.dir ?? null;
+      const sqls = statements.map((statement) => statement.sql);
+      const owns = () => sessions.get(tabId) === slot;
+      const startedAt = Date.now();
+
+      let result: ApplyResult;
+      try {
+        result = await sendApply(sessionId, sqls, mode);
+      } catch (error) {
+        if (isCommandError(error, "unknown_session")) forgetLost(tabId, slot);
+        return { outcome: "client_error", message: messageOf(error), tx: null };
+      }
+      // 서버에 가서 문장을 실행한 Apply만 기록한다. 되돌렸어도 보낸 것이다.
+      if (
+        result.outcome === "applied" ||
+        result.outcome === "failed" ||
+        result.outcome === "wrong_row_count"
+      ) {
+        void useHistory.getState().record(projectDir, {
+          connection: slot.connection,
+          sql: sqls.join("\n"),
+          executedAt: startedAt,
+          elapsedMicros: (Date.now() - startedAt) * 1000,
+        });
+      }
+      if (result.outcome === "connection_lost") {
+        if (forgetLost(tabId, slot)) void closeSlot(slot);
+        return result;
+      }
+      // release했거나 세션이 바뀌었으면 이 탭의 상태를 건드리지 않는다. stale 세션은 이미 트랜잭션을 잃었다.
+      if (!owns()) return result;
+      if (!slot.stale) {
+        const count = result.outcome === "applied" ? statements.length : 0;
+        const previous = get().transactions[tabId] ?? null;
+        const tx = txAfterApply(previous, result.tx, mode, startedAt, count);
+        setTx(tabId, tx ?? undefined);
+      }
+      if (result.outcome === "applied") {
+        applyRows(tabId, runKey, statements, result.rows);
+      }
+      return result;
     },
 
     async release(tabId) {

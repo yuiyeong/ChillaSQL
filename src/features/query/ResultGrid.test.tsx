@@ -75,6 +75,7 @@ function props(patch: Partial<Props> = {}): Props {
     onRunAgain: vi.fn(),
     onCopied: vi.fn(),
     copyTargetRef: createRef() as RefObject<(() => CopyTarget) | null>,
+    statementsRef: createRef(),
     onSelectionChange: vi.fn(),
     ...patch,
   };

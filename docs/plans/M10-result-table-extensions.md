@@ -483,30 +483,30 @@ git commit -m "feat: 결과 표의 셀을 고쳐 모으고 Apply로 보낼 SQL�
   ```
   문구 key: `edit.updated.one/other`(`Updated 1 row`, `Updated {count} rows`), `edit.notFound`(`Row {row} was not found. It may have been deleted or its key changed. Nothing was applied.`), `edit.matchedMany`(`Row {row} matched {count} rows. Nothing was applied.`), `edit.failedRow`(`Row {row}: {message}. Nothing was applied.`), `edit.failedCommit`(`{message}. Nothing was applied.`), `edit.txFailed`(`Roll back the failed transaction first.`). `{row}`는 1부터 센 결과 행 번호.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `editsStore.test.ts`: `applied_clears_changes_and_toasts`, `not_found_keeps_the_changes_and_names_the_row`, `server_error_names_the_row`, `commit_error_has_no_row`, `transaction_failed_is_explained`, `apply_is_ignored_while_applying`.
 - `runsStore.test.ts`: `applied_rows_replace_the_cells`(같은 attnum의 두 열 모두), `apply_records_history_once`(문장을 줄바꿈으로 이은 text), `manual_apply_counts_statements`, `auto_apply_outside_a_transaction_leaves_no_transaction`, `apply_is_not_sent_while_running`(running이면 null, 보내지 않음), `connection_lost_forgets_the_session`, `release_during_apply_ignores_the_answer`.
 - `ResultPane.test.tsx`: `apply_is_disabled_while_ending_or_applying`, `failure_note_shows_under_the_header`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - `applyEdits`는 `endTransaction`과 같은 세션 slot과 `owns()` 검사를 쓴다. mode는 `modeOf(useTabs.getState(), tabId)`. `connection_lost`는 `forgetLost`, `unknown_session` 오류도 같다.
 - 결과를 바꿀 때 `runs[tabId]`와 `scripts[tabId].done` 가운데 `runKeyOf`가 같은 것을 찾는다. 행 하나는 `statement.attnums`의 열마다 `RETURNING` 값의 같은 순서 값으로 바꾼다.
 - 기록은 `useHistory.getState().record`(M9)로, `applied`나 `failed`(서버에 간 것)일 때.
 - 성공 toast는 ResultPane의 `show`다(`apply`가 끝난 뒤 ResultPane이 결과를 보고 띄운다).
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

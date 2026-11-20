@@ -51,9 +51,11 @@ import { DdlView } from "./DdlView";
 import { useDdl } from "./ddlStore";
 import { ExplainView } from "./ExplainView";
 import { ResultBar, SingleTab } from "./ResultBar";
+import type { UpdateStatement } from "./editSql";
 import { changedCount, useEdits } from "./editsStore";
 import { runKeyOf } from "./gridViews";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
+import { ResultNote } from "./ResultNote";
 import { receivedRows, type ResultData, type RunState } from "./runReducer";
 import { endable, useRuns, type ScriptRun } from "./runsStore";
 import {
@@ -120,9 +122,22 @@ export const ResultPane = memo(function ResultPane({
   const tabEdits = useEdits((s) =>
     tabId === null ? undefined : s.edits[tabId],
   );
+  const applying = useEdits(
+    (s) => tabId !== null && s.applying[tabId] === true,
+  );
+  const applyFailure = useEdits((s) =>
+    tabId === null ? undefined : s.failure[tabId],
+  );
+  // 그 탭이 실행 중이거나 끝내기를 기다리면 Apply하지 않는다. 앞 문장의 결과를 보는 중이어도 같다.
+  const applyBlocked = useRuns((s) => {
+    if (tabId === null || s.ending[tabId] !== undefined) return true;
+    const status = s.runs[tabId]?.status;
+    return status === "running" || status === "connecting";
+  });
   const idleTimeoutSecs = useSettings((s) => s.idleTimeoutSecs);
   const toast = useToast();
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
+  const statementsRef = useRef<UpdateStatement[] | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
 
   const onFetchMore = useCallback(() => {
@@ -185,6 +200,7 @@ export const ResultPane = memo(function ResultPane({
       onRunAgain={onRunAgain}
       onCopied={show}
       copyTargetRef={copyTargetRef}
+      statementsRef={statementsRef}
       onSelectionChange={setHasSelection}
     />
   );
@@ -446,6 +462,13 @@ export const ResultPane = memo(function ResultPane({
       ? changedCount(tabEdits)
       : 0;
 
+  const apply = async () => {
+    const statements = statementsRef.current;
+    if (tabId === null || !statements?.length) return;
+    const message = await useEdits.getState().apply(tabId, statements);
+    if (message !== null) show(message);
+  };
+
   const copySelection = () => {
     const target = copyTargetRef.current?.();
     if (target != null) void copy(target.text, target.message);
@@ -477,8 +500,12 @@ export const ResultPane = memo(function ResultPane({
                   >
                     {t("edit.revert")}
                   </Button>
-                  {/* Apply는 Task 7이 단다. 그때까지 누를 수 없다. */}
-                  <Button variant="primary" size="small" disabled>
+                  <Button
+                    variant="primary"
+                    size="small"
+                    disabled={applying || applyBlocked}
+                    onClick={() => void apply()}
+                  >
                     {t("edit.apply")}
                   </Button>
                 </>
@@ -493,6 +520,9 @@ export const ResultPane = memo(function ResultPane({
                 </IconButton>
               )}
             </ResultBar>
+          )}
+          {changed > 0 && applyFailure !== undefined && (
+            <ResultNote>{applyFailure}</ResultNote>
           )}
           {notice}
           {explain}

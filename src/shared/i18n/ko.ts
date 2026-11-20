@@ -311,6 +311,17 @@ export const ko: Record<MessageKey, string> = {
   "edit.revertValue": "값 되돌리기",
   "edit.editor": "{name} 편집",
   "edit.menu": "셀",
+  "edit.updated.one": "1행을 고쳤습니다",
+  "edit.updated.other": "{count}행을 고쳤습니다",
+  "edit.notFound":
+    "{row}행을 찾지 못했습니다. 지워졌거나 key가 바뀌었을 수 있습니다. 아무것도 반영하지 않았습니다.",
+  "edit.matchedMany":
+    "{row}행이 {count}행에 맞았습니다. 아무것도 반영하지 않았습니다.",
+  "edit.failedRow": "{row}행: {message}. 아무것도 반영하지 않았습니다.",
+  "edit.failedCommit": "{message}. 아무것도 반영하지 않았습니다.",
+  "edit.txFailed": "실패한 트랜잭션을 먼저 Rollback하십시오.",
+  "edit.busy":
+    "이 세션에서 다른 쿼리가 아직 실행 중입니다. 아무것도 반영하지 않았습니다.",
   "edit.notEditable.readOnly": "편집할 수 없습니다: 읽기 전용 접속입니다.",
   "edit.notEditable.running":
     "행을 받는 중에는 편집할 수 없습니다. 취소하면 지금까지 받은 행은 남습니다.",

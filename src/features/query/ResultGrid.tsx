@@ -29,7 +29,7 @@ import { SpinnerIcon } from "../../shared/ui/icons";
 import { Menu, MenuItem } from "../../shared/ui/Menu";
 import { CellEditor } from "./CellEditor";
 import { EditPreview } from "./EditPreview";
-import { buildUpdates, type Changes } from "./editSql";
+import { buildUpdates, type Changes, type UpdateStatement } from "./editSql";
 import { useEdits } from "./editsStore";
 import {
   editTargetOf,
@@ -91,6 +91,8 @@ interface ResultGridProps {
   onCopied(message: string): void;
   /** ResultPane header의 복사 버튼이 부른다 */
   copyTargetRef: RefObject<(() => CopyTarget) | null>;
+  /** ResultPane header의 Apply가 보낼 UPDATE 문. 미리 보기와 같다 */
+  statementsRef: RefObject<UpdateStatement[] | null>;
   /** 복사할 선택이 생기거나 없어질 때(고른 행이 모두 버려진 때도). header 복사 버튼의 disabled에 쓴다 */
   onSelectionChange(hasSelection: boolean): void;
 }
@@ -143,6 +145,7 @@ function Grid({
   onRunAgain,
   onCopied,
   copyTargetRef,
+  statementsRef,
   onSelectionChange,
 }: ResultGridProps & { runKey: string }) {
   const { firstRow, rows, fetch } = result;
@@ -185,6 +188,10 @@ function Grid({
   const tabEdits = useEdits((state) => state.edits[tabId]);
   // 다른 결과에서 고친 값은 이 표의 것이 아니다.
   const changes = tabEdits?.runKey === runKey ? tabEdits.changes : undefined;
+  // Apply 실패 note가 ResultPane의 같은 자리에 뜨면 편집할 수 없다는 note는 그리지 않는다.
+  const applyFailed = useEdits(
+    (state) => changes !== undefined && tabId in state.failure,
+  );
 
   // 떠날 때 저장한 view. 그 사이 앞 행이 버려졌으면 보던 행이 그 자리에 오게 스크롤을 당긴다.
   const [restored] = useState((): GridView | undefined => {
@@ -586,6 +593,7 @@ function Grid({
       columnTypes.map((type) => type?.category),
     );
   }, [changes, target, rows, firstRow, columnTypes]);
+  useImperativeHandle(statementsRef, () => statements, [statements]);
 
   const menuChanged =
     menu !== null &&
@@ -593,7 +601,7 @@ function Grid({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      {note !== null && note.at === selection && (
+      {note !== null && note.at === selection && !applyFailed && (
         <ResultNote>{note.text}</ResultNote>
       )}
       <div

@@ -79,6 +79,7 @@ function setup(
       onRunAgain={vi.fn()}
       onCopied={onCopied}
       copyTargetRef={createRef() as RefObject<(() => CopyTarget) | null>}
+      statementsRef={createRef()}
       onSelectionChange={vi.fn()}
     />,
   );
