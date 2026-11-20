@@ -41,7 +41,7 @@
 | M7 스키마 트리와 자동완성 | 3 | 완료 | [M7](plans/M7-schema-autocomplete.md) | 2026-11-20 | 2026-11-20 |
 | M8 에디터·실행 편의 | 3 | 완료 | [M8](plans/M8-editor-run.md) | 2026-11-20 | 2026-11-20 |
 | M9 쿼리 도구 | 4 | 완료 | [M9](plans/M9-query-tools.md) | 2026-11-20 | 2026-11-20 |
-| M10 결과 표 확장 | 4 | 대기 | | | |
+| M10 결과 표 확장 | 4 | 계획 중 | [M10](plans/M10-result-table-extensions.md) | 2026-11-20 | |
 
 ## 결정 기록
 
