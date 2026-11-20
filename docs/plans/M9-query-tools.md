@@ -25,7 +25,7 @@
 - **쿼리 기록의 저장.** 앱 내부 저장소의 `query_history(id INTEGER PRIMARY KEY, project_dir TEXT NOT NULL, connection TEXT NOT NULL, sql TEXT NOT NULL, executed_at INTEGER NOT NULL, elapsed_micros INTEGER NOT NULL)`와 index `(project_dir, id)`. schema 판은 `PRAGMA user_version = 2`(1인 파일은 table만 더해 올린다). 프로젝트마다 따로 두고 최근 10,000개만 남긴다(기록할 때 그보다 오래된 것을 지운다). `executed_at`은 실행을 시작한 Unix ms다.
 - **언제 기록하는가.** 화면이 실행 하나(여러 문장이면 문장 하나)의 첫 `rows` event나 `discarded`가 아닌 `finished` event를 받을 때 한 번 기록한다. 오류로 끝난 문장도 기록한다. 세션을 열지 못했거나 위험 쿼리 확인에서 그만둔 실행은 서버에 가지 않았으므로 기록하지 않는다. 기록하는 text는 서버에 보낸 text(파라미터 값과 `EXPLAIN ANALYZE`가 들어간 것)다. 소요 시간은 그 event의 `elapsedMicros`다. 기록하지 못해도(저장소가 없음, 프로젝트가 바뀜) 실행에는 영향이 없다.
 - **검색(Sidebar C).** 검색어를 공백으로 나눈 단어가 모두 SQL text에 들어 있는 기록을 최근 것부터 200개. 영문 대소문자는 구분하지 않고 `%`, `_`, `\`는 글자 그대로 찾는다. 입력 뒤 150ms 동안 입력이 없으면 찾는다. 날짜 묶음 label은 `Today`, `Yesterday`, 그 밖에는 최근 프로젝트와 같은 `Nov 9`다. 항목은 SQL(mono 13, 두 줄까지, 넘치면 `…`)과 `● {접속} · {HH:mm} · {소요 시간}`(12px fg-2, dot은 지금 프로젝트에 그 접속이 있을 때 그 접속 색, 없으면 dot 없음). 고른 항목은 `accent/14` 배경. 아래 줄은 `↵ Open in editor`.
-- **에디터로 불러오기.** 항목을 두 번 누르거나 고른 채 `Enter`를 누르면 그 SQL로 새 탭을 열고 기록의 접속이 지금 프로젝트에 있으면 그 접속을 고른다(없으면 새 탭의 기본 접속). 실행하지는 않는다. 검색 칸에서 `↑`/`↓`가 고른 항목을 옮긴다. 목록을 새로 읽으면 첫 항목을 고른다.
+- **에디터로 불러오기.** 항목을 두 번 누르거나 고른 채 `Enter`를 누르면 그 SQL로 새 탭을 열고 기록의 접속이 지금 프로젝트에 있으면 그 접속을 고른다(없으면 새 탭의 기본 접속). 실행하지는 않는다. 검색 칸에서 `↑`/`↓`가 고른 항목을 옮긴다. 목록을 새로 읽으면 고른 항목이 새 목록에 있으면 그대로 두고 없으면 첫 항목을 고른다.
 - **파라미터(기획서 9장 "파라미터 값을 SQL text에 그대로 넣을지").** 넣는다. 값은 SQL로 그대로 들어가고 문자열은 사용자가 따옴표를 쓴다(Tools M9의 안내 문구). simple query protocol에는 bind가 없다(M2 결정).
 - **파라미터 dialog(Tools M9).** 실행(문장, 선택 영역, 파일, Explain)할 문장에 파라미터가 있으면 보내기 전에 에디터 오른쪽 아래(right 16px, bottom 16px)에 330px dialog `Parameter values`를 띄운다. 이름마다 한 줄(`:name` mono 13, 64px | input), 여러 문장이면 처음 나온 순서로 한 번씩 묻는다. 안내 `Values are inserted as SQL. Quote strings. ::date is a cast, not a parameter.`, 버튼 Cancel과 `Run ⌘↵`. 값이 빈 칸이 있으면 Run을 누를 수 없다. `Enter`와 `Cmd+Enter`는 Run, `Esc`는 Cancel(실행하지 않는다). 떠 있는 동안 문서의 `:name`에 `accent/16` 배경을 칠하고 다른 단축키는 동작하지 않는다. 값은 탭마다 이름별로 기억해 다음 dialog에 채운다(프로젝트를 바꾸면 잊는다). 위험 쿼리 확인과 기록은 값을 넣은 text를 본다. Run again과 터널 오류의 Try again은 같은 값으로 다시 보낸다(묻지 않는다).
 - **보낸 text와 문서의 offset(`Rewrite`).** 값을 넣거나 `EXPLAIN ANALYZE `를 앞에 붙인 실행은 문서의 문장 text(`source`)와 바꾼 자리 목록을 갖는다. 서버 오류의 position은 이것으로 문서 자리로 옮긴 뒤 밑줄, Ln/Col, Go to error에 쓴다. 넣은 값 안이나 붙인 앞부분 안의 position은 그 `:name`(또는 문장 처음)을 가리킨다.
@@ -674,7 +674,7 @@ Expected: 통과
 
 앱을 띄우기 전에 사용자에게 해도 되는지 묻는다. 방법은 진행상황 "지금"의 "앱 동작 확인 방법"이다. test DB(54318)에 `CREATE SCHEMA m9_check`의 테이블을 만들어 쓰고 끝나면 지운다. "어제 실행한 쿼리"는 하루를 기다리지 않고, 앱을 끝내기 전에 실행한 쿼리를 다시 시작한 뒤 찾는 것으로 대신하고 `Yesterday` 묶음은 화면 test(Task 3 `groups_by_day`)로 본다.
 
-- [ ] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
+- [x] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
 
 | 확인 | 기준 |
 | --- | --- |
@@ -686,7 +686,7 @@ Expected: 통과
 | 스키마 트리 테이블 menu → Show DDL → Open in new tab → 실행(다른 schema 이름으로 바꿔) | 결과 panel의 색칠한 DDL, 새 탭의 DDL이 그대로 실행됨 |
 | DDL을 연 채 Close | 지난 결과 표로 돌아감 |
 
-- [ ] **Step 2: 기록하고 commit한다**
+- [x] **Step 2: 기록하고 commit한다**
 
 - 진행상황: M9를 `완료`(날짜), 작업 로그에 Task별 결과와 Step 1의 결과, "지금"의 다음 할 일(M10 계획).
 - 이 계획의 체크박스를 모두 체크한다.
