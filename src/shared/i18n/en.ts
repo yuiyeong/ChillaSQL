@@ -226,6 +226,7 @@ export const en = {
   "result.done": "Done",
   "result.errorLocation": "Ln {line}, Col {column}",
   "result.sqlstate": "SQLSTATE {code}",
+  "result.goToError": "Go to error",
   "result.copyMessage": "Copy message",
   "result.cancelled": "Cancelled",
   "result.stopped": "Stopped on the server.",

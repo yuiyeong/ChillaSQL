@@ -228,6 +228,7 @@ export const ko: Record<MessageKey, string> = {
   "result.done": "완료",
   "result.errorLocation": "줄 {line}, 열 {column}",
   "result.sqlstate": "SQLSTATE {code}",
+  "result.goToError": "오류 위치로 이동",
   "result.copyMessage": "메시지 복사",
   "result.cancelled": "취소됨",
   "result.stopped": "서버에서 멈췄습니다.",

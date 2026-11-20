@@ -133,7 +133,11 @@ describe("statementsLabel", () => {
 });
 
 describe("canEndTransaction", () => {
-  const result = emptyResult("SELECT 1", { line: 1, column: 1 }, 0);
+  const result = emptyResult(
+    { sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } },
+    "run-0",
+    0,
+  );
   const running = (fetch: "none" | "ready" | "fetching"): RunState => ({
     status: "running",
     result: { ...result, fetch },

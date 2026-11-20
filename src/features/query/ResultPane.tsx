@@ -25,6 +25,8 @@ import { Kbd } from "../../shared/ui/Kbd";
 import { useNow } from "../../shared/ui/useNow";
 import { Toast, useToast } from "../../shared/ui/Toast";
 import { useTunnel } from "../connections/tunnelsStore";
+import { useEditorStatus } from "../editor/editorStatus";
+import { anchorLocation, anchorOf, goToError } from "../editor/runMarks";
 import { cancelRun, retryTunnel, runAgain } from "../workspace/commands";
 import { MessageBlock } from "./MessageBlock";
 import { shortcutLabel } from "../workspace/shortcuts";
@@ -207,6 +209,7 @@ export const ResultPane = memo(function ResultPane({
           header = name;
           body = (
             <ServerError
+              tabId={tabId}
               result={result}
               outcome={outcome}
               copy={copy}
@@ -481,11 +484,13 @@ function Notice({
 }
 
 function ServerError({
+  tabId,
   result,
   outcome,
   copy,
   failedTransaction,
 }: {
+  tabId: string | null;
   result: ResultData;
   outcome: Extract<Outcome, { outcome: "failed" }>;
   copy(text: string, message: string): Promise<void>;
@@ -493,8 +498,17 @@ function ServerError({
   failedTransaction?: { disabled: boolean; onRollback(): void };
 }) {
   const { error } = outcome;
+  // 문서가 따라 옮긴 위치는 이 component의 입력이 아니므로, 에디터가 바뀔 때마다 다시 읽는다.
+  useEditorStatus((s) => s.revision);
+  const moved = tabId === null ? null : anchorLocation(tabId, result.runKey);
+  const canGo =
+    tabId !== null &&
+    error.position !== null &&
+    anchorOf(tabId, result.runKey) !== null;
   const location =
-    error.position === null ? null : errorLocation(result, error.position);
+    error.position === null
+      ? null
+      : errorLocation(result, error.position, moved ?? result.origin);
   return (
     <MessageBlock icon={failedTransaction ? WarningIcon : ErrorIcon}>
       <div className="flex min-w-0 flex-1 flex-col gap-2.5">
@@ -525,7 +539,17 @@ function ServerError({
         {failedTransaction && (
           <p className="text-small text-fg-2">{failedHintOf(error.code)}</p>
         )}
-        <div>
+        <div className="flex gap-2">
+          {error.position !== null && (
+            <Button
+              disabled={!canGo}
+              onClick={() => {
+                if (tabId !== null) goToError(tabId);
+              }}
+            >
+              {t("result.goToError")}
+            </Button>
+          )}
           <Button
             variant="ghost"
             onClick={() => void copy(error.message, t("toast.copiedMessage"))}

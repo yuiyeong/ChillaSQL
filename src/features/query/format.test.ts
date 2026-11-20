@@ -20,11 +20,20 @@ test("formatElapsed는 반올림한 뒤에 단위를 고른다", () => {
 });
 
 test("errorLocation은 보낸 text의 위치를 문서의 줄과 칸으로 바꾼다", () => {
-  const result = emptyResult("SELECT *\nFROM nope", { line: 3, column: 5 }, 0);
+  const result = emptyResult(
+    { sql: "SELECT *\nFROM nope", from: 0, origin: { line: 3, column: 5 } },
+    "run-0",
+    0,
+  );
 
   expect(errorLocation(result, 0)).toEqual({ line: 3, column: 5 });
   expect(errorLocation(result, 7)).toEqual({ line: 3, column: 12 });
   expect(errorLocation(result, 14)).toEqual({ line: 4, column: 6 });
+  // 문서에서 옮겨진 시작을 따른다.
+  expect(errorLocation(result, 14, { line: 5, column: 1 })).toEqual({
+    line: 6,
+    column: 6,
+  });
 });
 
 test("formatLive는 소수 한 자리 초로 쓴다", () => {

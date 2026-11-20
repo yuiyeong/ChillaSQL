@@ -15,7 +15,12 @@ import { confirmDanger } from "./dangerPrompt";
 const TAB = "t1";
 
 function request(sql: string): RunRequest {
-  return { connection: "staging", sql, origin: { line: 1, column: 1 } };
+  return {
+    connection: "staging",
+    sql,
+    from: 0,
+    origin: { line: 1, column: 1 },
+  };
 }
 
 const deleteAll: Danger = { kind: "delete_without_where", table: "sessions" };

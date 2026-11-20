@@ -20,6 +20,7 @@ import type {
 } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
 import { modeOf, useTabs } from "../editor/tabsStore";
+import { markRunStart, markServerError } from "../editor/runMarks";
 import { clearGridViews, dropGridView } from "./gridViews";
 import {
   emptyResult,
@@ -378,9 +379,13 @@ export const useRuns = create<RunsState>()((set, get) => {
         setRun(tabId, { status: "rejected", rejection: request });
         return;
       }
-      const { connection, sql, origin } = request;
+      const { connection, sql } = request;
 
       const token = bump(tokens, tabId);
+      // 이 실행의 text가 문서에서 시작한 곳을 문서에 두고, 지난 실행의 오류 밑줄을 지운다. 세션을 여는
+      // 동안의 편집도 따라 옮긴다.
+      const runKey = `run-${token}`;
+      markRunStart(tabId, [{ runKey, from: request.from }]);
       const current = () => tokens.get(tabId) === token;
 
       const slot = slotFor(tabId, connection);
@@ -443,6 +448,14 @@ export const useRuns = create<RunsState>()((set, get) => {
         }
         const fresh = current();
         if (!fresh && event.type !== "finished") return;
+        if (
+          fresh &&
+          event.type === "finished" &&
+          event.outcome === "failed" &&
+          event.error.position !== null
+        ) {
+          markServerError(tabId, runKey, event.error.position);
+        }
         // header의 type 이름은 접속의 catalog connection이 답한다. 밀려난 실행이 묻으면 이미 닫은
         // catalog connection(과 터널)을 다시 연다.
         if (event.type === "columns") {
@@ -479,7 +492,7 @@ export const useRuns = create<RunsState>()((set, get) => {
 
       setRun(tabId, {
         status: "running",
-        result: emptyResult(sql, origin, startedAt),
+        result: emptyResult(request, runKey, startedAt),
       });
       const queryId = executeQuery(sessionId, sql, mode, onEvent);
       executions.set(tabId, { sessionId, queryId });

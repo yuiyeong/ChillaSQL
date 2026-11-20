@@ -14,15 +14,16 @@ import type {
 import { quoteIdent } from "../../shared/sql/identifiers";
 import { targetChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
-import { documentState } from "../editor/documents";
+import { documentState, findDocument } from "../editor/documents";
 import { showEditorNotice } from "../editor/editorNotice";
 import { reformatDocument } from "../editor/reformat";
 import { saveTab } from "../editor/saveTab";
+import { anchorLocation, anchorOf } from "../editor/runMarks";
 import { lineColumn, statementAt } from "../editor/statementAt";
 import { statementSpansField } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
-import type { Origin, Rejection, RunRequest } from "../query/runReducer";
+import type { Rejection, RunRequest, RunText } from "../query/runReducer";
 import { endable, useRuns } from "../query/runsStore";
 import { useTypes } from "../query/typesStore";
 import { useSchema } from "../schema/schemaStore";
@@ -53,9 +54,7 @@ function findTab(tabId: string) {
 }
 
 /** 선택 영역이 있으면 그것을, 없으면 커서가 가리키는 문장을 고른다. */
-async function statementToRun(
-  tabId: string,
-): Promise<{ sql: string; origin: Origin } | Rejection> {
+async function statementToRun(tabId: string): Promise<RunText | Rejection> {
   // 나누는 동안 문서가 바뀌거나 닫혀도 text, span, 커서가 한 snapshot에서 나오게 한 번만 읽는다.
   const state = documentState(tabId);
   const text = state.doc.toString();
@@ -65,7 +64,7 @@ async function statementToRun(
     if (sql.trim() === "") {
       return { title: t("run.emptySelection"), detail: null };
     }
-    return { sql, origin: lineColumn(text, from) };
+    return { sql, from, origin: lineColumn(text, from) };
   }
 
   // 문서에 둔 span이 지금 문서에 맞으면 다시 나누지 않는다.
@@ -92,6 +91,7 @@ async function statementToRun(
   }
   return {
     sql: text.slice(span.start, span.end),
+    from: span.start,
     origin: lineColumn(text, span.start),
   };
 }
@@ -101,13 +101,9 @@ function noConnection(): Rejection {
 }
 
 /** 탭의 지금 접속으로 `sql`을 실행할 요청. 접속이 없으면 Rejection이다. */
-function requestFor(
-  tabId: string,
-  sql: string,
-  origin: Origin,
-): RunRequest | Rejection {
+function requestFor(tabId: string, text: RunText): RunRequest | Rejection {
   const connection = findTab(tabId)?.connection ?? null;
-  return connection === null ? noConnection() : { connection, sql, origin };
+  return connection === null ? noConnection() : { connection, ...text };
 }
 
 /** 요청이 위험한 문장이면 묻는다. 그만두게 했으면 null이다. Rejection은 그대로 돌려준다. */
@@ -127,7 +123,7 @@ async function prepareRun(
   if (findTab(tabId)?.connection == null) return noConnection();
   const statement = await statementToRun(tabId);
   if ("title" in statement) return statement;
-  return confirmed(tabId, requestFor(tabId, statement.sql, statement.origin));
+  return confirmed(tabId, requestFor(tabId, statement));
 }
 
 /** 활성 탭에 대해 command를 실행한다. */
@@ -210,18 +206,26 @@ export async function retryTunnel(connection: string): Promise<void> {
 }
 
 /** 탭의 지금 접속으로 `sql`을 실행한다. 위험한 문장이면 묻는다. */
-function runSql(tabId: string, sql: string, origin: Origin): Promise<void> {
+function runText(tabId: string, text: RunText): Promise<void> {
   return useRuns
     .getState()
-    .run(tabId, () => confirmed(tabId, requestFor(tabId, sql, origin)));
+    .run(tabId, () => confirmed(tabId, requestFor(tabId, text)));
 }
 
-/** 그 탭의 결과에 쓴 SQL을 탭의 지금 접속으로 다시 실행한다. 결과가 없으면 아무것도 하지 않는다. */
+/**
+ * 그 탭의 결과에 쓴 SQL을 탭의 지금 접속으로 다시 실행한다. 보낸 text 그대로, 문서에서 옮겨진 자리에서
+ * 시작한 것으로 본다(문서가 그 자리를 지웠으면 처음 자리). 결과가 없으면 아무것도 하지 않는다.
+ */
 export async function runAgain(tabId: string): Promise<void> {
   const state = useRuns.getState().runs[tabId];
   if (state?.status !== "running" && state?.status !== "finished") return;
-  const { sql, origin } = state.result;
-  return runSql(tabId, sql, origin);
+  const { sql, runKey, from, origin } = state.result;
+  const doc = findDocument(tabId)?.doc;
+  return runText(tabId, {
+    sql,
+    from: anchorOf(tabId, runKey) ?? Math.min(from, doc?.length ?? from),
+    origin: anchorLocation(tabId, runKey) ?? origin,
+  });
 }
 
 /** Select first rows가 읽는 행 수. batch 하나다. */
@@ -238,7 +242,7 @@ export async function selectFirstRows(
   const name = `${quoteIdent(relation.schema, reservedWords)}.${quoteIdent(relation.name, reservedWords)}`;
   const sql = `SELECT * FROM ${name} LIMIT ${FIRST_ROWS}`;
   const tabId = useTabs.getState().newTab({ text: sql });
-  return runSql(tabId, sql, { line: 1, column: 1 });
+  return runText(tabId, { sql, from: 0, origin: { line: 1, column: 1 } });
 }
 
 /**

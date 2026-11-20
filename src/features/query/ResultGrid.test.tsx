@@ -27,7 +27,15 @@ function rowsOf(count: number, from = 0): Cell[][] {
 
 function result(patch: Partial<ResultData> = {}): ResultData {
   return {
-    ...emptyResult("SELECT id, email FROM users", { line: 1, column: 1 }, 1000),
+    ...emptyResult(
+      {
+        sql: "SELECT id, email FROM users",
+        from: 0,
+        origin: { line: 1, column: 1 },
+      },
+      "run-0",
+      1000,
+    ),
     columns: resultColumns("id", "email"),
     rows: rowsOf(3),
     elapsedMicros: 38000,

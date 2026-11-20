@@ -6,7 +6,10 @@ import { emptyResult, reduce, requestFetch, type RunState } from "./runReducer";
 const origin = { line: 1, column: 1 };
 
 function running(): RunState {
-  return { status: "running", result: emptyResult("SELECT 1", origin, 1000) };
+  return {
+    status: "running",
+    result: emptyResult({ sql: "SELECT 1", from: 0, origin }, "run-0", 1000),
+  };
 }
 
 test("columns_keep_their_types", () => {
@@ -59,6 +62,8 @@ test("columns, rows, finished를 차례로 쌓는다", () => {
     status: "finished",
     result: {
       sql: "SELECT 1",
+      runKey: "run-0",
+      from: 0,
       origin,
       columns: resultColumns("id", "name"),
       firstRow: 0,
@@ -167,7 +172,7 @@ test("expired면 받은 행을 남기고 더 가져오지 않는다", () => {
   expect(state).toEqual({
     status: "finished",
     result: {
-      ...emptyResult("SELECT 1", origin, 1000),
+      ...emptyResult({ sql: "SELECT 1", from: 0, origin }, "run-0", 1000),
       rows: [["a"]],
       elapsedMicros: 2,
       fetch: "none",
@@ -180,7 +185,7 @@ test("running이 아닌 상태는 event를 무시한다", () => {
   const idle: RunState = { status: "idle" };
   const finished: RunState = {
     status: "finished",
-    result: emptyResult("SELECT 1", origin, 1000),
+    result: emptyResult({ sql: "SELECT 1", from: 0, origin }, "run-0", 1000),
     outcome: { outcome: "discarded" },
   };
   const rejected: RunState = {
@@ -217,7 +222,9 @@ const rowsEvent: QueryEvent = {
 };
 
 test("emptyResult는 fetch none과 startedAt을 갖는다", () => {
-  expect(emptyResult("SELECT 1", origin, 42)).toMatchObject({
+  expect(
+    emptyResult({ sql: "SELECT 1", from: 0, origin }, "run-0", 42),
+  ).toMatchObject({
     fetch: "none",
     startedAt: 42,
   });

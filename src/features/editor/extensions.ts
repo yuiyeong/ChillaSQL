@@ -30,6 +30,7 @@ import {
 import { tags } from "@lezer/highlight";
 import { t } from "../../shared/i18n/t";
 import { catalogCompletion, kindLetter } from "./completion";
+import { runMarksField } from "./runMarks";
 import {
   runRangeHighlight,
   statementSpansField,
@@ -59,6 +60,11 @@ const editorTheme = EditorView.theme(
     ".cm-runRange": {
       backgroundColor: `color-mix(in srgb, ${color("accent")} 7%, transparent)`,
       boxShadow: `inset 2px 0 0 ${color("accent")}`,
+    },
+    // 서버가 알려 준 오류 자리. 캔버스 States의 "오류"다.
+    ".cm-errorMark": {
+      textDecoration: `underline wavy ${color("danger")}`,
+      textUnderlineOffset: "4px",
     },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: color("fg") },
     "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground":
@@ -248,35 +254,41 @@ const footerPlugin = ViewPlugin.fromClass(
   },
 );
 
-// 모든 문서가 같은 extension 값을 나눠 쓴다.
-const extensions: Extension = [
-  lineNumbers(),
-  history(),
-  drawSelection(),
-  indentOnInput(),
-  bracketMatching(),
-  closeBrackets(),
-  highlightSelectionMatches(),
-  keymap.of([
-    ...closeBracketsKeymap,
-    ...defaultKeymap,
-    ...historyKeymap,
-    ...searchKeymap,
-    indentWithTab,
-  ]),
-  // keyword는 대문자로 넣는다. catalog의 source는 catalogCompletion이 더한다.
-  sql({ dialect: PostgreSQL, upperCaseKeywords: true }),
-  catalogCompletion,
-  autocompletion(AUTOCOMPLETION),
-  footerPlugin,
-  statementSpansField,
-  statementSpansPlugin,
-  runRangeHighlight,
-  editorTheme,
-  syntaxHighlighting(syntaxStyle),
-];
+// 모든 문서가 같은 extension 값을 나눠 쓴다. runMarks가 documents를 거쳐 이 module을 다시 부르므로,
+// 처음 쓸 때 만든다.
+let extensions: Extension | undefined;
+
+function createExtensions(): Extension {
+  return [
+    lineNumbers(),
+    history(),
+    drawSelection(),
+    indentOnInput(),
+    bracketMatching(),
+    closeBrackets(),
+    highlightSelectionMatches(),
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...historyKeymap,
+      ...searchKeymap,
+      indentWithTab,
+    ]),
+    // keyword는 대문자로 넣는다. catalog의 source는 catalogCompletion이 더한다.
+    sql({ dialect: PostgreSQL, upperCaseKeywords: true }),
+    catalogCompletion,
+    autocompletion(AUTOCOMPLETION),
+    footerPlugin,
+    statementSpansField,
+    statementSpansPlugin,
+    runRangeHighlight,
+    runMarksField,
+    editorTheme,
+    syntaxHighlighting(syntaxStyle),
+  ];
+}
 
 /** SQL 편집기의 extension. 자동완성은 문서의 catalog(`setCatalog`)를 쓴다. */
 export function editorExtensions(): Extension {
-  return extensions;
+  return (extensions ??= createExtensions());
 }

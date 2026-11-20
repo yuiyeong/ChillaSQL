@@ -9,6 +9,7 @@ vi.mock("../workspace/commands", () => ({
   retryTunnel: vi.fn(),
 }));
 
+import { EditorView } from "@codemirror/view";
 import { copyText } from "../../shared/api/clipboard";
 import { stubLayout } from "../../test/layout";
 import type { Cell, Outcome } from "../../shared/api/types";
@@ -20,6 +21,16 @@ import {
   resultColumns,
 } from "../../test/fixtures";
 import type { TunnelState } from "../../shared/api/types";
+import {
+  attachView,
+  closeDocument,
+  detachView,
+  documentState,
+  openDocument,
+  setDocumentState,
+} from "../editor/documents";
+import { useEditorStatus } from "../editor/editorStatus";
+import { markRunStart } from "../editor/runMarks";
 import { ResultPane } from "./ResultPane";
 import { fitWidth } from "./grid";
 import { emptyResult, type ResultData, type RunState } from "./runReducer";
@@ -42,7 +53,15 @@ afterEach(() => {
 
 function result(patch: Partial<ResultData> = {}): ResultData {
   return {
-    ...emptyResult("SELECT id, name FROM t", { line: 1, column: 1 }, 0),
+    ...emptyResult(
+      {
+        sql: "SELECT id, name FROM t",
+        from: 0,
+        origin: { line: 1, column: 1 },
+      },
+      "run-0",
+      0,
+    ),
     elapsedMicros: 1234567,
     ...patch,
   };
@@ -232,6 +251,8 @@ test("failed면 server error와 SQLSTATE, 시간을 보여 준다", () => {
   expect(screen.getByText("SQLSTATE 42601")).toBeInTheDocument();
   expect(screen.getByText("3 ms")).toBeInTheDocument();
   expect(screen.queryByText(/^Ln /)).toBeNull();
+  // 위치가 없으면 이동할 곳도 없다.
+  expect(screen.queryByRole("button", { name: "Go to error" })).toBeNull();
   // header에는 이름만 있다.
   expect(screen.getByRole("tab")).toBeInTheDocument();
   expect(
@@ -261,6 +282,111 @@ test("실패는 message, detail, hint, 위치를 보여 준다", () => {
   expect(screen.getByText("테이블 이름을 확인하세요")).toBeInTheDocument();
   expect(screen.getByText("Ln 4, Col 6")).toBeInTheDocument();
   expect(screen.getByText("SQLSTATE 42P01")).toBeInTheDocument();
+});
+
+describe("오류 위치", () => {
+  const sent = "SELEC 2";
+  const position = 6;
+  let view: EditorView | null = null;
+
+  /** 문서 `SELECT 1;\nSELEC 2`의 둘째 문장이 실패한 결과. 문서를 에디터가 보여 준다. */
+  function failedAt(text = "SELECT 1;\nSELEC 2", from = 10) {
+    openDocument("t", text);
+    const shown = new EditorView({
+      state: documentState("t"),
+      parent: document.body,
+      dispatchTransactions(trs, v) {
+        v.update(trs);
+        setDocumentState("t", v.state);
+        useEditorStatus.getState().update("t", v.state);
+      },
+    });
+    view = shown;
+    attachView(shown, "t");
+    markRunStart("t", [{ runKey: "run-0", from }]);
+    finished(
+      {
+        outcome: "failed",
+        error: {
+          code: "42601",
+          message: 'syntax error at or near "2"',
+          detail: null,
+          hint: null,
+          position,
+        },
+      },
+      { sql: sent, from, origin: { line: 2, column: 1 } },
+    );
+    return shown;
+  }
+
+  afterEach(() => {
+    if (view !== null) {
+      detachView(view);
+      view.destroy();
+      view = null;
+    }
+    closeDocument("t");
+    useEditorStatus.setState(useEditorStatus.getInitialState(), true);
+  });
+
+  test("go_to_error_moves_the_cursor", () => {
+    const shown = failedAt();
+    expect(shown.state.selection.main.head).toBe(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to error" }));
+
+    expect(shown.state.selection.main.head).toBe(16);
+    expect(shown.hasFocus).toBe(true);
+  });
+
+  test("buttons_are_in_the_order_of_the_canvas", () => {
+    failedAt();
+
+    const names = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent);
+    expect(names.indexOf("Go to error")).toBeGreaterThanOrEqual(0);
+    expect(names.indexOf("Copy message")).toBe(
+      names.indexOf("Go to error") + 1,
+    );
+  });
+
+  test("error_location_follows_edits", () => {
+    const shown = failedAt();
+    expect(screen.getByText("Ln 2, Col 7")).toBeInTheDocument();
+
+    act(() => shown.dispatch({ changes: { from: 0, insert: "\n" } }));
+
+    expect(screen.getByText("Ln 3, Col 7")).toBeInTheDocument();
+  });
+
+  test("go_to_error_follows_edits", () => {
+    const shown = failedAt();
+    act(() => shown.dispatch({ changes: { from: 0, insert: "--\n" } }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Go to error" }));
+
+    expect(shown.state.selection.main.head).toBe(19);
+  });
+
+  test("go_to_error_is_disabled_when_the_text_was_deleted", () => {
+    const shown = failedAt();
+    act(() => shown.dispatch({ changes: { from: 8, to: 17 } }));
+
+    expect(screen.getByRole("button", { name: "Go to error" })).toBeDisabled();
+    // 위치는 실행한 때의 값을 보여 준다.
+    expect(screen.getByText("Ln 2, Col 7")).toBeInTheDocument();
+  });
+});
+
+test("문서가 없으면 Go to error는 쓸 수 없다", () => {
+  finished({
+    outcome: "failed",
+    error: { ...failure.error, position: 3 },
+  });
+
+  expect(screen.getByRole("button", { name: "Go to error" })).toBeDisabled();
 });
 
 test("오류의 Copy message는 서버 message를 복사하고 알린다", async () => {
@@ -686,6 +812,7 @@ describe("터널", () => {
     const retry = {
       connection: "staging",
       sql: "SELECT 1",
+      from: 0,
       origin: { line: 1, column: 1 },
     };
     const onEdit = showFor({

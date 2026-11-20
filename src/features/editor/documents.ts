@@ -1,4 +1,4 @@
-import { EditorState } from "@codemirror/state";
+import { EditorState, type TransactionSpec } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 import { editorExtensions } from "./extensions";
 
@@ -51,6 +51,20 @@ export function documentState(tabId: string): EditorState {
 /** 열려 있는 문서만 바꾼다. 닫은 문서는 mounted editor가 다음 transaction에서 부르더라도 다시 열리지 않는다. */
 export function setDocumentState(tabId: string, state: EditorState): void {
   if (documents.has(tabId)) documents.set(tabId, state);
+}
+
+/**
+ * 그 탭 문서에 transaction을 보낸다. 보이는 탭이면 view로 보내 SqlEditor가 documents와 상태 표시줄을
+ * 따라가게 하고, 아니면 저장한 state를 바꾼다. 닫은 문서에는 아무것도 하지 않는다.
+ */
+export function dispatchToDocument(tabId: string, spec: TransactionSpec): void {
+  const view = viewShowing(tabId);
+  if (view !== null) {
+    view.dispatch(spec);
+    return;
+  }
+  const state = findDocument(tabId);
+  if (state !== undefined) setDocumentState(tabId, state.update(spec).state);
 }
 
 /** 줄 끝이 \n인 text. offset이 CodeMirror의 위치와 같다. 실행 경로가 쓴다. */

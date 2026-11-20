@@ -40,3 +40,12 @@ test("column은 UTF-16 단위로 센다", () => {
 
   expect(useEditorStatus.getState().column).toBe(3);
 });
+
+test("update는 같은 위치여도 revision을 늘린다", () => {
+  const state = EditorState.create({ doc: "SELECT 1" });
+
+  useEditorStatus.getState().update("a", state);
+  useEditorStatus.getState().update("a", state);
+
+  expect(useEditorStatus.getState().revision).toBe(2);
+});

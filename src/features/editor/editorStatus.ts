@@ -9,6 +9,8 @@ interface EditorStatus {
   line: number;
   /** 1부터. UTF-16 code unit 기준 */
   column: number;
+  /** 문서나 선택이 바뀔 때마다 늘어난다. 편집을 따라 옮겨지는 위치(실행 anchor)를 다시 읽을 때 본다. */
+  revision: number;
   update(tabId: string, state: EditorState): void;
 }
 
@@ -19,14 +21,16 @@ export const useEditorStatus = create<EditorStatus>()((set) => ({
   hasSelection: false,
   line: 1,
   column: 1,
+  revision: 0,
   update(tabId, state) {
     const { head, empty } = state.selection.main;
     const line = state.doc.lineAt(head);
-    set({
+    set((s) => ({
+      revision: s.revision + 1,
       tabId,
       hasSelection: !empty,
       line: line.number,
       column: head - line.from + 1,
-    });
+    }));
   },
 }));

@@ -173,7 +173,14 @@ test("실행 중에는 Cancel이고 누르면 취소한다", async () => {
   const id = tabWith("local");
   renderToolbar();
 
-  setRun(id, { status: "running", result: emptyResult("SELECT 1", ORIGIN, 0) });
+  setRun(id, {
+    status: "running",
+    result: emptyResult(
+      { sql: "SELECT 1", from: 0, origin: ORIGIN },
+      "run-0",
+      0,
+    ),
+  });
 
   expect(screen.queryByRole("button", { name: "Run statement" })).toBeNull();
   expect(
@@ -192,7 +199,14 @@ test("연결 중에는 Cancel이 disabled이고 실행 중에는 enabled다", ()
   setRun(id, { status: "connecting" });
   expect(runButton("Cancel")).toBeDisabled();
 
-  setRun(id, { status: "running", result: emptyResult("SELECT 1", ORIGIN, 0) });
+  setRun(id, {
+    status: "running",
+    result: emptyResult(
+      { sql: "SELECT 1", from: 0, origin: ORIGIN },
+      "run-0",
+      0,
+    ),
+  });
   expect(runButton("Cancel")).toBeEnabled();
 });
 
@@ -236,7 +250,14 @@ test("실행 menu를 연 채 실행이 시작되면 닫히고 실행이 끝나�
   await click(runButton("Choose what to run"));
   expect(screen.getByRole("menu", { name: "What to run" })).toBeInTheDocument();
 
-  setRun(id, { status: "running", result: emptyResult("SELECT 1", ORIGIN, 0) });
+  setRun(id, {
+    status: "running",
+    result: emptyResult(
+      { sql: "SELECT 1", from: 0, origin: ORIGIN },
+      "run-0",
+      0,
+    ),
+  });
   expect(screen.queryByRole("menu")).toBeNull();
 
   setRun(id, { status: "idle" });
@@ -298,13 +319,20 @@ test("연결 중과 첫 행을 기다리는 동안 진행 막대가 있다", () 
   setRun(id, { status: "connecting" });
   expect(progress()).toHaveAttribute("aria-hidden", "true");
 
-  setRun(id, { status: "running", result: emptyResult("SELECT 1", ORIGIN, 0) });
+  setRun(id, {
+    status: "running",
+    result: emptyResult(
+      { sql: "SELECT 1", from: 0, origin: ORIGIN },
+      "run-0",
+      0,
+    ),
+  });
   expect(progress()).not.toBeNull();
 
   setRun(id, {
     status: "running",
     result: {
-      ...emptyResult("SELECT 1", ORIGIN, 0),
+      ...emptyResult({ sql: "SELECT 1", from: 0, origin: ORIGIN }, "run-0", 0),
       columns: resultColumns("a"),
       rows: [["1"]],
     },

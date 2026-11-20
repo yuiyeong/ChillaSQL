@@ -32,6 +32,7 @@ import {
   openDocument,
   setDocumentState,
 } from "../editor/documents";
+import { anchorOf } from "../editor/runMarks";
 import { setStatementSpans } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
@@ -336,6 +337,7 @@ test("dirty 탭은 물어본 뒤에 닫는다", async () => {
   await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   useTabs.getState().markDirty(id);
@@ -444,6 +446,7 @@ test("접속을 바꾸면 세션을 놓는다", async () => {
   await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   // 처음 state object를 고치지 않게 새 object에 spy를 단다.
@@ -478,6 +481,7 @@ test("프로젝트를 바꾸면 탭과 실행 상태를 비운다", async () => 
   await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
 
@@ -520,6 +524,7 @@ test("세션을 닫지 못해도 프로젝트를 바꾼다", async () => {
   await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   vi.mocked(pickDirectory).mockResolvedValue("/q");
@@ -590,6 +595,7 @@ test("save, cancel, newTab, nextTab, prevTab은 활성 탭에 한다", async () 
   await useRuns.getState().run(second, () => ({
     connection: "local",
     sql: "SELECT 2",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   await execute("cancel");
@@ -642,6 +648,7 @@ async function ranTab(name: string, sessionId: number): Promise<string> {
   await useRuns.getState().run(id, () => ({
     connection: name,
     sql: "SELECT 1",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   return id;
@@ -756,6 +763,7 @@ test("디렉토리 고르기가 실패하면 프로젝트 오류로 보여 준�
   await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT 1",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   vi.mocked(pickDirectory).mockRejectedValue(new Error("창을 열지 못했습니다"));
@@ -815,6 +823,41 @@ test("runAgain은 같은 SQL을 지금 접속으로 다시 실행한다", async 
   });
 });
 
+test("run_again_uses_the_moved_position", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 10, end: 18 }]);
+  const id = tabWith("SELECT 1;\nSELECT 2");
+  select(id, 12);
+  await execute("run");
+  const first = runOf(id);
+  expect(first).toMatchObject({
+    result: { from: 10, origin: { line: 2, column: 1 } },
+  });
+  const firstKey = first.status === "running" ? first.result.runKey : "";
+  expect(anchorOf(id, firstKey)).toBe(10);
+
+  // 위에 줄을 넣으면 같은 text가 옮겨진 자리에서 다시 실행된다.
+  setDocumentState(
+    id,
+    documentState(id).update({ changes: { from: 0, insert: "\n\n" } }).state,
+  );
+  await runAgain(id);
+
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    3,
+    "SELECT 2",
+    "auto",
+    expect.any(Function),
+  );
+  const again = runOf(id);
+  expect(again).toMatchObject({
+    status: "running",
+    result: { sql: "SELECT 2", from: 12, origin: { line: 4, column: 1 } },
+  });
+  const key = again.status === "running" ? again.result.runKey : "";
+  expect(key).not.toBe(firstKey);
+  expect(anchorOf(id, key)).toBe(12);
+});
+
 test("runAgain은 결과가 없으면 아무것도 하지 않는다", async () => {
   const id = tabWith("SELECT 1");
 
@@ -852,6 +895,7 @@ test("터널이 시작 중인 연결 중 탭의 취소는 터널 시작을 멈�
   void useRuns.getState().run(id, () => ({
     connection: "staging",
     sql: "SELECT 1",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   expect(runOf(id)?.status).toBe("connecting");
@@ -898,6 +942,7 @@ async function runInTransaction(
   await useRuns.getState().run(tabId, () => ({
     connection: "local",
     sql: "UPDATE a SET b = 1",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   onEventOf(call)({
@@ -948,6 +993,7 @@ test("commit does nothing without a transaction or while a query is being read",
   await useRuns.getState().run(id, () => ({
     connection: "local",
     sql: "SELECT * FROM big",
+    from: 0,
     origin: { line: 1, column: 1 },
   }));
   // 앞 줄을 받는 중이면 먼저 Cancel해야 한다.

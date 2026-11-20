@@ -32,7 +32,7 @@ function session(id: number, connection = "local"): Session {
 
 /** 바로 이 문장을 실행하게 하는 prepare. */
 function prepared(sql = "SELECT 1", connection = "local"): Prepare {
-  return () => ({ connection, sql, origin: { line: 1, column: 1 } });
+  return () => ({ connection, sql, from: 0, origin: { line: 1, column: 1 } });
 }
 
 const origin = { line: 1, column: 1 };
@@ -82,6 +82,8 @@ test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () =>
     status: "running",
     result: {
       sql: "SELECT 1",
+      runKey: expect.any(String),
+      from: 0,
       origin: { line: 1, column: 1 },
       columns: null,
       firstRow: 0,
@@ -574,7 +576,7 @@ test("prepare가 끝나기 전에 release하면 실행하지 않는다", async (
   const running = useRuns.getState().run("t", () => preparing.promise);
 
   await useRuns.getState().release("t");
-  preparing.resolve({ connection: "local", sql: "SELECT 1", origin });
+  preparing.resolve({ connection: "local", sql: "SELECT 1", from: 0, origin });
   await running;
 
   expect(openSession).not.toHaveBeenCalled();
@@ -588,7 +590,7 @@ test("prepare가 늦게 끝난 앞 실행은 뒤 실행을 덮지 않는다", as
 
   await useRuns.getState().run("t", prepared("SELECT B"));
   const stateB = runOf("t");
-  preparingA.resolve({ connection: "local", sql: "SELECT A", origin });
+  preparingA.resolve({ connection: "local", sql: "SELECT A", from: 0, origin });
   await runningA;
 
   expect(executeQuery).toHaveBeenCalledTimes(1);
@@ -643,7 +645,7 @@ test("prepare를 기다리는 동안에도 앞 쿼리의 event가 반영된다",
   const stateA = runOf("t");
   expect(stateA.status === "running" && stateA.result.rows).toEqual([["1"]]);
 
-  preparing.resolve({ connection: "local", sql: "SELECT B", origin });
+  preparing.resolve({ connection: "local", sql: "SELECT B", from: 0, origin });
   await runningB;
   expect(executeQuery).toHaveBeenLastCalledWith(
     3,
@@ -860,7 +862,7 @@ test("터널 오류는 output과 다시 실행할 요청을 남긴다", async ()
     title: "localhost:25432 didn't open within 20 seconds",
     detail: null,
     output: "Unauthorized",
-    retry: { connection: "staging", sql: "SELECT 1", origin },
+    retry: { connection: "staging", sql: "SELECT 1", from: 0, origin },
   };
   expect(runOf("t")).toEqual({ status: "rejected", rejection: expected });
 });

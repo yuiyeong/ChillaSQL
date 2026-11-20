@@ -149,7 +149,11 @@ test("disabled_while_reading", () => {
   open(2, 10);
   setRun({
     status: "running",
-    result: emptyResult("SELECT 1", ORIGIN, NOW),
+    result: emptyResult(
+      { sql: "SELECT 1", from: 0, origin: ORIGIN },
+      "run-0",
+      NOW,
+    ),
   });
 
   expect(commit()).toBeDisabled();
@@ -160,7 +164,14 @@ test("disabled_while_reading", () => {
   // 행을 받았고 다음 batch를 요청할 수 있으면 다시 누를 수 있다.
   setRun({
     status: "running",
-    result: { ...emptyResult("SELECT 1", ORIGIN, NOW), fetch: "ready" },
+    result: {
+      ...emptyResult(
+        { sql: "SELECT 1", from: 0, origin: ORIGIN },
+        "run-0",
+        NOW,
+      ),
+      fetch: "ready",
+    },
   });
   expect(commit()).toBeEnabled();
   expect(radio("Manual")).toBeEnabled();

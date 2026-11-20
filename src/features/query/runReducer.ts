@@ -14,11 +14,18 @@ export interface Origin {
 /** 다음 batch를 요청할 수 있는지. rows가 오면 ready, 요청하면 fetching, 끝나면 none이다. */
 export type FetchState = "none" | "ready" | "fetching";
 
-/** 실행할 것. 탭의 접속, 보낼 SQL, 그 SQL이 문서에서 시작한 곳. */
-export interface RunRequest {
-  connection: string;
+/** 실행할 text 하나와 그것이 문서에서 시작한 곳. */
+export interface RunText {
   sql: string;
+  /** 문서 offset. 실행한 뒤의 편집은 문서가 따라 옮긴다(`anchorOf`). */
+  from: number;
+  /** 실행한 때의 줄과 칸. 문서가 그 자리를 지웠을 때만 쓴다. */
   origin: Origin;
+}
+
+/** 실행할 것. 탭의 접속과 보낼 text. */
+export interface RunRequest extends RunText {
+  connection: string;
 }
 
 /** 실행하지 못한 이유. title은 한 줄, detail은 덧붙일 설명이다. */
@@ -34,6 +41,10 @@ export interface Rejection {
 export interface ResultData {
   /** 서버에 보낸 text */
   sql: string;
+  /** 실행을 가리키는 key. 에디터 문서가 그 실행의 현재 위치를 이 key로 둔다. */
+  runKey: string;
+  /** 실행할 때의 문서 offset. 지금 위치는 `anchorOf(tabId, runKey)`다. */
+  from: number;
   origin: Origin;
   columns: ResultColumn[] | null;
   /** rows[0]의 행 번호 */
@@ -58,12 +69,14 @@ export type RunState =
   | { status: "rejected"; rejection: Rejection };
 
 export function emptyResult(
-  sql: string,
-  origin: Origin,
+  { sql, from, origin }: RunText,
+  runKey: string,
   startedAt: number,
 ): ResultData {
   return {
     sql,
+    runKey,
+    from,
     origin,
     columns: null,
     firstRow: 0,
