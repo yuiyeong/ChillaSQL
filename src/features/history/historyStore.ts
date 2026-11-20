@@ -27,7 +27,7 @@ interface HistoryState {
   /**
    * 실행 하나를 `dir` 프로젝트에 기록한다. `dir`은 실행을 시작할 때 열려 있던 프로젝트이고, 지금
    * 열린 프로젝트와 다르거나 없으면 아무것도 하지 않는다. 실패는 무시한다. 화면이 열려 있으면 기록한
-   * 뒤 목록을 다시 읽는다.
+   * 뒤 150ms 동안 더 기록하지 않을 때 목록을 다시 읽는다.
    */
   record(dir: string | null, entry: Omit<HistoryEntry, "id">): Promise<void>;
   /** 프로젝트를 바꿀 때. 검색어와 목록을 비우고 늦게 오는 답을 버린다. */
@@ -44,6 +44,15 @@ export const useHistory = create<HistoryState>()((set, get) => {
     timer = undefined;
   }
 
+  /** 150ms 동안 더 부르지 않으면 목록을 다시 읽는다. 부를 때마다 기다림을 다시 시작한다. */
+  function scheduleLoad() {
+    cancelTimer();
+    timer = setTimeout(() => {
+      timer = undefined;
+      void get().load();
+    }, SEARCH_WAIT_MS);
+  }
+
   return {
     query: "",
     entries: [],
@@ -58,11 +67,7 @@ export const useHistory = create<HistoryState>()((set, get) => {
 
     setQuery(query) {
       set({ query });
-      cancelTimer();
-      timer = setTimeout(() => {
-        timer = undefined;
-        void get().load();
-      }, SEARCH_WAIT_MS);
+      scheduleLoad();
     },
 
     async load() {
@@ -74,9 +79,16 @@ export const useHistory = create<HistoryState>()((set, get) => {
       try {
         const entries = await searchHistory(dir, get().query);
         if (request !== lastRequest) return;
+        // 고른 항목이 새 목록에 있으면 그대로 두고, 없으면 처음 항목을 고른다.
+        const before = get();
+        const keptId =
+          before.selected === null
+            ? undefined
+            : before.entries[before.selected]?.id;
+        const kept = entries.findIndex((e) => e.id === keptId);
         set({
           entries,
-          selected: entries.length > 0 ? 0 : null,
+          selected: kept >= 0 ? kept : entries.length > 0 ? 0 : null,
           status: "ready",
           error: null,
         });
@@ -113,7 +125,8 @@ export const useHistory = create<HistoryState>()((set, get) => {
         // 기록하지 못해도(저장소가 없음, 프로젝트가 바뀜) 실행에는 영향이 없다.
         return;
       }
-      if (get().open) await get().load();
+      // 실행이 이어서 끝나면 기록이 몰리므로 목록은 한 번만 다시 읽는다.
+      if (get().open) scheduleLoad();
     },
 
     reset() {

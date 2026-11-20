@@ -1481,42 +1481,6 @@ describe("EXPLAIN result", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
-  test("running_plan_fetches_more", () => {
-    const fetchMore = vi.fn().mockResolvedValue(undefined);
-    useRuns.setState({ fetchMore });
-    // 창에 다 들어가지 않는 행 수라 표가 스스로 더 가져오지 않는다.
-    const many: Cell[][] = Array.from({ length: 200 }, (_, i) => [
-      `  ->  Seq Scan on t${i}  (cost=0.00..1.00 rows=1 width=8)`,
-    ]);
-    show({
-      status: "running",
-      result: result({
-        sql: planSql,
-        columns: planColumns,
-        rows: many,
-        fetch: "ready",
-      }),
-    });
-
-    expect(fetchMore).toHaveBeenCalledWith("t");
-  });
-
-  test("a_running_non_plan_result_is_not_fetched_for_the_user", () => {
-    const fetchMore = vi.fn().mockResolvedValue(undefined);
-    useRuns.setState({ fetchMore });
-    const many: Cell[][] = Array.from({ length: 200 }, (_, i) => [`${i}`]);
-    show({
-      status: "running",
-      result: result({
-        columns: resultColumns("id"),
-        rows: many,
-        fetch: "ready",
-      }),
-    });
-
-    expect(fetchMore).not.toHaveBeenCalled();
-  });
-
   test("a_running_plan_keeps_the_grid_until_it_completes", () => {
     show({
       status: "running",

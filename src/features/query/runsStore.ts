@@ -23,7 +23,9 @@ import { modeOf, useTabs } from "../editor/tabsStore";
 import { markRunStart, markServerError } from "../editor/runAnchors";
 import { useHistory } from "../history/historyStore";
 import { useProject } from "../project/projectStore";
+import { cancelParameterPrompt } from "../workspace/parameterPrompt";
 import { closeDdl } from "./ddlStore";
+import { isPlanResult } from "./explainPlan";
 import { clearGridViews, dropGridView } from "./gridViews";
 import { sourceOffset, type Rewrite } from "./rewrite";
 import {
@@ -449,6 +451,8 @@ export const useRuns = create<RunsState>()((set, get) => {
     async run(tabId, prepare, confirmStep) {
       // Commit이나 Rollback의 답을 기다리는 동안은 그 세션에 쿼리를 보내지 않는다.
       if (get().ending[tabId]) return;
+      // 이 탭에 떠 있던 파라미터 물음은 새 실행이 대신한다. `prepare`가 다시 묻는 것은 그 뒤다.
+      cancelParameterPrompt(tabId);
       // 기록은 실행을 시작한 프로젝트에 남긴다. 프로젝트를 바꾼 뒤 옛 실행의 늦은 event가 와도 새 프로젝트에 쓰지 않는다.
       const projectDir = useProject.getState().project?.dir ?? null;
       const attempt = bump(attempts, tabId);
@@ -623,6 +627,18 @@ export const useRuns = create<RunsState>()((set, get) => {
               ? s
               : { runs, transactions };
           });
+          // 받는 중인 QUERY PLAN은 끝까지 가져온다. tree는 결과가 다 와야 그릴 수 있고, 다른 탭을
+          // 보고 있어도 그 쿼리가 만료되기 전에 받아야 한다.
+          if (fresh && event.type === "rows") {
+            const after = get().runs[tabId];
+            if (
+              after?.status === "running" &&
+              after.result.fetch === "ready" &&
+              isPlanResult(after.result.columns)
+            ) {
+              void get().fetchMore(tabId);
+            }
+          }
           if (fresh && event.type === "finished" && tabId in get().scripts) {
             if (event.outcome !== "completed") {
               stopScript(tabId, index);
@@ -792,6 +808,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     },
 
     async release(tabId) {
+      cancelParameterPrompt(tabId);
       closeDdl(tabId);
       const slot = drop(tabId);
       dropGridView(tabId);

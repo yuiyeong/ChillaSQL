@@ -1,4 +1,4 @@
-import { StateEffect, StateField } from "@codemirror/state";
+import { EditorState, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, EditorView, type DecorationSet } from "@codemirror/view";
 
 /**
@@ -25,4 +25,25 @@ export const parameterMarksField = StateField.define<DecorationSet>({
     return next;
   },
   provide: (field) => EditorView.decorations.from(field),
+});
+
+/**
+ * 값을 묻는 동안 그 문서를 고칠 수 없게 한다. 물음에 쓴 문장의 문서 위치(`from`)가 편집으로 어긋나지
+ * 않게 하려는 것이다. 커서와 선택은 움직일 수 있다. 프로젝트 전환의 잠금(`editorEditable`)과 따로이므로
+ * 글자를 넣는 transaction을 걸러서 막는다.
+ */
+export const setParameterLock = StateEffect.define<boolean>();
+
+export const parameterLockField = StateField.define<boolean>({
+  create: () => false,
+  update(value, tr) {
+    for (const effect of tr.effects) {
+      if (effect.is(setParameterLock)) value = effect.value;
+    }
+    return value;
+  },
+  provide: (field) =>
+    EditorState.transactionFilter.of((tr) =>
+      tr.docChanged && tr.startState.field(field) ? [] : tr,
+    ),
 });

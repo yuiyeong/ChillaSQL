@@ -262,6 +262,7 @@ test("a_recorded_query_appears_while_the_view_is_open", async () => {
       executedAt: NOW.getTime(),
       elapsedMicros: 1,
     });
+    await vi.advanceTimersByTimeAsync(200);
   });
 
   expect(items()[0]).toHaveTextContent("SELECT 5");

@@ -23,7 +23,7 @@ import {
   findDocument,
 } from "../editor/documents";
 import { editorNotice } from "../editor/editorNotice";
-import { setParameterMarks } from "../editor/parameterMarks";
+import { setParameterLock, setParameterMarks } from "../editor/parameterMarks";
 import { reformatDocument } from "../editor/reformat";
 import { saveTab } from "../editor/saveTab";
 import { anchorLocation, anchorOf } from "../editor/runAnchors";
@@ -251,16 +251,23 @@ async function fillParameters(
   if (found === null) return steps;
   const names = namesOf(found);
   if (names.length === 0) return steps;
+  // 물어보는 동안 문서를 고치지 못하게 한다. 문장의 문서 위치(`from`)가 어긋나면 오류 밑줄과 Go to
+  // error가 엉뚱한 곳을 가리킨다.
   dispatchToDocument(tabId, {
-    effects: setParameterMarks.of(markRanges(tabId, steps, found)),
+    effects: [
+      setParameterMarks.of(markRanges(tabId, steps, found)),
+      setParameterLock.of(true),
+    ],
   });
   let values: Record<string, string> | null;
   try {
     values = await askParameters(tabId, names);
   } finally {
-    // 같은 탭에서 다시 실행해 물음이 이어졌으면 그 표시는 새 물음이 거둔다.
+    // 같은 탭에서 다시 실행해 물음이 이어졌으면 그 표시와 잠금은 새 물음이 거둔다.
     if (useParameterPrompt.getState().request?.tabId !== tabId) {
-      dispatchToDocument(tabId, { effects: setParameterMarks.of([]) });
+      dispatchToDocument(tabId, {
+        effects: [setParameterMarks.of([]), setParameterLock.of(false)],
+      });
     }
   }
   return values === null
@@ -276,7 +283,7 @@ async function fillParameters(
 export function runSteps(
   tabId: string,
   choose: (tabId: string) => Promise<ScriptStep[] | Rejection>,
-  finish?: (steps: ScriptStep[]) => ScriptStep[] | Rejection,
+  finish?: (steps: ScriptStep[]) => ScriptStep[],
 ): Promise<void> {
   const connection = findTab(tabId)?.connection ?? null;
   // 문장을 나누거나 값을 묻는 동안 탭을 닫거나 접속을 바꾸면 release가 이 실행을 버린다.
@@ -289,7 +296,6 @@ export function runSteps(
       const filled = await fillParameters(tabId, chosen);
       if (filled === null) return null;
       const steps = finish === undefined ? filled : finish(filled);
-      if ("title" in steps) return steps;
       return confirmed(tabId, requestFor(tabId, steps));
     },
     connection === null ? undefined : confirmStepOf(tabId, connection),
@@ -299,17 +305,22 @@ export function runSteps(
 const EXPLAIN_PREFIX = "EXPLAIN ANALYZE ";
 
 /**
- * Explain이 보낼 문장. 문장이 둘 이상이면 실행하지 않고, 이미 EXPLAIN으로 시작하면 그대로, 아니면
- * `EXPLAIN ANALYZE `를 앞에 붙인다. 값을 넣은 뒤에 불리므로 접두어가 `:name`의 자리를 밀지 않는다.
+ * Explain이 실행할 문장. 문장이 둘 이상이면 값을 묻기 전에 실행하지 않는다.
  */
-function explainFinish(steps: ScriptStep[]): ScriptStep[] | Rejection {
-  if (steps.length !== 1) {
-    return { title: t("run.explainOneStatement"), detail: null };
-  }
-  const [step] = steps;
-  return [
+async function explainChoose(tabId: string): Promise<ScriptStep[] | Rejection> {
+  const chosen = await statementsToRun(tabId);
+  if ("title" in chosen || chosen.length === 1) return chosen;
+  return { title: t("run.explainOneStatement"), detail: null };
+}
+
+/**
+ * Explain이 보낼 문장. 이미 EXPLAIN으로 시작하면 그대로, 아니면 `EXPLAIN ANALYZE `를 앞에 붙인다.
+ * 값을 넣은 뒤에 불리므로 접두어가 `:name`의 자리를 밀지 않는다.
+ */
+function explainFinish(steps: ScriptStep[]): ScriptStep[] {
+  return steps.map((step) =>
     startsWithWord(step.sql, "EXPLAIN") ? step : prepend(step, EXPLAIN_PREFIX),
-  ];
+  );
 }
 
 /** command를 실행한다. 대부분은 활성 탭에 대해서이고, 탭이 없으면 아무것도 하지 않는다. */
@@ -337,7 +348,7 @@ export async function execute(command: CommandId): Promise<void> {
     case "runFile":
       return runSteps(tabId, fileToRun);
     case "explain":
-      return runSteps(tabId, statementsToRun, explainFinish);
+      return runSteps(tabId, explainChoose, explainFinish);
     case "cancel":
       return cancelRun(tabId);
     case "save":

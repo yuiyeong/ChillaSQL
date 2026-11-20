@@ -52,6 +52,13 @@ export function answerParameters(values: Record<string, string> | null): void {
   resolve?.(values);
 }
 
+/** 그 탭의 물음이 떠 있으면 Cancel로 끝낸다. 다른 탭의 물음은 그대로 둔다. */
+export function cancelParameterPrompt(tabId: string): void {
+  if (useParameterPrompt.getState().request?.tabId === tabId) {
+    answerParameters(null);
+  }
+}
+
 export function isParameterPromptOpen(): boolean {
   return useParameterPrompt.getState().request !== null;
 }

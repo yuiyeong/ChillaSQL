@@ -31,6 +31,7 @@ import type {
 } from "../../shared/api/types";
 import {
   closeDocument,
+  dispatchToDocument,
   documentState,
   openDocument,
   setDocumentState,
@@ -2070,6 +2071,89 @@ test("a_second_run_replaces_the_prompt_and_keeps_the_marks", async () => {
   expect(marksIn(id)).toEqual([]);
 });
 
+test("editor_is_read_only_while_the_prompt_is_open", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 9 }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "id", start: 7, end: 9 },
+  ]);
+  const id = tabWith("SELECT :id");
+
+  const running = execute("run");
+  await promptRequest();
+  dispatchToDocument(id, { changes: { from: 0, insert: "-- " } });
+  expect(documentState(id).doc.toString()).toBe("SELECT :id");
+  // 커서와 선택은 움직일 수 있다.
+  dispatchToDocument(id, { selection: { anchor: 3 } });
+  expect(documentState(id).selection.main.head).toBe(3);
+
+  answerParameters({ id: "1" });
+  await running;
+  dispatchToDocument(id, { changes: { from: 0, insert: "-- " } });
+  expect(documentState(id).doc.toString()).toBe("-- SELECT :id");
+});
+
+test("editor_is_editable_again_after_cancel", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 9 }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "id", start: 7, end: 9 },
+  ]);
+  const id = tabWith("SELECT :id");
+
+  const running = execute("run");
+  await promptRequest();
+  answerParameters(null);
+  await running;
+
+  dispatchToDocument(id, { changes: { from: 0, insert: "-- " } });
+  expect(documentState(id).doc.toString()).toBe("-- SELECT :id");
+});
+
+test("a_run_without_parameters_closes_the_open_prompt", async () => {
+  const text = "SELECT :id; SELECT 2";
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 10 },
+    { start: 12, end: 20 },
+  ]);
+  vi.mocked(findParameters).mockImplementation(async (sql) =>
+    sql === "SELECT :id" ? [{ name: "id", start: 7, end: 10 }] : [],
+  );
+  const id = tabWith(text);
+
+  const first = execute("run");
+  await promptRequest();
+  // 물음이 떠 있어도 커서는 옮길 수 있다. 파라미터가 없는 문장을 실행한다.
+  dispatchToDocument(id, { selection: { anchor: 15 } });
+  await execute("run");
+  await first;
+
+  expect(isParameterPromptOpen()).toBe(false);
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "SELECT 2",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  expect(marksIn(id)).toEqual([]);
+});
+
+test("closing_the_tab_closes_its_prompt", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 9 }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "id", start: 7, end: 9 },
+  ]);
+  const id = tabWith("SELECT :id");
+
+  const running = execute("run");
+  await promptRequest();
+  await closeTab(id);
+  await running;
+
+  expect(isParameterPromptOpen()).toBe(false);
+  expect(executeQuery).not.toHaveBeenCalled();
+});
+
 test("cancel_does_not_run", async () => {
   vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 9 }]);
   vi.mocked(findParameters).mockResolvedValue([
@@ -2302,6 +2386,31 @@ test("explain_rejects_two_statements", async () => {
   });
   expect(executeQuery).not.toHaveBeenCalled();
   expect(openSession).not.toHaveBeenCalled();
+});
+
+test("explain_rejects_two_statements_before_asking_parameters", async () => {
+  const text = "SELECT :id; SELECT 2";
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 10 },
+    { start: 12, end: 20 },
+  ]);
+  vi.mocked(findParameters).mockImplementation(async (sql) =>
+    sql === "SELECT :id" ? [{ name: "id", start: 7, end: 10 }] : [],
+  );
+  const id = tabWith(text);
+  select(id, 0, text.length);
+
+  await execute("explain");
+
+  expect(isParameterPromptOpen()).toBe(false);
+  expect(findParameters).not.toHaveBeenCalled();
+  expect(runOf(id)).toMatchObject({
+    status: "rejected",
+    rejection: {
+      title: "Explain runs one statement. Select a single statement.",
+    },
+  });
+  expect(executeQuery).not.toHaveBeenCalled();
 });
 
 test("explain_asks_parameters_first", async () => {

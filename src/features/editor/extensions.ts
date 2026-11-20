@@ -30,7 +30,7 @@ import {
 import { tags } from "@lezer/highlight";
 import { t } from "../../shared/i18n/t";
 import { catalogCompletion, kindLetter } from "./completion";
-import { parameterMarksField } from "./parameterMarks";
+import { parameterLockField, parameterMarksField } from "./parameterMarks";
 import { runMarksField } from "./runMarks";
 import {
   runRangeHighlight,
@@ -318,6 +318,7 @@ const extensions: Extension = [
   runRangeHighlight,
   runMarksField,
   parameterMarksField,
+  parameterLockField,
   editorTheme,
   editorFontCompartment.of(editorFontTheme("D2Coding", 15)),
   editorEditableCompartment.of(editorEditable(true)),

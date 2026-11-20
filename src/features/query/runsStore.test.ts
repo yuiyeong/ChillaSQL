@@ -25,6 +25,10 @@ import { prepend, substitute } from "./rewrite";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
 import { useTypes } from "./typesStore";
+import {
+  askParameters,
+  useParameterPrompt,
+} from "../workspace/parameterPrompt";
 import { deferred } from "../../test/deferred";
 import {
   openProjectWith,
@@ -838,6 +842,61 @@ test("fetchMore는 execute가 query id를 돌려준 뒤 보낸다", async () => 
   await fetching;
   expect(fetchMore).toHaveBeenCalledWith(3, 9);
   await running;
+});
+
+test("plan_result_in_any_tab_is_fetched_to_the_end", async () => {
+  await useRuns.getState().run("t", prepared("EXPLAIN ANALYZE SELECT 1"));
+  // 다른 탭이 활성이어도 받는 중인 QUERY PLAN은 이어서 받는다.
+  useTabs.getState().newTab();
+  const onEvent = onEventOf(0);
+  onEvent({ type: "columns", columns: resultColumns("QUERY PLAN") });
+  expect(fetchMore).not.toHaveBeenCalled();
+  onEvent(rowsEvent);
+  expect(runOf("t")).toMatchObject({
+    status: "running",
+    result: { fetch: "fetching" },
+  });
+  await vi.waitFor(() => expect(fetchMore).toHaveBeenCalledTimes(1));
+  expect(fetchMore).toHaveBeenCalledWith(3, 7);
+
+  onEvent({ ...rowsEvent, firstRow: 1 });
+  await vi.waitFor(() => expect(fetchMore).toHaveBeenCalledTimes(2));
+});
+
+test("non_plan_result_is_not_fetched_on_its_own", async () => {
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+  const onEvent = onEventOf(0);
+  onEvent({ type: "columns", columns: resultColumns("id") });
+  onEvent(rowsEvent);
+  await Promise.resolve();
+  expect(fetchMore).not.toHaveBeenCalled();
+  expect(runOf("t")).toMatchObject({ result: { fetch: "ready" } });
+});
+
+test("release_closes_that_tabs_parameter_prompt_only", async () => {
+  const mine = askParameters("t", ["id"]);
+  await useRuns.getState().release("other");
+  expect(useParameterPrompt.getState().request?.tabId).toBe("t");
+
+  await useRuns.getState().release("t");
+  expect(useParameterPrompt.getState().request).toBeNull();
+  await expect(mine).resolves.toBeNull();
+});
+
+test("a_run_closes_that_tabs_parameter_prompt_before_prepare", async () => {
+  const asked = askParameters("t", ["id"]);
+  let openDuringPrepare: boolean | null = null;
+  await useRuns.getState().run("t", () => {
+    openDuringPrepare = useParameterPrompt.getState().request !== null;
+    return {
+      connection: "local",
+      steps: [{ sql: "SELECT 1", from: 0, origin }],
+    };
+  });
+
+  expect(openDuringPrepare).toBe(false);
+  await expect(asked).resolves.toBeNull();
+  expect(executeQuery).toHaveBeenCalledTimes(1);
 });
 
 test("fetchMore가 실패해도 state를 바꾸지 않는다", async () => {

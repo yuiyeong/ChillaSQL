@@ -79,11 +79,26 @@ test("a_stale_answer_is_dropped", async () => {
 test("selects_the_first_entry_after_load", async () => {
   vi.mocked(searchHistory).mockResolvedValue([entry(2), entry(1)]);
   await useHistory.getState().load();
-  useHistory.getState().select(1);
+  expect(useHistory.getState().selected).toBe(0);
 
+  // 고른 항목이 새 목록에 없으면 처음 항목이다.
+  useHistory.getState().select(1);
+  vi.mocked(searchHistory).mockResolvedValue([entry(3), entry(2)]);
   await useHistory.getState().load();
 
   expect(useHistory.getState().selected).toBe(0);
+});
+
+test("reload_keeps_the_selected_entry_by_id", async () => {
+  vi.mocked(searchHistory).mockResolvedValue([entry(2), entry(1)]);
+  await useHistory.getState().load();
+  useHistory.getState().select(1);
+
+  // 새 기록이 앞에 붙어 index가 밀려도 같은 항목이 골라져 있다.
+  vi.mocked(searchHistory).mockResolvedValue([entry(3), entry(2), entry(1)]);
+  await useHistory.getState().load();
+
+  expect(useHistory.getState().selected).toBe(2);
 });
 
 test("an_empty_list_selects_nothing", async () => {
@@ -160,11 +175,53 @@ test("record_reloads_only_while_the_view_is_open", async () => {
 
   await useHistory.getState().record("/p", row);
   expect(recordQuery).toHaveBeenCalledWith("/p", row);
+  await vi.advanceTimersByTimeAsync(200);
   expect(searchHistory).not.toHaveBeenCalled();
 
   useHistory.setState({ open: true });
   await useHistory.getState().record("/p", row);
+  await vi.advanceTimersByTimeAsync(200);
   expect(searchHistory).toHaveBeenCalledTimes(1);
+});
+
+test("a_burst_of_records_reloads_once", async () => {
+  vi.mocked(recordQuery).mockResolvedValue();
+  vi.mocked(searchHistory).mockResolvedValue([entry(1)]);
+  useHistory.setState({ open: true });
+  const row = {
+    connection: "local",
+    sql: "SELECT 1",
+    executedAt: 1,
+    elapsedMicros: 2,
+  };
+
+  for (let i = 0; i < 5; i++) {
+    await useHistory.getState().record("/p", row);
+    await vi.advanceTimersByTimeAsync(50);
+  }
+  expect(searchHistory).not.toHaveBeenCalled();
+  await vi.advanceTimersByTimeAsync(150);
+
+  expect(searchHistory).toHaveBeenCalledTimes(1);
+});
+
+test("a_record_reload_keeps_the_selected_entry", async () => {
+  vi.mocked(recordQuery).mockResolvedValue();
+  vi.mocked(searchHistory).mockResolvedValue([entry(2), entry(1)]);
+  await useHistory.getState().load();
+  useHistory.setState({ open: true });
+  useHistory.getState().select(1);
+
+  vi.mocked(searchHistory).mockResolvedValue([entry(3), entry(2), entry(1)]);
+  await useHistory.getState().record("/p", {
+    connection: "local",
+    sql: "SELECT 3",
+    executedAt: 3,
+    elapsedMicros: 2,
+  });
+  await vi.advanceTimersByTimeAsync(200);
+
+  expect(useHistory.getState().selected).toBe(2);
 });
 
 test("record_for_another_project_does_nothing", async () => {
