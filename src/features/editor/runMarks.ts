@@ -1,13 +1,5 @@
-import {
-  MapMode,
-  StateEffect,
-  StateField,
-  type Text,
-  type TransactionSpec,
-} from "@codemirror/state";
+import { MapMode, StateEffect, StateField, type Text } from "@codemirror/state";
 import { Decoration, EditorView } from "@codemirror/view";
-import { useRuns } from "../query/runsStore";
-import { dispatchToDocument, findDocument, viewShowing } from "./documents";
 
 export interface RunMarks {
   /** runKey → 그 실행의 text가 시작한 문서 offset */
@@ -93,25 +85,6 @@ export const runMarksField = StateField.define<RunMarks>({
     ),
 });
 
-/** 그 실행의 지금 문서 offset. 문서가 그 자리를 지웠으면 null. */
-export function anchorOf(tabId: string, runKey: string): number | null {
-  return (
-    findDocument(tabId)?.field(runMarksField, false)?.anchors[runKey] ?? null
-  );
-}
-
-/** 그 실행의 text가 지금 문서에서 시작하는 줄과 칸(1부터). anchor가 없으면 null. */
-export function anchorLocation(
-  tabId: string,
-  runKey: string,
-): { line: number; column: number } | null {
-  const anchor = anchorOf(tabId, runKey);
-  const doc = findDocument(tabId)?.doc;
-  if (anchor === null || doc === undefined) return null;
-  const line = doc.lineAt(Math.min(anchor, doc.length));
-  return { line: line.number, column: anchor - line.from + 1 };
-}
-
 const WORD_CHAR = /[\p{L}\p{N}_$]/u;
 
 /** 오류 위치(보낸 text의 UTF-16 offset)의 밑줄 범위: 그 자리의 단어 끝까지, 단어가 아니면 한 글자. */
@@ -140,53 +113,4 @@ export function errorRange(
     end += char.length;
   }
   return { from: pos, to: pos + end };
-}
-
-/**
- * 실행을 시작했다. 그 탭 문서에 이번 실행의 시작 offset을 두고 지난 실행의 anchor와 오류 밑줄을 지운다.
- * 한 요청이 여러 문장이면 문장마다 넘긴다.
- */
-export function markRunStart(
-  tabId: string,
-  steps: { runKey: string; from: number }[],
-): void {
-  dispatchToDocument(tabId, {
-    effects: [
-      clearRunAnchors.of(null),
-      ...steps.map((step) => setRunAnchor.of(step)),
-      setErrorMark.of(null),
-    ],
-  });
-}
-
-/** 서버 오류의 `position`(보낸 text 기준)에 밑줄을 긋는다. 그 실행의 anchor가 없으면 긋지 않는다. */
-export function markServerError(
-  tabId: string,
-  runKey: string,
-  position: number,
-): void {
-  const anchor = anchorOf(tabId, runKey);
-  const doc = findDocument(tabId)?.doc;
-  if (anchor === null || doc === undefined) return;
-  dispatchToDocument(tabId, {
-    effects: setErrorMark.of(errorRange(doc, anchor + position)),
-  });
-}
-
-/** 오류 화면의 Go to error. 오류 자리에 커서를 두고 에디터에 focus한다. */
-export function goToError(tabId: string): void {
-  const state = useRuns.getState().runs[tabId];
-  if (state?.status !== "finished" || state.outcome.outcome !== "failed") {
-    return;
-  }
-  const { position } = state.outcome.error;
-  const anchor = anchorOf(tabId, state.result.runKey);
-  const doc = findDocument(tabId)?.doc;
-  if (position === null || anchor === null || doc === undefined) return;
-  const spec: TransactionSpec = {
-    selection: { anchor: Math.min(anchor + position, doc.length) },
-    scrollIntoView: true,
-  };
-  dispatchToDocument(tabId, spec);
-  viewShowing(tabId)?.focus();
 }

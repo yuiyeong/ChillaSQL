@@ -10,6 +10,10 @@ import type {
 } from "../shared/api/types";
 import { useTabs, type Tab } from "../features/editor/tabsStore";
 import { useProject } from "../features/project/projectStore";
+import {
+  DEFAULT_EDITOR,
+  DEFAULT_IDLE_TIMEOUT_SECS,
+} from "../features/settings/settingsStore";
 
 /** type을 모르는(OID 0) 결과 열. 이름만 중요한 test에서 쓴다. */
 export function resultColumns(...names: string[]): ResultColumn[] {
@@ -127,8 +131,8 @@ export function catalogFixture(patch: Partial<Catalog> = {}): Catalog {
 export function settingsFixture(patch: Partial<Settings> = {}): Settings {
   return {
     language: "en",
-    editor: { font: "D2Coding", fontSize: 15 },
-    idleTimeoutSecs: 600,
+    editor: DEFAULT_EDITOR,
+    idleTimeoutSecs: DEFAULT_IDLE_TIMEOUT_SECS,
     error: null,
     storeError: null,
     ...patch,

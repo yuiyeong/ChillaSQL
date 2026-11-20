@@ -1,6 +1,8 @@
 // src-tauri/src/commands.rs의 DTO가 화면으로 보내는 JSON과 같은 모양이다.
 // 키는 camelCase, 구분 값(`outcome`, `type`, `mode`)은 snake_case다.
 
+import type { Language } from "../i18n/t";
+
 export type SslMode = "disable" | "require" | "verify-full";
 
 export type ConnectionColor = "green" | "yellow" | "red" | "blue" | "purple";
@@ -212,7 +214,7 @@ export interface TunnelEvent {
 
 /** 시작할 때 읽은 전역 설정(`~/.config/chilla/config.toml`). `error`가 있으면 기본값이고 그 이유다. */
 export interface Settings {
-  language: "en" | "ko";
+  language: Language;
   editor: { font: string; fontSize: number };
   /** 받다 만 결과를 닫는 초 */
   idleTimeoutSecs: number;

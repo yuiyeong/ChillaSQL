@@ -1,7 +1,7 @@
 import { EditorSelection } from "@codemirror/state";
 import { isolateHistory } from "@codemirror/commands";
 import { format } from "sql-formatter";
-import { documentState, setDocumentState, viewShowing } from "./documents";
+import { dispatchToDocument, documentState } from "./documents";
 
 const OPTIONS = {
   language: "postgresql",
@@ -135,12 +135,6 @@ export function reformatDocument(
     // 앞뒤 입력과 한 undo 단위로 묶이지 않고, 한 번으로 돌아간다.
     annotations: isolateHistory.of("full"),
   };
-  const view = viewShowing(tabId);
-  if (view !== null) {
-    // SqlEditor의 dispatchTransactions가 documents, 상태 표시줄, dirty를 따라가게 한다.
-    view.dispatch(spec);
-  } else {
-    setDocumentState(tabId, state.update(spec).state);
-  }
+  dispatchToDocument(tabId, spec);
   return { ok: true };
 }

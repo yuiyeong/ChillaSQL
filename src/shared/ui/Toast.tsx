@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-
-export const TOAST_MS = 2000;
+import { useEffect, useState } from "react";
+import { useStore } from "zustand";
+import { createToastStore } from "./toastStore";
 
 /**
  * 잠깐 보이는 알림. message가 null이면 비어 있다.
@@ -23,16 +23,8 @@ export function Toast({ message }: { message: string | null }) {
 
 /** `show`를 부르면 2초 동안 message가 있다. 다시 부르면 2초를 새로 잰다. */
 export function useToast(): { message: string | null; show(m: string): void } {
-  const [message, setMessage] = useState<string | null>(null);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  const show = useCallback((next: string) => {
-    clearTimeout(timer.current);
-    setMessage(next);
-    timer.current = setTimeout(() => setMessage(null), TOAST_MS);
-  }, []);
-
-  return { message, show };
+  const [toast] = useState(createToastStore);
+  useEffect(() => toast.reset, [toast]);
+  const message = useStore(toast.store, (state) => state.message);
+  return { message, show: toast.show };
 }

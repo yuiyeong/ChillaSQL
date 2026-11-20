@@ -34,7 +34,8 @@ import {
   openDocument,
   setDocumentState,
 } from "../editor/documents";
-import { anchorOf, runMarksField } from "../editor/runMarks";
+import { anchorOf } from "../editor/runAnchors";
+import { runMarksField } from "../editor/runMarks";
 import { setStatementSpans } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { connectionInUse, useProject } from "../project/projectStore";

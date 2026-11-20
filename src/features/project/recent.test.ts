@@ -1,19 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import { setLanguage } from "../../shared/i18n/t";
-import { initials, openedWhen, shortPath } from "./recent";
-
-test("initials_from_words_and_single_names", () => {
-  expect(initials("chilla-demo")).toBe("CD");
-  expect(initials("billing")).toBe("BI");
-  expect(initials("billing-migration")).toBe("BM");
-});
-
-test("short_path_uses_tilde", () => {
-  expect(shortPath("/Users/jo/work/billing", "/Users/jo")).toBe(
-    "~/work/billing",
-  );
-  expect(shortPath("/opt/billing", "/Users/jo")).toBe("/opt/billing");
-});
+import { openedWhen } from "./recent";
 
 test("opened_when_buckets", () => {
   // 지역 시각 기준이다. 2026-11-20 14:00.

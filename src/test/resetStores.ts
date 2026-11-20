@@ -1,5 +1,5 @@
 import { useTunnels } from "../features/connections/tunnelsStore";
-import { resetEditorNotice } from "../features/editor/editorNotice";
+import { editorNotice } from "../features/editor/editorNotice";
 import { useEditorStatus } from "../features/editor/editorStatus";
 import { useTabs } from "../features/editor/tabsStore";
 import { useProject } from "../features/project/projectStore";
@@ -27,7 +27,7 @@ export async function resetStores(): Promise<void> {
   useSchema.getState().reset();
   useTypes.getState().reset();
   useSettings.setState(useSettings.getInitialState(), true);
-  resetEditorNotice();
+  editorNotice.reset();
   setLanguage("en");
   // 답을 기다리던 ask는 cancel로 끝내고 차례를 비운다.
   resetDialogs();

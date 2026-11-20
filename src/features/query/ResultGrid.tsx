@@ -139,8 +139,8 @@ function Grid({
     connection,
     resultColumns ?? NO_RESULT_COLUMNS,
   );
-  const kinds = useMemo(() => columnTypes.map(valueKind), [columnTypes]);
   const fits = useMemo(() => columnTypes.map(fitColumnOf), [columnTypes]);
+  const kinds = useMemo(() => fits.map((fit) => fit.kind), [fits]);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 떠날 때 저장한 view. 그 사이 앞 행이 버려졌으면 보던 행이 그 자리에 오게 스크롤을 당긴다.
@@ -456,6 +456,7 @@ function Grid({
           headers={headers}
           columns={columns}
           types={columnTypes}
+          kinds={kinds}
           columnSizing={columnSizing}
           resizing={resizing}
           onFit={fitColumn}
@@ -506,7 +507,7 @@ function Grid({
             top={totalSize - FOOTER_HEIGHT}
             fetching={fetch === "fetching"}
             endRows={endRows}
-            received={firstRow + rows.length}
+            received={receivedRows(result)}
           />
         </div>
       </div>
@@ -529,6 +530,8 @@ interface HeaderRowProps {
   columns: string[];
   /** 컬럼의 type. 아직 모르면 undefined */
   types: (TypeInfo | undefined)[];
+  /** 컬럼마다 값을 그리는 방식 */
+  kinds: readonly ValueKind[];
   /** 너비가 바뀌면 다시 그린다. header object는 그대로라 크기는 이것으로 안다. */
   columnSizing: ColumnSizingState;
   /** 끄는 중인 column의 id. 없으면 false */
@@ -541,6 +544,7 @@ const HeaderRow = memo(function HeaderRow({
   headers,
   columns,
   types,
+  kinds,
   resizing,
   onFit,
 }: HeaderRowProps) {
@@ -554,9 +558,7 @@ const HeaderRow = memo(function HeaderRow({
         <div
           key={header.id}
           role="columnheader"
-          className={
-            valueKind(types[index]) === "number" ? HEADER_RIGHT : HEADER
-          }
+          className={kinds[index] === "number" ? HEADER_RIGHT : HEADER}
           style={{ width: header.getSize() }}
         >
           <span className="truncate">{columns[index]}</span>
@@ -729,7 +731,9 @@ function* columnValues(
 }
 
 /** 열 너비를 맞출 때 쓰는 type 표시. 모르는 type이면 비어 있다. */
-function fitColumnOf(type: TypeInfo | undefined): FitColumn {
+function fitColumnOf(
+  type: TypeInfo | undefined,
+): FitColumn & { kind: ValueKind } {
   return { type: type?.name, kind: valueKind(type) };
 }
 

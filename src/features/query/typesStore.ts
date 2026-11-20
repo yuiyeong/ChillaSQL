@@ -77,19 +77,10 @@ export const useTypes = create<TypesState>()((set, get) => {
   };
 });
 
-/** 그 접속에서 알아낸 컬럼의 type. 아직 모르면(묻는 중, 실패, OID 0) undefined다. */
-export function useColumnType(
-  connection: string | null,
-  column: ResultColumn,
-): TypeInfo | undefined {
-  return useTypes((state) =>
-    connection === null
-      ? undefined
-      : state.types[connection]?.[typeKey(column.typeOid, column.typeModifier)],
-  );
-}
-
-/** `useColumnType`을 컬럼마다 한꺼번에. 그 접속의 type cache가 바뀔 때만 새 배열이다. */
+/**
+ * 그 접속에서 알아낸 컬럼마다의 type. 아직 모르면(묻는 중, 실패, OID 0) undefined다. 그 접속의 type
+ * cache가 바뀔 때만 새 배열이다.
+ */
 export function useColumnTypes(
   connection: string | null,
   columns: readonly ResultColumn[],

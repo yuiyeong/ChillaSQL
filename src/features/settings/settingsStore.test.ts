@@ -5,7 +5,11 @@ vi.mock("../../shared/api/commands");
 import { loadSettings } from "../../shared/api/commands";
 import { setLanguage, t } from "../../shared/i18n/t";
 import { settingsFixture } from "../../test/fixtures";
-import { useSettings } from "./settingsStore";
+import {
+  DEFAULT_EDITOR,
+  DEFAULT_IDLE_TIMEOUT_SECS,
+  useSettings,
+} from "./settingsStore";
 
 beforeEach(() => {
   vi.resetAllMocks();
@@ -68,6 +72,8 @@ test("a failed load starts with the defaults", async () => {
   const state = useSettings.getState();
   expect(state.status).toBe("ready");
   expect(state.language).toBe("en");
+  expect(state.editor).toEqual(DEFAULT_EDITOR);
+  expect(state.idleTimeoutSecs).toBe(DEFAULT_IDLE_TIMEOUT_SECS);
   expect(state.errors).toEqual([
     { title: "settings.errorTitle", reason: "no backend" },
   ]);

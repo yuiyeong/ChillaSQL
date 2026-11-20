@@ -4,7 +4,7 @@ import type { Cell, ResultColumn, TypeInfo } from "../../shared/api/types";
 import { formatCount, t } from "../../shared/i18n/t";
 import { IconButton } from "../../shared/ui/IconButton";
 import { CloseIcon, CopyIcon } from "../../shared/ui/icons";
-import { endOfString } from "./cellDisplay";
+import { endOfString, SCALAR_END, valueKind, WHITESPACE } from "./cellDisplay";
 import { copyCell } from "./grid";
 
 export type JsonTokenKind = "key" | "string" | "number" | "literal" | "punct";
@@ -15,9 +15,6 @@ export interface JsonToken {
 
 /** 이보다 긴 JSON은 들여쓰지 않고 원문으로 보인다. token마다 element를 만들어 큰 값은 화면이 멈춘다. */
 const JSON_PRETTY_LIMIT = 1_000_000;
-
-const WHITESPACE = /\s/;
-const SCALAR_END = /[\s,:\]}]/;
 
 /**
  * JSON을 2칸 들여쓴 token으로 쪼갠다. 값은 원문 그대로 옮겨 숫자 표기와 key 순서가 바뀌지 않는다.
@@ -117,12 +114,13 @@ export const ValueViewer = memo(function ValueViewer({
   /** 복사했다는 알림. 복사하지 못하면 부르지 않는다. */
   onCopied(message: string): void;
 }) {
+  // json과 jsonb가 아니면 값이 JSON 모양이어도 들여쓰지 않으므로 쪼개지도 않는다.
+  const isJson = valueKind(type) === "json";
   const tokens = useMemo(
-    () => (value === null ? null : jsonTokens(value)),
-    [value],
+    () => (value === null || !isJson ? null : jsonTokens(value)),
+    [value, isJson],
   );
-  const pretty =
-    tokens !== null && (type?.name === "json" || type?.name === "jsonb");
+  const pretty = tokens !== null;
 
   const copy = useCallback(async () => {
     try {

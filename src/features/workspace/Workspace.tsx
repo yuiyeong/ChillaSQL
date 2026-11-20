@@ -6,9 +6,10 @@ import {
   type PointerEvent,
   type RefObject,
 } from "react";
+import { useStore } from "zustand";
 import type { Connection, Project } from "../../shared/api/types";
 import { ConnectionForm } from "../connections/ConnectionForm";
-import { useEditorNotice } from "../editor/editorNotice";
+import { editorNotice } from "../editor/editorNotice";
 import { saveTab } from "../editor/saveTab";
 import { SqlEditor } from "../editor/SqlEditor";
 import { TabBar } from "../editor/TabBar";
@@ -58,7 +59,7 @@ export function Workspace() {
   const project = useProject((s) => s.project);
   const error = useProject((s) => s.error);
   const clearError = useProject((s) => s.clearError);
-  const notice = useEditorNotice((s) => s.message);
+  const notice = useStore(editorNotice.store, (s) => s.message);
   const [form, setForm] = useState<OpenForm | null>(null);
   const [connectionMenu, setConnectionMenu] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);

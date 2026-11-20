@@ -109,9 +109,7 @@ function schedule(): void {
 }
 
 /** 보이는 탭의 문서가 바뀌었다. 1초 뒤 저장한다. */
-export function documentChanged(): void {
-  schedule();
-}
+export { schedule as documentChanged };
 
 /** tabsStore와 문서 변경을 구독해 1초 뒤 저장한다. */
 export function startAutosave(): () => void {
@@ -222,28 +220,26 @@ export async function restore(
   // 읽는 동안 다른 프로젝트가 열렸으면 되살리지 않는다.
   if (useProject.getState().project?.dir !== dir) return { skipped: [] };
 
-  const kept: RestoredTab[] = [];
+  const kept: { tab: RestoredTab; index: number }[] = [];
   const skipped: string[] = [];
-  // 활성 탭이 빠지면 그 다음 탭, 없으면 마지막 탭이 활성이다.
-  let active: number | null = null;
   read.forEach((tab, index) => {
-    if (tab === null) {
-      skipped.push(snapshot.tabs[index].path as string);
-      return;
-    }
-    if (
-      active === null &&
-      snapshot.active !== null &&
-      index >= snapshot.active
-    ) {
-      active = kept.length;
-    }
-    kept.push(tab);
+    if (tab === null) skipped.push(snapshot.tabs[index].path!);
+    else kept.push({ tab, index });
   });
-  if (active === null && snapshot.active !== null && kept.length > 0) {
-    active = kept.length - 1;
-  }
-  useTabs.getState().restoreTabs(kept, active);
+  // 활성 탭이 빠지면 그 다음 탭, 없으면 마지막 탭이 활성이다.
+  const wanted = snapshot.active;
+  const next =
+    wanted === null ? -1 : kept.findIndex(({ index }) => index >= wanted);
+  const active =
+    wanted === null || kept.length === 0
+      ? null
+      : next < 0
+        ? kept.length - 1
+        : next;
+  useTabs.getState().restoreTabs(
+    kept.map(({ tab }) => tab),
+    active,
+  );
   return { skipped };
 }
 

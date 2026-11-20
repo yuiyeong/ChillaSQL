@@ -6,6 +6,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { copyText } from "../../shared/api/clipboard";
 import type { Connection, Outcome } from "../../shared/api/types";
 import { formatCount, t, tc } from "../../shared/i18n/t";
@@ -29,7 +30,7 @@ import { useTunnel } from "../connections/tunnelsStore";
 import { useConnection } from "../project/projectStore";
 import { useSettings } from "../settings/settingsStore";
 import { useEditorStatus } from "../editor/editorStatus";
-import { anchorLocation, anchorOf, goToError } from "../editor/runMarks";
+import { anchorLocation, goToError } from "../editor/runAnchors";
 import {
   cancelRun,
   retryRun,
@@ -643,12 +644,13 @@ function ServerError({
 }) {
   const { error } = outcome;
   // 문서가 따라 옮긴 위치는 이 component의 입력이 아니므로, 에디터가 바뀔 때마다 다시 읽는다.
-  useEditorStatus((s) => s.revision);
-  const moved = tabId === null ? null : anchorLocation(tabId, result.runKey);
-  const canGo =
-    tabId !== null &&
-    error.position !== null &&
-    anchorOf(tabId, result.runKey) !== null;
+  // 위치가 달라졌을 때만 다시 그린다.
+  const moved = useEditorStatus(
+    useShallow(() =>
+      tabId === null ? null : anchorLocation(tabId, result.runKey),
+    ),
+  );
+  const canGo = error.position !== null && moved !== null;
   const location =
     error.position === null
       ? null

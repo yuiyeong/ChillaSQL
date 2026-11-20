@@ -15,11 +15,9 @@ import {
   openDocument,
   setDocumentState,
 } from "./documents";
+import { anchorOf, markRunStart, markServerError } from "./runAnchors";
 import {
-  anchorOf,
   errorRange,
-  markRunStart,
-  markServerError,
   runMarksField,
   setErrorMark,
   setRunAnchor,

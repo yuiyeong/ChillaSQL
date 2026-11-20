@@ -1,4 +1,4 @@
-import type { EditorState } from "@codemirror/state";
+import type { EditorState, Text } from "@codemirror/state";
 import {
   cancelTunnel,
   restartTunnel,
@@ -16,11 +16,11 @@ import { quoteIdent } from "../../shared/sql/identifiers";
 import { sessionChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { documentState } from "../editor/documents";
-import { showEditorNotice } from "../editor/editorNotice";
+import { editorNotice } from "../editor/editorNotice";
 import { reformatDocument } from "../editor/reformat";
 import { saveTab } from "../editor/saveTab";
-import { anchorLocation, anchorOf } from "../editor/runMarks";
-import { lineColumn, statementAt } from "../editor/statementAt";
+import { anchorLocation, anchorOf } from "../editor/runAnchors";
+import { statementAt } from "../editor/statementAt";
 import { statementSpansField } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { connectionInUse, useProject } from "../project/projectStore";
@@ -72,22 +72,29 @@ function splitRejection(error: unknown): Rejection {
   return { title: messageOf(error), detail: null };
 }
 
-/** 문서 전체의 문장 span. 문서에 둔 span이 지금 문서에 맞으면 다시 나누지 않는다. */
+/**
+ * 문서 전체의 문장 span. 문서에 둔 span이 지금 문서에 맞으면 다시 나누지 않는다. 나눌 수 없으면
+ * Rejection이다.
+ */
 async function documentSpans(
   state: EditorState,
-  text: string,
-): Promise<StatementSpan[]> {
+): Promise<StatementSpan[] | Rejection> {
   const cached = state.field(statementSpansField, false);
   if (cached?.fresh && cached.spans !== null) return cached.spans;
-  return splitStatements(text);
+  try {
+    return await splitStatements(state.doc.toString());
+  } catch (error) {
+    return splitRejection(error);
+  }
 }
 
-/** 문서 text에서 span의 문장 */
-function stepOf(text: string, span: StatementSpan): ScriptStep {
+/** 문서에서 `start`부터 `end`까지의 step. 줄은 문서의 줄 table로 찾는다. */
+function stepIn(doc: Text, start: number, end: number): ScriptStep {
+  const line = doc.lineAt(start);
   return {
-    sql: text.slice(span.start, span.end),
-    from: span.start,
-    origin: lineColumn(text, span.start),
+    sql: doc.sliceString(start, end),
+    from: start,
+    origin: { line: line.number, column: start - line.from + 1 },
   };
 }
 
@@ -96,27 +103,24 @@ function stepOf(text: string, span: StatementSpan): ScriptStep {
  * 한 step이다.
  */
 async function selectionSteps(
-  docText: string,
+  doc: Text,
   from: number,
   to: number,
 ): Promise<ScriptStep[] | Rejection> {
-  const sql = docText.slice(from, to);
-  if (sql.trim() === "") {
+  const whole = stepIn(doc, from, to);
+  if (whole.sql.trim() === "") {
     return { title: t("run.emptySelection"), detail: null };
   }
-  const whole = [{ sql, from, origin: lineColumn(docText, from) }];
   let spans: StatementSpan[];
   try {
-    spans = await splitStatements(sql);
+    spans = await splitStatements(whole.sql);
   } catch (error) {
-    if (isCommandError(error, "split_failed")) return whole;
+    if (isCommandError(error, "split_failed")) return [whole];
     return { title: messageOf(error), detail: null };
   }
-  if (spans.length < 2) return whole;
+  if (spans.length < 2) return [whole];
   // span은 선택 영역의 text 기준이다.
-  return spans.map((span) =>
-    stepOf(docText, { start: from + span.start, end: from + span.end }),
-  );
+  return spans.map((span) => stepIn(doc, from + span.start, from + span.end));
 }
 
 /** 선택 영역이 있으면 그것을, 없으면 커서가 가리키는 문장을 고른다. */
@@ -125,37 +129,27 @@ async function statementsToRun(
 ): Promise<ScriptStep[] | Rejection> {
   // 나누는 동안 문서가 바뀌거나 닫혀도 text, span, 커서가 한 snapshot에서 나오게 한 번만 읽는다.
   const state = documentState(tabId);
-  const text = state.doc.toString();
   const { from, to, head } = state.selection.main;
-  if (from !== to) return selectionSteps(text, from, to);
+  if (from !== to) return selectionSteps(state.doc, from, to);
 
-  let spans;
-  try {
-    spans = await documentSpans(state, text);
-  } catch (error) {
-    return splitRejection(error);
-  }
+  const spans = await documentSpans(state);
+  if ("title" in spans) return spans;
   const span = statementAt(state.doc, spans, head);
   if (span === null) {
     return { title: t("run.noStatementAtCursor"), detail: null };
   }
-  return [stepOf(text, span)];
+  return [stepIn(state.doc, span.start, span.end)];
 }
 
 /** 문서의 모든 문장. 문장이 없으면 Nothing to run이다. */
 async function fileToRun(tabId: string): Promise<ScriptStep[] | Rejection> {
   const state = documentState(tabId);
-  const text = state.doc.toString();
-  let spans;
-  try {
-    spans = await documentSpans(state, text);
-  } catch (error) {
-    return splitRejection(error);
-  }
+  const spans = await documentSpans(state);
+  if ("title" in spans) return spans;
   if (spans.length === 0) {
     return { title: t("run.emptyFile"), detail: null };
   }
-  return spans.map((span) => stepOf(text, span));
+  return spans.map((span) => stepIn(state.doc, span.start, span.end));
 }
 
 function noConnection(): Rejection {
@@ -247,7 +241,7 @@ export async function execute(command: CommandId): Promise<void> {
     case "reformat": {
       const result = reformatDocument(tabId);
       if (!result.ok) {
-        showEditorNotice(t("toast.reformatFailed", { reason: result.reason }));
+        editorNotice.show(t("toast.reformatFailed", { reason: result.reason }));
       }
       return;
     }

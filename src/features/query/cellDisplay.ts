@@ -28,21 +28,35 @@ export function cellText(
 
 /** `[a,b,c,d]`의 앞 세 값과 개수. 세 값 이하이거나 모양이 다르면 그대로 둔다. */
 function shortenVector(value: string): { text: string; dim: string | null } {
-  if (!value.startsWith("[") || !value.endsWith("]")) {
-    return { text: value, dim: null };
+  const unchanged = { text: value, dim: null };
+  if (!value.startsWith("[") || !value.endsWith("]")) return unchanged;
+  // 값이 천 개를 넘는 embedding도 있어 배열로 쪼개지 않고 앞 세 값의 쉼표만 찾는다.
+  const shown: string[] = [];
+  let start = 1;
+  let comma = -1;
+  for (let n = 0; n < VECTOR_SHOWN; n++) {
+    comma = value.indexOf(",", start);
+    if (comma < 0) return unchanged;
+    shown.push(value.slice(start, comma));
+    start = comma + 1;
   }
-  const values = value.slice(1, -1).split(",");
-  if (values.length <= VECTOR_SHOWN) return { text: value, dim: null };
+  // 앞 세 값 다음에는 셋째 쉼표부터 쉼표마다 값이 하나씩 있다.
+  let count = VECTOR_SHOWN;
+  for (let i = comma; i < value.length; i++) {
+    if (value.charCodeAt(i) === 44) count++;
+  }
   return {
-    text: `[${values.slice(0, VECTOR_SHOWN).join(", ")}, …`,
-    dim: t("result.vectorValues", { count: formatCount(values.length) }),
+    text: `[${shown.join(", ")}, …`,
+    dim: t("result.vectorValues", { count: formatCount(count) }),
   };
 }
 
 /** 이보다 긴 JSON은 접지 않는다. 접으려면 통째로 parse해야 해서 표를 그릴 때마다 큰 값을 읽게 된다. */
 const JSON_COLLAPSE_LIMIT = 100_000;
 
-const WHITESPACE = /\s/;
+/** JSON의 token 사이 공백과, 숫자와 literal이 끝나는 자리. `jsonTokens`도 쓴다. */
+export const WHITESPACE = /\s/;
+export const SCALAR_END = /[\s,:\]}]/;
 
 /** `start`의 문자열 literal이 끝난 다음 index */
 export function endOfString(text: string, start: number): number {
@@ -116,7 +130,7 @@ function collapseJson(text: string): string {
     } else {
       // 숫자, true, false, null
       let end = i;
-      while (end < text.length && !/[\s,:\]}]/.test(text[end])) end++;
+      while (end < text.length && !SCALAR_END.test(text[end])) end++;
       out += text.slice(i, end);
       i = end;
     }

@@ -273,42 +273,37 @@ const footerPlugin = ViewPlugin.fromClass(
   },
 );
 
-// 모든 문서가 같은 extension 값을 나눠 쓴다. runMarks가 documents를 거쳐 이 module을 다시 부르므로,
-// 처음 쓸 때 만든다.
-let extensions: Extension | undefined;
-
-function createExtensions(): Extension {
-  return [
-    lineNumbers(),
-    history(),
-    drawSelection(),
-    indentOnInput(),
-    bracketMatching(),
-    closeBrackets(),
-    highlightSelectionMatches(),
-    keymap.of([
-      ...closeBracketsKeymap,
-      ...defaultKeymap,
-      ...historyKeymap,
-      ...searchKeymap,
-      indentWithTab,
-    ]),
-    // keyword는 대문자로 넣는다. catalog의 source는 catalogCompletion이 더한다.
-    sql({ dialect: PostgreSQL, upperCaseKeywords: true }),
-    catalogCompletion,
-    autocompletion(AUTOCOMPLETION),
-    footerPlugin,
-    statementSpansField,
-    statementSpansPlugin,
-    runRangeHighlight,
-    runMarksField,
-    editorTheme,
-    editorFontCompartment.of(editorFontTheme("D2Coding", 15)),
-    syntaxHighlighting(syntaxStyle),
-  ];
-}
+// 모든 문서가 같은 extension 값을 나눠 쓴다.
+const extensions: Extension = [
+  lineNumbers(),
+  history(),
+  drawSelection(),
+  indentOnInput(),
+  bracketMatching(),
+  closeBrackets(),
+  highlightSelectionMatches(),
+  keymap.of([
+    ...closeBracketsKeymap,
+    ...defaultKeymap,
+    ...historyKeymap,
+    ...searchKeymap,
+    indentWithTab,
+  ]),
+  // keyword는 대문자로 넣는다. catalog의 source는 catalogCompletion이 더한다.
+  sql({ dialect: PostgreSQL, upperCaseKeywords: true }),
+  catalogCompletion,
+  autocompletion(AUTOCOMPLETION),
+  footerPlugin,
+  statementSpansField,
+  statementSpansPlugin,
+  runRangeHighlight,
+  runMarksField,
+  editorTheme,
+  editorFontCompartment.of(editorFontTheme("D2Coding", 15)),
+  syntaxHighlighting(syntaxStyle),
+];
 
 /** SQL 편집기의 extension. 자동완성은 문서의 catalog(`setCatalog`)를 쓴다. */
 export function editorExtensions(): Extension {
-  return (extensions ??= createExtensions());
+  return extensions;
 }

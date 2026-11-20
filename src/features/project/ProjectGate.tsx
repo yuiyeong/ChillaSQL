@@ -18,7 +18,8 @@ import {
 } from "../workspace/shortcuts";
 import { useSettings } from "../settings/settingsStore";
 import { useProject } from "./projectStore";
-import { initials, openedWhen, shortPath, useHome } from "./recent";
+import { projectInitials, shortenHome } from "./fileTree";
+import { openedWhen, useHome } from "./recent";
 
 /**
  * "ready"일 때만 children을 그린다. 그 전에는 프로젝트를 열거나 만드는 Welcome 화면이다(캔버스
@@ -116,12 +117,12 @@ function Welcome() {
                   aria-hidden="true"
                   className="bg-bg-3 text-fg text-label flex size-[30px] shrink-0 items-center justify-center rounded-[7px] font-semibold"
                 >
-                  {initials(project.name)}
+                  {projectInitials(project.name)}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col">
                   <span className="font-medium">{project.name}</span>
                   <span className="text-label text-fg-2 truncate font-mono">
-                    {home === null ? project.dir : shortPath(project.dir, home)}
+                    {shortenHome(project.dir, home)}
                   </span>
                 </span>
                 <span className="text-label text-fg-2 shrink-0">
@@ -134,7 +135,7 @@ function Welcome() {
       </div>
       {asking && missingDir !== null && (
         <MissingSheet
-          dir={home === null ? missingDir : shortPath(missingDir, home)}
+          dir={shortenHome(missingDir, home)}
           full={missingDir}
           error={error}
         />

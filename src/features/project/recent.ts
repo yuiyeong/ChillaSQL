@@ -1,15 +1,6 @@
 import { useEffect, useState } from "react";
 import { homeDir } from "../../shared/api/path";
 import { t, type Language } from "../../shared/i18n/t";
-import { projectInitials, shortenHome } from "./fileTree";
-
-/** "chilla-demo" -> "CD", "billing" -> "BI", "billing-migration" -> "BM" */
-export const initials = projectInitials;
-
-/** home 아래면 "~/…"로 줄인다. */
-export function shortPath(dir: string, home: string): string {
-  return shortenHome(dir, home);
-}
 
 const MINUTE = 60_000;
 

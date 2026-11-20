@@ -2,6 +2,17 @@ import { create } from "zustand";
 import { loadSettings } from "../../shared/api/commands";
 import { messageOf } from "../../shared/api/errors";
 import { setLanguage, type Language } from "../../shared/i18n/t";
+import type { Settings } from "../../shared/api/types";
+
+/**
+ * 설정을 읽기 전과 읽지 못했을 때의 값. 진짜 기본값은 Rust(`Settings::default`)가 정하고,
+ * 화면은 `status`가 "ready"가 되기 전에는 그리지 않으므로 이 값은 읽지 못했을 때의 대비다.
+ */
+export const DEFAULT_EDITOR: Settings["editor"] = {
+  font: "D2Coding",
+  fontSize: 15,
+};
+export const DEFAULT_IDLE_TIMEOUT_SECS = 600;
 
 /** 시작할 때 알릴 오류. 제목은 어디의 오류인지에 따라 다르다. */
 export interface SettingsError {
@@ -13,7 +24,7 @@ export interface SettingsError {
 export interface SettingsState {
   status: "loading" | "ready";
   language: Language;
-  editor: { font: string; fontSize: number };
+  editor: Settings["editor"];
   idleTimeoutSecs: number;
   /** 설정 파일이나 앱 저장소의 오류. 첫 화면이 한 번 보이고 지운다. */
   errors: SettingsError[];
@@ -27,8 +38,8 @@ export interface SettingsState {
 export const useSettings = create<SettingsState>()((set) => ({
   status: "loading",
   language: "en",
-  editor: { font: "D2Coding", fontSize: 15 },
-  idleTimeoutSecs: 600,
+  editor: DEFAULT_EDITOR,
+  idleTimeoutSecs: DEFAULT_IDLE_TIMEOUT_SECS,
   errors: [],
   storeAvailable: true,
 

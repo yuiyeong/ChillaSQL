@@ -20,7 +20,7 @@ import type {
 } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
 import { modeOf, useTabs } from "../editor/tabsStore";
-import { markRunStart, markServerError } from "../editor/runMarks";
+import { markRunStart, markServerError } from "../editor/runAnchors";
 import { clearGridViews, dropGridView } from "./gridViews";
 import {
   emptyResult,
@@ -288,12 +288,17 @@ export const useRuns = create<RunsState>()((set, get) => {
     set((s) => ({ runs: { ...s.runs, [tabId]: state } }));
   }
 
-  /** 실행하지 못한 이유를 보인다. 여러 문장의 실행이었으면 결과 탭 없이 이유만 보인다. */
-  function reject(tabId: string, rejection: Rejection): void {
+  /** 탭을 `state`로 두고 여러 문장 실행의 상태는 치운다. */
+  function settle(tabId: string, state: RunState): void {
     set((s) => ({
-      runs: { ...s.runs, [tabId]: { status: "rejected", rejection } },
+      runs: { ...s.runs, [tabId]: state },
       scripts: withEntry(s.scripts, tabId, undefined),
     }));
+  }
+
+  /** 실행하지 못한 이유를 보인다. 여러 문장의 실행이었으면 결과 탭 없이 이유만 보인다. */
+  function reject(tabId: string, rejection: Rejection): void {
+    settle(tabId, { status: "rejected", rejection });
   }
 
   /** 그 탭의 여러 문장 실행을 바꾼다. 없거나 바뀌지 않으면 state를 그대로 둔다. */
@@ -496,8 +501,7 @@ export const useRuns = create<RunsState>()((set, get) => {
         forget(tabId, slot);
         if (!current()) return;
         if (isCommandError(error, "tunnel_cancelled")) {
-          setEntry("scripts", tabId, undefined);
-          setRun(tabId, { status: "idle" });
+          settle(tabId, { status: "idle" });
         } else {
           reject(tabId, openRejection(error, { connection, steps, runKeys }));
         }

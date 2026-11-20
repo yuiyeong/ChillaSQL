@@ -66,6 +66,12 @@ const MAX_TUNNEL_TIMEOUT = 300;
 /** Rust의 `MAX_STATEMENT_TIMEOUT_SECS`와 같다. */
 const MAX_STATEMENT_TIMEOUT = 86400;
 
+/** 1부터 `max`까지의 정수 초. 정수가 아니거나 범위 밖이면 null이다. */
+function wholeSeconds(text: string, max: number): number | null {
+  const secs = /^\d+$/.test(text) ? Number(text) : 0;
+  return secs >= 1 && secs <= max ? secs : null;
+}
+
 const required = ["name", "host", "database", "user"] as const;
 
 /** `taken`은 프로젝트에 이미 있는 접속 이름이다. 새 접속이 그 이름이면 덮어쓰지 않게 거절한다. */
@@ -101,16 +107,16 @@ export function toConnection(
   let tunnelTimeout: number | null = null;
   const timeoutText = values.tunnelTimeout.trim();
   if (tunnel !== "" && timeoutText !== "") {
-    tunnelTimeout = /^\d+$/.test(timeoutText) ? Number(timeoutText) : 0;
-    if (tunnelTimeout < 1 || tunnelTimeout > MAX_TUNNEL_TIMEOUT) {
+    tunnelTimeout = wholeSeconds(timeoutText, MAX_TUNNEL_TIMEOUT);
+    if (tunnelTimeout === null) {
       return { error: t("connectionForm.tunnelTimeoutRange") };
     }
   }
   let statementTimeout: number | null = null;
   const statementText = values.statementTimeout.trim();
   if (statementText !== "") {
-    statementTimeout = /^\d+$/.test(statementText) ? Number(statementText) : 0;
-    if (statementTimeout < 1 || statementTimeout > MAX_STATEMENT_TIMEOUT) {
+    statementTimeout = wholeSeconds(statementText, MAX_STATEMENT_TIMEOUT);
+    if (statementTimeout === null) {
       return { error: t("connectionForm.statementTimeoutRange") };
     }
   }

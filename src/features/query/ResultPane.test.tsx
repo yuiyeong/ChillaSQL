@@ -36,7 +36,7 @@ import {
   setDocumentState,
 } from "../editor/documents";
 import { useEditorStatus } from "../editor/editorStatus";
-import { markRunStart } from "../editor/runMarks";
+import { markRunStart } from "../editor/runAnchors";
 import { ResultPane } from "./ResultPane";
 import { fitWidth } from "./grid";
 import { emptyResult, type ResultData, type RunState } from "./runReducer";
