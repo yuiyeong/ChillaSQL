@@ -105,7 +105,7 @@ async fn run_with(extra: &str, sql: &str) -> Vec<QueryEvent> {
     store_password(&app).await;
     let session = app.open_session("local").await.unwrap();
     let (sink, mut events) = sink();
-    app.execute(session.id, sql.into(), TxMode::Auto, sink)
+    app.execute(session.id, sql.into(), TxMode::Auto, false, sink)
         .await
         .unwrap();
     let mut all = Vec::new();

@@ -31,7 +31,7 @@ async fn open_session(app: &TestApp) -> SessionInfo {
 async fn start(app: &TestApp, session: SessionId, sql: &str) -> (QueryId, Events) {
     let (sink, events) = sink();
     let query = app
-        .execute(session, sql.into(), TxMode::Auto, sink)
+        .execute(session, sql.into(), TxMode::Auto, false, sink)
         .await
         .unwrap();
     (query, events)
@@ -264,6 +264,7 @@ async fn only_one_statement_runs_at_a_time() {
             session.id,
             "SELECT 1; SELECT 2".into(),
             TxMode::Auto,
+            false,
             sink().0
         )
         .await,
@@ -272,12 +273,68 @@ async fn only_one_statement_runs_at_a_time() {
     let events = run(&app, session.id, "DO $$ BEGIN PERFORM 1; END $$").await;
     assert_eq!(outcome(events.last().unwrap()), &completed(0));
     assert_eq!(
-        app.execute(session.id, "-- nothing".into(), TxMode::Auto, sink().0)
-            .await,
+        app.execute(
+            session.id,
+            "-- nothing".into(),
+            TxMode::Auto,
+            false,
+            sink().0
+        )
+        .await,
         Err(AppError::EmptyStatement)
     );
 
     app.close_session(session.id).await.unwrap();
+}
+
+/// 끝까지 읽는 실행은 남은 행을 버리려고 cancel하지 않으므로 `UPDATE … RETURNING`의 변경이 남는다.
+/// 첫 batch만 오고, 서버가 센 행 수로 끝난다.
+#[tokio::test]
+async fn a_drained_statement_keeps_its_changes() {
+    for mode in [TxMode::Auto, TxMode::Manual] {
+        let (app, _dir) = app_with_project().await;
+        let session = open_session(&app).await;
+        let setup = "CREATE TEMP TABLE drained (v int)";
+        run(&app, session.id, setup).await;
+        run(
+            &app,
+            session.id,
+            "INSERT INTO drained SELECT 0 FROM generate_series(1, 1000)",
+        )
+        .await;
+
+        let (sink, mut events) = sink();
+        app.execute(
+            session.id,
+            "UPDATE drained SET v = v + 1 RETURNING *".into(),
+            mode,
+            true,
+            sink,
+        )
+        .await
+        .unwrap();
+        assert!(matches!(next(&mut events).await, QueryEvent::Columns(_)));
+        let batch = rows(&mut events).await;
+        assert_eq!((batch.first_row, batch.rows.len()), (0, 500));
+        assert_eq!(finished(&mut events).await, completed(1000));
+
+        let events = run(
+            &app,
+            session.id,
+            "SELECT count(*) FILTER (WHERE v = 1), count(*) FROM drained",
+        )
+        .await;
+        let QueryEvent::Rows(counts) = &events[1] else {
+            panic!("Rows가 아니다: {events:?}");
+        };
+        assert_eq!(
+            counts.rows,
+            [[Some("1000".to_string()), Some("1000".to_string())]],
+            "{mode:?}"
+        );
+
+        app.close_session(session.id).await.unwrap();
+    }
 }
 
 /// Review Focus 4

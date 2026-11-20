@@ -909,13 +909,15 @@ pub fn inspect_statement(app: State<'_, CoreApp>, sql: String) -> Option<DangerD
     app.inspect_statement(&sql).map(DangerDto::from)
 }
 
-/// query id를 돌려주고 바로 끝난다. 결과는 `on_event`로 간다.
+/// query id를 돌려주고 바로 끝난다. 결과는 `on_event`로 간다. `drain`이면 첫 batch만 보내고 나머지 행은
+/// 끝까지 읽어서 버린다(여러 문장 중 마지막이 아닌 문장).
 #[tauri::command]
 pub async fn execute_query(
     app: State<'_, CoreApp>,
     session_id: u64,
     sql: String,
     mode: TxModeDto,
+    drain: bool,
     on_event: Channel<QueryEventDto>,
 ) -> CommandResult<u64> {
     // 화면이 사라져 send가 실패해도 무시한다. 그 쿼리는 다음 execute나 close_session에서 정리된다.
@@ -926,7 +928,7 @@ pub async fn execute_query(
         let _ = on_event.send(QueryEventDto::new(event, &sent));
     });
     let query = app
-        .execute(SessionId(session_id), sql, mode.into(), sink)
+        .execute(SessionId(session_id), sql, mode.into(), drain, sink)
         .await?;
     Ok(query.0)
 }

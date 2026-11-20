@@ -79,7 +79,7 @@ async fn port_open(port: u16) -> bool {
 
 async fn select_one(app: &TestApp, session: SessionId) -> QueryOutcome {
     let (sink, mut events) = sink();
-    app.execute(session, "SELECT 1".into(), TxMode::Auto, sink)
+    app.execute(session, "SELECT 1".into(), TxMode::Auto, false, sink)
         .await
         .unwrap();
     finished(&mut events).await

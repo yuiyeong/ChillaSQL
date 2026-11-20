@@ -169,6 +169,7 @@ test("executeQuery는 Channel의 message를 onEvent로 넘긴다", async () => {
     sessionId: 3,
     sql: "SELECT 1",
     mode: "manual",
+    drain: false,
     onEvent: expect.any(Channel),
   });
   const channel = (args as { onEvent: Channel<QueryEvent> }).onEvent;
@@ -179,6 +180,17 @@ test("executeQuery는 Channel의 message를 onEvent로 넘긴다", async () => {
   channel.onmessage(event);
   expect(onEvent).toHaveBeenCalledWith(event);
   expect(queryId).toBe(7);
+});
+
+test("executeQuery는 drain 옵션을 넘긴다", async () => {
+  invokeMock.mockResolvedValue(7);
+
+  await executeQuery(3, "SELECT 1", "auto", vi.fn(), { drain: true });
+
+  expect(invokeMock).toHaveBeenLastCalledWith(
+    "execute_query",
+    expect.objectContaining({ drain: true }),
+  );
 });
 
 test("endTransaction은 끝내는 방법을 넘기고 결과를 그대로 돌려준다", async () => {

@@ -630,11 +630,16 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     /// 문장이 하나로 나뉘거나 나눌 수 없을 때(따옴표가 닫히지 않은 경우 등) 받은 `sql`을
     /// 그대로 보낸다. 나눌 수 없는 text의 오류는 서버가 위치와 함께 알려 준다.
     /// `Manual`이고 트랜잭션 밖이면 세션이 그 문장 전에 `BEGIN`을 보낸다.
+    ///
+    /// `drain`이면 `Columns`와 첫 batch만 보내고 나머지 행은 서버가 끝낸 행 수까지 읽어서 버린다.
+    /// 버리려고 cancel하면 문장이 되돌아가므로(`UPDATE … RETURNING` 등) 스스로 cancel하지 않고,
+    /// 받다 만 결과를 닫는 시간 제한도 걸지 않는다. `fetch_more`는 아무것도 하지 않는다.
     pub async fn execute(
         &self,
         session: SessionId,
         sql: String,
         mode: TxMode,
+        drain: bool,
         sink: QuerySink,
     ) -> Result<QueryId, AppError> {
         let handle = self.session_handle(session).await?;
@@ -646,7 +651,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             }
         }
         handle
-            .execute(sql, mode, sink)
+            .execute(sql, mode, drain, sink)
             .await
             .ok_or(AppError::UnknownSession { id: session })
     }
@@ -1262,13 +1267,19 @@ mod tests {
 
         assert_eq!(
             f.app
-                .execute(session, "  ".into(), TxMode::Auto, sink().0)
+                .execute(session, "  ".into(), TxMode::Auto, false, sink().0)
                 .await,
             Err(AppError::EmptyStatement)
         );
         assert_eq!(
             f.app
-                .execute(session, "SELECT 1; SELECT 2".into(), TxMode::Auto, sink().0)
+                .execute(
+                    session,
+                    "SELECT 1; SELECT 2".into(),
+                    TxMode::Auto,
+                    false,
+                    sink().0
+                )
                 .await,
             Err(AppError::MultipleStatements { count: 2 })
         );
@@ -1283,7 +1294,7 @@ mod tests {
 
         let id = f
             .app
-            .execute(session, " SELECT 1 ;\n".into(), TxMode::Auto, sink)
+            .execute(session, " SELECT 1 ;\n".into(), TxMode::Auto, false, sink)
             .await;
 
         assert_eq!(id, Ok(QueryId(1)));
@@ -1299,7 +1310,7 @@ mod tests {
 
         let id = f
             .app
-            .execute(session, "SELECT 'open".into(), TxMode::Auto, sink)
+            .execute(session, "SELECT 'open".into(), TxMode::Auto, false, sink)
             .await;
 
         assert!(id.is_ok());
@@ -1315,7 +1326,7 @@ mod tests {
 
         assert_eq!(
             f.app
-                .execute(unknown, "SELECT 1".into(), TxMode::Auto, sink().0)
+                .execute(unknown, "SELECT 1".into(), TxMode::Auto, false, sink().0)
                 .await,
             Err(error())
         );
@@ -1334,7 +1345,7 @@ mod tests {
         let (sink, mut events) = sink();
 
         f.app
-            .execute(session, "SELECT 1".into(), TxMode::Manual, sink)
+            .execute(session, "SELECT 1".into(), TxMode::Manual, false, sink)
             .await
             .unwrap();
         finished(&mut events).await;
@@ -1367,7 +1378,7 @@ mod tests {
         let (sink, mut events) = sink();
         let query = f
             .app
-            .execute(session, "SELECT n".into(), TxMode::Auto, sink)
+            .execute(session, "SELECT n".into(), TxMode::Auto, false, sink)
             .await
             .unwrap();
 
@@ -1392,7 +1403,7 @@ mod tests {
         let (sink, mut events) = sink();
         let query = f
             .app
-            .execute(session, "SELECT 1".into(), TxMode::Auto, sink)
+            .execute(session, "SELECT 1".into(), TxMode::Auto, false, sink)
             .await
             .unwrap();
         finished(&mut events).await;
@@ -1417,6 +1428,7 @@ mod tests {
                 session,
                 "SELECT pg_sleep(10)".into(),
                 TxMode::Auto,
+                false,
                 sink().0,
             )
             .await

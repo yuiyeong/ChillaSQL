@@ -46,6 +46,7 @@ enum SessionCommand {
     Execute {
         sql: String,
         mode: TxMode,
+        drain: bool,
         sink: QuerySink,
         reply: oneshot::Sender<QueryId>,
     },
@@ -181,6 +182,7 @@ impl<D: DbConnection> Actor<D> {
             SessionCommand::Execute {
                 sql,
                 mode,
+                drain,
                 sink,
                 reply,
             } => {
@@ -191,6 +193,7 @@ impl<D: DbConnection> Actor<D> {
                     id,
                     sql,
                     mode,
+                    drain,
                     sink,
                 })
                 .await;
@@ -472,15 +475,18 @@ impl SessionHandle {
     }
 
     /// 쿼리를 맡기고 바로 돌아온다. 결과는 `sink`로 간다. task가 끝났으면 `None`이다.
+    /// `drain`이면 `Columns`와 첫 batch만 보내고 나머지 행은 끝까지 읽어서 버린다.
     pub(crate) async fn execute(
         &self,
         sql: String,
         mode: TxMode,
+        drain: bool,
         sink: QuerySink,
     ) -> Option<QueryId> {
         self.request(|reply| SessionCommand::Execute {
             sql,
             mode,
+            drain,
             sink,
             reply,
         })

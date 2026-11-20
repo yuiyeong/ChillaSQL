@@ -75,6 +75,8 @@ pub(super) struct Pending {
     pub(super) id: QueryId,
     pub(super) sql: String,
     pub(super) mode: TxMode,
+    /// 첫 batch만 화면에 보내고 나머지 행은 읽어서 버리는 실행. 여러 문장 중 마지막이 아닌 문장이다.
+    pub(super) drain: bool,
     pub(super) sink: QuerySink,
 }
 
@@ -130,6 +132,8 @@ pub(super) struct Query<R> {
     phase: Phase,
     clock: Clock,
     limits: QueryLimits,
+    /// 첫 batch만 보내고 나머지 행은 읽어서 버리는 실행이다(`Pending::drain`).
+    drain: bool,
     /// 아직 보내지 않은 행.
     batch: Vec<Row>,
     batch_bytes: usize,
@@ -168,6 +172,7 @@ impl<R: RowSource> Query<R> {
             phase: Phase::Reading,
             clock: Clock::start(started),
             limits,
+            drain: pending.drain,
             batch: Vec::new(),
             batch_bytes: 0,
             sent_rows: 0,
@@ -226,6 +231,10 @@ impl<R: RowSource> Query<R> {
     }
 
     fn push(&mut self, row: Row) {
+        // 끝까지 읽는 실행은 첫 batch를 보낸 뒤의 행을 읽기만 한다. batch 한도에도 세지 않는다.
+        if self.drain && self.sent_rows > 0 {
+            return;
+        }
         self.batch_bytes += row.iter().flatten().map(String::len).sum::<usize>();
         self.batch.push(row);
         if self.look_ahead {
@@ -236,7 +245,8 @@ impl<R: RowSource> Query<R> {
             self.expires_at = Some(Instant::now() + self.limits.idle_result_timeout);
         } else if self.batch_is_full() {
             self.send_batch();
-            self.look_ahead = true;
+            // 끝까지 읽는 실행은 look-ahead 행에서 멈추지 않는다.
+            self.look_ahead = !self.drain;
         }
     }
 

@@ -105,16 +105,27 @@ export function inspectStatement(sql: string): Promise<Danger | null> {
   return call("inspect_statement", { sql });
 }
 
-/** query id를 돌려준다. event는 이 promise가 끝나기 전에도 `onEvent`로 온다. */
+/**
+ * query id를 돌려준다. event는 이 promise가 끝나기 전에도 `onEvent`로 온다.
+ * `drain`이면 Columns와 첫 batch만 보내고 나머지 행은 Rust가 끝까지 읽어서 버린다.
+ */
 export function executeQuery(
   sessionId: number,
   sql: string,
   mode: TxMode,
   onEvent: (event: QueryEvent) => void,
+  options?: { drain?: boolean },
 ): Promise<number> {
   const channel = new Channel<QueryEvent>();
   channel.onmessage = onEvent;
-  return call("execute_query", { sessionId, sql, mode, onEvent: channel });
+  const drain = options?.drain ?? false;
+  return call("execute_query", {
+    sessionId,
+    sql,
+    mode,
+    drain,
+    onEvent: channel,
+  });
 }
 
 /** 트랜잭션을 Commit하거나 Rollback한다. 실행 중인 쿼리가 있으면 Rust가 버린 뒤에 끝낸다. */

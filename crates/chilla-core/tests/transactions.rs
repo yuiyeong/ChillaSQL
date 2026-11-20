@@ -36,7 +36,9 @@ async fn run(
     mode: TxMode,
 ) -> (QueryOutcome, Option<TxStatus>) {
     let (sink, mut events) = sink();
-    app.execute(session, sql.into(), mode, sink).await.unwrap();
+    app.execute(session, sql.into(), mode, false, sink)
+        .await
+        .unwrap();
     loop {
         if let QueryEvent::Finished { outcome, tx, .. } = next(&mut events).await {
             return (outcome, tx);
@@ -48,7 +50,9 @@ async fn run(
 async fn count(app: &TestApp, session: SessionId, table: &str) -> String {
     let (sink, mut events) = sink();
     let sql = format!("SELECT count(*) FROM {table}");
-    app.execute(session, sql, TxMode::Auto, sink).await.unwrap();
+    app.execute(session, sql, TxMode::Auto, false, sink)
+        .await
+        .unwrap();
     loop {
         match next(&mut events).await {
             QueryEvent::Rows(batch) => return batch.rows[0][0].clone().unwrap(),
@@ -272,6 +276,7 @@ async fn discarding_a_paused_result_inside_a_transaction_keeps_it_open() {
         // socket buffer보다 훨씬 커서 첫 batch 뒤에 서버는 문장을 끝내지 못하고 기다린다.
         "SELECT id FROM big_table".into(),
         TxMode::Manual,
+        false,
         big,
     )
     .await
@@ -326,6 +331,7 @@ async fn insert_then_start_update(app: &TestApp, session: SessionId) -> (QueryId
             session,
             "UPDATE m6_sp SET v = 1 RETURNING id".into(),
             TxMode::Manual,
+            false,
             sink,
         )
         .await
@@ -396,6 +402,7 @@ async fn user_cancel_inside_a_transaction_keeps_it_open() {
             session.id,
             "SELECT pg_sleep(30)".into(),
             TxMode::Manual,
+            false,
             sink,
         )
         .await
