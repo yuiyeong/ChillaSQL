@@ -143,6 +143,7 @@ export const ResultPane = memo(function ResultPane({
   const exportSourceRef = useRef<ExportSource | null>(null);
   const [hasSelection, setHasSelection] = useState(false);
   const [sorted, setSorted] = useState(false);
+  const [hasStatements, setHasStatements] = useState(false);
 
   const onFetchMore = useCallback(() => {
     if (tabId !== null) void useRuns.getState().fetchMore(tabId);
@@ -208,6 +209,7 @@ export const ResultPane = memo(function ResultPane({
       exportSourceRef={exportSourceRef}
       onSelectionChange={setHasSelection}
       onSortChange={setSorted}
+      onStatementsChange={setHasStatements}
     />
   );
 
@@ -522,7 +524,7 @@ export const ResultPane = memo(function ResultPane({
                   <Button
                     variant="primary"
                     size="small"
-                    disabled={applying || blocked}
+                    disabled={applying || blocked || !hasStatements}
                     onClick={() => void apply()}
                   >
                     {t("edit.apply")}

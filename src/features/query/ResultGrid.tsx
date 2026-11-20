@@ -103,6 +103,8 @@ interface ResultGridProps {
   onSelectionChange(hasSelection: boolean): void;
   /** 정렬을 켜거나 끌 때(탭을 바꿔 이어 간 정렬도). ResultPane이 일부만 정렬했다는 안내에 쓴다 */
   onSortChange(sorted: boolean): void;
+  /** Apply가 보낼 UPDATE 문이 생기거나 없어질 때. header Apply 버튼의 disabled에 쓴다 */
+  onStatementsChange(hasStatements: boolean): void;
 }
 
 // TanStack Table은 column 정의와 너비 조절에만 쓴다. row model은 부르지 않는다.
@@ -157,6 +159,7 @@ function Grid({
   exportSourceRef,
   onSelectionChange,
   onSortChange,
+  onStatementsChange,
 }: ResultGridProps & { runKey: string }) {
   const { firstRow, rows, fetch } = result;
   const resultColumns = result.columns;
@@ -177,6 +180,7 @@ function Grid({
   const editTables = useEditTables(
     connection,
     resultColumns ?? NO_RESULT_COLUMNS,
+    result.startedAt,
   );
   const target = useMemo(
     () =>
@@ -643,6 +647,10 @@ function Grid({
     );
   }, [changes, target, rows, firstRow, columnTypes]);
   useImperativeHandle(statementsRef, () => statements, [statements]);
+  const hasStatements = statements.length > 0;
+  useEffect(() => {
+    onStatementsChange(hasStatements);
+  }, [hasStatements, onStatementsChange]);
 
   const menuChanged =
     menu !== null &&

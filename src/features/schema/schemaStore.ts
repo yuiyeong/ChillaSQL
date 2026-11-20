@@ -155,6 +155,8 @@ export const useSchema = create<SchemaState>()((set, get) => {
 
     refresh(connection) {
       // type 이름은 새로고침으로 바뀌지 않으므로 화면의 결과가 쓰는 type 캐시는 그대로 둔다.
+      // 테이블 이름과 컬럼은 바뀔 수 있으므로 셀 편집의 테이블 cache는 버린다.
+      useEditTableCache.getState().forget(connection);
       return load(connection);
     },
 

@@ -79,6 +79,7 @@ function props(patch: Partial<Props> = {}): Props {
     statementsRef: createRef(),
     onSelectionChange: vi.fn(),
     onSortChange: vi.fn(),
+    onStatementsChange: vi.fn(),
     ...patch,
   };
 }

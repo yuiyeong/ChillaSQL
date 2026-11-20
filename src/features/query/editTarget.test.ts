@@ -146,9 +146,15 @@ test("join_names_both_tables", () => {
     ],
     [users, orders],
   );
-  expect(result).toEqual({ reason: "manyTables", names: ["orders", "users"] });
+  expect(result).toEqual({
+    reason: "manyTables",
+    count: 2,
+    names: ["orders", "users"],
+  });
   expect(
-    notEditableText(result as { reason: "manyTables"; names: string[] }),
+    notEditableText(
+      result as { reason: "manyTables"; count: number; names: string[] },
+    ),
   ).toBe("Not editable: rows come from 2 tables (orders, users).");
 });
 
@@ -161,7 +167,25 @@ test("many_tables_names_skip_unknown_oids", () => {
     ],
     [orders, users],
   );
-  expect(result).toEqual({ reason: "manyTables", names: ["users", "orders"] });
+  expect(result).toEqual({
+    reason: "manyTables",
+    count: 3,
+    names: ["users", "orders"],
+  });
+});
+
+test("many_tables_count_every_table_even_when_gone", () => {
+  // 두 테이블 중 하나는 없어져 이름을 모른다. 수는 결과의 테이블 수다.
+  const result = target(
+    [resultColumn("a", 999, 1), resultColumn("b", USERS, 2)],
+    [users],
+  );
+  expect(result).toEqual({ reason: "manyTables", count: 2, names: ["users"] });
+  expect(
+    notEditableText(
+      result as { reason: "manyTables"; count: number; names: string[] },
+    ),
+  ).toBe("Not editable: rows come from 2 tables (users).");
 });
 
 test("more_than_three_tables_are_cut", () => {
@@ -174,10 +198,13 @@ test("more_than_three_tables_are_cut", () => {
   );
   expect(result).toEqual({
     reason: "manyTables",
+    count: 4,
     names: ["users", "orders", "t300", "t400"],
   });
   expect(
-    notEditableText(result as { reason: "manyTables"; names: string[] }),
+    notEditableText(
+      result as { reason: "manyTables"; count: number; names: string[] },
+    ),
   ).toBe("Not editable: rows come from 4 tables (users, orders, t300, …).");
 });
 

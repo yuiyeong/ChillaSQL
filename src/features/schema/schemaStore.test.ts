@@ -208,6 +208,18 @@ test("forget_drops_the_cached_edit_tables_of_that_connection", async () => {
   expect(useEditTableCache.getState().tables).toEqual({ other: { 1: null } });
 });
 
+test("refresh_drops_the_cached_edit_tables_of_that_connection", async () => {
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  await useSchema.getState().ensure("local");
+  useEditTableCache.setState({
+    tables: { local: { 1: null }, other: { 1: null } },
+  });
+
+  await useSchema.getState().refresh("local");
+
+  expect(useEditTableCache.getState().tables).toEqual({ other: { 1: null } });
+});
+
 test("refresh_keeps_the_cached_types", async () => {
   vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
   await useSchema.getState().ensure("local");

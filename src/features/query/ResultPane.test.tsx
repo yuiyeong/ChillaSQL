@@ -1736,6 +1736,18 @@ describe("cell editing", () => {
     expect(apply()).toBeDisabled();
   });
 
+  test("apply_is_disabled_without_statements_to_send", async () => {
+    // 테이블을 묻지 못해 편집할 수 있는지 모르면 보낼 문장이 없다.
+    vi.mocked(describeTables).mockReset();
+    vi.mocked(describeTables).mockRejectedValue(new Error("boom"));
+    await showEditable();
+    act(() => useEdits.getState().setCell("t", shownKey, 0, 2, "c@x", "a@x"));
+
+    expect(screen.getByText("1 cell changed")).toBeInTheDocument();
+    expect(screen.queryByText("SQL to send on Apply")).toBeNull();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeDisabled();
+  });
+
   test("apply_sends_the_previewed_statements_and_toasts", async () => {
     const applyEdits = vi.fn(() =>
       Promise.resolve({

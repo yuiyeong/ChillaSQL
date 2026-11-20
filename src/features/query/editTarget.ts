@@ -7,7 +7,8 @@ import { t } from "../../shared/i18n/t";
 
 export type NotEditable =
   | { reason: "readOnly" | "running" | "noTable" | "gone" }
-  | { reason: "manyTables"; names: string[] }
+  /** `count`는 결과의 테이블 수, `names`는 그중 아직 있는 테이블의 이름이다. */
+  | { reason: "manyTables"; count: number; names: string[] }
   | { reason: "notTable" | "noPrimaryKey"; name: string }
   | { reason: "primaryKeyMissing"; columns: string[] };
 
@@ -57,7 +58,7 @@ export function editTargetOf(
       const found = tables.find((table) => table.oid === oid);
       return found ? [found.name] : [];
     });
-    return { reason: "manyTables", names };
+    return { reason: "manyTables", count: oids.length, names };
   }
 
   const table = tables.find((candidate) => candidate.oid === oids[0]);
@@ -115,7 +116,7 @@ export function notEditableText(
     case "manyTables": {
       const shown = reason.names.slice(0, NAMES_SHOWN).join(", ");
       return t("edit.notEditable.manyTables", {
-        count: reason.names.length,
+        count: reason.count,
         names: reason.names.length > NAMES_SHOWN ? `${shown}, …` : shown,
       });
     }

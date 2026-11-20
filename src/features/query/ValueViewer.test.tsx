@@ -82,6 +82,7 @@ function setup(
       statementsRef={createRef()}
       onSelectionChange={vi.fn()}
       onSortChange={vi.fn()}
+      onStatementsChange={vi.fn()}
     />,
   );
   return { onCopied, grid: screen.getByRole("grid") };
