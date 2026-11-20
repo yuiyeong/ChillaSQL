@@ -6,6 +6,7 @@ edition = "2024"
 [dependencies]
 apple-native-keyring-store = { version = "1", features = ["keychain"] }
 futures-util = { version = "0.3", default-features = false }
+iana-time-zone = "0.1"
 keyring-core = "1"
 libc = "0.2"
 pg_query = "18.1"

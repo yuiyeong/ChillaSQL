@@ -17,6 +17,16 @@ export interface Connection {
   /** 터널의 포트를 기다리는 초. 없으면 20초다. */
   tunnelTimeout: number | null;
   color: ConnectionColor | null;
+  /** 세션을 읽기 전용으로 연다. 서버가 쓰기를 거절한다. */
+  readOnly: boolean;
+  /** 세션의 statement_timeout 초(1~86400). 없으면 서버 기본값이다. */
+  statementTimeout: number | null;
+}
+
+/** 접속 test가 알아낸 서버의 정보. */
+export interface ServerInfo {
+  /** server_version의 첫 단어("18.6"). */
+  version: string;
 }
 
 export interface Project {

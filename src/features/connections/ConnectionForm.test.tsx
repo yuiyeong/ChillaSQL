@@ -16,7 +16,7 @@ import {
 } from "../../shared/api/commands";
 import { pickFile } from "../../shared/api/dialog";
 import { CommandError } from "../../shared/api/errors";
-import type { Connection, Project } from "../../shared/api/types";
+import type { Connection, Project, ServerInfo } from "../../shared/api/types";
 import { ConnectionForm } from "./ConnectionForm";
 
 const saved: Project = { name: "demo", dir: "/p", connections: [] };
@@ -30,7 +30,7 @@ beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(hasPassword).mockResolvedValue(false);
   vi.mocked(saveConnection).mockResolvedValue(saved);
-  vi.mocked(testConnection).mockResolvedValue(undefined);
+  vi.mocked(testConnection).mockResolvedValue({ version: "18.6" });
 });
 
 function renderForm(
@@ -93,6 +93,8 @@ test("새 접속을 저장하면 saveConnection에 입력한 비밀번호를 넘
       tunnel: null,
       tunnelTimeout: null,
       color: null,
+      readOnly: false,
+      statementTimeout: null,
     },
     "secret",
   );
@@ -401,7 +403,7 @@ test("password 입력은 type이 password다", () => {
 });
 
 test("도는 동안 테스트와 저장 버튼은 disabled다", async () => {
-  const testing = deferred<void>();
+  const testing = deferred<ServerInfo>();
   vi.mocked(testConnection).mockReturnValue(testing.promise);
   const saving = deferred<Project>();
   vi.mocked(saveConnection).mockReturnValue(saving.promise);
@@ -415,7 +417,7 @@ test("도는 동안 테스트와 저장 버튼은 disabled다", async () => {
   await click(saveButton());
   expect(saveConnection).not.toHaveBeenCalled();
 
-  await act(async () => testing.resolve());
+  await act(async () => testing.resolve({ version: "18.6" }));
   expect(testButton()).toBeEnabled();
   expect(saveButton()).toBeEnabled();
 
@@ -519,6 +521,7 @@ test("테스트가 성공하면 걸린 시간을 보여 준다", async () => {
   const now = vi.spyOn(performance, "now").mockImplementation(() => clock);
   vi.mocked(testConnection).mockImplementation(async () => {
     clock += 41.4;
+    return { version: "18.6" };
   });
   renderForm();
   fillNew();

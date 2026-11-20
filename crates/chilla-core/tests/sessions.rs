@@ -1,9 +1,10 @@
 mod support;
 
 use chilla_core::application::{AppError, ConnectError};
-use chilla_core::domain::{Password, SessionState, TxStatus};
+use chilla_core::domain::{Password, QueryEvent, QueryOutcome, SessionState, TxMode, TxStatus};
 use support::{
-    admin, app_with_project, backend_exists, eventually, store_password, terminate_backend,
+    DATABASE, TEST_DB_PORT, USER, admin, app_with_project, app_with_toml, backend_exists,
+    eventually, next, sink, store_password, terminate_backend,
 };
 
 const OPEN: SessionState = SessionState::Open { tx: TxStatus::Idle };
@@ -82,14 +83,88 @@ async fn test_connection_connects_with_the_given_password() {
     let (app, _dir) = app_with_project().await;
     let profile = support::local_profile();
 
-    assert_eq!(
+    assert!(
         app.test_connection(support::local_profile(), Some(support::password()))
-            .await,
-        Ok(())
+            .await
+            .is_ok()
     );
     let wrong = Password::new("nope".into());
     assert!(matches!(
         app.test_connection(profile, Some(wrong)).await,
         Err(AppError::Connect(ConnectError::AuthFailed { .. }))
     ));
+}
+
+/// test DB의 접속 `local`에 `extra`(toml 줄)를 더한 프로젝트에서 세션을 열고, `sql`을 실행해
+/// 그 이벤트를 `Finished`까지 모두 돌려준다.
+async fn run_with(extra: &str, sql: &str) -> Vec<QueryEvent> {
+    let toml = format!(
+        "[connections.local]\nhost = \"127.0.0.1\"\nport = {TEST_DB_PORT}\ndatabase = \"{DATABASE}\"\nuser = \"{USER}\"\n{extra}\n"
+    );
+    let (app, _dir, _events) = app_with_toml(&toml).await;
+    store_password(&app).await;
+    let session = app.open_session("local").await.unwrap();
+    let (sink, mut events) = sink();
+    app.execute(session.id, sql.into(), TxMode::Auto, sink)
+        .await
+        .unwrap();
+    let mut all = Vec::new();
+    loop {
+        let event = next(&mut events).await;
+        let done = matches!(event, QueryEvent::Finished { .. });
+        all.push(event);
+        if done {
+            break;
+        }
+    }
+    app.close_session(session.id).await.unwrap();
+    all
+}
+
+fn failed_code(events: &[QueryEvent]) -> String {
+    match events.last() {
+        Some(QueryEvent::Finished {
+            outcome: QueryOutcome::Failed(error),
+            ..
+        }) => error.code.clone(),
+        other => panic!("Failed가 아니다: {other:?}"),
+    }
+}
+
+#[tokio::test]
+async fn read_only_session_rejects_writes() {
+    let events = run_with("read_only = true", "CREATE TEMP TABLE t (id int)").await;
+    assert_eq!(failed_code(&events), "25006");
+
+    // 켜지 않으면 같은 문장이 통과한다.
+    let events = run_with("", "CREATE TEMP TABLE t (id int)").await;
+    assert!(matches!(
+        events.last(),
+        Some(QueryEvent::Finished {
+            outcome: QueryOutcome::Completed { .. },
+            ..
+        })
+    ));
+}
+
+#[tokio::test]
+async fn statement_timeout_cancels_long_queries() {
+    let events = run_with("statement_timeout = 1", "SELECT pg_sleep(2)").await;
+    assert_eq!(failed_code(&events), "57014");
+}
+
+#[tokio::test]
+async fn session_time_zone_is_the_mac_zone() {
+    let Ok(zone) = iana_time_zone::get_timezone() else {
+        return;
+    };
+    let events = run_with("", "SHOW TimeZone").await;
+    let rows = events
+        .iter()
+        .find_map(|event| match event {
+            QueryEvent::Rows(batch) => Some(batch.rows.clone()),
+            _ => None,
+        })
+        .expect("SHOW TimeZone이 행을 돌려주지 않았다");
+    assert_eq!(rows, [[Some(zone)]]);
 }

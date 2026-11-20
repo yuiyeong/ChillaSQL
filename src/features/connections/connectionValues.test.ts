@@ -90,6 +90,8 @@ test("값의 앞뒤 공백을 빼고 port를 숫자로 바꾼다", () => {
       tunnel: null,
       tunnelTimeout: null,
       color: null,
+      readOnly: false,
+      statementTimeout: null,
     },
   });
 });
@@ -181,6 +183,8 @@ test("수정은 이름을 original에서 가져온다", () => {
       tunnel: "bastion",
       tunnelTimeout: null,
       color: "red",
+      readOnly: false,
+      statementTimeout: null,
     },
   });
 });
@@ -277,5 +281,17 @@ describe("targetChanged", () => {
     ["tunnel을 비움", { tunnel: null }],
   ])("%s가 다르면 true다", (_, patch) => {
     expect(targetChanged({ ...original, ...patch }, original)).toBe(true);
+  });
+});
+
+test("수정은 form에 없는 readOnly와 statementTimeout을 original 그대로 둔다", () => {
+  const result = toConnection(
+    { ...values, name: "local" },
+    { ...original, readOnly: true, statementTimeout: 30 },
+    [],
+  );
+
+  expect(result).toMatchObject({
+    connection: { readOnly: true, statementTimeout: 30 },
   });
 });

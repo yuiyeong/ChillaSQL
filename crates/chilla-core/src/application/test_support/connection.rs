@@ -321,6 +321,9 @@ impl FakeCancel {
     }
 }
 
+/// `FakeConnection::server_version`이 돌려주는 값.
+pub(crate) const FAKE_SERVER_VERSION: &str = "18.6";
+
 pub(crate) struct FakeConnection {
     pub(crate) pid: i32,
     pub(crate) link: FakeLink,
@@ -347,6 +350,10 @@ impl DbConnection for FakeConnection {
 
     fn backend_pid(&self) -> i32 {
         self.pid
+    }
+
+    fn server_version(&self) -> &str {
+        FAKE_SERVER_VERSION
     }
 
     /// `None`까지 읽히지 않은 결과가 있으면 다 읽힐 때까지 기다린다. 끊긴 연결에서는 바로

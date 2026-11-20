@@ -7,7 +7,7 @@ mod session_actor;
 mod test_support;
 mod tunnels;
 
-pub use app::{App, AppError};
+pub use app::{App, AppError, ServerInfo};
 pub use session_actor::QuerySink;
 pub use tunnels::{TunnelError, TunnelSink};
 

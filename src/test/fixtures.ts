@@ -31,6 +31,8 @@ export function connection(
     tunnel: null,
     tunnelTimeout: null,
     color: null,
+    readOnly: false,
+    statementTimeout: null,
     ...patch,
   };
 }

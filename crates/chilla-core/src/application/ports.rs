@@ -117,6 +117,8 @@ pub trait DbConnection: Send + Sync + 'static {
     type Cancel: QueryCancel;
 
     fn backend_pid(&self) -> i32;
+    /// 연결할 때 받은 `server_version`의 첫 단어("18.6").
+    fn server_version(&self) -> &str;
     /// 서버가 마지막으로 알려 준 트랜잭션 상태. 오류 직후에는 서버가 상태를 알려 줄 때까지 기다린다.
     fn tx_status(&self) -> impl Future<Output = TxStatus> + Send;
     /// 연결이 밖에서 끊겼으면 true다 (서버 재시작, `pg_terminate_backend` 등).

@@ -322,6 +322,8 @@ fn production() -> ConnectionProfile {
         tunnel: None,
         tunnel_timeout: None,
         color: Some(ConnectionColor::Red),
+        read_only: false,
+        statement_timeout: None,
     }
 }
 
@@ -337,6 +339,8 @@ fn analytics() -> ConnectionProfile {
         tunnel: None,
         tunnel_timeout: None,
         color: None,
+        read_only: false,
+        statement_timeout: None,
     }
 }
 
@@ -472,6 +476,8 @@ fn save_connection_removes_optional_keys_that_are_unset() {
         tunnel: None,
         tunnel_timeout: None,
         color: None,
+        read_only: false,
+        statement_timeout: None,
     };
     let (dir, _result, text) = saved(SPEC_EXAMPLE, staging);
     assert!(
@@ -525,6 +531,8 @@ fn save_connection_keeps_comments_above_removed_keys() {
         tunnel: None,
         tunnel_timeout: None,
         color: Some(ConnectionColor::Green),
+        read_only: false,
+        statement_timeout: None,
     };
     let (_dir, result, text) = saved(toml, local);
     result.unwrap();
@@ -692,4 +700,77 @@ fn save_connection_keeps_the_file_mode() {
 
     let mode = fs::metadata(&path).unwrap().permissions().mode() & 0o777;
     assert_eq!(mode, 0o600, "{mode:o}");
+}
+
+#[test]
+fn reads_read_only_and_statement_timeout() {
+    let project = load_local("read_only = true\nstatement_timeout = 30").unwrap();
+    let local = project.connection("local").unwrap();
+    assert!(local.read_only);
+    assert_eq!(local.statement_timeout, Some(Duration::from_secs(30)));
+
+    let project = load_local("").unwrap();
+    let local = project.connection("local").unwrap();
+    assert!(!local.read_only);
+    assert_eq!(local.statement_timeout, None);
+
+    assert_eq!(
+        load_local("statement_timeout = 0"),
+        Err(ProjectError::InvalidConnection {
+            connection: "local".into(),
+            source: ProfileError::StatementTimeoutRange { secs: 0 }
+        })
+    );
+    assert_eq!(
+        load_local("statement_timeout = 86401"),
+        Err(ProjectError::InvalidConnection {
+            connection: "local".into(),
+            source: ProfileError::StatementTimeoutRange { secs: 86_401 }
+        })
+    );
+}
+
+#[test]
+fn writes_them_only_when_set() {
+    let toml =
+        "[connections.local]\nhost = \"localhost\"\ndatabase = \"app\"\nuser = \"postgres\"\n";
+    let (dir, result) = load(toml);
+    let local = result.unwrap().connection("local").unwrap().clone();
+
+    // false와 없음은 key를 쓰지 않는다.
+    TomlProjectStore
+        .save_connection(dir.path(), &local)
+        .unwrap();
+    let text = fs::read_to_string(dir.path().join("chilla.toml")).unwrap();
+    assert!(!text.contains("read_only"), "{text}");
+    assert!(!text.contains("statement_timeout"), "{text}");
+
+    let set = ConnectionProfile {
+        read_only: true,
+        statement_timeout: Some(Duration::from_secs(45)),
+        ..local.clone()
+    };
+    let project = TomlProjectStore.save_connection(dir.path(), &set).unwrap();
+    let text = fs::read_to_string(dir.path().join("chilla.toml")).unwrap();
+    assert!(text.contains("read_only = true\n"), "{text}");
+    assert!(text.contains("statement_timeout = 45\n"), "{text}");
+    let saved = project.connection("local").unwrap();
+    assert!(saved.read_only);
+    assert_eq!(saved.statement_timeout, Some(Duration::from_secs(45)));
+
+    // 다시 끄면 key가 지워진다.
+    TomlProjectStore
+        .save_connection(dir.path(), &local)
+        .unwrap();
+    let text = fs::read_to_string(dir.path().join("chilla.toml")).unwrap();
+    assert!(!text.contains("read_only"), "{text}");
+    assert!(!text.contains("statement_timeout"), "{text}");
+}
+
+#[test]
+fn rejects_a_string_statement_timeout() {
+    let message = parse_message(load_local("statement_timeout = \"30s\""));
+    assert!(message.contains("statement_timeout"), "{message}");
+    let message = parse_message(load_local("statement_timeout = -5"));
+    assert!(message.contains("statement_timeout"), "{message}");
 }

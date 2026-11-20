@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use chilla_core::application::{App, AppError};
+use chilla_core::application::{App, AppError, ServerInfo};
 use chilla_core::domain::{
     Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo, ConstraintKind, Danger,
     EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, Password, ProfileError, Project,
@@ -62,6 +62,11 @@ pub struct ConnectionDto {
     pub tunnel_timeout: Option<u64>,
     #[serde(default)]
     pub color: Option<String>,
+    #[serde(default)]
+    pub read_only: bool,
+    /// 초 단위.
+    #[serde(default)]
+    pub statement_timeout: Option<u64>,
 }
 
 impl From<&ConnectionProfile> for ConnectionDto {
@@ -80,6 +85,8 @@ impl From<&ConnectionProfile> for ConnectionDto {
             tunnel: profile.tunnel.clone(),
             tunnel_timeout: profile.tunnel_timeout.map(|timeout| timeout.as_secs()),
             color: profile.color.map(|color| color.as_str().to_string()),
+            read_only: profile.read_only,
+            statement_timeout: profile.statement_timeout.map(|timeout| timeout.as_secs()),
         }
     }
 }
@@ -99,7 +106,24 @@ impl TryFrom<ConnectionDto> for ConnectionProfile {
             tunnel: dto.tunnel,
             tunnel_timeout: dto.tunnel_timeout.map(Duration::from_secs),
             color: dto.color.as_deref().map(str::parse).transpose()?,
+            read_only: dto.read_only,
+            statement_timeout: dto.statement_timeout.map(Duration::from_secs),
         })
+    }
+}
+
+/// 접속 test가 알아낸 서버의 정보.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerInfoDto {
+    pub version: String,
+}
+
+impl From<ServerInfo> for ServerInfoDto {
+    fn from(info: ServerInfo) -> Self {
+        Self {
+            version: info.version,
+        }
     }
 }
 
@@ -780,10 +804,10 @@ pub async fn test_connection(
     app: State<'_, CoreApp>,
     connection: ConnectionDto,
     password: Option<String>,
-) -> CommandResult<()> {
+) -> CommandResult<ServerInfoDto> {
     let password = password.map(Password::new);
     let profile = ConnectionProfile::try_from(connection).map_err(AppError::from)?;
-    Ok(app.test_connection(profile, password).await?)
+    Ok(app.test_connection(profile, password).await?.into())
 }
 
 #[tauri::command]
@@ -981,6 +1005,8 @@ mod tests {
             tunnel: Some("ssh -N -L 25432:db.internal:5432 bastion".into()),
             tunnel_timeout: Some(Duration::from_secs(30)),
             color: Some(ConnectionColor::Red),
+            read_only: true,
+            statement_timeout: Some(Duration::from_secs(45)),
         }
     }
 
@@ -1205,12 +1231,27 @@ mod tests {
                 "sslrootcert",
                 "tunnel",
                 "tunnelTimeout",
-                "color"
+                "color",
+                "readOnly",
+                "statementTimeout"
             ])
         );
         assert_eq!(json["sslmode"], "verify-full");
         assert_eq!(json["sslrootcert"], "/p/certs/ca.pem");
         assert_eq!(json["tunnelTimeout"], 30);
+        assert_eq!(json["readOnly"], true);
+        assert_eq!(json["statementTimeout"], 45);
+    }
+
+    #[test]
+    fn server_info_dto_uses_camel_case() {
+        let dto = ServerInfoDto::from(ServerInfo {
+            version: "18.6".into(),
+        });
+        assert_eq!(
+            serde_json::to_value(dto).unwrap(),
+            json!({"version": "18.6"})
+        );
     }
 
     #[test]
@@ -1265,6 +1306,8 @@ mod tests {
         assert_eq!(profile.tunnel, None);
         assert_eq!(profile.tunnel_timeout, None);
         assert_eq!(profile.color, None);
+        assert!(!profile.read_only);
+        assert_eq!(profile.statement_timeout, None);
     }
 
     #[test]

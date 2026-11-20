@@ -22,6 +22,13 @@ use crate::domain::{
     StatementSpan, TableDetails, TxEnd, TxMode, TypeInfo, WriteMode,
 };
 
+/// `test_connection`이 연결해서 알아낸 서버의 정보.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ServerInfo {
+    /// `server_version`의 첫 단어("18.6").
+    pub version: String,
+}
+
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum AppError {
     #[error("Open a project first")]
@@ -291,7 +298,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         &self,
         profile: ConnectionProfile,
         password: Option<Password>,
-    ) -> Result<(), AppError> {
+    ) -> Result<ServerInfo, AppError> {
         let (profile, stored_key, dir) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
@@ -315,8 +322,11 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         let connected = self.connector.connect(&profile, password.as_ref()).await;
         let result = match connected {
             Ok(connection) => {
+                let info = ServerInfo {
+                    version: connection.server_version().to_string(),
+                };
                 connection.close().await;
-                Ok(())
+                Ok(info)
             }
             Err(error) => Err(error.into()),
         };
@@ -1047,7 +1057,9 @@ mod tests {
 
         assert_eq!(
             f.app.test_connection(draft, Some(pw("typed"))).await,
-            Ok(())
+            Ok(ServerInfo {
+                version: "18.6".into()
+            })
         );
 
         assert_eq!(
@@ -1110,6 +1122,22 @@ mod tests {
         f.app.set_password("local", pw("stored")).await.unwrap();
         let mut draft = profile("local");
         draft.color = Some(ConnectionColor::Red);
+
+        f.app.test_connection(draft, None).await.unwrap();
+
+        assert_eq!(
+            f.connector.requests(),
+            [("local".to_string(), Some("stored".to_string()))]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_connection_uses_the_stored_password_when_only_session_settings_differ() {
+        let f = opened().await;
+        f.app.set_password("local", pw("stored")).await.unwrap();
+        let mut draft = profile("local");
+        draft.read_only = true;
+        draft.statement_timeout = Some(Duration::from_secs(30));
 
         f.app.test_connection(draft, None).await.unwrap();
 

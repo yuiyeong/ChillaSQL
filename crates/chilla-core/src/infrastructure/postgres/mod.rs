@@ -42,6 +42,8 @@ const APPLICATION_NAME: &str = "ChillaSQL";
 
 pub struct PgConnector {
     connect_timeout: Duration,
+    /// 세션의 `TimeZone`으로 보낼 Mac의 time zone(IANA 이름). 알 수 없으면 서버 기본값을 쓴다.
+    time_zone: Option<String>,
 }
 
 impl PgConnector {
@@ -53,6 +55,9 @@ impl PgConnector {
     pub fn with_connect_timeout(timeout: Duration) -> Self {
         Self {
             connect_timeout: timeout,
+            time_zone: iana_time_zone::get_timezone()
+                .ok()
+                .filter(|zone| is_safe_option_value(zone)),
         }
     }
 }
@@ -71,7 +76,7 @@ impl Connector for PgConnector {
         profile: &ConnectionProfile,
         password: Option<&Password>,
     ) -> Result<PgConnection, ConnectError> {
-        let connection = establish(profile, password, self.connect_timeout);
+        let connection = establish(profile, password, self);
         tokio::time::timeout(self.connect_timeout, connection)
             .await
             .unwrap_or(Err(ConnectError::Timeout))
@@ -81,15 +86,15 @@ impl Connector for PgConnector {
 async fn establish(
     profile: &ConnectionProfile,
     password: Option<&Password>,
-    connect_timeout: Duration,
+    connector: &PgConnector,
 ) -> Result<PgConnection, ConnectError> {
     let tcp = open_tcp((profile.host.as_str(), profile.port)).await?;
     let server = tcp.peer_addr().map_err(unreachable)?;
     let Some(verification) = verification(profile) else {
-        return start(tcp, profile, server, password, connect_timeout).await;
+        return start(tcp, profile, server, password, connector).await;
     };
     let tls = tls::negotiate(tcp, &profile.host, verification).await?;
-    start(tls, profile, server, password, connect_timeout).await
+    start(tls, profile, server, password, connector).await
 }
 
 async fn open_tcp(addr: impl ToSocketAddrs) -> Result<TcpStream, ConnectError> {
@@ -129,7 +134,7 @@ async fn start<S>(
     profile: &ConnectionProfile,
     server: SocketAddr,
     password: Option<&Password>,
-    connect_timeout: Duration,
+    connector: &PgConnector,
 ) -> Result<PgConnection, ConnectError>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
@@ -143,6 +148,9 @@ where
         .application_name(APPLICATION_NAME)
         // 암호화는 이 함수에 오기 전에 끝난다. tokio-postgres는 SSL을 협상하지 않는다.
         .ssl_mode(tokio_postgres::config::SslMode::Disable);
+    if let Some(options) = startup_options(profile, connector.time_zone.as_deref()) {
+        config.options(&options);
+    }
     if let Some(password) = password {
         config.password(password.expose());
     }
@@ -155,7 +163,7 @@ where
         // 끊긴 이유는 `Client`의 다음 호출이 오류로 알려 준다.
         let _ = connection.await;
     });
-    let backend_pid = backend_pid(&client).await?;
+    let (backend_pid, server_version) = handshake_info(&client).await?;
 
     Ok(PgConnection {
         client,
@@ -163,26 +171,58 @@ where
         tx_status,
         row_types,
         backend_pid,
+        server_version,
         profile: profile.clone(),
         server,
-        connect_timeout,
+        connect_timeout: connector.connect_timeout,
     })
 }
 
-/// simple query로 묻는다. `query_one`은 prepare 때문에 round trip이 한 번 더 든다.
-async fn backend_pid(client: &Client) -> Result<i32, ConnectError> {
+/// 세션을 열 때 서버에 보내는 `options`. 보낼 것이 없으면 `None`이다.
+///
+/// `read_only`는 `default_transaction_read_only`로 건다. 서버가 쓰기를 거절하고(SQLSTATE
+/// `25006`) 임시 테이블도 만들 수 없다.
+fn startup_options(profile: &ConnectionProfile, time_zone: Option<&str>) -> Option<String> {
+    let mut options = Vec::new();
+    if profile.read_only {
+        options.push("-c default_transaction_read_only=on".to_string());
+    }
+    if let Some(timeout) = profile.statement_timeout {
+        options.push(format!("-c statement_timeout={}", timeout.as_millis()));
+    }
+    if let Some(zone) = time_zone.filter(|zone| is_safe_option_value(zone)) {
+        options.push(format!("-c TimeZone={zone}"));
+    }
+    (!options.is_empty()).then(|| options.join(" "))
+}
+
+/// `options`는 공백으로 나뉘고 `\`로 escape하므로 그런 글자가 든 값은 보내지 않는다.
+fn is_safe_option_value(value: &str) -> bool {
+    !value.is_empty()
+        && !value
+            .chars()
+            .any(|c| c.is_whitespace() || c == '\'' || c == '\\')
+}
+
+/// backend pid와 `server_version`의 첫 단어를 simple query 하나로 묻는다. `query_one`은
+/// prepare 때문에 round trip이 한 번 더 든다.
+async fn handshake_info(client: &Client) -> Result<(i32, String), ConnectError> {
     let messages = client
-        .simple_query("SELECT pg_backend_pid()")
+        .simple_query("SELECT pg_backend_pid(), current_setting('server_version')")
         .await
         .map_err(connect_error)?;
     messages
         .iter()
         .find_map(|message| match message {
-            SimpleQueryMessage::Row(row) => row.get(0)?.parse().ok(),
+            SimpleQueryMessage::Row(row) => {
+                let pid = row.get(0)?.parse().ok()?;
+                let version = row.get(1)?.split_whitespace().next()?.to_string();
+                Some((pid, version))
+            }
             _ => None,
         })
         .ok_or_else(|| ConnectError::Other {
-            message: "The server did not return a backend pid".into(),
+            message: "The server did not return a backend pid and version".into(),
         })
 }
 
@@ -195,6 +235,8 @@ pub struct PgConnection {
     /// 읽기마다 비운다.
     row_types: RowTypes,
     backend_pid: i32,
+    /// `server_version`의 첫 단어("18.6").
+    server_version: String,
     /// cancel 요청을 같은 방법(TLS 여부, 인증서 확인)으로 보내려고 갖는다.
     profile: ConnectionProfile,
     /// 연결한 서버의 주소. cancel 요청은 host 이름을 다시 찾지 않고 이 주소로 보낸다.
@@ -210,6 +252,10 @@ impl DbConnection for PgConnection {
 
     fn backend_pid(&self) -> i32 {
         self.backend_pid
+    }
+
+    fn server_version(&self) -> &str {
+        &self.server_version
     }
 
     async fn tx_status(&self) -> TxStatus {
@@ -355,6 +401,35 @@ mod tests {
             .connect(&local_profile(), Some(&Password::new("chilla".into())))
             .await
             .expect("scripts/test-db.sh up 을 먼저 실행하세요")
+    }
+
+    fn profile() -> ConnectionProfile {
+        ConnectionProfile::fixture("local")
+    }
+
+    #[test]
+    fn startup_options_are_sent_only_when_set() {
+        assert_eq!(startup_options(&profile(), None), None);
+        assert_eq!(
+            startup_options(&profile(), Some("Asia/Seoul")).as_deref(),
+            Some("-c TimeZone=Asia/Seoul")
+        );
+        let all = ConnectionProfile {
+            read_only: true,
+            statement_timeout: Some(Duration::from_secs(30)),
+            ..profile()
+        };
+        assert_eq!(
+            startup_options(&all, Some("UTC")).as_deref(),
+            Some("-c default_transaction_read_only=on -c statement_timeout=30000 -c TimeZone=UTC")
+        );
+    }
+
+    #[test]
+    fn unsafe_time_zone_names_are_not_sent() {
+        for zone in ["", "Asia/Seoul KST", "A'B", "A\\B"] {
+            assert_eq!(startup_options(&profile(), Some(zone)), None, "{zone:?}");
+        }
     }
 
     /// FIN 없이 죽은 연결(sleep 뒤 복귀, VPN 끊김)은 keepalive가 있어야 끊긴 줄 안다.

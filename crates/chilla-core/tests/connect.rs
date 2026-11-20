@@ -117,3 +117,27 @@ async fn terminated_backend_is_detected() {
         .await
         .expect("close가 1초 안에 끝나야 한다");
 }
+
+#[tokio::test]
+async fn test_connection_returns_the_server_version() {
+    let (app, _dir) = support::app_with_project().await;
+
+    let info = app
+        .test_connection(local_profile(), Some(password()))
+        .await
+        .unwrap();
+
+    assert!(info.version.starts_with("18."), "{}", info.version);
+    assert!(!info.version.contains(' '), "{}", info.version);
+}
+
+#[tokio::test]
+async fn connection_reports_the_server_version() {
+    let conn = PgConnector::new()
+        .connect(&local_profile(), Some(&password()))
+        .await
+        .unwrap();
+
+    assert!(conn.server_version().starts_with("18."));
+    conn.close().await;
+}

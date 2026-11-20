@@ -43,6 +43,9 @@ struct RawConnection {
     /// 초 단위 정수. 다른 type이면 key 이름이 든 오류를 내려고 값 그대로 받는다.
     tunnel_timeout: Option<toml::Value>,
     color: Option<String>,
+    read_only: Option<bool>,
+    /// `tunnel_timeout`처럼 값 그대로 받는다.
+    statement_timeout: Option<toml::Value>,
 }
 
 impl ProjectStore for TomlProjectStore {
@@ -202,6 +205,14 @@ fn write_fields(
             "color",
             profile.color.map(|color| Value::from(color.as_str())),
         ),
+        // false는 key를 쓰지 않는다. 없는 key가 false다.
+        ("read_only", profile.read_only.then(|| Value::from(true))),
+        (
+            "statement_timeout",
+            profile
+                .statement_timeout
+                .map(|timeout| Value::from(i64::try_from(timeout.as_secs()).unwrap_or(i64::MAX))),
+        ),
     ];
     for (key, value) in fields {
         match value {
@@ -330,26 +341,8 @@ fn connection(
         .map(str::parse)
         .transpose()
         .map_err(invalid)?;
-    let tunnel_timeout = match raw.tunnel_timeout {
-        None => None,
-        Some(toml::Value::Integer(secs)) if secs >= 0 => {
-            Some(Duration::from_secs(secs.unsigned_abs()))
-        }
-        Some(toml::Value::Integer(secs)) => {
-            return Err(ProjectError::Parse {
-                message: format!(
-                    "Connection '{name}': tunnel_timeout must be 1 to 300 seconds, not {secs}"
-                ),
-            });
-        }
-        Some(_) => {
-            return Err(ProjectError::Parse {
-                message: format!(
-                    "Connection '{name}': tunnel_timeout must be a whole number of seconds"
-                ),
-            });
-        }
-    };
+    let tunnel_timeout = seconds(&name, "tunnel_timeout", "300", raw.tunnel_timeout)?;
+    let statement_timeout = seconds(&name, "statement_timeout", "86400", raw.statement_timeout)?;
     let profile = ConnectionProfile {
         name: name.clone(),
         host: raw.host,
@@ -361,10 +354,33 @@ fn connection(
         tunnel: raw.tunnel,
         tunnel_timeout,
         color,
+        read_only: raw.read_only.unwrap_or(false),
+        statement_timeout,
     }
     .resolved_under(dir);
     profile.validate().map_err(invalid)?;
     Ok(profile)
+}
+
+/// 초 단위 정수인 key를 읽는다. 정수가 아니거나 음수면 key 이름이 든 오류를 낸다. 범위는
+/// `validate`가 본다.
+fn seconds(
+    connection: &str,
+    key: &str,
+    max: &str,
+    value: Option<toml::Value>,
+) -> Result<Option<Duration>, ProjectError> {
+    let message = match value {
+        None => return Ok(None),
+        Some(toml::Value::Integer(secs)) if secs >= 0 => {
+            return Ok(Some(Duration::from_secs(secs.unsigned_abs())));
+        }
+        Some(toml::Value::Integer(secs)) => {
+            format!("Connection '{connection}': {key} must be 1 to {max} seconds, not {secs}")
+        }
+        Some(_) => format!("Connection '{connection}': {key} must be a whole number of seconds"),
+    };
+    Err(ProjectError::Parse { message })
 }
 
 fn dir_name(dir: &Path) -> String {

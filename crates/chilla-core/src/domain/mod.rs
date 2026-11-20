@@ -15,7 +15,9 @@ pub use catalog::{
     Catalog, CatalogColumn, ConstraintInfo, ConstraintKind, FunctionName, IndexInfo, Relation,
     RelationKind, TableDetails, TypeInfo,
 };
-pub use connection::{ConnectionColor, ConnectionProfile, ProfileError, SslMode};
+pub use connection::{
+    ConnectionColor, ConnectionProfile, MAX_STATEMENT_TIMEOUT_SECS, ProfileError, SslMode,
+};
 pub use danger::Danger;
 pub use password::Password;
 pub use project::Project;

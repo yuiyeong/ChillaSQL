@@ -40,6 +40,8 @@ pub fn local_profile() -> ConnectionProfile {
         tunnel: None,
         tunnel_timeout: None,
         color: None,
+        read_only: false,
+        statement_timeout: None,
     }
 }
 

@@ -108,6 +108,9 @@ export function toConnection(
       tunnel: tunnel === "" ? null : tunnel,
       tunnelTimeout,
       color: values.color,
+      // 이 칸들의 form 항목은 따로 만든다. 그 전에는 저장된 값을 그대로 둔다.
+      readOnly: original?.readOnly ?? false,
+      statementTimeout: original?.statementTimeout ?? null,
     },
   };
 }

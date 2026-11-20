@@ -438,6 +438,7 @@ version = "0.1.0"
 dependencies = [
  "apple-native-keyring-store",
  "futures-util",
+ "iana-time-zone",
  "keyring-core",
  "libc",
  "pg_query",

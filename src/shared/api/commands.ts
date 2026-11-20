@@ -7,6 +7,7 @@ import type {
   EndResult,
   Project,
   QueryEvent,
+  ServerInfo,
   Session,
   SqlFile,
   StatementSpan,
@@ -53,7 +54,7 @@ export function hasPassword(connection: string): Promise<boolean> {
 export function testConnection(
   connection: Connection,
   password: string | null,
-): Promise<void> {
+): Promise<ServerInfo> {
   return call("test_connection", { connection, password });
 }
 

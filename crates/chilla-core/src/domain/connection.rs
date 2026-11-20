@@ -4,6 +4,9 @@ use std::time::Duration;
 
 use super::tunnel::{DEFAULT_TUNNEL_TIMEOUT, MAX_TUNNEL_TIMEOUT_SECS, TunnelTarget};
 
+/// `statement_timeout`의 상한(초). 하루다.
+pub const MAX_STATEMENT_TIMEOUT_SECS: u64 = 86_400;
+
 /// `chilla.toml`의 `sslmode`. 조용히 평문으로 내려가는 `prefer`는 두지 않는다.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum SslMode {
@@ -94,6 +97,10 @@ pub struct ConnectionProfile {
     /// 터널의 포트가 열리기를 기다리는 시간. 없으면 [`DEFAULT_TUNNEL_TIMEOUT`]이다. `tunnel`이 있을 때만 쓴다.
     pub tunnel_timeout: Option<Duration>,
     pub color: Option<ConnectionColor>,
+    /// 세션을 `default_transaction_read_only=on`으로 열어 서버가 쓰기를 거절하게 한다.
+    pub read_only: bool,
+    /// 세션의 `statement_timeout`. 없으면 서버 기본값이다. 세션을 열 때 startup option으로 보낸다.
+    pub statement_timeout: Option<Duration>,
 }
 
 impl ConnectionProfile {
@@ -133,6 +140,12 @@ impl ConnectionProfile {
                 return Err(ProfileError::TunnelTimeoutRange { secs });
             }
         }
+        if let Some(timeout) = self.statement_timeout {
+            let secs = timeout.as_secs();
+            if !(1..=MAX_STATEMENT_TIMEOUT_SECS).contains(&secs) {
+                return Err(ProfileError::StatementTimeoutRange { secs });
+            }
+        }
         Ok(())
     }
 
@@ -157,7 +170,8 @@ impl ConnectionProfile {
     }
 
     /// 같은 서버에 같은 방법으로 같은 사용자로 붙는가. 저장된 비밀번호를 이 접속 정보에
-    /// 써도 되는지 가릴 때 쓴다. 색과 터널 대기 시간처럼 연결 대상과 무관한 항목은 보지 않는다.
+    /// 써도 되는지 가릴 때 쓴다. 색, 터널 대기 시간, `read_only`, `statement_timeout`처럼 연결
+    /// 대상과 무관한 항목은 보지 않는다.
     pub fn same_target(&self, other: &ConnectionProfile) -> bool {
         let ConnectionProfile {
             name,
@@ -170,6 +184,8 @@ impl ConnectionProfile {
             tunnel,
             tunnel_timeout: _,
             color: _,
+            read_only: _,
+            statement_timeout: _,
         } = self;
         *name == other.name
             && *host == other.host
@@ -179,6 +195,14 @@ impl ConnectionProfile {
             && *sslmode == other.sslmode
             && *sslrootcert == other.sslrootcert
             && *tunnel == other.tunnel
+    }
+
+    /// `same_target`이고 `read_only`와 `statement_timeout`도 같은가. 다르면 열려 있는 세션에는
+    /// 바뀐 값이 닿지 않으므로 세션을 새로 열어야 한다.
+    pub fn same_session(&self, other: &ConnectionProfile) -> bool {
+        self.same_target(other)
+            && self.read_only == other.read_only
+            && self.statement_timeout == other.statement_timeout
     }
 }
 
@@ -198,6 +222,8 @@ pub enum ProfileError {
     TunnelTimeoutWithoutTunnel,
     #[error("tunnel_timeout must be 1 to 300 seconds, not {secs}")]
     TunnelTimeoutRange { secs: u64 },
+    #[error("statement_timeout must be 1 to 86400 seconds, not {secs}")]
+    StatementTimeoutRange { secs: u64 },
 }
 
 #[cfg(test)]
@@ -215,6 +241,8 @@ impl ConnectionProfile {
             tunnel: None,
             tunnel_timeout: None,
             color: None,
+            read_only: false,
+            statement_timeout: None,
         }
     }
 }
@@ -416,6 +444,63 @@ mod tests {
         for other in different {
             assert!(!saved.same_target(&other), "{other:?}");
         }
+    }
+
+    #[test]
+    fn statement_timeout_range() {
+        let with = |secs: u64| ConnectionProfile {
+            statement_timeout: Some(Duration::from_secs(secs)),
+            ..local()
+        };
+        assert_eq!(with(1).validate(), Ok(()));
+        assert_eq!(with(MAX_STATEMENT_TIMEOUT_SECS).validate(), Ok(()));
+        for secs in [0, 86_401] {
+            assert_eq!(
+                with(secs).validate(),
+                Err(ProfileError::StatementTimeoutRange { secs })
+            );
+        }
+        assert_eq!(
+            ProfileError::StatementTimeoutRange { secs: 0 }.to_string(),
+            "statement_timeout must be 1 to 86400 seconds, not 0"
+        );
+    }
+
+    #[test]
+    fn same_session_compares_read_only_and_timeout() {
+        let saved = local();
+        assert!(saved.same_session(&local()));
+        assert!(saved.same_session(&ConnectionProfile {
+            color: Some(ConnectionColor::Red),
+            tunnel_timeout: Some(Duration::from_secs(30)),
+            ..local()
+        }));
+        assert!(!saved.same_session(&ConnectionProfile {
+            read_only: true,
+            ..local()
+        }));
+        assert!(!saved.same_session(&ConnectionProfile {
+            statement_timeout: Some(Duration::from_secs(30)),
+            ..local()
+        }));
+        // 연결 대상이 다르면 세션 설정이 같아도 다른 세션이다.
+        assert!(!saved.same_session(&ConnectionProfile {
+            host: "other.example".into(),
+            ..local()
+        }));
+    }
+
+    #[test]
+    fn same_target_ignores_session_settings() {
+        let saved = local();
+        assert!(saved.same_target(&ConnectionProfile {
+            read_only: true,
+            ..local()
+        }));
+        assert!(saved.same_target(&ConnectionProfile {
+            statement_timeout: Some(Duration::from_secs(30)),
+            ..local()
+        }));
     }
 
     #[test]
