@@ -5,7 +5,7 @@
 ## 지금
 
 - **진행 중**: 없음(M10 결과 표 확장이 2026-11-20에 끝남, [M10](plans/M10-result-table-extensions.md)). Task 12 앱 확인 9개가 모두 통과함(작업 로그 2026-11-20). M10으로 4단계 마일스톤(M7–M10)이 모두 끝났다
-- **작업 위치**: branch `m10-result-table-extensions`. M10은 아직 main에 합치지 않음. main에는 branch `m9-query-tools`를 2026-11-20에 fast-forward로 합쳤고 origin/main은 `d2be9bf`이며 그 뒤의 commit은 push하지 않았다
+- **작업 위치**: main. branch `m10-result-table-extensions`를 2026-11-21에 fast-forward로 합치고 지움. origin/main은 `c752404`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
 - **다음 할 일**: 기획서 8장의 4단계 완료 기준("기획서 4장의 모든 기능 동작")을 확인하고 branch `m10-result-table-extensions`를 합친다. 4단계까지 며칠 실제로 써 본다. 사용자에게 부탁할 것(computer use로 만들 수 없음): 셀 editor에서 한글을 조합하는 중에 `Enter`와 단축키를 누르면 글자만 확정되고 셀이 확정되거나 단축키가 실행되지 않는지, 파라미터 dialog의 한글 IME 확인. 기획서 8장대로 3단계를 며칠 실제로 써 본다(완료 기준: 하루 업무를 DataGrip 없이 처리). 부하가 걸리면 가끔 실패하는 test(`tunnel_process` 몇 개, `ten_thousand_statements_split_within_100ms`, `first_500_rows_of_a_million_arrive_within_100ms`, vitest `aliased_columns_come_from_the_aliased_table`)를 따로 손본다. 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함. 알려진 것: 긴 줄을 가로로 scroll하면 줄 번호 gutter가 사라진다. 좁은 열(`id`)을 정렬하면 `↑`/`↓`가 자리를 차지해 header의 이름과 type이 `i…`, `big…`로 잘린다(M10 앱 확인)
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
