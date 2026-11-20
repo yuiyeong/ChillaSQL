@@ -30,11 +30,15 @@ import {
 import { tags } from "@lezer/highlight";
 import { t } from "../../shared/i18n/t";
 import { catalogCompletion, kindLetter } from "./completion";
+import {
+  runRangeHighlight,
+  statementSpansField,
+  statementSpansPlugin,
+} from "./statementSpans";
 
 const color = (name: string) => `var(--color-${name})`;
 
 // 색은 src/index.css의 token이다. 캔버스(Main.dc.html)의 에디터를 따른다.
-// 실행 범위 강조(active line)는 캔버스에 없어 넣지 않는다(M8).
 const editorTheme = EditorView.theme(
   {
     "&": {
@@ -51,6 +55,11 @@ const editorTheme = EditorView.theme(
       caretColor: color("fg"),
     },
     ".cm-line": { lineHeight: "24px" },
+    // 실행될 문장의 줄. 캔버스 Main의 현재 문장이다.
+    ".cm-runRange": {
+      backgroundColor: `color-mix(in srgb, ${color("accent")} 7%, transparent)`,
+      boxShadow: `inset 2px 0 0 ${color("accent")}`,
+    },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: color("fg") },
     "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground":
       {
@@ -260,6 +269,9 @@ const extensions: Extension = [
   catalogCompletion,
   autocompletion(AUTOCOMPLETION),
   footerPlugin,
+  statementSpansField,
+  statementSpansPlugin,
+  runRangeHighlight,
   editorTheme,
   syntaxHighlighting(syntaxStyle),
 ];

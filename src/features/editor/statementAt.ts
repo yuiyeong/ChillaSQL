@@ -1,5 +1,11 @@
 import type { StatementSpan } from "../../shared/api/types";
 
+/** CodeMirror의 `Text`가 만족하는 부분. 전체 문서를 string으로 만들지 않고 필요한 구간만 읽는다. */
+export interface TextLike {
+  length: number;
+  sliceString(from: number, to?: number): string;
+}
+
 /**
  * 커서가 가리키는 문장을 고른다. spans는 start 오름차순이고 end는 포함하지 않으며 `;`를 담지 않는다.
  *
@@ -8,7 +14,7 @@ import type { StatementSpan } from "../../shared/api/types";
  * 3. 아니면 같은 줄에서 커서 뒤에 시작하는 첫 문장.
  */
 export function statementAt(
-  text: string,
+  text: TextLike,
   spans: StatementSpan[],
   cursor: number,
 ): StatementSpan | null {
@@ -19,12 +25,18 @@ export function statementAt(
   for (const s of spans) {
     if (s.end < cursor) before = s;
   }
-  if (before !== undefined && !text.slice(before.end, cursor).includes("\n")) {
+  if (
+    before !== undefined &&
+    !text.sliceString(before.end, cursor).includes("\n")
+  ) {
     return before;
   }
 
   const after = spans.find((s) => s.start > cursor);
-  if (after !== undefined && !text.slice(cursor, after.start).includes("\n")) {
+  if (
+    after !== undefined &&
+    !text.sliceString(cursor, after.start).includes("\n")
+  ) {
     return after;
   }
 

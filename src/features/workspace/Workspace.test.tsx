@@ -77,6 +77,8 @@ beforeEach(async () => {
   vi.mocked(listSqlFiles).mockResolvedValue([]);
   vi.mocked(hasPassword).mockResolvedValue(false);
   vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  // 에디터가 보이는 문서를 나눈다.
+  vi.mocked(splitStatements).mockResolvedValue([]);
 });
 
 test("탭이 없으면 toolbar는 disabled다", () => {
@@ -334,6 +336,8 @@ test("접속 form이 열려 있으면 단축키가 동작하지 않는다", asyn
   vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
   const id = tabWith("SELECT 1", "local");
   renderWorkspace();
+  // 에디터가 문서를 처음 나눈 호출은 세지 않는다.
+  vi.mocked(splitStatements).mockClear();
   const shortcut = (code: string) =>
     new KeyboardEvent("keydown", {
       code,
@@ -372,6 +376,8 @@ test("저장 경로 dialog가 열려 있으면 단축키가 동작하지 않는�
   const a = tabWith("SELECT 1", "local");
   const b = tabWith("SELECT 2", "local");
   renderWorkspace();
+  // 에디터가 문서를 처음 나눈 호출은 세지 않는다.
+  vi.mocked(splitStatements).mockClear();
   const shortcut = (code: string, shiftKey = false) =>
     new KeyboardEvent("keydown", {
       code,

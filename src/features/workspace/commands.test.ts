@@ -31,6 +31,7 @@ import {
   openDocument,
   setDocumentState,
 } from "../editor/documents";
+import { setStatementSpans } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
@@ -172,6 +173,47 @@ test("선택이 없으면 커서 문장을 실행한다", async () => {
     status: "running",
     result: { sql: "SELECT 2", origin: { line: 2, column: 1 } },
   });
+});
+
+test("run_uses_fresh_spans_without_splitting", async () => {
+  const id = tabWith("SELECT 1;\nSELECT 2");
+  select(id, 12);
+  setDocumentState(
+    id,
+    documentState(id).update({
+      effects: setStatementSpans.of([
+        { start: 0, end: 8 },
+        { start: 10, end: 18 },
+      ]),
+    }).state,
+  );
+
+  await execute("run");
+
+  expect(splitStatements).not.toHaveBeenCalled();
+  expect(runOf(id)).toMatchObject({
+    status: "running",
+    result: { sql: "SELECT 2", origin: { line: 2, column: 1 } },
+  });
+});
+
+test("run_splits_when_the_cached_spans_are_stale", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 9 }]);
+  const id = tabWith("SELECT 1");
+  setDocumentState(
+    id,
+    documentState(id).update({
+      effects: setStatementSpans.of([{ start: 0, end: 8 }]),
+    }).state,
+  );
+  setDocumentState(
+    id,
+    documentState(id).update({ changes: { from: 8, insert: "0" } }).state,
+  );
+
+  await execute("run");
+
+  expect(splitStatements).toHaveBeenCalledWith("SELECT 10");
 });
 
 test("split_failed는 Couldn't find a statement로 거절한다", async () => {

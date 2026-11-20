@@ -14,11 +14,16 @@ import type {
 import { quoteIdent } from "../../shared/sql/identifiers";
 import { targetChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
-import { documentSelection, documentText } from "../editor/documents";
+import {
+  documentSelection,
+  documentState,
+  documentText,
+} from "../editor/documents";
 import { showEditorNotice } from "../editor/editorNotice";
 import { reformatDocument } from "../editor/reformat";
 import { saveTab } from "../editor/saveTab";
 import { lineColumn, statementAt } from "../editor/statementAt";
+import { statementSpansField } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import type { Origin, Rejection, RunRequest } from "../query/runReducer";
@@ -65,19 +70,25 @@ async function statementToRun(
     return { sql, origin: lineColumn(text, from) };
   }
 
+  // 문서에 둔 span이 지금 문서에 맞으면 다시 나누지 않는다.
+  const cached = documentState(tabId).field(statementSpansField, false);
   let spans;
-  try {
-    spans = await splitStatements(text);
-  } catch (error) {
-    if (isCommandError(error, "split_failed")) {
-      return {
-        title: t("run.splitFailed.title"),
-        detail: t("run.splitFailed.detail"),
-      };
+  if (cached?.fresh && cached.spans !== null) {
+    spans = cached.spans;
+  } else {
+    try {
+      spans = await splitStatements(text);
+    } catch (error) {
+      if (isCommandError(error, "split_failed")) {
+        return {
+          title: t("run.splitFailed.title"),
+          detail: t("run.splitFailed.detail"),
+        };
+      }
+      return { title: messageOf(error), detail: null };
     }
-    return { title: messageOf(error), detail: null };
   }
-  const span = statementAt(text, spans, head);
+  const span = statementAt(documentState(tabId).doc, spans, head);
   if (span === null) {
     return { title: t("run.noStatementAtCursor"), detail: null };
   }
