@@ -211,6 +211,7 @@ pub async fn app_with_toml(toml: &str) -> (TestApp, TempDir, TunnelEvents) {
             move |event| events.lock().unwrap().push(event)
         }),
         QueryLimits::default(),
+        None,
     );
     app.open_project(dir.path()).await.unwrap();
     (app, dir, events)

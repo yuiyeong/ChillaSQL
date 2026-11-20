@@ -6,9 +6,10 @@ use std::sync::Arc;
 
 use chilla_core::infrastructure::{
     FsSqlFileStore, KeychainPasswordStore, PgConnector, PgQueryInspector, PgQuerySplitter,
-    ShellTunnelRunner, TomlProjectStore, load_settings, settings_path,
+    ShellTunnelRunner, SqliteAppStore, TomlProjectStore, load_settings, settings_path,
 };
 
+use chilla_core::application::AppStore;
 use chilla_core::domain::Settings;
 use commands::{CoreApp, LoadedSettings, TunnelEventDto};
 use tauri::{Emitter, Manager, RunEvent, WindowEvent};
@@ -18,6 +19,14 @@ const TUNNEL_EVENT: &str = "tunnel";
 
 /// Rust가 종료를 요청받았음을 화면에 알리는 event 이름. 끝낼지는 화면이 묻고 `quit_app`으로 끝낸다.
 const QUIT_REQUESTED_EVENT: &str = "quit-requested";
+
+/// `<app_data_dir>/chilla.sqlite3`를 연다. 디렉토리가 없으면 만든다.
+fn open_store(handle: &tauri::AppHandle) -> Result<SqliteAppStore, String> {
+    let dir = handle.path().app_data_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    let path = dir.join("chilla.sqlite3");
+    SqliteAppStore::open(&path).map_err(|e| format!("{}: {e}", path.display()))
+}
 
 pub fn run() {
     let app = tauri::Builder::default()
@@ -48,7 +57,16 @@ pub fn run() {
             // menu는 언어를 알아야 해서 `Builder::menu`가 아니라 여기서 만든다.
             app.set_menu(menu::build(&handle, settings.language)?)?;
             let limits = settings.limits;
-            app.manage(LoadedSettings { settings, error });
+            // 저장소를 열지 못하면 최근 프로젝트와 탭 복원 없이 시작하고 이유는 화면이 보여 준다.
+            let (store, store_error) = match open_store(&handle) {
+                Ok(store) => (Some(Arc::new(store)), None),
+                Err(message) => (None, Some(message)),
+            };
+            app.manage(LoadedSettings {
+                settings,
+                error,
+                store_error,
+            });
             let passwords = KeychainPasswordStore::new().expect("키체인을 쓸 수 없습니다");
             let core = CoreApp::new(
                 Arc::new(TomlProjectStore),
@@ -63,6 +81,7 @@ pub fn run() {
                     let _ = handle.emit(TUNNEL_EVENT, TunnelEventDto::from(event));
                 }),
                 limits,
+                store.map(|store| store as Arc<dyn AppStore>),
             );
             app.manage(core);
             Ok(())
@@ -94,6 +113,9 @@ pub fn run() {
             commands::cancel_tunnel,
             commands::restart_tunnel,
             commands::load_settings,
+            commands::recent_projects,
+            commands::load_workspace,
+            commands::save_workspace,
             commands::quit_app,
         ])
         .build(tauri::generate_context!())

@@ -17,9 +17,9 @@ pub(crate) use connection::{FakeCatalog, FakeConnection, FakeFeed, FakeLink, ser
 pub(crate) use tunnel::{FakeRun, FakeRunner, events_sink};
 
 use super::{
-    ConnectError, Connector, FileError, PasswordKey, PasswordStore, PasswordStoreError,
-    ProjectError, ProjectStore, QueryError, QuerySink, SplitError, SqlFileStore,
-    StatementInspector, StatementSplitter,
+    AppStore, ConnectError, Connector, FileError, PasswordKey, PasswordStore, PasswordStoreError,
+    ProjectError, ProjectStore, QueryError, QuerySink, RecentProject, SplitError, SqlFileStore,
+    StatementInspector, StatementSplitter, StoreError,
 };
 use crate::domain::{
     Catalog, ConnectionColor, ConnectionProfile, Danger, FileStamp, Password, Project, QueryEvent,
@@ -440,5 +440,65 @@ mod tests {
         let expected = [("/new", "a"), ("/new", "b"), ("/new", "a"), ("/none", "a")];
         let expected = expected.map(|(dir, name)| (PathBuf::from(dir), name.to_string()));
         assert_eq!(saved, expected);
+    }
+}
+
+/// 메모리에 두는 [`AppStore`]. 최근 프로젝트는 넣은 순서대로 쌓고 `recent_projects`는 그 역순이다.
+#[derive(Default)]
+pub(crate) struct FakeStore {
+    recent: Mutex<Vec<RecentProject>>,
+    workspaces: Mutex<HashMap<PathBuf, (String, i64)>>,
+    fail: AtomicBool,
+}
+
+impl FakeStore {
+    /// 이 뒤의 모든 호출이 실패한다. `false`를 주면 다시 성공한다.
+    pub(crate) fn fail(&self, fail: bool) {
+        self.fail.store(fail, Ordering::SeqCst);
+    }
+
+    /// 저장한 snapshot과 `saved_at`.
+    pub(crate) fn workspace(&self, dir: &str) -> Option<(String, i64)> {
+        self.workspaces.lock().unwrap().get(Path::new(dir)).cloned()
+    }
+
+    fn check(&self) -> Result<(), StoreError> {
+        if self.fail.load(Ordering::SeqCst) {
+            return Err(StoreError {
+                message: "깨졌다".into(),
+            });
+        }
+        Ok(())
+    }
+}
+
+impl AppStore for FakeStore {
+    fn recent_projects(&self) -> Result<Vec<RecentProject>, StoreError> {
+        self.check()?;
+        Ok(self.recent.lock().unwrap().iter().rev().cloned().collect())
+    }
+
+    fn record_project(&self, project: &RecentProject) -> Result<(), StoreError> {
+        self.check()?;
+        let mut recent = self.recent.lock().unwrap();
+        recent.retain(|p| p.dir != project.dir);
+        recent.push(project.clone());
+        Ok(())
+    }
+
+    fn load_workspace(&self, dir: &Path) -> Result<Option<String>, StoreError> {
+        self.check()?;
+        let workspaces = self.workspaces.lock().unwrap();
+        Ok(workspaces.get(dir).map(|(snapshot, _)| snapshot.clone()))
+    }
+
+    fn save_workspace(&self, dir: &Path, snapshot: &str, saved_at: i64) -> Result<(), StoreError> {
+        self.check()?;
+        let entry = (snapshot.to_string(), saved_at);
+        self.workspaces
+            .lock()
+            .unwrap()
+            .insert(dir.to_path_buf(), entry);
+        Ok(())
     }
 }

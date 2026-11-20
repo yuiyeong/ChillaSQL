@@ -7,6 +7,7 @@ import type {
   EndResult,
   Project,
   QueryEvent,
+  RecentProject,
   ServerInfo,
   Settings,
   Session,
@@ -168,4 +169,18 @@ export function quitApp(): Promise<void> {
 /** 앱을 시작할 때 읽은 전역 설정. 파일을 고쳐도 앱을 다시 시작해야 바뀐다. */
 export function loadSettings(): Promise<Settings> {
   return call("load_settings");
+}
+
+/** 최근에 연 프로젝트. 최근 것부터 최대 10개다. */
+export function recentProjects(): Promise<RecentProject[]> {
+  return call("recent_projects");
+}
+
+/** 열린 프로젝트의 탭 snapshot(화면이 만든 JSON text). 저장한 적이 없으면 null이다. */
+export function loadWorkspace(): Promise<string | null> {
+  return call("load_workspace");
+}
+
+export function saveWorkspace(snapshot: string): Promise<void> {
+  return call("save_workspace", { snapshot });
 }

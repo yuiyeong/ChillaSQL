@@ -5,6 +5,7 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use tokio::sync::{Mutex, OwnedMutexGuard};
 use tokio::task::JoinSet;
@@ -12,9 +13,9 @@ use tokio::task::JoinSet;
 use super::session_actor::{self, QuerySink, SessionHandle};
 use super::tunnels::{TunnelError, TunnelLease, TunnelSink, Tunnels};
 use super::{
-    CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey, PasswordStore,
-    PasswordStoreError, ProjectError, ProjectStore, QueryError, SplitError, SqlFileStore,
-    StatementInspector, StatementSplitter, TunnelRunner,
+    AppStore, CancelError, ConnectError, Connector, DbConnection, FileError, PasswordKey,
+    PasswordStore, PasswordStoreError, ProjectError, ProjectStore, QueryError, RecentProject,
+    SplitError, SqlFileStore, StatementInspector, StatementSplitter, StoreError, TunnelRunner,
 };
 use crate::domain::{
     Catalog, ConnectionProfile, Danger, EndResult, FileStamp, Password, ProfileError, Project,
@@ -65,6 +66,10 @@ pub enum AppError {
     InvalidPath(#[from] SqlPathError),
     #[error("Could not read the schema: {0}")]
     Catalog(QueryError),
+    #[error(transparent)]
+    Store(#[from] StoreError),
+    #[error("The app database could not be opened, so recent projects and tabs are not kept")]
+    StoreUnavailable,
 }
 
 pub struct App<C: Connector, T: TunnelRunner> {
@@ -82,6 +87,8 @@ pub struct App<C: Connector, T: TunnelRunner> {
     save_lock: Mutex<()>,
     /// 세션이 결과를 나눠 보내고 닫는 한도. 설정 파일에서 온다.
     limits: QueryLimits,
+    /// 최근 프로젝트와 탭 snapshot. 저장소 파일을 열지 못했으면 `None`이다.
+    store: Option<Arc<dyn AppStore>>,
 }
 
 /// 스키마 트리와 자동완성의 catalog를 읽는 연결. 탭 세션과 따로 열고, 같은 접속의 터널을 함께 쓴다.
@@ -124,6 +131,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         runner: T,
         on_tunnel: TunnelSink,
         limits: QueryLimits,
+        store: Option<Arc<dyn AppStore>>,
     ) -> Self {
         Self {
             projects,
@@ -137,6 +145,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             catalogs: Mutex::new(HashMap::new()),
             save_lock: Mutex::new(()),
             limits,
+            store,
         }
     }
 
@@ -147,6 +156,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         let dir = dir.to_path_buf();
         let project = blocking(move || projects.load(&dir)).await?;
         self.switch_project(project.clone()).await;
+        self.record_recent(&project).await;
         Ok(project)
     }
 
@@ -157,7 +167,48 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         let dir = dir.to_path_buf();
         let project = blocking(move || projects.create(&dir)).await?;
         self.switch_project(project.clone()).await;
+        self.record_recent(&project).await;
         Ok(project)
+    }
+
+    /// 연 프로젝트를 최근 목록에 올린다. 기록하지 못해도 프로젝트는 열린 채로 둔다.
+    async fn record_recent(&self, project: &Project) {
+        let Some(store) = self.store.clone() else {
+            return;
+        };
+        let recent = RecentProject {
+            dir: project.dir.clone(),
+            name: project.name.clone(),
+            opened_at: unix_now(),
+        };
+        if let Err(error) = blocking(move || store.record_project(&recent)).await {
+            eprintln!("최근 프로젝트를 기록하지 못했다: {error}");
+        }
+    }
+
+    /// 최근에 연 프로젝트. 최근 것부터 최대 10개다.
+    pub async fn recent_projects(&self) -> Result<Vec<RecentProject>, AppError> {
+        let store = self.store()?;
+        Ok(blocking(move || store.recent_projects()).await?)
+    }
+
+    /// 열린 프로젝트의 탭 snapshot. 저장한 적이 없으면 `None`이다.
+    pub async fn load_workspace(&self) -> Result<Option<String>, AppError> {
+        let store = self.store()?;
+        let dir = self.project_dir().await?;
+        Ok(blocking(move || store.load_workspace(&dir)).await?)
+    }
+
+    /// 열린 프로젝트의 탭 snapshot을 덮어쓴다. 내용은 화면이 정하고 여기서는 열어 보지 않는다.
+    pub async fn save_workspace(&self, snapshot: String) -> Result<(), AppError> {
+        let store = self.store()?;
+        let dir = self.project_dir().await?;
+        let saved_at = unix_now();
+        Ok(blocking(move || store.save_workspace(&dir, &snapshot, saved_at)).await?)
+    }
+
+    fn store(&self) -> Result<Arc<dyn AppStore>, AppError> {
+        self.store.clone().ok_or(AppError::StoreUnavailable)
     }
 
     /// 열려 있던 프로젝트의 세션을 모두 닫고 `project`로 바꾼다. 세션이 생기기 전이라 lease를 쥔
@@ -718,7 +769,14 @@ fn password_key(project: &Project, connection: &str) -> PasswordKey {
     }
 }
 
-/// 파일과 키체인 호출은 blocking이다 (키체인은 확인 창이 떠 있는 동안 돌아오지 않는다).
+/// 지금 시각(Unix 초). 시계가 1970년 앞이면 0이다.
+fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_secs() as i64)
+}
+
+/// 파일과 키체인과 SQLite 호출은 blocking이다 (키체인은 확인 창이 떠 있는 동안 돌아오지 않는다).
 async fn blocking<T, E, F>(call: F) -> Result<T, E>
 where
     F: FnOnce() -> Result<T, E> + Send + 'static,
@@ -743,7 +801,7 @@ mod tests {
     use super::*;
     use crate::application::test_support::{
         FakeConnector, FakeFiles, FakeInspector, FakePasswords, FakeProjects, FakeRun, FakeRunner,
-        FakeSplitter, events_sink, next, profile, sink,
+        FakeSplitter, FakeStore, events_sink, next, profile, sink,
     };
     use crate::application::{
         CancelError, PasswordKey, PasswordStore, ProjectError, QueryError, SplitError, TunnelError,
@@ -761,6 +819,7 @@ mod tests {
         projects: Arc<FakeProjects>,
         passwords: Arc<FakePasswords>,
         files: Arc<FakeFiles>,
+        store: Arc<FakeStore>,
         runner: FakeRunner,
         tunnel_events: Arc<std::sync::Mutex<Vec<TunnelEvent>>>,
     }
@@ -776,6 +835,7 @@ mod tests {
         projects.add("/q", &["local"]);
         let passwords = Arc::new(FakePasswords::default());
         let files = Arc::new(FakeFiles::default());
+        let store = Arc::new(FakeStore::default());
         let connector = FakeConnector::default();
         let runner = FakeRunner::default();
         let (tunnel_sink, tunnel_events) = events_sink();
@@ -790,11 +850,13 @@ mod tests {
                 runner.clone(),
                 tunnel_sink,
                 limits,
+                Some(store.clone()),
             ),
             connector,
             projects,
             passwords,
             files,
+            store,
             runner,
             tunnel_events,
         }
@@ -2104,6 +2166,119 @@ mod tests {
             Err(AppError::UnknownConnection {
                 name: "nope".into()
             })
+        );
+    }
+
+    #[tokio::test]
+    async fn opening_a_project_records_it() {
+        let f = fixture();
+        f.app.open_project(Path::new("/p")).await.unwrap();
+        f.app.create_project(Path::new("/new")).await.unwrap();
+
+        let recent = f.app.recent_projects().await.unwrap();
+
+        let dirs: Vec<_> = recent.iter().map(|r| r.dir.to_str().unwrap()).collect();
+        assert_eq!(dirs, ["/new", "/p"]);
+        assert_eq!(recent[0].name, "new");
+        assert!(recent[0].opened_at > 1_700_000_000, "Unix 초다");
+    }
+
+    #[tokio::test]
+    async fn a_failed_open_does_not_record_it() {
+        let f = fixture();
+
+        assert!(f.app.open_project(Path::new("/nope")).await.is_err());
+        assert!(f.app.create_project(Path::new("/p")).await.is_err());
+
+        assert_eq!(f.app.recent_projects().await, Ok(Vec::new()));
+    }
+
+    #[tokio::test]
+    async fn a_failed_record_does_not_fail_the_open() {
+        let f = fixture();
+        f.store.fail(true);
+
+        let project = f.app.open_project(Path::new("/p")).await.unwrap();
+        let created = f.app.create_project(Path::new("/new")).await.unwrap();
+
+        assert_eq!((project.name.as_str(), created.name.as_str()), ("p", "new"));
+        f.store.fail(false);
+        assert_eq!(f.app.recent_projects().await, Ok(Vec::new()));
+    }
+
+    #[tokio::test]
+    async fn workspace_is_saved_and_loaded_for_the_open_project() {
+        let f = opened().await;
+        assert_eq!(f.app.load_workspace().await, Ok(None));
+
+        f.app.save_workspace("{\"tabs\":[]}".into()).await.unwrap();
+
+        assert_eq!(
+            f.app.load_workspace().await,
+            Ok(Some("{\"tabs\":[]}".into()))
+        );
+        let (snapshot, saved_at) = f.store.workspace("/p").unwrap();
+        assert_eq!(snapshot, "{\"tabs\":[]}");
+        assert!(saved_at > 1_700_000_000, "Unix 초다");
+        f.app.open_project(Path::new("/q")).await.unwrap();
+        assert_eq!(f.app.load_workspace().await, Ok(None));
+    }
+
+    #[tokio::test]
+    async fn save_workspace_needs_a_project() {
+        let f = fixture();
+        assert_eq!(
+            f.app.save_workspace("{}".into()).await,
+            Err(AppError::NoProject)
+        );
+        assert_eq!(f.app.load_workspace().await, Err(AppError::NoProject));
+        assert!(f.store.workspace("/p").is_none());
+    }
+
+    #[tokio::test]
+    async fn store_failures_reach_the_caller() {
+        let f = opened().await;
+        f.store.fail(true);
+
+        assert!(matches!(
+            f.app.recent_projects().await,
+            Err(AppError::Store(_))
+        ));
+        assert!(matches!(
+            f.app.load_workspace().await,
+            Err(AppError::Store(_))
+        ));
+        assert!(matches!(
+            f.app.save_workspace("{}".into()).await,
+            Err(AppError::Store(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn without_a_store_the_store_calls_fail_but_projects_open() {
+        let projects = Arc::new(FakeProjects::default());
+        projects.add("/p", &["local"]);
+        let (tunnel_sink, _events) = events_sink();
+        let app = App::new(
+            projects,
+            Arc::new(FakePasswords::default()),
+            Arc::new(FakeSplitter),
+            Arc::new(FakeInspector),
+            Arc::new(FakeFiles::default()),
+            FakeConnector::default(),
+            FakeRunner::default(),
+            tunnel_sink,
+            QueryLimits::default(),
+            None,
+        );
+
+        app.open_project(Path::new("/p")).await.unwrap();
+
+        assert_eq!(app.recent_projects().await, Err(AppError::StoreUnavailable));
+        assert_eq!(app.load_workspace().await, Err(AppError::StoreUnavailable));
+        assert_eq!(
+            app.save_workspace("{}".into()).await,
+            Err(AppError::StoreUnavailable)
         );
     }
 }

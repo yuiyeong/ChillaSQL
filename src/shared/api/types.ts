@@ -217,4 +217,14 @@ export interface Settings {
   /** 받다 만 결과를 닫는 초 */
   idleTimeoutSecs: number;
   error: string | null;
+  /** 앱 내부 저장소를 열지 못한 이유. 있으면 최근 프로젝트와 탭 복원이 없다. */
+  storeError: string | null;
+}
+
+/** 최근에 연 프로젝트. */
+export interface RecentProject {
+  dir: string;
+  name: string;
+  /** Unix 초 */
+  openedAt: number;
 }

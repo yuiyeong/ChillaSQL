@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use chilla_core::application::{App, AppError, ServerInfo};
+use chilla_core::application::{App, AppError, RecentProject, ServerInfo};
 use chilla_core::domain::{
     Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo, ConstraintKind, Danger,
     EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, Password, ProfileError, Project,
@@ -982,6 +982,8 @@ pub async fn cancel_query(
 pub struct LoadedSettings {
     pub settings: Settings,
     pub error: Option<SettingsError>,
+    /// 앱 내부 저장소(`chilla.sqlite3`)를 열지 못한 이유. 열었으면 `None`이다.
+    pub store_error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -991,6 +993,7 @@ pub struct SettingsDto {
     pub editor: EditorSettingsDto,
     pub idle_timeout_secs: u64,
     pub error: Option<String>,
+    pub store_error: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -1014,6 +1017,7 @@ impl From<&LoadedSettings> for SettingsDto {
             },
             idle_timeout_secs: settings.limits.idle_result_timeout.as_secs(),
             error: loaded.error.as_ref().map(ToString::to_string),
+            store_error: loaded.store_error.clone(),
         }
     }
 }
@@ -1022,6 +1026,43 @@ impl From<&LoadedSettings> for SettingsDto {
 #[tauri::command]
 pub fn load_settings(settings: State<'_, LoadedSettings>) -> SettingsDto {
     SettingsDto::from(&*settings)
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentProjectDto {
+    pub dir: String,
+    pub name: String,
+    /// Unix 초
+    pub opened_at: i64,
+}
+
+impl From<RecentProject> for RecentProjectDto {
+    fn from(project: RecentProject) -> Self {
+        Self {
+            dir: project.dir.display().to_string(),
+            name: project.name,
+            opened_at: project.opened_at,
+        }
+    }
+}
+
+/// 최근에 연 프로젝트. 최근 것부터 최대 10개다.
+#[tauri::command]
+pub async fn recent_projects(app: State<'_, CoreApp>) -> CommandResult<Vec<RecentProjectDto>> {
+    let projects = app.recent_projects().await?;
+    Ok(projects.into_iter().map(Into::into).collect())
+}
+
+/// 열린 프로젝트의 탭 snapshot(화면이 만든 JSON text). 저장한 적이 없으면 `None`이다.
+#[tauri::command]
+pub async fn load_workspace(app: State<'_, CoreApp>) -> CommandResult<Option<String>> {
+    Ok(app.load_workspace().await?)
+}
+
+#[tauri::command]
+pub async fn save_workspace(app: State<'_, CoreApp>, snapshot: String) -> CommandResult<()> {
+    Ok(app.save_workspace(snapshot).await?)
 }
 
 /// 화면이 확인을 마친 뒤 앱을 끝낸다. `RunEvent::Exit`의 `shutdown`이 세션을 닫고,
@@ -1108,6 +1149,7 @@ mod tests {
                 path: "/h/config.toml".into(),
                 message: "unknown field `fontsize`".into(),
             }),
+            store_error: Some("file is not a database".into()),
         };
         assert_eq!(
             serde_json::to_value(SettingsDto::from(&loaded)).unwrap(),
@@ -1116,6 +1158,7 @@ mod tests {
                 "editor": { "font": "D2Coding", "fontSize": 15 },
                 "idleTimeoutSecs": 600,
                 "error": "/h/config.toml: unknown field `fontsize`",
+                "storeError": "file is not a database",
             })
         );
     }

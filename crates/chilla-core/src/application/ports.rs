@@ -285,3 +285,30 @@ pub trait StatementInspector: Send + Sync {
 pub struct SplitError {
     pub message: String,
 }
+
+/// 최근에 연 프로젝트 하나.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RecentProject {
+    pub dir: PathBuf,
+    pub name: String,
+    /// Unix 초
+    pub opened_at: i64,
+}
+
+/// 앱 내부 저장소. 최근 프로젝트와 프로젝트별 탭 snapshot을 둔다. 프로젝트 디렉토리 밖의,
+/// 사용자가 읽지 않는 상태다.
+pub trait AppStore: Send + Sync {
+    /// 최근 것부터 최대 10개.
+    fn recent_projects(&self) -> Result<Vec<RecentProject>, StoreError>;
+    /// 있으면 시각을 바꾸고, 10개를 넘으면 오래된 것을 지운다.
+    fn record_project(&self, project: &RecentProject) -> Result<(), StoreError>;
+    /// `dir` 프로젝트의 탭 snapshot. 화면이 만든 JSON text이고 여기서는 열어 보지 않는다.
+    fn load_workspace(&self, dir: &Path) -> Result<Option<String>, StoreError>;
+    fn save_workspace(&self, dir: &Path, snapshot: &str, saved_at: i64) -> Result<(), StoreError>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("Could not use the app database: {message}")]
+pub struct StoreError {
+    pub message: String,
+}

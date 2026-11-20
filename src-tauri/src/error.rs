@@ -33,6 +33,8 @@ impl From<AppError> for CommandError {
             AppError::Cancel(_) => "cancel_failed",
             AppError::InvalidPath(_) => "invalid_path",
             AppError::Catalog(_) => "catalog_failed",
+            AppError::Store(_) => "store_failed",
+            AppError::StoreUnavailable => "store_unavailable",
             AppError::File(file) => match file {
                 FileError::NotFound { .. } => "file_not_found",
                 FileError::Exists { .. } => "file_exists",
@@ -78,7 +80,7 @@ mod tests {
 
     use chilla_core::application::{
         CancelError, ConnectError, FileError, PasswordStoreError, ProjectError, QueryError,
-        SplitError, TunnelError,
+        SplitError, StoreError, TunnelError,
     };
     use chilla_core::domain::{ProfileError, QueryId, SessionId, SqlPathError, TunnelFailure};
 
@@ -110,6 +112,14 @@ mod tests {
                 AppError::UnknownSession { id: SessionId(1) },
                 "unknown_session",
             ),
+            (
+                StoreError {
+                    message: message.clone(),
+                }
+                .into(),
+                "store_failed",
+            ),
+            (AppError::StoreUnavailable, "store_unavailable"),
             (
                 SplitError {
                     message: message.clone(),

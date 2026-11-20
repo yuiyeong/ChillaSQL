@@ -18,6 +18,9 @@ import {
   hasPassword,
   inspectStatement,
   listSqlFiles,
+  loadWorkspace,
+  recentProjects,
+  saveWorkspace,
   openProject,
   openSession,
   readSqlFile,
@@ -237,4 +240,18 @@ test("quitApp은 인자 없이 quit_app을 부른다", async () => {
 test("loadSettings는 인자 없이 load_settings를 부른다", async () => {
   await loadSettings();
   expect(invokeMock).toHaveBeenLastCalledWith("load_settings");
+});
+
+test("recentProjects와 loadWorkspace는 인자 없이 부른다", async () => {
+  await recentProjects();
+  expect(invokeMock).toHaveBeenLastCalledWith("recent_projects");
+  await loadWorkspace();
+  expect(invokeMock).toHaveBeenLastCalledWith("load_workspace");
+});
+
+test("saveWorkspace는 snapshot text를 그대로 보낸다", async () => {
+  await saveWorkspace('{"tabs":[]}');
+  expect(invokeMock).toHaveBeenLastCalledWith("save_workspace", {
+    snapshot: '{"tabs":[]}',
+  });
 });
