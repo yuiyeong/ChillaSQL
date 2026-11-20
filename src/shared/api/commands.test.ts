@@ -33,6 +33,7 @@ import {
   writeSqlFile,
   cancelTunnel,
   closeCatalog,
+  describeTables,
   describeTypes,
   loadCatalog,
   loadDdl,
@@ -111,6 +112,12 @@ test("command 이름과 인자 key를 그대로 보낸다", async () => {
   expect(invokeMock).toHaveBeenLastCalledWith("describe_types", {
     connection: "local",
     types: [{ oid: 1043, modifier: 259 }],
+  });
+
+  await describeTables("local", [16385, 16390]);
+  expect(invokeMock).toHaveBeenLastCalledWith("describe_tables", {
+    connection: "local",
+    oids: [16385, 16390],
   });
 
   await closeCatalog("local");

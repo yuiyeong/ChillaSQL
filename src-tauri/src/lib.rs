@@ -104,6 +104,7 @@ pub fn run() {
             commands::load_table_details,
             commands::load_ddl,
             commands::describe_types,
+            commands::describe_tables,
             commands::close_catalog,
             commands::split_statements,
             commands::find_parameters,

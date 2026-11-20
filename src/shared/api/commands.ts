@@ -4,6 +4,7 @@ import type {
   Catalog,
   Connection,
   Danger,
+  EditTable,
   EndResult,
   Project,
   QueryEvent,
@@ -99,6 +100,17 @@ export function describeTypes(
   types: { oid: number; modifier: number }[],
 ): Promise<TypeInfo[]> {
   return call("describe_types", { connection, types });
+}
+
+/**
+ * 결과 열의 table OID마다 이름, 종류, 컬럼(attnum, PK, 고칠 수 있는지)을 그 접속의 catalog 연결이
+ * 답한다. 없는 OID와 table이 아닌 relation(인덱스, sequence 등)은 답에 없다.
+ */
+export function describeTables(
+  connection: string,
+  oids: number[],
+): Promise<EditTable[]> {
+  return call("describe_tables", { connection, oids });
 }
 
 /** 그 접속의 catalog 연결을 닫는다. 그 접속을 쓰는 탭이 없어졌을 때 부른다. */

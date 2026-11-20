@@ -4,8 +4,8 @@ use std::future::Future;
 use std::path::{Path, PathBuf};
 
 use crate::domain::{
-    Catalog, Column, ConnectionProfile, Danger, EndOutcome, FileStamp, ParameterSpan, Password,
-    ProfileError, Project, QueryOutcome, RelationDdl, Row, ServerError, SqlFile, SqlPath,
+    Catalog, Column, ConnectionProfile, Danger, EditTable, EndOutcome, FileStamp, ParameterSpan,
+    Password, ProfileError, Project, QueryOutcome, RelationDdl, Row, ServerError, SqlFile, SqlPath,
     StatementSpan, TableDetails, TxStatus, TypeInfo, WriteMode,
 };
 
@@ -149,6 +149,12 @@ pub trait DbConnection: Send + Sync + 'static {
         &self,
         types: &[(u32, i32)],
     ) -> impl Future<Output = Result<Vec<TypeInfo>, QueryError>> + Send;
+    /// table OID마다 이름, 종류, 컬럼(attnum, PK, 고칠 수 있는지). 없는 OID와 `RelationKind`에 없는
+    /// relkind(인덱스, sequence 등)는 결과에 없다. 연결이 끊겨 있으면 `ConnectionLost`다.
+    fn describe_tables(
+        &self,
+        oids: &[u32],
+    ) -> impl Future<Output = Result<Vec<EditTable>, QueryError>> + Send;
     /// 이 연결에서 실행 중인 쿼리를 멈추는 요청. 연결과 따로 살아서 다른 task에서 쓸 수 있다.
     fn cancel_handle(&self) -> Self::Cancel;
     /// 서버가 세션을 끝낼 때까지 기다린다. 실행 중인 쿼리가 있으면 끝날 때까지 기다리지 않는다.

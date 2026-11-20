@@ -5,7 +5,8 @@ mod support;
 
 use chilla_core::application::DbConnection;
 use chilla_core::domain::{
-    CatalogColumn, ConstraintKind, FunctionName, Relation, RelationKind, TableDetails, TypeInfo,
+    CatalogColumn, ConstraintKind, EditTable, FunctionName, Relation, RelationKind, TableDetails,
+    TypeInfo,
 };
 use support::{admin, connect};
 
@@ -271,4 +272,139 @@ async fn describe_types_of_a_domain_and_enum() {
             type_info(positive, -1, "m8_types_a.positive", 'N'),
         ]
     );
+}
+
+/// M10 셀 편집 test가 함께 쓰는 schema. 읽기만 하는 test들이 한 번 만든 것을 같이 본다.
+const EDIT_SCHEMA: &str = "m10_edit";
+
+/// `m10_edit`를 만들고 `name`의 OID를 돌려준다. `users`는 attnum이 1 2 4 5 6이다(3번을 지웠다).
+async fn edit_fixture() -> std::collections::HashMap<String, u32> {
+    reset_schema(
+        EDIT_SCHEMA,
+        r#"
+        CREATE TABLE users (
+            id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+            email text NOT NULL,
+            dropped text,
+            name text,
+            doubled int GENERATED ALWAYS AS (length(email) * 2) STORED,
+            note text
+        );
+        ALTER TABLE users DROP COLUMN dropped;
+        CREATE TABLE orders (id int PRIMARY KEY, user_id int);
+        CREATE TABLE nopk (a int, b text);
+        CREATE TABLE parted (id int, k int, v text, PRIMARY KEY (id, k)) PARTITION BY RANGE (id);
+        CREATE TABLE parted_1 PARTITION OF parted FOR VALUES FROM (0) TO (100);
+        CREATE VIEW users_v AS SELECT id, email FROM users;
+        CREATE MATERIALIZED VIEW users_mv AS SELECT id, email FROM users;
+        CREATE TABLE "Order Items" (id int PRIMARY KEY, "Note" text);
+        "#,
+    )
+    .await;
+    let rows = admin()
+        .await
+        .query(
+            "SELECT c.relname::text, c.oid FROM pg_class c \
+             JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1",
+            &[&EDIT_SCHEMA],
+        )
+        .await
+        .unwrap();
+    rows.iter().map(|r| (r.get(0), r.get(1))).collect()
+}
+
+async fn describe(oids: &[u32]) -> Vec<EditTable> {
+    connect().await.describe_tables(oids).await.unwrap()
+}
+
+fn table(tables: &[EditTable], oid: u32) -> &EditTable {
+    tables.iter().find(|t| t.oid == oid).unwrap()
+}
+
+async fn drop_edit_schema() {
+    admin()
+        .await
+        .batch_execute(&format!("DROP SCHEMA IF EXISTS {EDIT_SCHEMA} CASCADE"))
+        .await
+        .unwrap();
+}
+
+// `m10_edit`를 쓰는 test는 한 test 함수에 모아 순서대로 돌린다. cargo test가 병렬로 돌려도
+// schema를 다시 만드는 사이에 다른 test가 읽지 않는다.
+#[tokio::test]
+async fn describe_tables_reads_edit_columns() {
+    let oids = edit_fixture().await;
+
+    // describes_columns_by_number
+    let tables = describe(&[oids["users"]]).await;
+    let users = table(&tables, oids["users"]);
+    assert_eq!(users.name, "users");
+    assert_eq!(users.qualified_name, "m10_edit.users");
+    assert_eq!(users.kind, RelationKind::Table);
+    let summary: Vec<(i16, &str, bool, bool)> = users
+        .columns
+        .iter()
+        .map(|c| (c.number, c.name.as_str(), c.primary_key, c.updatable))
+        .collect();
+    assert_eq!(
+        summary,
+        vec![
+            (1, "id", true, false),
+            (2, "email", false, true),
+            (4, "name", false, true),
+            (5, "doubled", false, false),
+            (6, "note", false, true),
+        ]
+    );
+
+    // composite_primary_key
+    let tables = describe(&[oids["parted"], oids["parted_1"]]).await;
+    let parted = table(&tables, oids["parted"]);
+    assert_eq!(parted.kind, RelationKind::PartitionedTable);
+    let keys: Vec<(&str, bool)> = parted
+        .columns
+        .iter()
+        .map(|c| (c.name.as_str(), c.primary_key))
+        .collect();
+    assert_eq!(keys, vec![("id", true), ("k", true), ("v", false)]);
+    let part = table(&tables, oids["parted_1"]);
+    assert_eq!(part.kind, RelationKind::Table);
+    assert!(part.columns[0].primary_key && part.columns[1].primary_key);
+    assert!(!part.columns[2].primary_key);
+
+    // kinds_and_quoted_names
+    let tables = describe(&[oids["users_v"], oids["users_mv"], oids["Order Items"]]).await;
+    assert_eq!(table(&tables, oids["users_v"]).kind, RelationKind::View);
+    assert_eq!(
+        table(&tables, oids["users_mv"]).kind,
+        RelationKind::MaterializedView
+    );
+    let items = table(&tables, oids["Order Items"]);
+    assert_eq!(items.qualified_name, "m10_edit.\"Order Items\"");
+    assert_eq!(items.name, "Order Items");
+    assert_eq!(items.columns[1].name, "Note");
+    assert_eq!(items.columns[1].quoted_name, "\"Note\"");
+    assert_eq!(items.columns[0].quoted_name, "id");
+
+    // unknown_oids_are_left_out: 인덱스(`users_pkey`)와 없는 OID는 빠진다.
+    let index = admin()
+        .await
+        .query_one("SELECT 'm10_edit.users_pkey'::regclass::oid", &[])
+        .await
+        .unwrap()
+        .get::<_, u32>(0);
+    let tables = describe(&[4_000_000_000, index, oids["orders"], 0]).await;
+    assert_eq!(
+        tables.iter().map(|t| t.oid).collect::<Vec<_>>(),
+        vec![oids["orders"]]
+    );
+    assert_eq!(describe(&[]).await, vec![]);
+
+    // table_without_primary_key
+    let tables = describe(&[oids["nopk"]]).await;
+    let nopk = table(&tables, oids["nopk"]);
+    assert_eq!(nopk.columns.len(), 2);
+    assert!(nopk.columns.iter().all(|c| !c.primary_key && c.updatable));
+
+    drop_edit_schema().await;
 }

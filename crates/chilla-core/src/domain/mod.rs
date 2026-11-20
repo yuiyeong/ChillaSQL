@@ -4,6 +4,7 @@ mod catalog;
 mod connection;
 mod danger;
 mod ddl;
+mod edit;
 mod password;
 mod project;
 mod query;
@@ -24,6 +25,7 @@ pub use danger::Danger;
 pub use ddl::{
     DdlColumn, DdlConstraint, Generated, Identity, PartitionOf, RelationDdl, render_ddl,
 };
+pub use edit::{EditColumn, EditTable};
 pub use password::Password;
 pub use project::Project;
 pub use query::{

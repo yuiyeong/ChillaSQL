@@ -1,5 +1,6 @@
 //! 스키마 트리와 자동완성의 catalog를 읽는 SQL. PostgreSQL 11 이상을 가정한다(`prokind`).
 //! DDL 읽기(`read_ddl`)만 PostgreSQL 13 이상이다(`attgenerated`는 12, `tgparentid`는 13부터 있다).
+//! 셀 편집 정보(`describe_tables`)는 12 이상이다(`attgenerated`).
 
 use tokio_postgres::Client;
 use tokio_postgres::types::ToSql;
@@ -7,9 +8,9 @@ use tokio_postgres::types::ToSql;
 use super::query_error;
 use crate::application::QueryError;
 use crate::domain::{
-    Catalog, CatalogColumn, ConstraintInfo, ConstraintKind, DdlColumn, DdlConstraint, FunctionName,
-    Generated, Identity, IndexInfo, PartitionOf, Relation, RelationDdl, RelationKind, TableDetails,
-    TypeInfo,
+    Catalog, CatalogColumn, ConstraintInfo, ConstraintKind, DdlColumn, DdlConstraint, EditColumn,
+    EditTable, FunctionName, Generated, Identity, IndexInfo, PartitionOf, Relation, RelationDdl,
+    RelationKind, TableDetails, TypeInfo,
 };
 
 /// 트리와 테이블 자동완성에서 빼는 schema. `alias`는 `pg_namespace`의 별칭이다.
@@ -76,6 +77,30 @@ const SEARCH_PATH_SQL: &str =
     "SELECT s::text FROM unnest(current_schemas(false)) WITH ORDINALITY AS t(s, i) ORDER BY i";
 
 const RESERVED_SQL: &str = "SELECT word FROM pg_get_keywords() WHERE catcode <> 'U' ORDER BY word";
+
+/// 셀 편집이 쓰는 relation 정보. relation마다 한 줄이고 컬럼은 attnum 순의 배열 다섯 개(attnum, 이름,
+/// `quote_ident` 이름, pk, 고칠 수 있는지)다. 없는 OID와 relkind가 `r p f v m`이 아닌 것은 없다.
+/// `attgenerated`가 있어 PostgreSQL 12 이상이다.
+const EDIT_TABLES_SQL: &str = "\
+    SELECT c.oid, quote_ident(n.nspname) || '.' || quote_ident(c.relname), c.relname::text, \
+           c.relkind::text, \
+           COALESCE(array_agg(a.attnum ORDER BY a.attnum) \
+               FILTER (WHERE a.attnum IS NOT NULL), '{}'), \
+           COALESCE(array_agg(a.attname::text ORDER BY a.attnum) \
+               FILTER (WHERE a.attnum IS NOT NULL), '{}'), \
+           COALESCE(array_agg(quote_ident(a.attname) ORDER BY a.attnum) \
+               FILTER (WHERE a.attnum IS NOT NULL), '{}'), \
+           COALESCE(array_agg(COALESCE(a.attnum = ANY (i.indkey), false) ORDER BY a.attnum) \
+               FILTER (WHERE a.attnum IS NOT NULL), '{}'), \
+           COALESCE(array_agg(a.attgenerated = '' AND a.attidentity <> 'a' ORDER BY a.attnum) \
+               FILTER (WHERE a.attnum IS NOT NULL), '{}') \
+    FROM pg_class c \
+    JOIN pg_namespace n ON n.oid = c.relnamespace \
+    LEFT JOIN pg_attribute a ON a.attrelid = c.oid AND a.attnum > 0 AND NOT a.attisdropped \
+    LEFT JOIN pg_index i ON i.indrelid = c.oid AND i.indisprimary \
+    WHERE c.oid = ANY ($1) AND c.relkind IN ('r', 'p', 'f', 'v', 'm') \
+    GROUP BY c.oid, n.nspname, c.relname, c.relkind \
+    ORDER BY c.oid";
 
 const INDEXES_SQL: &str = "\
     SELECT ic.relname::text, pg_get_indexdef(i.indexrelid), i.indisunique, i.indisprimary \
@@ -397,6 +422,51 @@ pub(super) async fn describe_types(
                 modifier: row.get(1),
                 name: row.get(2),
                 category: char::from(category as u8),
+            }
+        })
+        .collect())
+}
+
+pub(super) async fn describe_tables(
+    client: &Client,
+    oids: &[u32],
+) -> Result<Vec<EditTable>, QueryError> {
+    if oids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let params: [&(dyn ToSql + Sync); 1] = [&oids];
+    let rows = query(client, EDIT_TABLES_SQL, &params).await?;
+    Ok(rows
+        .iter()
+        .map(|row| {
+            let kind: String = row.get(3);
+            let numbers: Vec<i16> = row.get(4);
+            let names: Vec<String> = row.get(5);
+            let quoted_names: Vec<String> = row.get(6);
+            let primary_keys: Vec<bool> = row.get(7);
+            let updatable: Vec<bool> = row.get(8);
+            let columns = numbers
+                .into_iter()
+                .zip(names)
+                .zip(quoted_names)
+                .zip(primary_keys)
+                .zip(updatable)
+                .map(
+                    |((((number, name), quoted_name), primary_key), updatable)| EditColumn {
+                        number,
+                        name,
+                        quoted_name,
+                        primary_key,
+                        updatable,
+                    },
+                )
+                .collect();
+            EditTable {
+                oid: row.get(0),
+                qualified_name: row.get(1),
+                name: row.get(2),
+                kind: relation_kind(&kind),
+                columns,
             }
         })
         .collect())

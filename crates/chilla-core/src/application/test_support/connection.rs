@@ -10,7 +10,7 @@ use tokio::sync::{OwnedRwLockWriteGuard, RwLock, watch};
 use super::numbered;
 use crate::application::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
 use crate::domain::{
-    Catalog, Column, RelationDdl, Row, ServerError, TableDetails, TxStatus, TypeInfo,
+    Catalog, Column, EditTable, RelationDdl, Row, ServerError, TableDetails, TxStatus, TypeInfo,
 };
 
 /// 가짜 연결 하나를 test가 밖에서 보고 조작하는 손잡이.
@@ -138,7 +138,10 @@ pub(crate) struct FakeCatalog {
     pub(crate) ddls: HashMap<u32, RelationDdl>,
     /// `describe_types`가 아는 type.
     pub(crate) types: Vec<TypeInfo>,
-    /// 다음 읽기(`read_catalog`, `read_table_details`, `read_ddl`, `describe_types`)들이 차례로
+    /// `describe_tables`가 아는 table.
+    pub(crate) tables: Vec<EditTable>,
+    /// 다음 읽기(`read_catalog`, `read_table_details`, `read_ddl`, `describe_types`,
+    /// `describe_tables`)들이 차례로
     /// 돌려줄 오류.
     pub(crate) failures: VecDeque<QueryError>,
     /// `read_catalog`가 불린 횟수.
@@ -472,6 +475,19 @@ impl DbConnection for FakeConnection {
                         .find(|info| info.oid == oid && info.modifier == modifier)
                         .cloned()
                 })
+                .collect()),
+        }
+    }
+
+    async fn describe_tables(&self, oids: &[u32]) -> Result<Vec<EditTable>, QueryError> {
+        let mut catalog = self.catalog.lock().unwrap();
+        match self.catalog_failure(&mut catalog) {
+            Some(error) => Err(error),
+            None => Ok(catalog
+                .tables
+                .iter()
+                .filter(|table| oids.contains(&table.oid))
+                .cloned()
                 .collect()),
         }
     }

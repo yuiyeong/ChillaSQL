@@ -12,7 +12,7 @@ use chilla_core::application::{
 };
 use chilla_core::domain::{
     Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo, ConstraintKind, Danger,
-    EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, ParameterSpan, Password,
+    EditTable, EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, ParameterSpan, Password,
     ProfileError, Project, QueryEvent, QueryId, QueryOutcome, Relation, RelationKind, RowBatch,
     ServerError, SessionId, SessionInfo, SessionState, Settings, SettingsError, SqlFile,
     StatementSpan, TableDetails, TunnelEvent, TunnelFailure, TunnelState, TxEnd, TxMode, TxStatus,
@@ -348,19 +348,25 @@ impl From<Catalog> for CatalogDto {
     }
 }
 
+impl From<RelationKind> for RelationKindDto {
+    fn from(kind: RelationKind) -> Self {
+        match kind {
+            RelationKind::Table => Self::Table,
+            RelationKind::PartitionedTable => Self::PartitionedTable,
+            RelationKind::ForeignTable => Self::ForeignTable,
+            RelationKind::View => Self::View,
+            RelationKind::MaterializedView => Self::MaterializedView,
+        }
+    }
+}
+
 impl From<Relation> for RelationDto {
     fn from(relation: Relation) -> Self {
         Self {
             oid: relation.oid,
             schema: relation.schema,
             name: relation.name,
-            kind: match relation.kind {
-                RelationKind::Table => RelationKindDto::Table,
-                RelationKind::PartitionedTable => RelationKindDto::PartitionedTable,
-                RelationKind::ForeignTable => RelationKindDto::ForeignTable,
-                RelationKind::View => RelationKindDto::View,
-                RelationKind::MaterializedView => RelationKindDto::MaterializedView,
-            },
+            kind: relation.kind.into(),
             columns: relation
                 .columns
                 .into_iter()
@@ -919,6 +925,61 @@ pub async fn describe_types(
     Ok(infos.into_iter().map(Into::into).collect())
 }
 
+/// 셀 편집 대상이 될 수 있는 relation 하나.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditTableDto {
+    pub oid: u32,
+    pub qualified_name: String,
+    pub name: String,
+    pub kind: RelationKindDto,
+    pub columns: Vec<EditColumnDto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EditColumnDto {
+    pub number: i16,
+    pub name: String,
+    pub quoted_name: String,
+    pub primary_key: bool,
+    pub updatable: bool,
+}
+
+impl From<EditTable> for EditTableDto {
+    fn from(table: EditTable) -> Self {
+        Self {
+            oid: table.oid,
+            qualified_name: table.qualified_name,
+            name: table.name,
+            kind: table.kind.into(),
+            columns: table
+                .columns
+                .into_iter()
+                .map(|column| EditColumnDto {
+                    number: column.number,
+                    name: column.name,
+                    quoted_name: column.quoted_name,
+                    primary_key: column.primary_key,
+                    updatable: column.updatable,
+                })
+                .collect(),
+        }
+    }
+}
+
+/// 그 접속의 catalog connection이 결과 열의 table OID마다 이름, PK, 고칠 수 있는 컬럼을 답한다.
+/// 없는 OID와 table이 아닌 relation은 답에 없다.
+#[tauri::command]
+pub async fn describe_tables(
+    app: State<'_, CoreApp>,
+    connection: String,
+    oids: Vec<u32>,
+) -> CommandResult<Vec<EditTableDto>> {
+    let tables = app.describe_tables(&connection, oids).await?;
+    Ok(tables.into_iter().map(Into::into).collect())
+}
+
 #[tauri::command]
 pub async fn close_catalog(app: State<'_, CoreApp>, connection: String) -> CommandResult<()> {
     Ok(app.close_catalog(&connection).await?)
@@ -1202,7 +1263,7 @@ mod tests {
     use std::collections::BTreeSet;
 
     use chilla_core::domain::{
-        ConnectionColor, Language, SslMode, TunnelEvent, TunnelFailure, TunnelState,
+        ConnectionColor, EditColumn, Language, SslMode, TunnelEvent, TunnelFailure, TunnelState,
     };
     use serde_json::json;
 
@@ -1312,6 +1373,39 @@ mod tests {
                 "idleTimeoutSecs": 600,
                 "error": "/h/config.toml: unknown field `fontsize`",
                 "storeError": "file is not a database",
+            })
+        );
+    }
+
+    #[test]
+    fn edit_table_dto_uses_the_documented_shape() {
+        let table = EditTable {
+            oid: 16385,
+            qualified_name: "public.\"Order Items\"".into(),
+            name: "Order Items".into(),
+            kind: RelationKind::PartitionedTable,
+            columns: vec![EditColumn {
+                number: 4,
+                name: "Note".into(),
+                quoted_name: "\"Note\"".into(),
+                primary_key: false,
+                updatable: true,
+            }],
+        };
+        assert_eq!(
+            serde_json::to_value(EditTableDto::from(table)).unwrap(),
+            serde_json::json!({
+                "oid": 16385,
+                "qualifiedName": "public.\"Order Items\"",
+                "name": "Order Items",
+                "kind": "partitioned_table",
+                "columns": [{
+                    "number": 4,
+                    "name": "Note",
+                    "quotedName": "\"Note\"",
+                    "primaryKey": false,
+                    "updatable": true,
+                }],
             })
         );
     }

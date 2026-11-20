@@ -19,7 +19,7 @@ use super::{
     StoreError, TunnelRunner,
 };
 use crate::domain::{
-    Catalog, ConnectionProfile, Danger, EndResult, FileStamp, ParameterSpan, Password,
+    Catalog, ConnectionProfile, Danger, EditTable, EndResult, FileStamp, ParameterSpan, Password,
     ProfileError, Project, QueryId, QueryLimits, SessionId, SessionInfo, SessionState, SqlFile,
     SqlPath, SqlPathError, StatementSpan, TableDetails, TxEnd, TxMode, TypeInfo, WriteMode,
     render_ddl,
@@ -540,6 +540,20 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         .await
     }
 
+    /// 그 접속의 catalog connection으로 결과 열의 table OID마다 이름, PK, 고칠 수 있는 컬럼을 읽는다.
+    /// 없는 OID와 table이 아닌 relation(인덱스, sequence 등)은 결과에 없다.
+    pub async fn describe_tables(
+        &self,
+        connection: &str,
+        oids: Vec<u32>,
+    ) -> Result<Vec<EditTable>, AppError> {
+        self.read_catalog_with(connection, |db| {
+            let oids = oids.clone();
+            Box::pin(async move { db.describe_tables(&oids).await })
+        })
+        .await
+    }
+
     /// catalog connection을 닫고 터널 lease를 놓는다. 없으면 아무것도 하지 않는다.
     pub async fn close_catalog(&self, connection: &str) -> Result<(), AppError> {
         let slot = self.catalogs.lock().await.remove(connection);
@@ -873,9 +887,9 @@ mod tests {
         CancelError, PasswordKey, PasswordStore, ProjectError, QueryError, SplitError, TunnelError,
     };
     use crate::domain::{
-        Catalog, ConnectionColor, EndOutcome, EndResult, FileStamp, ProfileError, QueryEvent,
-        QueryOutcome, RelationDdl, RelationKind, SessionState, SslMode, StatementSpan,
-        TableDetails, TxEnd, TxStatus, TypeInfo, WriteMode,
+        Catalog, ConnectionColor, EditColumn, EditTable, EndOutcome, EndResult, FileStamp,
+        ProfileError, QueryEvent, QueryOutcome, RelationDdl, RelationKind, SessionState, SslMode,
+        StatementSpan, TableDetails, TxEnd, TxStatus, TypeInfo, WriteMode,
     };
     use crate::domain::{TunnelEvent, TunnelFailure};
 
@@ -2148,6 +2162,30 @@ mod tests {
         let types = f.app.describe_types("local", vec![(23, -1), (0, -1)]).await;
 
         assert_eq!(types, Ok(vec![integer]));
+        assert_eq!(f.connector.requests().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn describe_tables_uses_the_catalog_connection() {
+        let f = opened().await;
+        let table = EditTable {
+            oid: 16385,
+            qualified_name: "public.users".into(),
+            name: "users".into(),
+            kind: RelationKind::Table,
+            columns: vec![EditColumn {
+                number: 1,
+                name: "id".into(),
+                quoted_name: "id".into(),
+                primary_key: true,
+                updatable: true,
+            }],
+        };
+        f.connector.set_tables(vec![table.clone()]);
+
+        let tables = f.app.describe_tables("local", vec![16385, 1]).await;
+
+        assert_eq!(tables, Ok(vec![table]));
         assert_eq!(f.connector.requests().len(), 1);
     }
 

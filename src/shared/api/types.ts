@@ -91,6 +91,30 @@ export interface TableDetails {
   constraints: { name: string; kind: ConstraintKind; definition: string }[];
 }
 
+/** 셀 편집 대상이 될 수 있는 relation의 컬럼 하나. */
+export interface EditColumn {
+  /** `pg_attribute.attnum`. 결과 열의 `columnNumber`와 맞춘다. */
+  number: number;
+  name: string;
+  /** `quote_ident(attname)`. SQL에 쓴다. */
+  quotedName: string;
+  primaryKey: boolean;
+  /** generated 컬럼과 `GENERATED ALWAYS` identity 컬럼은 false */
+  updatable: boolean;
+}
+
+/** 셀 편집 대상이 될 수 있는 relation 하나. 결과 열의 `tableOid`로 찾는다. */
+export interface EditTable {
+  oid: number;
+  /** `quote_ident(schema) || '.' || quote_ident(relname)`. SQL에 쓴다. */
+  qualifiedName: string;
+  /** relname 그대로. 화면 문구에 쓴다. */
+  name: string;
+  kind: RelationKind;
+  /** attnum 순. 지운 컬럼은 없다. */
+  columns: EditColumn[];
+}
+
 /** 결과 컬럼 type 하나의 이름과 category. `oid`와 `modifier`는 `ResultColumn`의 것이다. */
 export interface TypeInfo {
   oid: number;
