@@ -1,3 +1,4 @@
+import type { EditorState } from "@codemirror/state";
 import {
   cancelTunnel,
   restartTunnel,
@@ -9,12 +10,13 @@ import type {
   Connection,
   Project,
   Relation,
+  StatementSpan,
   TxEnd,
 } from "../../shared/api/types";
 import { quoteIdent } from "../../shared/sql/identifiers";
 import { targetChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
-import { documentState, findDocument } from "../editor/documents";
+import { documentState } from "../editor/documents";
 import { showEditorNotice } from "../editor/editorNotice";
 import { reformatDocument } from "../editor/reformat";
 import { saveTab } from "../editor/saveTab";
@@ -23,8 +25,13 @@ import { lineColumn, statementAt } from "../editor/statementAt";
 import { statementSpansField } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
-import type { Rejection, RunRequest, RunText } from "../query/runReducer";
-import { endable, useRuns } from "../query/runsStore";
+import type {
+  Rejection,
+  Retry,
+  RunRequest,
+  ScriptStep,
+} from "../query/runReducer";
+import { endable, useRuns, type ConfirmStep } from "../query/runsStore";
 import { useTypes } from "../query/typesStore";
 import { useSchema } from "../schema/schemaStore";
 import { mono, rt } from "../../shared/i18n/rich";
@@ -39,6 +46,7 @@ import {
 
 export type CommandId =
   | "run"
+  | "runFile"
   | "cancel"
   | "save"
   | "newTab"
@@ -53,42 +61,28 @@ function findTab(tabId: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === tabId);
 }
 
-/** 선택 영역이 있으면 그것을, 없으면 커서가 가리키는 문장을 고른다. */
-async function statementToRun(tabId: string): Promise<RunText | Rejection> {
-  // 나누는 동안 문서가 바뀌거나 닫혀도 text, span, 커서가 한 snapshot에서 나오게 한 번만 읽는다.
-  const state = documentState(tabId);
-  const text = state.doc.toString();
-  const { from, to, head } = state.selection.main;
-  if (from !== to) {
-    const sql = text.slice(from, to);
-    if (sql.trim() === "") {
-      return { title: t("run.emptySelection"), detail: null };
-    }
-    return { sql, from, origin: lineColumn(text, from) };
+function splitRejection(error: unknown): Rejection {
+  if (isCommandError(error, "split_failed")) {
+    return {
+      title: t("run.splitFailed.title"),
+      detail: t("run.splitFailed.detail"),
+    };
   }
+  return { title: messageOf(error), detail: null };
+}
 
-  // 문서에 둔 span이 지금 문서에 맞으면 다시 나누지 않는다.
+/** 문서 전체의 문장 span. 문서에 둔 span이 지금 문서에 맞으면 다시 나누지 않는다. */
+async function documentSpans(
+  state: EditorState,
+  text: string,
+): Promise<StatementSpan[]> {
   const cached = state.field(statementSpansField, false);
-  let spans;
-  if (cached?.fresh && cached.spans !== null) {
-    spans = cached.spans;
-  } else {
-    try {
-      spans = await splitStatements(text);
-    } catch (error) {
-      if (isCommandError(error, "split_failed")) {
-        return {
-          title: t("run.splitFailed.title"),
-          detail: t("run.splitFailed.detail"),
-        };
-      }
-      return { title: messageOf(error), detail: null };
-    }
-  }
-  const span = statementAt(state.doc, spans, head);
-  if (span === null) {
-    return { title: t("run.noStatementAtCursor"), detail: null };
-  }
+  if (cached?.fresh && cached.spans !== null) return cached.spans;
+  return splitStatements(text);
+}
+
+/** 문서 text에서 span의 문장 */
+function stepOf(text: string, span: StatementSpan): ScriptStep {
   return {
     sql: text.slice(span.start, span.end),
     from: span.start,
@@ -96,34 +90,126 @@ async function statementToRun(tabId: string): Promise<RunText | Rejection> {
   };
 }
 
+/**
+ * 선택 영역의 문장. 둘 이상으로 나뉘면 문장마다 step이고, 하나이거나 나눌 수 없으면 고른 그대로
+ * 한 step이다.
+ */
+async function selectionSteps(
+  docText: string,
+  from: number,
+  to: number,
+): Promise<ScriptStep[] | Rejection> {
+  const sql = docText.slice(from, to);
+  if (sql.trim() === "") {
+    return { title: t("run.emptySelection"), detail: null };
+  }
+  const whole = [{ sql, from, origin: lineColumn(docText, from) }];
+  let spans: StatementSpan[];
+  try {
+    spans = await splitStatements(sql);
+  } catch (error) {
+    if (isCommandError(error, "split_failed")) return whole;
+    return { title: messageOf(error), detail: null };
+  }
+  if (spans.length < 2) return whole;
+  // span은 선택 영역의 text 기준이다.
+  return spans.map((span) =>
+    stepOf(docText, { start: from + span.start, end: from + span.end }),
+  );
+}
+
+/** 선택 영역이 있으면 그것을, 없으면 커서가 가리키는 문장을 고른다. */
+async function statementsToRun(
+  tabId: string,
+): Promise<ScriptStep[] | Rejection> {
+  // 나누는 동안 문서가 바뀌거나 닫혀도 text, span, 커서가 한 snapshot에서 나오게 한 번만 읽는다.
+  const state = documentState(tabId);
+  const text = state.doc.toString();
+  const { from, to, head } = state.selection.main;
+  if (from !== to) return selectionSteps(text, from, to);
+
+  let spans;
+  try {
+    spans = await documentSpans(state, text);
+  } catch (error) {
+    return splitRejection(error);
+  }
+  const span = statementAt(state.doc, spans, head);
+  if (span === null) {
+    return { title: t("run.noStatementAtCursor"), detail: null };
+  }
+  return [stepOf(text, span)];
+}
+
+/** 문서의 모든 문장. 문장이 없으면 Nothing to run이다. */
+async function fileToRun(tabId: string): Promise<ScriptStep[] | Rejection> {
+  const state = documentState(tabId);
+  const text = state.doc.toString();
+  let spans;
+  try {
+    spans = await documentSpans(state, text);
+  } catch (error) {
+    return splitRejection(error);
+  }
+  if (spans.length === 0) {
+    return { title: t("run.emptySelection"), detail: null };
+  }
+  return spans.map((span) => stepOf(text, span));
+}
+
 function noConnection(): Rejection {
   return { title: t("run.noConnection"), detail: null };
 }
 
-/** 탭의 지금 접속으로 `sql`을 실행할 요청. 접속이 없으면 Rejection이다. */
-function requestFor(tabId: string, text: RunText): RunRequest | Rejection {
+/** 탭의 지금 접속으로 `steps`를 실행할 요청. 접속이 없으면 Rejection이다. */
+function requestFor(
+  tabId: string,
+  steps: ScriptStep[],
+): RunRequest | Rejection {
   const connection = findTab(tabId)?.connection ?? null;
-  return connection === null ? noConnection() : { connection, ...text };
+  return connection === null ? noConnection() : { connection, steps };
 }
 
-/** 요청이 위험한 문장이면 묻는다. 그만두게 했으면 null이다. Rejection은 그대로 돌려준다. */
+/** 첫 문장이 위험하면 묻는다. 그만두게 했으면 null이다. Rejection은 그대로 돌려준다. */
 async function confirmed(
   tabId: string,
   request: RunRequest | Rejection,
 ): Promise<RunRequest | Rejection | null> {
   if ("title" in request) return request;
-  return (await confirmDanger(tabId, request)) ? request : null;
+  const [first] = request.steps;
+  return (await confirmDanger(tabId, {
+    connection: request.connection,
+    sql: first.sql,
+  }))
+    ? request
+    : null;
 }
 
-/** 탭에서 실행할 것을 정한다. 위험한 문장이면 묻는다. store를 바꾸지 않는다. */
-async function prepareRun(
+/** 여러 문장의 실행에서 둘째 문장부터 그 차례에 위험한 문장인지 묻는다. */
+function confirmStepOf(tabId: string, connection: string): ConfirmStep {
+  return (step) => confirmDanger(tabId, { connection, sql: step.sql });
+}
+
+/**
+ * 탭에서 `choose`가 고른 문장을 실행한다. 위험한 문장이면 그 차례에 묻는다. 접속이 없으면 문장을
+ * 나누지 않는다.
+ */
+function runSteps(
   tabId: string,
-): Promise<RunRequest | Rejection | null> {
-  // 접속이 없으면 문장을 나누지 않는다.
-  if (findTab(tabId)?.connection == null) return noConnection();
-  const statement = await statementToRun(tabId);
-  if ("title" in statement) return statement;
-  return confirmed(tabId, requestFor(tabId, statement));
+  choose: (tabId: string) => Promise<ScriptStep[] | Rejection>,
+): Promise<void> {
+  const connection = findTab(tabId)?.connection ?? null;
+  // 문장을 나누는 동안 탭을 닫거나 접속을 바꾸면 release가 이 실행을 버린다.
+  return useRuns.getState().run(
+    tabId,
+    async () => {
+      if (connection === null) return noConnection();
+      const steps = await choose(tabId);
+      if ("title" in steps) return steps;
+      return confirmed(tabId, requestFor(tabId, steps));
+    },
+    connection === null ? undefined : confirmStepOf(tabId, connection),
+  );
 }
 
 /** 활성 탭에 대해 command를 실행한다. */
@@ -145,8 +231,9 @@ export async function execute(command: CommandId): Promise<void> {
   if (tabId === null) return;
   switch (command) {
     case "run":
-      // 문장을 나누는 동안 탭을 닫거나 접속을 바꾸면 release가 이 실행을 버린다.
-      return useRuns.getState().run(tabId, () => prepareRun(tabId));
+      return runSteps(tabId, statementsToRun);
+    case "runFile":
+      return runSteps(tabId, fileToRun);
     case "cancel":
       return cancelRun(tabId);
     case "save":
@@ -205,27 +292,55 @@ export async function retryTunnel(connection: string): Promise<void> {
   }
 }
 
-/** 탭의 지금 접속으로 `sql`을 실행한다. 위험한 문장이면 묻는다. */
-function runText(tabId: string, text: RunText): Promise<void> {
+/** 탭의 지금 접속으로 문장 하나를 실행한다. 위험한 문장이면 묻는다. */
+function runStep(tabId: string, step: ScriptStep): Promise<void> {
   return useRuns
     .getState()
-    .run(tabId, () => confirmed(tabId, requestFor(tabId, text)));
+    .run(tabId, () => confirmed(tabId, requestFor(tabId, [step])));
+}
+
+/**
+ * 실행한 문장을 지금 문서에서 다시 할 자리. 문서가 옮긴 자리에서 시작한 것으로 본다. 문서가 그 자리를
+ * 지웠으면 anchor 없이(from이 null) 처음 줄과 칸으로 한다.
+ */
+function movedStep(
+  tabId: string,
+  runKey: string,
+  { sql, origin }: Pick<ScriptStep, "sql" | "origin">,
+): ScriptStep {
+  return {
+    sql,
+    from: anchorOf(tabId, runKey),
+    origin: anchorLocation(tabId, runKey) ?? origin,
+  };
 }
 
 /**
  * 그 탭의 결과에 쓴 SQL을 탭의 지금 접속으로 다시 실행한다. 보낸 text 그대로, 문서에서 옮겨진 자리에서
- * 시작한 것으로 본다(문서가 그 자리를 지웠으면 처음 자리). 결과가 없으면 아무것도 하지 않는다.
+ * 시작한 것으로 본다. 결과가 없으면 아무것도 하지 않는다.
  */
 export async function runAgain(tabId: string): Promise<void> {
   const state = useRuns.getState().runs[tabId];
   if (state?.status !== "running" && state?.status !== "finished") return;
-  const { sql, runKey, from, origin } = state.result;
-  const doc = findDocument(tabId)?.doc;
-  return runText(tabId, {
-    sql,
-    from: anchorOf(tabId, runKey) ?? Math.min(from, doc?.length ?? from),
-    origin: anchorLocation(tabId, runKey) ?? origin,
-  });
+  return runStep(tabId, movedStep(tabId, state.result.runKey, state.result));
+}
+
+/**
+ * 터널 오류로 시작하지 못한 실행을 같은 접속으로 다시 한다(Try again). 문장마다 문서가 옮긴 자리를 쓴다.
+ * 첫 문장은 처음 실행할 때 확인했으므로 묻지 않고, 둘째 문장부터 그 차례에 묻는다.
+ */
+export function retryRun(tabId: string, retry: Retry): Promise<void> {
+  const { connection, runKeys } = retry;
+  return useRuns.getState().run(
+    tabId,
+    () => ({
+      connection,
+      steps: retry.steps.map((step, index) =>
+        movedStep(tabId, runKeys[index], step),
+      ),
+    }),
+    confirmStepOf(tabId, connection),
+  );
 }
 
 /** Select first rows가 읽는 행 수. batch 하나다. */
@@ -242,7 +357,7 @@ export async function selectFirstRows(
   const name = `${quoteIdent(relation.schema, reservedWords)}.${quoteIdent(relation.name, reservedWords)}`;
   const sql = `SELECT * FROM ${name} LIMIT ${FIRST_ROWS}`;
   const tabId = useTabs.getState().newTab({ text: sql });
-  return runText(tabId, { sql, from: 0, origin: { line: 1, column: 1 } });
+  return runStep(tabId, { sql, from: 0, origin: { line: 1, column: 1 } });
 }
 
 /**

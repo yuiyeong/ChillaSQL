@@ -279,7 +279,7 @@ test("실행 menu를 연 채 왼쪽 실행 button을 누르면 menu가 닫힌다
   expect(screen.queryByRole("menu")).toBeNull();
 });
 
-test("실행 menu의 Run file은 disabled다", async () => {
+test("실행 menu의 Run statement는 단축키를 보이고 실행한다", async () => {
   openProjectWith([connection("local")]);
   tabWith("local");
   renderToolbar();
@@ -287,13 +287,26 @@ test("실행 menu의 Run file은 disabled다", async () => {
   await click(runButton("Choose what to run"));
 
   const menu = screen.getByRole("menu", { name: "What to run" });
-  expect(
-    within(menu).getByRole("menuitem", { name: "Run file" }),
-  ).toBeDisabled();
   const run = within(menu).getByRole("menuitem", { name: "Run statement" });
   expect(run).toHaveAttribute("aria-keyshortcuts", "Meta+Enter");
   await click(run);
   expect(execute).toHaveBeenCalledWith("run");
+});
+
+test("run_file_is_enabled", async () => {
+  openProjectWith([connection("local")]);
+  tabWith("local");
+  renderToolbar();
+
+  await click(runButton("Choose what to run"));
+
+  const menu = screen.getByRole("menu", { name: "What to run" });
+  const runFile = within(menu).getByRole("menuitem", { name: "Run file" });
+  expect(runFile).toBeEnabled();
+  // Run file에는 단축키가 없다.
+  expect(runFile).not.toHaveAttribute("aria-keyshortcuts");
+  await click(runFile);
+  expect(execute).toHaveBeenCalledWith("runFile");
 });
 
 test("실행 menu의 첫 항목 label은 선택 여부를 따른다", async () => {

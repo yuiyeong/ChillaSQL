@@ -5,7 +5,6 @@ import { bold, rt, sqlCode } from "../../shared/i18n/rich";
 import { t } from "../../shared/i18n/t";
 import { ask, type DialogSpec } from "../../shared/ui/dialogs";
 import { modeOf, useTabs } from "../editor/tabsStore";
-import type { RunRequest } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
 
 function keyword(text: string): ReactNode {
@@ -76,6 +75,12 @@ function firstSentence(danger: Danger, connection: string): ReactNode {
   }
 }
 
+/** 위험한지 살펴볼 문장과 그것을 보낼 접속 */
+interface DangerRequest {
+  connection: string;
+  sql: string;
+}
+
 /** Manual이거나 트랜잭션이 열려 있으면 Rollback할 수 있고, Auto이고 트랜잭션 밖이면 바로 Commit된다. */
 function secondSentence(tabId: string): ReactNode {
   const reversible =
@@ -90,7 +95,7 @@ function secondSentence(tabId: string): ReactNode {
 
 function specOf(
   tabId: string,
-  request: RunRequest,
+  request: DangerRequest,
   danger: Danger,
 ): DialogSpec {
   return {
@@ -111,10 +116,11 @@ function specOf(
 /**
  * 실행하기 전에 위험한 문장(WHERE 없는 UPDATE와 DELETE, DROP, TRUNCATE)이면 묻는다. 위험하지
  * 않거나 Run을 고르면 true. 문장을 살펴보지 못하면 묻지 않고 true다(서버가 판단한다).
+ * 여러 문장의 실행은 문장마다 그 차례에 부른다.
  */
 export async function confirmDanger(
   tabId: string,
-  request: RunRequest,
+  request: DangerRequest,
 ): Promise<boolean> {
   let danger: Danger | null;
   try {

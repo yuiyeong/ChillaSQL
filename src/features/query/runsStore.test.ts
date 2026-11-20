@@ -32,7 +32,10 @@ function session(id: number, connection = "local"): Session {
 
 /** 바로 이 문장을 실행하게 하는 prepare. */
 function prepared(sql = "SELECT 1", connection = "local"): Prepare {
-  return () => ({ connection, sql, from: 0, origin: { line: 1, column: 1 } });
+  return () => ({
+    connection,
+    steps: [{ sql, from: 0, origin: { line: 1, column: 1 } }],
+  });
 }
 
 const origin = { line: 1, column: 1 };
@@ -77,6 +80,7 @@ test("첫 실행은 세션을 열고 그 세션으로 실행한다", async () =>
     "SELECT 1",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   expect(runOf("t")).toEqual({
     status: "running",
@@ -106,6 +110,7 @@ test("같은 탭의 다음 실행은 세션을 다시 쓴다", async () => {
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
 });
 
@@ -129,6 +134,7 @@ test("연결 중에 한 번 더 실행해도 세션은 하나다", async () => {
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   const state = runOf("t");
   expect(state.status === "running" && state.result.sql).toBe("SELECT 2");
@@ -348,6 +354,7 @@ test("첫 세션이 여는 중일 때 접속을 바꾸면 앞 세션을 닫은 �
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
 });
 
@@ -374,6 +381,7 @@ test("늦은 unknown_session은 새 세션을 건드리지 않는다", async () 
     "SELECT 3",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
 });
 
@@ -441,6 +449,7 @@ test("접속이 바뀐 탭은 앞 세션을 닫고 새로 연다", async () => {
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
 });
 
@@ -508,6 +517,7 @@ test("reset은 열린 세션을 모두 닫는다", async () => {
     "SELECT 1",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
 });
 
@@ -526,6 +536,7 @@ test("탭마다 세션이 따로다", async () => {
     "SELECT 1",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   expect(executeQuery).toHaveBeenNthCalledWith(
     2,
@@ -533,6 +544,7 @@ test("탭마다 세션이 따로다", async () => {
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   expect(runOf("a").status).toBe("running");
   expect(runOf("b").status).toBe("running");
@@ -576,7 +588,10 @@ test("prepare가 끝나기 전에 release하면 실행하지 않는다", async (
   const running = useRuns.getState().run("t", () => preparing.promise);
 
   await useRuns.getState().release("t");
-  preparing.resolve({ connection: "local", sql: "SELECT 1", from: 0, origin });
+  preparing.resolve({
+    connection: "local",
+    steps: [{ sql: "SELECT 1", from: 0, origin }],
+  });
   await running;
 
   expect(openSession).not.toHaveBeenCalled();
@@ -590,7 +605,10 @@ test("prepare가 늦게 끝난 앞 실행은 뒤 실행을 덮지 않는다", as
 
   await useRuns.getState().run("t", prepared("SELECT B"));
   const stateB = runOf("t");
-  preparingA.resolve({ connection: "local", sql: "SELECT A", from: 0, origin });
+  preparingA.resolve({
+    connection: "local",
+    steps: [{ sql: "SELECT A", from: 0, origin }],
+  });
   await runningA;
 
   expect(executeQuery).toHaveBeenCalledTimes(1);
@@ -599,6 +617,7 @@ test("prepare가 늦게 끝난 앞 실행은 뒤 실행을 덮지 않는다", as
     "SELECT B",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   expect(runOf("t")).toBe(stateB);
 });
@@ -645,13 +664,17 @@ test("prepare를 기다리는 동안에도 앞 쿼리의 event가 반영된다",
   const stateA = runOf("t");
   expect(stateA.status === "running" && stateA.result.rows).toEqual([["1"]]);
 
-  preparing.resolve({ connection: "local", sql: "SELECT B", from: 0, origin });
+  preparing.resolve({
+    connection: "local",
+    steps: [{ sql: "SELECT B", from: 0, origin }],
+  });
   await runningB;
   expect(executeQuery).toHaveBeenLastCalledWith(
     3,
     "SELECT B",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   const stateB = runOf("t");
   expect(stateB.status === "running" && stateB.result.sql).toBe("SELECT B");
@@ -862,7 +885,11 @@ test("터널 오류는 output과 다시 실행할 요청을 남긴다", async ()
     title: "localhost:25432 didn't open within 20 seconds",
     detail: null,
     output: "Unauthorized",
-    retry: { connection: "staging", sql: "SELECT 1", from: 0, origin },
+    retry: {
+      connection: "staging",
+      steps: [{ sql: "SELECT 1", from: 0, origin }],
+      runKeys: [expect.any(String)],
+    },
   };
   expect(runOf("t")).toEqual({ status: "rejected", rejection: expected });
 });
@@ -919,6 +946,7 @@ test("run_sends_the_tab_mode", async () => {
     "SELECT 1",
     "manual",
     expect.any(Function),
+    { drain: false },
   );
   // 다른 탭은 Auto다.
   await useRuns.getState().run("t2", prepared("SELECT 1"));
@@ -1242,6 +1270,7 @@ test("a_stale_session_with_an_open_transaction_reports_it_lost", async () => {
     "SELECT 1",
     "manual",
     expect.any(Function),
+    { drain: false },
   );
 });
 
@@ -1498,4 +1527,290 @@ test("a_null_prepare_changes_nothing", async () => {
   expect(useRuns.getState().notices).toBe(state.notices);
   expect(openSession).toHaveBeenCalledTimes(1);
   expect(executeQuery).toHaveBeenCalledTimes(1);
+});
+
+/** 문장마다 한 step인 실행. step의 from은 10씩 띄운다. */
+function script(...sqls: string[]): Prepare {
+  return () => ({
+    connection: "local",
+    steps: sqls.map((sql, index) => ({ sql, from: index * 10, origin })),
+  });
+}
+
+function scriptOf(tabId: string) {
+  return useRuns.getState().scripts[tabId];
+}
+
+/** n번째(0부터) 실행을 서버 오류로 끝낸다. */
+function fail(call: number): void {
+  onEventOf(call)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "failed",
+    error: {
+      code: "42P01",
+      message: 'relation "order_items" does not exist',
+      detail: null,
+      hint: null,
+      position: null,
+    },
+  });
+}
+
+/** executeQuery가 n번 불릴 때까지 기다린다. 다음 문장은 앞 문장의 finished 뒤에 보낸다. */
+async function sent(count: number): Promise<void> {
+  await vi.waitFor(() => expect(executeQuery).toHaveBeenCalledTimes(count));
+}
+
+test("runs_steps_in_order_on_one_session", async () => {
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2", "SELECT 3"));
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+  expect(scriptOf("t")).toMatchObject({
+    current: 0,
+    selected: 0,
+    stoppedAt: null,
+    done: [],
+  });
+
+  complete(0, "idle");
+  await sent(2);
+  complete(1, "idle");
+  await sent(3);
+  complete(2, "idle");
+
+  expect(openSession).toHaveBeenCalledTimes(1);
+  expect(
+    vi
+      .mocked(executeQuery)
+      .mock.calls.map(([id, sql, mode, , options]) => [id, sql, mode, options]),
+  ).toEqual([
+    [3, "SELECT 1", "auto", { drain: true }],
+    [3, "SELECT 2", "auto", { drain: true }],
+    [3, "SELECT 3", "auto", { drain: false }],
+  ]);
+  const run = scriptOf("t");
+  expect(run).toMatchObject({ current: 2, selected: 2, stoppedAt: null });
+  expect(run.done.map((step) => step.status)).toEqual(["finished", "finished"]);
+  expect(
+    run.done.map((step) => step.status === "finished" && step.result.sql),
+  ).toEqual(["SELECT 1", "SELECT 2"]);
+  // 문장마다 runKey가 따로다.
+  const keys = [
+    ...run.done.map((step) => step.status === "finished" && step.result.runKey),
+    (() => {
+      const last = runOf("t");
+      return last.status === "finished" && last.result.runKey;
+    })(),
+  ];
+  expect(new Set(keys).size).toBe(3);
+});
+
+test("a_single_statement_has_no_script", async () => {
+  await useRuns.getState().run("t", prepared("SELECT 1"));
+
+  expect(scriptOf("t")).toBeUndefined();
+  expect(vi.mocked(executeQuery).mock.calls[0][4]).toEqual({ drain: false });
+});
+
+test("stops_at_the_first_failure", async () => {
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2", "SELECT 3"));
+  complete(0, "idle");
+  await sent(2);
+
+  fail(1);
+  await Promise.resolve();
+
+  expect(executeQuery).toHaveBeenCalledTimes(2);
+  expect(scriptOf("t")).toMatchObject({
+    current: 1,
+    selected: 1,
+    stoppedAt: 1,
+  });
+  expect(runOf("t")).toMatchObject({
+    status: "finished",
+    outcome: { outcome: "failed" },
+  });
+});
+
+test("a_failure_in_the_last_statement_leaves_nothing_unrun", async () => {
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2"));
+  complete(0, "idle");
+  await sent(2);
+
+  fail(1);
+
+  expect(scriptOf("t")).toMatchObject({ current: 1, stoppedAt: null });
+});
+
+test("cancel_stops_the_script", async () => {
+  vi.mocked(executeQuery).mockResolvedValueOnce(7).mockResolvedValueOnce(8);
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2", "SELECT 3"));
+  complete(0, "idle");
+  await sent(2);
+
+  await useRuns.getState().cancel("t");
+  expect(cancelQuery).toHaveBeenCalledWith(3, 8);
+  finish(1, "cancelled", "idle");
+  await Promise.resolve();
+
+  expect(executeQuery).toHaveBeenCalledTimes(2);
+  expect(scriptOf("t")).toMatchObject({ current: 1, stoppedAt: 1 });
+});
+
+test("a_cancelled_confirmation_stops_before_that_step", async () => {
+  const confirmStep = vi.fn((step: { sql: string }) =>
+    Promise.resolve(!step.sql.startsWith("DELETE")),
+  );
+  await useRuns
+    .getState()
+    .run(
+      "t",
+      script("SELECT 1", "SELECT 2", "DELETE FROM a", "SELECT 4"),
+      confirmStep,
+    );
+  // 첫 문장은 prepare가 확인한다.
+  expect(confirmStep).not.toHaveBeenCalled();
+
+  complete(0, "idle");
+  await sent(2);
+  expect(confirmStep).toHaveBeenLastCalledWith({
+    sql: "SELECT 2",
+    from: 10,
+    origin,
+  });
+  complete(1, "idle");
+  await vi.waitFor(() => expect(confirmStep).toHaveBeenCalledTimes(2));
+  await vi.waitFor(() => expect(scriptOf("t").stoppedAt).toBe(1));
+
+  expect(executeQuery).toHaveBeenCalledTimes(2);
+  expect(scriptOf("t")).toMatchObject({ current: 1, selected: 1 });
+  expect(runOf("t")).toMatchObject({
+    status: "finished",
+    outcome: { outcome: "completed" },
+  });
+});
+
+test("a_confirmation_answered_after_a_new_run_sends_nothing", async () => {
+  const answer = deferred<boolean>();
+  await useRuns
+    .getState()
+    .run("t", script("SELECT 1", "DELETE FROM a"), () => answer.promise);
+  complete(0, "idle");
+  await useRuns.getState().run("t", prepared("SELECT 9"));
+
+  answer.resolve(true);
+  await Promise.resolve();
+  await Promise.resolve();
+
+  expect(executeQuery).toHaveBeenCalledTimes(2);
+  expect(vi.mocked(executeQuery).mock.calls[1][1]).toBe("SELECT 9");
+});
+
+test("each_step_counts_toward_the_transaction", async () => {
+  setTabMode("t1", "manual");
+  await useRuns
+    .getState()
+    .run(
+      "t1",
+      script("UPDATE a SET b = 1", "UPDATE a SET b = 2", "UPDATE a SET b = 3"),
+    );
+  complete(0, "in_transaction");
+  await sent(2);
+  complete(1, "in_transaction");
+  await sent(3);
+  complete(2, "in_transaction");
+
+  expect(vi.mocked(executeQuery).mock.calls.map((call) => call[2])).toEqual([
+    "manual",
+    "manual",
+    "manual",
+  ]);
+  expect(txOf("t1")).toEqual(
+    expect.objectContaining({ status: "open", statements: 3, openedBy: "app" }),
+  );
+});
+
+test("last_step_can_fetch_more", async () => {
+  vi.mocked(executeQuery).mockResolvedValueOnce(7).mockResolvedValueOnce(8);
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2"));
+  complete(0, "idle");
+  await sent(2);
+  onEventOf(1)(rowsEvent);
+
+  await useRuns.getState().fetchMore("t");
+
+  expect(fetchMore).toHaveBeenCalledWith(3, 8);
+});
+
+test("earlier_steps_are_frozen", async () => {
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2"));
+  onEventOf(0)({ type: "columns", columns: resultColumns("id") });
+  onEventOf(0)(rowsEvent);
+
+  // 끝까지 읽는 문장은 이어서 가져오지 않는다. 읽는 중이라 Commit도 기다린다.
+  const reading = runOf("t");
+  expect(reading.status === "running" && reading.result.fetch).toBe("none");
+  await useRuns.getState().fetchMore("t");
+  expect(fetchMore).not.toHaveBeenCalled();
+
+  onEventOf(0)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 1200,
+  });
+  await sent(2);
+  const [first] = scriptOf("t").done;
+  expect(first).toMatchObject({
+    status: "finished",
+    result: { sql: "SELECT 1", rows: [["1"]], fetch: "none" },
+    outcome: { outcome: "completed", rows: 1200 },
+  });
+  await useRuns.getState().fetchMore("t");
+  expect(fetchMore).not.toHaveBeenCalled();
+});
+
+test("a_new_run_replaces_the_script", async () => {
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2", "SELECT 3"));
+  await useRuns.getState().run("t", prepared("SELECT 9"));
+
+  expect(scriptOf("t")).toBeUndefined();
+  // 밀려난 문장의 늦은 finished는 다음 문장을 보내지 않는다.
+  complete(0, "idle");
+  await Promise.resolve();
+  expect(executeQuery).toHaveBeenCalledTimes(2);
+
+  await useRuns.getState().run("t", script("SELECT 4", "SELECT 5"));
+  expect(scriptOf("t")).toMatchObject({ current: 0, done: [] });
+  expect(scriptOf("t").steps.map((step) => step.sql)).toEqual([
+    "SELECT 4",
+    "SELECT 5",
+  ]);
+});
+
+test("release_forgets_the_script", async () => {
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2"));
+  await useRuns.getState().release("t");
+
+  expect(scriptOf("t")).toBeUndefined();
+  complete(0, "idle");
+  await Promise.resolve();
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+});
+
+test("select_step_shows_a_step_that_has_a_result", async () => {
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2", "SELECT 3"));
+  complete(0, "idle");
+  await sent(2);
+  fail(1);
+
+  useRuns.getState().selectStep("t", 0);
+  expect(scriptOf("t").selected).toBe(0);
+  // 실행하지 않은 문장은 고르지 않는다.
+  useRuns.getState().selectStep("t", 2);
+  expect(scriptOf("t").selected).toBe(0);
+  useRuns.getState().selectStep("t", 1);
+  expect(scriptOf("t").selected).toBe(1);
 });

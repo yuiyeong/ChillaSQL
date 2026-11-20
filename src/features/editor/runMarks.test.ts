@@ -229,9 +229,7 @@ test("next_run_clears_it", async () => {
   const run = (sql: string, from: number) =>
     useRuns.getState().run("t", () => ({
       connection: "local",
-      sql,
-      from,
-      origin: { line: 1, column: 1 },
+      steps: [{ sql, from, origin: { line: 1, column: 1 } }],
     }));
 
   await run("SELEC 2", 10);
@@ -278,9 +276,7 @@ test("a_late_error_of_a_superseded_run_draws_nothing", async () => {
   const run = (sql: string, from: number) =>
     useRuns.getState().run("t", () => ({
       connection: "local",
-      sql,
-      from,
-      origin: { line: 1, column: 1 },
+      steps: [{ sql, from, origin: { line: 1, column: 1 } }],
     }));
   await run("SELEC 2", 10);
   await run("SELECT 1", 0);

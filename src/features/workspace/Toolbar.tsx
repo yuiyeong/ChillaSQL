@@ -252,7 +252,7 @@ function RunSplitButton({
             <span className="flex-1 text-left">{label}</span>
             <Kbd>{keyLabel}</Kbd>
           </MenuItem>
-          <MenuItem disabled onSelect={() => {}}>
+          <MenuItem onSelect={() => void execute("runFile")}>
             <span className="flex-1 text-left">{t("toolbar.runFile")}</span>
           </MenuItem>
         </div>

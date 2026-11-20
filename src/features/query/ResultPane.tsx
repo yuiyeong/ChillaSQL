@@ -27,7 +27,12 @@ import { Toast, useToast } from "../../shared/ui/Toast";
 import { useTunnel } from "../connections/tunnelsStore";
 import { useEditorStatus } from "../editor/editorStatus";
 import { anchorLocation, anchorOf, goToError } from "../editor/runMarks";
-import { cancelRun, retryTunnel, runAgain } from "../workspace/commands";
+import {
+  cancelRun,
+  retryRun,
+  retryTunnel,
+  runAgain,
+} from "../workspace/commands";
 import { MessageBlock } from "./MessageBlock";
 import { shortcutLabel } from "../workspace/shortcuts";
 import {
@@ -38,8 +43,8 @@ import {
   resultLabel,
 } from "./format";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
-import { receivedRows, type ResultData } from "./runReducer";
-import { endable, useRuns } from "./runsStore";
+import { receivedRows, type ResultData, type RunState } from "./runReducer";
+import { endable, useRuns, type ScriptRun } from "./runsStore";
 import {
   failedHintOf,
   TransactionFailedHeader,
@@ -74,7 +79,15 @@ export const ResultPane = memo(function ResultPane({
   connection?: string | null;
   onEditConnection?(name: string): void;
 }) {
-  const state = useRuns((s) => (tabId === null ? undefined : s.runs[tabId]));
+  const current = useRuns((s) => (tabId === null ? undefined : s.runs[tabId]));
+  const script = useRuns((s) =>
+    tabId === null ? undefined : s.scripts[tabId],
+  );
+  // 결과 탭에서 앞 문장을 고르면 그 문장의 고정된 결과를 그린다.
+  const state =
+    script !== undefined && script.selected < script.current
+      ? script.done[script.selected]
+      : current;
   const runNotice = useRuns((s) =>
     tabId === null ? undefined : s.notices[tabId],
   );
@@ -112,6 +125,18 @@ export const ResultPane = memo(function ResultPane({
     },
     [show],
   );
+
+  const tabs =
+    script === undefined || tabId === null ? null : (
+      <ScriptTabs tabId={tabId} script={script} current={current} />
+    );
+  // 멈춘 문장을 보고 있으면 거기서 멈췄고 뒤 문장은 실행하지 않았다고 알린다.
+  const stopped =
+    script !== undefined &&
+    script.stoppedAt !== null &&
+    script.selected === script.stoppedAt
+      ? stoppedText(script.stoppedAt, script.steps.length)
+      : null;
 
   let header: ReactNode = null;
   let notice: ReactNode = null;
@@ -161,7 +186,7 @@ export const ResultPane = memo(function ResultPane({
       const { result } = state;
       const hasRows = result.rows.length > 0;
       header = (
-        <Header sql={result.sql}>
+        <Header sql={result.sql} tabs={tabs}>
           {hasRows ? (
             <Meta>{rowsMeta(result)}</Meta>
           ) : (
@@ -179,12 +204,12 @@ export const ResultPane = memo(function ResultPane({
     case "finished": {
       const { result, outcome } = state;
       const elapsed = formatElapsed(result.elapsedMicros ?? 0);
-      const name = <Header sql={result.sql} />;
+      const name = <Header sql={result.sql} tabs={tabs} />;
       switch (outcome.outcome) {
         case "completed":
           if (result.columns === null) {
             header = (
-              <Header sql={result.sql}>
+              <Header sql={result.sql} tabs={tabs}>
                 <Meta>{elapsed}</Meta>
               </Header>
             );
@@ -198,7 +223,7 @@ export const ResultPane = memo(function ResultPane({
             );
           } else {
             header = (
-              <Header sql={result.sql}>
+              <Header sql={result.sql} tabs={tabs}>
                 <Meta>{tc("result.rows", outcome.rows, { elapsed })}</Meta>
               </Header>
             );
@@ -212,6 +237,7 @@ export const ResultPane = memo(function ResultPane({
               tabId={tabId}
               result={result}
               outcome={outcome}
+              stopped={stopped}
               copy={copy}
               failedTransaction={
                 txFailed && tabId !== null
@@ -233,7 +259,7 @@ export const ResultPane = memo(function ResultPane({
           // header는 받은 행 수, 안내는 표에 남은 행 수다. 버린 앞 행은 표의 버린 구간 줄이 알린다.
           const retained = result.rows.length;
           header = (
-            <Header sql={result.sql}>
+            <Header sql={result.sql} tabs={tabs}>
               <Meta>
                 {tc("result.rows", receivedRows(result), { elapsed })}
               </Meta>
@@ -289,6 +315,14 @@ export const ResultPane = memo(function ResultPane({
           );
           break;
       }
+      if (stopped !== null && outcome.outcome !== "failed") {
+        notice = (
+          <>
+            {notice}
+            <p className="text-small text-fg-2 shrink-0 px-4 pt-3">{stopped}</p>
+          </>
+        );
+      }
       break;
     }
     case "rejected": {
@@ -300,8 +334,7 @@ export const ResultPane = memo(function ResultPane({
             rejection={rejection}
             retry={retry}
             onRetry={() => {
-              if (tabId !== null)
-                void useRuns.getState().run(tabId, () => retry);
+              if (tabId !== null) void retryRun(tabId, retry);
             }}
             onEditConnection={onEditConnection}
           />
@@ -391,28 +424,117 @@ function rowsMeta(result: ResultData): string {
   });
 }
 
-/** header의 결과 탭. 탭은 하나뿐이다. */
-function Header({ sql, children }: { sql: string; children?: ReactNode }) {
+/** `Stopped at statement 3. Statement 4 was not run.` `stoppedAt`은 0부터 센다. */
+function stoppedText(stoppedAt: number, count: number): string {
+  const first = stoppedAt + 2;
+  return `${t("result.stoppedAt", { n: stoppedAt + 1 })} ${tc(
+    "result.notRunRest",
+    count - first + 1,
+    { first, last: count },
+  )}`;
+}
+
+const TAB_CLASS =
+  "text-small inline-flex h-6 shrink-0 items-center gap-1.5 rounded-[6px] border-0 px-2.5 font-medium";
+
+/**
+ * header의 결과 탭. 문장이 하나면 탭 하나이고, 여러 문장의 실행이면 `tabs`(문장마다 탭)를 그린다.
+ */
+function Header({
+  sql,
+  tabs,
+  children,
+}: {
+  sql: string;
+  tabs: ReactNode;
+  children?: ReactNode;
+}) {
   // batch, 알림, 선택마다 다시 그려지므로 label은 실행마다 한 번 만든다.
   const label = useMemo(() => resultLabel(sql), [sql]);
   return (
     <>
-      <div
-        role="tablist"
-        aria-label={t("result.tabs")}
-        className="flex gap-0.5"
-      >
-        <button
-          type="button"
-          role="tab"
-          aria-selected="true"
-          className="text-small bg-bg-3 text-fg h-6 cursor-default rounded-[6px] border-0 px-2.5 font-medium"
+      {tabs ?? (
+        <div
+          role="tablist"
+          aria-label={t("result.tabs")}
+          className="flex gap-0.5"
         >
-          {label}
-        </button>
-      </div>
+          <button
+            type="button"
+            role="tab"
+            aria-selected="true"
+            className={`${TAB_CLASS} bg-bg-3 text-fg cursor-default`}
+          >
+            {label}
+          </button>
+        </div>
+      )}
       {children}
     </>
+  );
+}
+
+/**
+ * 여러 문장의 결과 탭. fg-3 번호와 문장 이름이다. 오류로 끝난 문장은 Error, 멈춰서 보내지 않은 문장은
+ * Not run이다. 결과가 없는 문장(보내지 않았거나 아직 차례가 오지 않은 문장)은 누를 수 없다.
+ */
+function ScriptTabs({
+  tabId,
+  script,
+  current,
+}: {
+  tabId: string;
+  script: ScriptRun;
+  /** 지금 문장의 상태 */
+  current: RunState | undefined;
+}) {
+  const { steps } = script;
+  const labels = useMemo(
+    () => steps.map((step) => resultLabel(step.sql)),
+    [steps],
+  );
+  const failed =
+    current?.status === "finished" && current.outcome.outcome === "failed";
+  return (
+    <div
+      role="tablist"
+      aria-label={t("result.tabs")}
+      className="flex min-w-0 gap-0.5 overflow-x-auto"
+    >
+      {steps.map((_, index) => {
+        const hasResult = index <= script.current;
+        const selected = index === script.selected;
+        let content: ReactNode = labels[index];
+        if (index === script.current && failed) {
+          content = (
+            <>
+              <ErrorIcon />
+              {t("result.errorTab")}
+            </>
+          );
+        } else if (!hasResult && script.stoppedAt !== null) {
+          content = t("result.notRun");
+        }
+        const tone = selected
+          ? "bg-bg-3 text-fg cursor-default"
+          : hasResult
+            ? "text-fg-2 cursor-pointer bg-transparent"
+            : "text-fg-3 cursor-default bg-transparent";
+        return (
+          <button
+            key={index}
+            type="button"
+            role="tab"
+            aria-selected={selected}
+            aria-disabled={hasResult ? undefined : true}
+            className={`${TAB_CLASS} ${tone}`}
+            onClick={() => useRuns.getState().selectStep(tabId, index)}
+          >
+            <span className="text-fg-3 font-mono">{index + 1}</span> {content}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -487,12 +609,15 @@ function ServerError({
   tabId,
   result,
   outcome,
+  stopped,
   copy,
   failedTransaction,
 }: {
   tabId: string | null;
   result: ResultData;
   outcome: Extract<Outcome, { outcome: "failed" }>;
+  /** 여러 문장의 실행이 이 오류에서 멈췄으면 그 안내 */
+  stopped: string | null;
   copy(text: string, message: string): Promise<void>;
   /** 이 오류로 트랜잭션이 실패한 상태면 제목과 Rollback, 안내를 더한다. */
   failedTransaction?: { disabled: boolean; onRollback(): void };
@@ -516,6 +641,7 @@ function ServerError({
           <TransactionFailedHeader {...failedTransaction} />
         )}
         <p className="text-body font-mono break-words">{error.message}</p>
+        {stopped !== null && <p className="text-small text-fg-2">{stopped}</p>}
         {error.detail !== null && (
           <p className="text-small text-fg">{error.detail}</p>
         )}

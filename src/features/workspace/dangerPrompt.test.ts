@@ -8,19 +8,13 @@ import { answerDialog, textOf } from "../../test/dialogs";
 import { setTabMode } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 import { useDialogs } from "../../shared/ui/dialogs";
-import type { RunRequest } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
 import { confirmDanger } from "./dangerPrompt";
 
 const TAB = "t1";
 
-function request(sql: string): RunRequest {
-  return {
-    connection: "staging",
-    sql,
-    from: 0,
-    origin: { line: 1, column: 1 },
-  };
+function request(sql: string) {
+  return { connection: "staging", sql };
 }
 
 const deleteAll: Danger = { kind: "delete_without_where", table: "sessions" };

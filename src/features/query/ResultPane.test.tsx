@@ -6,6 +6,7 @@ vi.mock("../../shared/api/clipboard");
 vi.mock("../workspace/commands", () => ({
   runAgain: vi.fn(),
   cancelRun: vi.fn(),
+  retryRun: vi.fn(),
   retryTunnel: vi.fn(),
 }));
 
@@ -13,7 +14,12 @@ import { EditorView } from "@codemirror/view";
 import { copyText } from "../../shared/api/clipboard";
 import { stubLayout } from "../../test/layout";
 import type { Cell, Outcome } from "../../shared/api/types";
-import { cancelRun, retryTunnel, runAgain } from "../workspace/commands";
+import {
+  cancelRun,
+  retryRun,
+  retryTunnel,
+  runAgain,
+} from "../workspace/commands";
 import { useTunnels } from "../connections/tunnelsStore";
 import {
   connection,
@@ -808,12 +814,10 @@ describe("터널", () => {
   });
 
   test("터널을 열지 못한 실행은 명령의 출력과 Try again, Edit connection을 준다", () => {
-    const run = vi.spyOn(useRuns.getState(), "run").mockResolvedValue();
     const retry = {
       connection: "staging",
-      sql: "SELECT 1",
-      from: 0,
-      origin: { line: 1, column: 1 },
+      steps: [{ sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } }],
+      runKeys: ["run-1-0"],
     };
     const onEdit = showFor({
       status: "rejected",
@@ -829,13 +833,10 @@ describe("터널", () => {
     expect(screen.getByText("Unauthorized. Please login")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(run).toHaveBeenCalledWith("t", expect.any(Function));
-    const prepare = run.mock.calls[0][1];
-    expect(prepare()).toEqual(retry);
+    expect(retryRun).toHaveBeenCalledWith("t", retry);
 
     fireEvent.click(screen.getByRole("button", { name: "Edit connection" }));
     expect(onEdit).toHaveBeenCalledWith("staging");
-    run.mockRestore();
   });
 
   test("다시 실행 중이면 한 줄로 알린다", () => {
@@ -1065,5 +1066,173 @@ describe("트랜잭션", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Running the next query/)).toBeNull();
+  });
+});
+
+describe("여러 문장", () => {
+  const steps = [
+    "SELECT * FROM users",
+    "UPDATE users SET active = true",
+    "SELECT * FROM order_items",
+    "SELECT 4",
+  ].map((sql, index) => ({
+    sql,
+    from: index * 40,
+    origin: { line: index + 1, column: 1 },
+  }));
+
+  function stepResult(index: number, patch: Partial<ResultData> = {}) {
+    return result({
+      sql: steps[index].sql,
+      runKey: `run-1-${index}`,
+      ...patch,
+    });
+  }
+
+  const users: RunState = {
+    status: "finished",
+    result: stepResult(0, {
+      columns: resultColumns("id", "name"),
+      rows: someRows,
+    }),
+    outcome: { outcome: "completed", rows: 3 },
+  };
+  const updated: RunState = {
+    status: "finished",
+    result: stepResult(1),
+    outcome: { outcome: "completed", rows: 12 },
+  };
+  const failed: RunState = {
+    status: "finished",
+    result: stepResult(2),
+    outcome: {
+      outcome: "failed",
+      error: {
+        code: "42P01",
+        message: 'relation "order_items" does not exist',
+        detail: null,
+        hint: null,
+        position: null,
+      },
+    },
+  };
+
+  function showScript(
+    patch: Partial<{ selected: number; stoppedAt: number | null }> = {},
+    allSteps = steps,
+  ) {
+    useRuns.setState({
+      runs: { t: failed },
+      scripts: {
+        t: {
+          steps: allSteps,
+          done: [users, updated],
+          current: 2,
+          selected: 2,
+          stoppedAt: 2,
+          ...patch,
+        },
+      },
+    });
+    render(<ResultPane tabId="t" hasConnection />);
+  }
+
+  function tabs() {
+    return within(screen.getByRole("tablist", { name: "Result tabs" }))
+      .getAllByRole("tab")
+      .map((tab) => ({
+        name: tab.textContent,
+        selected: tab.getAttribute("aria-selected"),
+        disabled: tab.getAttribute("aria-disabled"),
+      }));
+  }
+
+  test("script_shows_result_tabs", () => {
+    showScript();
+
+    expect(tabs()).toEqual([
+      { name: "1 SELECT users", selected: "false", disabled: null },
+      { name: "2 UPDATE users", selected: "false", disabled: null },
+      { name: "3 Error", selected: "true", disabled: null },
+      { name: "4 Not run", selected: "false", disabled: "true" },
+    ]);
+    expect(
+      screen.getByText('relation "order_items" does not exist'),
+    ).toBeInTheDocument();
+  });
+
+  test("stopped_message_names_the_rest", () => {
+    showScript();
+    expect(
+      screen.getByText("Stopped at statement 3. Statement 4 was not run."),
+    ).toBeInTheDocument();
+  });
+
+  test("stopped_message_names_a_range_of_statements", () => {
+    showScript({ stoppedAt: 2 }, [
+      ...steps,
+      { sql: "SELECT 5", from: 200, origin: { line: 5, column: 1 } },
+    ]);
+    expect(
+      screen.getByText("Stopped at statement 3. Statements 4–5 were not run."),
+    ).toBeInTheDocument();
+  });
+
+  test("choosing_a_tab_shows_its_result", () => {
+    showScript();
+
+    fireEvent.click(screen.getByRole("tab", { name: "1 SELECT users" }));
+
+    expect(useRuns.getState().scripts.t.selected).toBe(0);
+    expect(tabs()[0].selected).toBe("true");
+    expect(screen.getByRole("grid")).toBeInTheDocument();
+    expect(screen.getByText("3 rows · 1.23 s")).toBeInTheDocument();
+    expect(screen.queryByText(/Stopped at statement/)).toBeNull();
+
+    fireEvent.click(screen.getByRole("tab", { name: "2 UPDATE users" }));
+    expect(screen.getByText("12 rows updated")).toBeInTheDocument();
+
+    // 실행하지 않은 문장은 고를 수 없다.
+    fireEvent.click(screen.getByRole("tab", { name: "4 Not run" }));
+    expect(useRuns.getState().scripts.t.selected).toBe(1);
+  });
+
+  test("statements_after_the_running_one_wait_with_their_names", () => {
+    useRuns.setState({
+      runs: { t: { status: "running", result: stepResult(1) } },
+      scripts: {
+        t: {
+          steps,
+          done: [users],
+          current: 1,
+          selected: 1,
+          stoppedAt: null,
+        },
+      },
+    });
+    render(<ResultPane tabId="t" hasConnection />);
+
+    expect(tabs()).toEqual([
+      { name: "1 SELECT users", selected: "false", disabled: null },
+      { name: "2 UPDATE users", selected: "true", disabled: null },
+      { name: "3 SELECT order_items", selected: "false", disabled: "true" },
+      { name: "4 SELECT", selected: "false", disabled: "true" },
+    ]);
+  });
+
+  test("single_statement_has_no_tabs", () => {
+    finished(
+      { outcome: "completed", rows: 3 },
+      {
+        columns: resultColumns("id", "name"),
+        rows: someRows,
+      },
+    );
+
+    const tablist = screen.getByRole("tablist", { name: "Result tabs" });
+    const [only] = within(tablist).getAllByRole("tab");
+    expect(within(tablist).getAllByRole("tab")).toHaveLength(1);
+    expect(only).toHaveTextContent(/^SELECT t$/);
+    expect(screen.queryByText(/Stopped at statement/)).toBeNull();
   });
 });

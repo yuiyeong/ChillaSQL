@@ -129,6 +129,7 @@ test("실행 중에는 실행 버튼이 취소 버튼으로 바뀐다", async ()
     "SELECT 1",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
 
   await click(toolbarButton("Cancel"));

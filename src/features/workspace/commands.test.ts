@@ -32,7 +32,7 @@ import {
   openDocument,
   setDocumentState,
 } from "../editor/documents";
-import { anchorOf } from "../editor/runMarks";
+import { anchorOf, runMarksField } from "../editor/runMarks";
 import { setStatementSpans } from "../editor/statementSpans";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
@@ -46,6 +46,7 @@ import {
   closeTab,
   execute,
   cancelRun,
+  retryRun,
   runAgain,
   selectFirstRows,
   switchProject,
@@ -93,6 +94,10 @@ function runOf(tabId: string) {
   return useRuns.getState().runs[tabId];
 }
 
+function marksOf(tabId: string) {
+  return documentState(tabId).field(runMarksField);
+}
+
 beforeEach(async () => {
   vi.restoreAllMocks();
   await resetStores();
@@ -121,6 +126,7 @@ test("접속이 없으면 Choose a connection으로 거절한다", async () => {
 });
 
 test("선택 영역은 고른 그대로 실행한다", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 1, end: 9 }]);
   const id = tabWith("SELECT 1;\n  SELECT 2  ;");
   select(id, 11, 21);
 
@@ -132,10 +138,146 @@ test("선택 영역은 고른 그대로 실행한다", async () => {
     " SELECT 2 ",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   expect(runOf(id)).toMatchObject({
     status: "running",
     result: { sql: " SELECT 2 ", origin: { line: 2, column: 2 } },
+  });
+  // 문장이 하나면 나눈 span이 아니라 고른 그대로다.
+  expect(splitStatements).toHaveBeenCalledWith(" SELECT 2 ");
+  expect(useRuns.getState().scripts[id]).toBeUndefined();
+});
+
+test("selection_with_two_statements_runs_a_script", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 8 },
+    { start: 10, end: 18 },
+  ]);
+  const id = tabWith("SELECT 0;\nSELECT 1;\nSELECT 2;");
+  select(id, 10, 28);
+
+  await execute("run");
+
+  expect(splitStatements).toHaveBeenCalledWith("SELECT 1;\nSELECT 2");
+  expect(useRuns.getState().scripts[id]?.steps).toEqual([
+    { sql: "SELECT 1", from: 10, origin: { line: 2, column: 1 } },
+    { sql: "SELECT 2", from: 20, origin: { line: 3, column: 1 } },
+  ]);
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "SELECT 1",
+    "auto",
+    expect.any(Function),
+    { drain: true },
+  );
+
+  // 문장마다 anchor가 있어 오류 밑줄과 Go to error가 그 문장을 가리킨다.
+  const first = runOf(id);
+  const firstKey = first.status === "running" ? first.result.runKey : "";
+  expect(anchorOf(id, firstKey)).toBe(10);
+  onEventOf(0)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 1,
+  });
+  await vi.waitFor(() => expect(executeQuery).toHaveBeenCalledTimes(2));
+  const second = runOf(id);
+  expect(second).toMatchObject({ result: { sql: "SELECT 2", from: 20 } });
+  const secondKey = second.status === "running" ? second.result.runKey : "";
+  expect(anchorOf(id, secondKey)).toBe(20);
+  onEventOf(1)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "failed",
+    error: {
+      code: "42601",
+      message: "syntax error",
+      detail: null,
+      hint: null,
+      position: 2,
+    },
+  });
+  expect(marksOf(id).error).toEqual({ from: 22, to: 26 });
+});
+
+test("a_selection_that_cannot_be_split_runs_as_one_statement", async () => {
+  vi.mocked(splitStatements).mockRejectedValue(
+    new CommandError("split_failed", "문장을 나눌 수 없습니다"),
+  );
+  const id = tabWith("SELECT 'a; SELECT 2");
+  select(id, 0, 19);
+
+  await execute("run");
+
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "SELECT 'a; SELECT 2",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  expect(useRuns.getState().scripts[id]).toBeUndefined();
+});
+
+test("run_file_runs_every_statement", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 8 },
+    { start: 10, end: 18 },
+  ]);
+  const id = tabWith("SELECT 1;\nSELECT 2");
+  // 커서와 선택 영역은 보지 않는다.
+  select(id, 0, 3);
+
+  await execute("runFile");
+
+  expect(splitStatements).toHaveBeenCalledWith("SELECT 1;\nSELECT 2");
+  expect(useRuns.getState().scripts[id]?.steps).toEqual([
+    { sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } },
+    { sql: "SELECT 2", from: 10, origin: { line: 2, column: 1 } },
+  ]);
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+});
+
+test("run_file_with_one_statement_runs_it_alone", async () => {
+  const id = tabWith("SELECT 1;");
+  setDocumentState(
+    id,
+    documentState(id).update({
+      effects: setStatementSpans.of([{ start: 0, end: 8 }]),
+    }).state,
+  );
+
+  await execute("runFile");
+
+  expect(splitStatements).not.toHaveBeenCalled();
+  expect(useRuns.getState().scripts[id]).toBeUndefined();
+  expect(runOf(id)).toMatchObject({ result: { sql: "SELECT 1" } });
+});
+
+test("run_file_on_an_empty_document_is_rejected", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([]);
+  const id = tabWith("  \n-- note\n");
+
+  await execute("runFile");
+
+  expect(runOf(id)).toEqual({
+    status: "rejected",
+    rejection: { title: "Nothing to run", detail: null },
+  });
+  expect(openSession).not.toHaveBeenCalled();
+});
+
+test("run_file_without_a_connection_is_rejected", async () => {
+  const id = tabWith("SELECT 1", null);
+
+  await execute("runFile");
+
+  expect(runOf(id)).toMatchObject({
+    rejection: { title: "Choose a connection to run queries." },
   });
   expect(splitStatements).not.toHaveBeenCalled();
 });
@@ -170,6 +312,7 @@ test("선택이 없으면 커서 문장을 실행한다", async () => {
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   expect(runOf(id)).toMatchObject({
     status: "running",
@@ -303,6 +446,7 @@ test("문장을 나누는 동안 문서를 고쳐도 나누기 전 문서로 고
     "SELECT 1",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
 });
 
@@ -336,9 +480,7 @@ test("dirty 탭은 물어본 뒤에 닫는다", async () => {
   const id = tabWith("SELECT 1");
   await useRuns.getState().run(id, () => ({
     connection: "local",
-    sql: "SELECT 1",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [{ sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } }],
   }));
   useTabs.getState().markDirty(id);
   // 처음 state object를 고치지 않게 새 object에 spy를 단다.
@@ -445,9 +587,7 @@ test("접속을 바꾸면 세션을 놓는다", async () => {
   const id = tabWith("SELECT 1");
   await useRuns.getState().run(id, () => ({
     connection: "local",
-    sql: "SELECT 1",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [{ sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } }],
   }));
   // 처음 state object를 고치지 않게 새 object에 spy를 단다.
   useRuns.setState({ ...useRuns.getState() });
@@ -480,9 +620,7 @@ test("프로젝트를 바꾸면 탭과 실행 상태를 비운다", async () => 
   const id = tabWith("SELECT 1");
   await useRuns.getState().run(id, () => ({
     connection: "local",
-    sql: "SELECT 1",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [{ sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } }],
   }));
 
   // 폴더를 고르지 않으면 아무것도 하지 않는다.
@@ -523,9 +661,7 @@ test("세션을 닫지 못해도 프로젝트를 바꾼다", async () => {
   const id = tabWith("SELECT 1");
   await useRuns.getState().run(id, () => ({
     connection: "local",
-    sql: "SELECT 1",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [{ sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } }],
   }));
   vi.mocked(pickDirectory).mockResolvedValue("/q");
   vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
@@ -594,9 +730,7 @@ test("save, cancel, newTab, nextTab, prevTab은 활성 탭에 한다", async () 
 
   await useRuns.getState().run(second, () => ({
     connection: "local",
-    sql: "SELECT 2",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [{ sql: "SELECT 2", from: 0, origin: { line: 1, column: 1 } }],
   }));
   await execute("cancel");
   expect(cancelQuery).toHaveBeenCalledWith(3, 7);
@@ -647,9 +781,7 @@ async function ranTab(name: string, sessionId: number): Promise<string> {
   });
   await useRuns.getState().run(id, () => ({
     connection: name,
-    sql: "SELECT 1",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [{ sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } }],
   }));
   return id;
 }
@@ -680,6 +812,7 @@ test("대상이 바뀐 접속을 쓰는 탭의 세션을 놓는다", async () =>
   expect(runOf(staging)?.status).toBe("running");
 
   vi.mocked(openSession).mockResolvedValueOnce(session(5));
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
   useTabs.getState().activate(local);
   select(local, 0, 8);
   await execute("run");
@@ -762,9 +895,7 @@ test("디렉토리 고르기가 실패하면 프로젝트 오류로 보여 준�
   const id = tabWith("SELECT 1");
   await useRuns.getState().run(id, () => ({
     connection: "local",
-    sql: "SELECT 1",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [{ sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } }],
   }));
   vi.mocked(pickDirectory).mockRejectedValue(new Error("창을 열지 못했습니다"));
 
@@ -798,6 +929,7 @@ test("runAgain은 같은 SQL을 지금 접속으로 다시 실행한다", async 
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
 
   // 커서를 옮기고 접속을 바꿔도 결과의 SQL을 그대로 보낸다.
@@ -816,6 +948,7 @@ test("runAgain은 같은 SQL을 지금 접속으로 다시 실행한다", async 
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   expect(runOf(id)).toMatchObject({
     status: "running",
@@ -847,6 +980,7 @@ test("run_again_uses_the_moved_position", async () => {
     "SELECT 2",
     "auto",
     expect.any(Function),
+    { drain: false },
   );
   const again = runOf(id);
   expect(again).toMatchObject({
@@ -894,9 +1028,7 @@ test("터널이 시작 중인 연결 중 탭의 취소는 터널 시작을 멈�
   vi.mocked(openSession).mockReturnValue(opening.promise);
   void useRuns.getState().run(id, () => ({
     connection: "staging",
-    sql: "SELECT 1",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [{ sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } }],
   }));
   expect(runOf(id)?.status).toBe("connecting");
   useTunnels.getState().apply({
@@ -941,9 +1073,9 @@ async function runInTransaction(
 ): Promise<void> {
   await useRuns.getState().run(tabId, () => ({
     connection: "local",
-    sql: "UPDATE a SET b = 1",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [
+      { sql: "UPDATE a SET b = 1", from: 0, origin: { line: 1, column: 1 } },
+    ],
   }));
   onEventOf(call)({
     type: "finished",
@@ -992,9 +1124,9 @@ test("commit does nothing without a transaction or while a query is being read",
   await runInTransaction(id, "in_transaction");
   await useRuns.getState().run(id, () => ({
     connection: "local",
-    sql: "SELECT * FROM big",
-    from: 0,
-    origin: { line: 1, column: 1 },
+    steps: [
+      { sql: "SELECT * FROM big", from: 0, origin: { line: 1, column: 1 } },
+    ],
   }));
   // 앞 줄을 받는 중이면 먼저 Cancel해야 한다.
   expect(runOf(id).status).toBe("running");
@@ -1289,6 +1421,7 @@ test("run_asks_before_a_dangerous_statement_and_does_nothing_on_cancel", async (
     "DELETE FROM sessions;",
     "manual",
     expect.any(Function),
+    { drain: false },
   );
 });
 
@@ -1311,6 +1444,109 @@ test("run_again_asks_too", async () => {
 
   expect(executeQuery).toHaveBeenCalledTimes(1);
   expect(runOf(id)).toMatchObject({ status: "finished" });
+});
+
+test("danger_is_confirmed_when_its_step_comes", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 8 },
+    { start: 10, end: 30 },
+    { start: 32, end: 40 },
+  ]);
+  vi.mocked(inspectStatement).mockImplementation((sql) =>
+    Promise.resolve(sql.startsWith("DELETE") ? deleteAll : null),
+  );
+  const id = tabWith("SELECT 1;\nDELETE FROM sessions;\nSELECT 3");
+
+  await execute("runFile");
+  // 앞 문장이 끝나기 전에는 묻지 않는다.
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+  expect(useDialogs.getState().current).toBeNull();
+
+  onEventOf(0)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 1,
+  });
+  const spec = await answerDialog("cancel");
+
+  expect(textOf(spec.title)).toBe("Run DELETE without WHERE?");
+  expect(spec.sql).toBe("DELETE FROM sessions");
+  await vi.waitFor(() =>
+    expect(useRuns.getState().scripts[id]?.stoppedAt).toBe(0),
+  );
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+
+  // Run을 고르면 그 문장을 보낸다.
+  await execute("runFile");
+  onEventOf(1)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "completed",
+    rows: 1,
+  });
+  await answerDialog("run");
+  await vi.waitFor(() => expect(executeQuery).toHaveBeenCalledTimes(3));
+  expect(vi.mocked(executeQuery).mock.calls[2][1]).toBe("DELETE FROM sessions");
+});
+
+test("run_again_without_its_anchor_runs_without_one", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 10, end: 18 }]);
+  const id = tabWith("SELECT 1;\nSELECT 2");
+  select(id, 12);
+  await execute("run");
+
+  // 실행한 text를 지우면 문서에 그 자리가 없다.
+  setDocumentState(
+    id,
+    documentState(id).update({ changes: { from: 9, to: 18 } }).state,
+  );
+  await runAgain(id);
+
+  expect(executeQuery).toHaveBeenLastCalledWith(
+    3,
+    "SELECT 2",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  const again = runOf(id);
+  expect(again).toMatchObject({
+    status: "running",
+    result: { sql: "SELECT 2", from: null, origin: { line: 2, column: 1 } },
+  });
+  const key = again.status === "running" ? again.result.runKey : "";
+  expect(anchorOf(id, key)).toBeNull();
+  expect(marksOf(id).anchors).toEqual({});
+});
+
+test("try_again_uses_the_moved_anchor", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 8 },
+    { start: 10, end: 18 },
+  ]);
+  vi.mocked(openSession).mockRejectedValueOnce(
+    new CommandError("tunnel_timeout", "localhost:25432 didn't open"),
+  );
+  const id = tabWith("SELECT 1;\nSELECT 2");
+  await execute("runFile");
+  const failed = runOf(id);
+  const retry = failed.status === "rejected" ? failed.rejection.retry : null;
+  expect(retry).toMatchObject({ connection: "local" });
+
+  setDocumentState(
+    id,
+    documentState(id).update({ changes: { from: 0, insert: "\n\n" } }).state,
+  );
+  await retryRun(id, retry!);
+
+  expect(useRuns.getState().scripts[id]?.steps).toEqual([
+    { sql: "SELECT 1", from: 2, origin: { line: 3, column: 1 } },
+    { sql: "SELECT 2", from: 12, origin: { line: 4, column: 1 } },
+  ]);
+  expect(executeQuery).toHaveBeenCalledTimes(1);
 });
 
 test("saving_a_changed_target_reloads_its_catalog", async () => {
@@ -1392,6 +1628,7 @@ test("select_first_rows_quotes_names", async () => {
       sql,
       "auto",
       expect.any(Function),
+      { drain: false },
     ),
   );
 });

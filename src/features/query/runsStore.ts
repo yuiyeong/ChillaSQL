@@ -27,8 +27,10 @@ import {
   reduce,
   requestFetch,
   type Rejection,
+  type Retry,
   type RunRequest,
   type RunState,
+  type ScriptStep,
 } from "./runReducer";
 import {
   canEndTransaction,
@@ -50,7 +52,7 @@ function rejectionOf(error: unknown): Rejection {
 }
 
 /** 세션을 열지 못한 이유. 터널 오류면 stderr와 같은 실행을 다시 할 요청을 남긴다. */
-function openRejection(error: unknown, request: RunRequest): Rejection {
+function openRejection(error: unknown, request: Retry): Rejection {
   const rejection = rejectionOf(error);
   if (!(error instanceof CommandError) || !error.kind.startsWith("tunnel_")) {
     return rejection;
@@ -59,6 +61,25 @@ function openRejection(error: unknown, request: RunRequest): Rejection {
     ? { ...rejection, retry: request }
     : { ...rejection, output: error.output, retry: request };
 }
+
+/**
+ * 문장이 둘 이상인 실행. 문장을 하나씩 보내고, 문장이 `completed`가 아니게 끝나면 거기서 멈춘다.
+ * 지금 문장의 상태는 `runs[tabId]`에 두어 fetch, cancel, 트랜잭션 계산은 문장 하나의 실행과 같다.
+ */
+export interface ScriptRun {
+  steps: ScriptStep[];
+  /** 끝난 앞 문장의 고정된 결과. index는 문장 번호 - 1 */
+  done: RunState[];
+  /** runs[tabId]가 보이는 문장 */
+  current: number;
+  /** 결과 탭에서 고른 문장 */
+  selected: number;
+  /** 멈췄으면 그 문장. 끝까지 갔으면 null */
+  stoppedAt: number | null;
+}
+
+/** 그 문장 차례에 보낼지 묻는다(위험한 문장 확인). false면 그 문장부터 보내지 않는다. */
+export type ConfirmStep = (step: ScriptStep) => Promise<boolean>;
 
 /**
  * 탭에 띄우는 알림. `reconnected`는 끊긴 세션을 새 세션이 대신했다는 것이고, `transactionLost`는
@@ -115,8 +136,10 @@ function endRejection(result: EndResult, end: TxEnd): Rejection | null {
 }
 
 interface RunsState {
-  /** tab id → 상태. 없으면 idle로 본다. */
+  /** tab id → 상태. 없으면 idle로 본다. 여러 문장의 실행이면 지금 문장의 상태다. */
   runs: Record<string, RunState>;
+  /** tab id → 여러 문장의 실행. 문장이 둘 이상인 실행만 있다. */
+  scripts: Record<string, ScriptRun>;
   /** tab id → 알림. 그 탭의 다음 실행이 시작하거나 `dismissNotice`가 지운다. */
   notices: Record<string, RunNotice>;
   /**
@@ -149,15 +172,26 @@ interface RunsState {
    * 다음 동작이 오면 실행하지 않는다. `prepare`가 Rejection을
    * 돌려주면 rejected로 두는데, 그 탭이 연결 중이거나 실행 중이면 아무것도 바꾸지 않는다.
    * null이면 아무것도 바꾸지 않는다.
+   *
+   * 문장이 둘 이상이면 한 세션에서 차례로 보낸다. 마지막이 아닌 문장은 끝까지 읽고 첫 batch만 받는다
+   * (`drain`). 앞 문장이 `completed`로 끝나야 다음 문장을 보내고, 그 전에 `confirmStep`으로 묻는다.
+   * 첫 문장은 `prepare`가 확인한다. 같은 탭에서 다시 실행하거나 release하면 다음 문장을 보내지 않는다.
+   * promise는 첫 문장을 보내면 끝난다.
    */
-  run(tabId: string, prepare: Prepare): Promise<void>;
+  run(
+    tabId: string,
+    prepare: Prepare,
+    confirmStep?: ConfirmStep,
+  ): Promise<void>;
+  /** 결과 탭에서 문장을 고른다. 결과가 있는 문장(지금 문장까지)만 고를 수 있다. */
+  selectStep(tabId: string, index: number): void;
   cancel(tabId: string): Promise<void>;
   /**
    * 실행 중인 결과의 다음 batch를 요청한다. 앞 요청의 batch가 오기 전이거나 끝난 결과면
    * 보내지 않는다. 실패는 무시한다. 끝은 `finished`로 온다.
    */
   fetchMore(tabId: string): Promise<void>;
-  /** 탭을 닫거나 접속을 바꿀 때. 상태, 트랜잭션과 결과 표의 view는 바로 지우고 세션을 닫는다. */
+  /** 탭을 닫거나 접속을 바꿀 때. 상태, 여러 문장의 실행, 트랜잭션과 결과 표의 view는 바로 지우고 세션을 닫는다. */
   release(tabId: string): Promise<void>;
   /** 모든 탭을 release한다. 프로젝트를 바꿀 때 */
   reset(): Promise<void>;
@@ -165,6 +199,7 @@ interface RunsState {
 
 /** 탭마다 값을 하나씩 두는 record 가운데 `setEntry`로 바꾸는 것과 그 값 */
 interface Entries {
+  scripts: ScriptRun;
   notices: RunNotice;
   discardedByEnd: true;
   transactions: TxInfo;
@@ -204,6 +239,17 @@ export function endable(
   return canEndTransaction(state.runs[tabId]);
 }
 
+/**
+ * 끝까지 읽는 문장(`drain`)의 실행 중 상태는 이어서 가져올 수 없다. Rust가 아직 읽는 중이므로
+ * Commit과 Rollback도 처음 batch 전처럼 기다린다.
+ */
+function frozen(state: RunState, drain: boolean): RunState {
+  if (!drain || state.status !== "running" || state.result.fetch === "none") {
+    return state;
+  }
+  return { status: "running", result: { ...state.result, fetch: "none" } };
+}
+
 /** 세션이 열리면 닫는다. 열기와 닫기의 실패는 무시한다. */
 async function closeSlot(slot: SessionSlot): Promise<void> {
   try {
@@ -237,6 +283,39 @@ export const useRuns = create<RunsState>()((set, get) => {
 
   function setRun(tabId: string, state: RunState): void {
     set((s) => ({ runs: { ...s.runs, [tabId]: state } }));
+  }
+
+  /** 실행하지 못한 이유를 보인다. 여러 문장의 실행이었으면 결과 탭 없이 이유만 보인다. */
+  function reject(tabId: string, rejection: Rejection): void {
+    set((s) => ({
+      runs: { ...s.runs, [tabId]: { status: "rejected", rejection } },
+      scripts: withEntry(s.scripts, tabId, undefined),
+    }));
+  }
+
+  /** 그 탭의 여러 문장 실행을 바꾼다. 없거나 바뀌지 않으면 state를 그대로 둔다. */
+  function updateScript(
+    tabId: string,
+    change: (script: ScriptRun) => ScriptRun,
+  ): void {
+    set((s) => {
+      const script = s.scripts[tabId];
+      if (script === undefined) return s;
+      const next = change(script);
+      return next === script ? s : { scripts: { ...s.scripts, [tabId]: next } };
+    });
+  }
+
+  /**
+   * 여러 문장의 실행을 `index` 문장에서 멈춘다. 그 뒤 문장은 보내지 않는다. 마지막 문장이면 남은 문장이
+   * 없으므로 끝까지 간 것이다.
+   */
+  function stopScript(tabId: string, index: number): void {
+    updateScript(tabId, (script) => ({
+      ...script,
+      selected: index,
+      stoppedAt: index < script.steps.length - 1 ? index : null,
+    }));
   }
 
   /** 탭마다의 record에서 그 탭의 값을 바꾼다. `undefined`면 지운다. 바뀌지 않으면 state를 그대로 둔다. */
@@ -334,6 +413,7 @@ export const useRuns = create<RunsState>()((set, get) => {
 
   return {
     runs: {},
+    scripts: {},
     notices: {},
     discardedByEnd: {},
     transactions: {},
@@ -353,7 +433,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       setNotice(tabId, null);
     },
 
-    async run(tabId, prepare) {
+    async run(tabId, prepare, confirmStep) {
       // Commit이나 Rollback의 답을 기다리는 동안은 그 세션에 쿼리를 보내지 않는다.
       if (get().ending[tabId]) return;
       const attempt = bump(attempts, tabId);
@@ -376,16 +456,30 @@ export const useRuns = create<RunsState>()((set, get) => {
         const status = get().runs[tabId]?.status;
         if (status === "connecting" || status === "running") return;
         bump(tokens, tabId);
-        setRun(tabId, { status: "rejected", rejection: request });
+        reject(tabId, request);
         return;
       }
-      const { connection, sql } = request;
+      const { connection, steps } = request;
 
       const token = bump(tokens, tabId);
-      // 이 실행의 text가 문서에서 시작한 곳을 문서에 두고, 지난 실행의 오류 밑줄을 지운다. 세션을 여는
-      // 동안의 편집도 따라 옮긴다.
-      const runKey = `run-${token}`;
-      markRunStart(tabId, [{ runKey, from: request.from }]);
+      // 문장마다 key를 두어 오류 밑줄, Go to error, 결과 표의 view가 그 문장을 가리킨다.
+      const runKeys = steps.map((_, index) => `run-${token}-${index}`);
+      // 이 실행의 문장이 문서에서 시작한 곳을 문서에 두고, 지난 실행의 오류 밑줄을 지운다. 세션을 여는
+      // 동안의 편집도 따라 옮긴다. 문서에 자리가 없는 문장은 두지 않는다.
+      markRunStart(
+        tabId,
+        steps.flatMap(({ from }, index) =>
+          from === null ? [] : [{ runKey: runKeys[index], from }],
+        ),
+      );
+      dropGridView(tabId);
+      setEntry(
+        "scripts",
+        tabId,
+        steps.length > 1
+          ? { steps, done: [], current: 0, selected: 0, stoppedAt: null }
+          : undefined,
+      );
       const current = () => tokens.get(tabId) === token;
 
       const slot = slotFor(tabId, connection);
@@ -397,12 +491,10 @@ export const useRuns = create<RunsState>()((set, get) => {
         forget(tabId, slot);
         if (!current()) return;
         if (isCommandError(error, "tunnel_cancelled")) {
+          setEntry("scripts", tabId, undefined);
           setRun(tabId, { status: "idle" });
         } else {
-          setRun(tabId, {
-            status: "rejected",
-            rejection: openRejection(error, request),
-          });
+          reject(tabId, openRejection(error, { connection, steps, runKeys }));
         }
         return;
       }
@@ -414,7 +506,6 @@ export const useRuns = create<RunsState>()((set, get) => {
 
       // 문장 수는 보낸 모드로 센다. 실행 중에 탭의 모드가 바뀌어도 이 실행은 이 모드다.
       const mode = modeOf(useTabs.getState(), tabId);
-      const startedAt = Date.now();
       /**
        * 끝난 실행의 tx를 탭의 트랜잭션에 반영할지. actor는 tx를 문장이 끝나고(버린 문장은 되돌린 뒤)
        * 다음 문장 전에 읽으므로, 이 탭의 세션에서 온 null이 아닌 tx는 그때의 상태다. 다만
@@ -437,73 +528,142 @@ export const useRuns = create<RunsState>()((set, get) => {
         );
       };
 
-      const onEvent = (event: QueryEvent) => {
-        // 세션이 죽었다. 늦은 event여도 그 세션이 아직 이 탭의 것이면 버린다.
-        if (
-          event.type === "finished" &&
-          event.outcome === "connection_lost" &&
-          forgetLost(tabId, slot)
-        ) {
-          void closeSlot(slot);
-        }
-        const fresh = current();
-        if (!fresh && event.type !== "finished") return;
-        if (
-          fresh &&
-          event.type === "finished" &&
-          event.outcome === "failed" &&
-          event.error.position !== null
-        ) {
-          markServerError(tabId, runKey, event.error.position);
-        }
-        // header의 type 이름은 접속의 catalog connection이 답한다. 밀려난 실행이 묻으면 이미 닫은
-        // catalog connection(과 터널)을 다시 연다.
-        if (event.type === "columns") {
-          void useTypes.getState().ensure(connection, event.columns);
-        }
-        set((s) => {
-          const before = s.runs[tabId] ?? { status: "idle" };
-          const after = fresh ? reduce(before, event) : before;
-          const runs =
-            after === before ? s.runs : { ...s.runs, [tabId]: after };
-          if (event.type !== "finished" || !appliesTx(s, event, fresh)) {
-            return runs === s.runs ? s : { runs };
+      /** `index` 문장을 보낸다. 앞 문장의 끝난 결과는 고정해 둔다. */
+      const sendStep = async (index: number): Promise<void> => {
+        const step = steps[index];
+        const runKey = runKeys[index];
+        // 마지막이 아닌 문장은 Rust가 끝까지 읽고 첫 batch만 보낸다. 버리면 cancel이 되어 변경이 되돌려진다.
+        const drain = index < steps.length - 1;
+        // 문장마다 따로 센다. 트랜잭션을 연 문장의 시각이 트랜잭션의 시작이다.
+        const startedAt = Date.now();
+
+        const onEvent = (event: QueryEvent) => {
+          // 세션이 죽었다. 늦은 event여도 그 세션이 아직 이 탭의 것이면 버린다.
+          if (
+            event.type === "finished" &&
+            event.outcome === "connection_lost" &&
+            forgetLost(tabId, slot)
+          ) {
+            void closeSlot(slot);
           }
-          // 밀려난 실행은 화면에 결과가 남지 않으므로 세지 않고 상태만 따른다.
-          const tx = nextTx(
-            s.transactions[tabId] ?? null,
-            event.tx,
-            event.outcome,
-            mode,
-            startedAt,
-            fresh,
-          );
-          if (event.tx !== null) txReads.set(tabId, token);
-          const transactions = withEntry(
-            s.transactions,
-            tabId,
-            tx ?? undefined,
-          );
-          return runs === s.runs && transactions === s.transactions
-            ? s
-            : { runs, transactions };
+          const fresh = current();
+          if (!fresh && event.type !== "finished") return;
+          if (
+            fresh &&
+            event.type === "finished" &&
+            event.outcome === "failed" &&
+            event.error.position !== null
+          ) {
+            markServerError(tabId, runKey, event.error.position);
+          }
+          // header의 type 이름은 접속의 catalog connection이 답한다. 밀려난 실행이 묻으면 이미 닫은
+          // catalog connection(과 터널)을 다시 연다.
+          if (event.type === "columns") {
+            void useTypes.getState().ensure(connection, event.columns);
+          }
+          set((s) => {
+            const before = s.runs[tabId] ?? { status: "idle" };
+            const after = fresh ? frozen(reduce(before, event), drain) : before;
+            const runs =
+              after === before ? s.runs : { ...s.runs, [tabId]: after };
+            if (event.type !== "finished" || !appliesTx(s, event, fresh)) {
+              return runs === s.runs ? s : { runs };
+            }
+            // 밀려난 실행은 화면에 결과가 남지 않으므로 세지 않고 상태만 따른다.
+            const tx = nextTx(
+              s.transactions[tabId] ?? null,
+              event.tx,
+              event.outcome,
+              mode,
+              startedAt,
+              fresh,
+            );
+            if (event.tx !== null) txReads.set(tabId, token);
+            const transactions = withEntry(
+              s.transactions,
+              tabId,
+              tx ?? undefined,
+            );
+            return runs === s.runs && transactions === s.transactions
+              ? s
+              : { runs, transactions };
+          });
+          if (fresh && event.type === "finished" && tabId in get().scripts) {
+            if (event.outcome !== "completed") {
+              stopScript(tabId, index);
+            } else if (drain) {
+              void nextStep(index + 1);
+            }
+          }
+        };
+
+        set((s) => {
+          const running: RunState = {
+            status: "running",
+            result: emptyResult(step, runKey, startedAt),
+          };
+          const runs = { ...s.runs, [tabId]: running };
+          const script = s.scripts[tabId];
+          if (script === undefined) return { runs };
+          // 앞 문장의 결과는 `runs`에서 `done`으로 옮긴다. 결과 탭은 지금 문장을 따라간다.
+          const previous = s.runs[tabId];
+          const done =
+            index === 0 || previous === undefined
+              ? script.done
+              : [...script.done, previous];
+          return {
+            runs,
+            scripts: {
+              ...s.scripts,
+              [tabId]: { ...script, done, current: index, selected: index },
+            },
+          };
         });
+        const queryId = executeQuery(sessionId, step.sql, mode, onEvent, {
+          drain,
+        });
+        executions.set(tabId, { sessionId, queryId });
+        try {
+          await queryId;
+        } catch (error) {
+          if (isCommandError(error, "unknown_session")) forgetLost(tabId, slot);
+          if (current()) reject(tabId, rejectionOf(error));
+        }
       };
 
-      setRun(tabId, {
-        status: "running",
-        result: emptyResult(request, runKey, startedAt),
-      });
-      const queryId = executeQuery(sessionId, sql, mode, onEvent);
-      executions.set(tabId, { sessionId, queryId });
-      try {
-        await queryId;
-      } catch (error) {
-        if (isCommandError(error, "unknown_session")) forgetLost(tabId, slot);
-        if (current()) {
-          setRun(tabId, { status: "rejected", rejection: rejectionOf(error) });
+      /** 앞 문장이 끝났다. `index` 문장의 차례에 묻고 보낸다. 보내지 않으면 앞 문장에서 멈춘다. */
+      const nextStep = async (index: number): Promise<void> => {
+        let confirmed = true;
+        if (confirmStep !== undefined) {
+          try {
+            confirmed = await confirmStep(steps[index]);
+          } catch {
+            confirmed = false;
+          }
         }
-      }
+        if (!current()) return;
+        // 끝내기를 기다리는 중이거나 세션이 끊겼으면 다음 문장을 보내지 않는다.
+        if (
+          !confirmed ||
+          get().ending[tabId] !== undefined ||
+          sessions.get(tabId) !== slot ||
+          slot.stale
+        ) {
+          stopScript(tabId, index - 1);
+          return;
+        }
+        await sendStep(index);
+      };
+
+      await sendStep(0);
+    },
+
+    selectStep(tabId, index) {
+      updateScript(tabId, (script) =>
+        index < 0 || index > script.current || index === script.selected
+          ? script
+          : { ...script, selected: index },
+      );
     },
 
     async fetchMore(tabId) {
@@ -580,7 +740,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       if (rejection !== null && tokens.get(tabId) === token) {
         // 끝내기 앞에서 버려진 쿼리의 늦은 event가 이 표시를 덮지 않게 한다.
         bump(tokens, tabId);
-        setRun(tabId, { status: "rejected", rejection });
+        reject(tabId, rejection);
       }
       return result?.outcome === "ended";
     },
@@ -590,6 +750,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       dropGridView(tabId);
       set((s) => ({
         runs: withEntry(s.runs, tabId, undefined),
+        scripts: withEntry(s.scripts, tabId, undefined),
         notices: withEntry(s.notices, tabId, undefined),
         discardedByEnd: withEntry(s.discardedByEnd, tabId, undefined),
         transactions: withEntry(s.transactions, tabId, undefined),
@@ -606,6 +767,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       lost.clear();
       set({
         runs: {},
+        scripts: {},
         notices: {},
         discardedByEnd: {},
         transactions: {},

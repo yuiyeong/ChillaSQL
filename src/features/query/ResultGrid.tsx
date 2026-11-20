@@ -87,7 +87,7 @@ const estimateSize = () => ROW_HEIGHT;
 
 /**
  * 가상 스크롤 결과 표. 같은 실행 동안에는 batch마다 `result` object가 바뀌어도 상태를 이어 가고,
- * 다른 실행(`startedAt`이나 `sql`이 다름)이 오면 처음부터 다시 그린다(선택, 스크롤, 너비).
+ * 다른 실행(`runKeyOf`가 다름. 여러 문장의 다른 문장도)이 오면 처음부터 다시 그린다(선택, 스크롤, 너비).
  * 다른 탭을 보다 돌아오면 그 탭이 같은 실행일 때 떠날 때의 view를 이어 간다.
  * props가 그대로면(알림, header 복사 버튼) 다시 그리지 않는다.
  */
@@ -96,12 +96,16 @@ export const ResultGrid = memo(function ResultGrid(props: ResultGridProps) {
   return <Grid key={`${props.tabId}\n${runKey}`} runKey={runKey} {...props} />;
 });
 
-/** 그 탭이 아직 이 실행을 보여 주는지. release했거나 다시 실행했으면 false다. */
+/**
+ * 그 탭이 아직 이 실행을 보여 줄 수 있는지. 여러 문장의 실행이면 끝난 앞 문장도 결과 탭으로 다시 본다.
+ * release했거나 다시 실행했으면 false다.
+ */
 function isShownRun(tabId: string, runKey: string): boolean {
-  const run = useRuns.getState().runs[tabId];
-  return (
-    (run?.status === "running" || run?.status === "finished") &&
-    runKeyOf(run.result) === runKey
+  const { runs, scripts } = useRuns.getState();
+  return [runs[tabId], ...(scripts[tabId]?.done ?? [])].some(
+    (run) =>
+      (run?.status === "running" || run?.status === "finished") &&
+      runKeyOf(run.result) === runKey,
   );
 }
 
