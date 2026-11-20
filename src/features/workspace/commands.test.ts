@@ -2206,3 +2206,197 @@ test("switching_projects_forgets_the_asking_prompt", async () => {
   expect(isParameterPromptOpen()).toBe(false);
   expect(executeQuery).not.toHaveBeenCalled();
 });
+
+test("explain_prefixes_the_statement", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
+  const id = tabWith("SELECT 1");
+
+  await execute("explain");
+
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "EXPLAIN ANALYZE SELECT 1",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  expect(runOf(id)).toMatchObject({
+    status: "running",
+    result: {
+      sql: "EXPLAIN ANALYZE SELECT 1",
+      from: 0,
+      rewrite: { source: "SELECT 1" },
+    },
+  });
+});
+
+test("explain_runs_the_selection", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
+  const id = tabWith("-- x\nSELECT 1;");
+  select(id, 5, 13);
+
+  await execute("explain");
+
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "EXPLAIN ANALYZE SELECT 1",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+});
+
+test.each([
+  "EXPLAIN SELECT 1",
+  "explain analyze select 1",
+  "  \n -- note\nExplain (ANALYZE) SELECT 1",
+  "/* a /* nested */ b */ EXPLAIN SELECT 1",
+])("explain_keeps_an_explain_statement: %s", async (sql) => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: sql.length }]);
+  const id = tabWith(sql);
+
+  await execute("explain");
+
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    sql,
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  expect(runOf(id)).not.toHaveProperty("result.rewrite");
+});
+
+test("explain_prefixes_a_word_that_only_starts_with_explain", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 21 }]);
+  tabWith("SELECT explain FROM t");
+
+  await execute("explain");
+
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "EXPLAIN ANALYZE SELECT explain FROM t",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+});
+
+test("explain_rejects_two_statements", async () => {
+  const text = "SELECT 1; SELECT 2";
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 8 },
+    { start: 10, end: 18 },
+  ]);
+  const id = tabWith(text);
+  select(id, 0, text.length);
+
+  await execute("explain");
+
+  expect(runOf(id)).toEqual({
+    status: "rejected",
+    rejection: {
+      title: "Explain runs one statement. Select a single statement.",
+      detail: null,
+    },
+  });
+  expect(executeQuery).not.toHaveBeenCalled();
+  expect(openSession).not.toHaveBeenCalled();
+});
+
+test("explain_asks_parameters_first", async () => {
+  const sql = "SELECT :n";
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: sql.length }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "n", start: 7, end: 9 },
+  ]);
+  const id = tabWith(sql);
+
+  const running = execute("explain");
+  const request = await promptRequest();
+
+  // 물을 때 문장에는 아직 접두어가 없다.
+  expect(findParameters).toHaveBeenCalledWith(sql);
+  expect(request.names).toEqual(["n"]);
+  expect(executeQuery).not.toHaveBeenCalled();
+  answerParameters({ n: "5" });
+  await running;
+
+  expect(inspectStatement).toHaveBeenCalledWith("EXPLAIN ANALYZE SELECT 5");
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "EXPLAIN ANALYZE SELECT 5",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  expect(runOf(id)).toMatchObject({
+    result: { rewrite: { source: sql } },
+  });
+});
+
+test("explain_error_position_maps_to_the_document", async () => {
+  const text = "SELECT 1;\nSELECT foo FROM t";
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 8 },
+    { start: 10, end: 27 },
+  ]);
+  const id = tabWith(text);
+  select(id, 20);
+
+  await execute("explain");
+  const fail = (position: number) =>
+    onEventOf(0)({
+      type: "finished",
+      tx: "idle",
+      elapsedMicros: 1,
+      outcome: "failed",
+      error: {
+        code: "42703",
+        message: "column foo does not exist",
+        detail: null,
+        hint: null,
+        position,
+      },
+    });
+
+  // 보낸 text `EXPLAIN ANALYZE SELECT foo FROM t`에서 foo는 22(0부터)이고 문서에서는 17이다.
+  fail(23);
+
+  expect(marksOf(id).error).toMatchObject({ from: 17 });
+});
+
+test("explain_error_inside_the_prefix_points_at_the_statement_start", async () => {
+  const text = "SELECT foo FROM t";
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 17 }]);
+  const id = tabWith(text);
+
+  await execute("explain");
+  onEventOf(0)({
+    type: "finished",
+    tx: "idle",
+    elapsedMicros: 1,
+    outcome: "failed",
+    error: {
+      code: "42601",
+      message: "syntax error",
+      detail: null,
+      hint: null,
+      position: 4,
+    },
+  });
+
+  expect(marksOf(id).error).toMatchObject({ from: 0 });
+});
+
+test("explain_without_a_connection_is_rejected", async () => {
+  const id = tabWith("SELECT 1", null);
+
+  await execute("explain");
+
+  expect(runOf(id)).toMatchObject({
+    status: "rejected",
+    rejection: { title: "Choose a connection to run queries." },
+  });
+  expect(splitStatements).not.toHaveBeenCalled();
+});

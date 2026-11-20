@@ -40,6 +40,7 @@ export const en = {
   "toolbar.chooseWhatToRun": "Choose what to run",
   "toolbar.whatToRun": "What to run",
   "toolbar.reformat": "Reformat (Opt+Cmd+L)",
+  "toolbar.explain": "Explain plan (EXPLAIN ANALYZE)",
 
   "workspace.resizeResults": "Resize results panel",
   "status.position": "Ln {line}, Col {column}",
@@ -139,6 +140,8 @@ export const en = {
   "run.emptySelection": "Nothing to run",
   "run.emptyFile": "Nothing to run",
   "run.noStatementAtCursor": "No statement at the cursor",
+  "run.explainOneStatement":
+    "Explain runs one statement. Select a single statement.",
   "run.splitFailed.title": "Couldn't find a statement",
   "run.splitFailed.detail":
     "An unclosed quote keeps the text from being split into statements. Select what to run and it is sent as is.",
@@ -296,6 +299,18 @@ export const en = {
   "result.end.one": "End · 1 row",
   "result.end.other": "End · {count} rows",
   "result.resizeColumn": "Resize {name}",
+
+  "explain.tab": "EXPLAIN",
+  "explain.timings": "Execution {execution} · Planning {planning}",
+  "explain.timingsExecution": "Execution {execution}",
+  "explain.timingsPlanning": "Planning {planning}",
+  "explain.showRaw": "Show raw",
+  "explain.showTree": "Show tree",
+  "explain.node": "Node",
+  "explain.actualTime": "Actual time",
+  "explain.rows": "Rows (est → actual)",
+  "explain.loops": "Loops",
+  "explain.neverExecuted": "never executed",
 
   "tx.mode": "Transaction mode",
   "tx.auto": "Auto",

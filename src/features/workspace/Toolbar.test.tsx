@@ -443,6 +443,50 @@ test("탭이 없으면 Reformat이 disabled다", () => {
   ).toBeDisabled();
 });
 
+test("explain_button_runs_explain", async () => {
+  openProjectWith([connection("local")]);
+  tabWith("local");
+  renderToolbar();
+
+  const button = screen.getByRole("button", {
+    name: "Explain plan (EXPLAIN ANALYZE)",
+  });
+  expect(button).not.toHaveAttribute("aria-keyshortcuts");
+  await click(button);
+
+  expect(execute).toHaveBeenCalledWith("explain");
+});
+
+test("explain_follows_reformat_in_the_toolbar", () => {
+  openProjectWith([connection("local")]);
+  tabWith("local");
+  renderToolbar();
+
+  const names = within(screen.getByRole("toolbar"))
+    .getAllByRole("button")
+    .map((button) => button.getAttribute("aria-label"));
+  const reformat = names.indexOf("Reformat (Opt+Cmd+L)");
+  expect(names[reformat + 1]).toBe("Explain plan (EXPLAIN ANALYZE)");
+});
+
+test("explain_is_disabled_without_a_connection", () => {
+  openProjectWith([connection("local")]);
+  tabWith(null);
+  renderToolbar();
+
+  expect(
+    screen.getByRole("button", { name: "Explain plan (EXPLAIN ANALYZE)" }),
+  ).toBeDisabled();
+});
+
+test("explain_is_disabled_without_a_tab", () => {
+  renderToolbar();
+
+  expect(
+    screen.getByRole("button", { name: "Explain plan (EXPLAIN ANALYZE)" }),
+  ).toBeDisabled();
+});
+
 test("read_only_connections_show_the_lock", async () => {
   openProjectWith([connection("dev"), connection("prod", { readOnly: true })]);
   tabWith("prod");

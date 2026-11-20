@@ -488,31 +488,31 @@ git commit -m "feat: EXPLAIN의 text 출력을 node tree로 읽음"
 - Consumes: Task 7의 `parsePlan`, `isPlanResult`. Task 5의 `prepend`. Task 6의 `runSteps(tabId, choose, finish)`.
 - Produces: `CommandId`에 `"explain"`(keymap에는 넣지 않는다). 문구 key: `toolbar.explain`(`Explain plan (EXPLAIN ANALYZE)`), `run.explainOneStatement`, `explain.tab`(`EXPLAIN`), `explain.timings`(`Execution {execution} · Planning {planning}`), `explain.showRaw`, `explain.showTree`, `explain.node`, `explain.actualTime`, `explain.rows`, `explain.loops`, `explain.neverExecuted`.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `ExplainView.test.tsx`: `indents_by_depth`(16px씩), `slowest_row_is_bold`, `rows_show_estimate_and_actual`(`1,200 → 98,410`, 소수는 `50.5`), `show_raw_toggles_server_text`, `timings_omit_missing_values`.
 - `ResultPane.test.tsx`: `completed_query_plan_draws_the_tree`, `json_plan_draws_the_grid`, `trimmed_plan_draws_the_grid`(`firstRow > 0`), `running_plan_fetches_more`.
 - `commands.test.ts`: `explain_prefixes_the_statement`(`EXPLAIN ANALYZE SELECT 1`), `explain_keeps_an_explain_statement`, `explain_rejects_two_statements`, `explain_asks_parameters_first`(값을 넣은 뒤 앞에 붙임), `explain_error_position_maps_to_the_document`.
 - `Toolbar.test.tsx`: `explain_button_runs_explain`, `explain_is_disabled_without_a_connection`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query/ExplainView.test.tsx src/features/query/ResultPane.test.tsx src/features/workspace`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - ResultPane: `finished`, `completed`, `isPlanResult`, `firstRow === 0`, `parsePlan(rows의 첫 cell)`이 null이 아니면 grid 대신 `ExplainView`. 실행 중인 `isPlanResult` 결과의 `fetch === "ready"`면 `fetchMore`를 부른다. 여러 문장의 결과 탭에서도 같다.
 - ExplainView는 Tools M9를 따른다(이 계획 "EXPLAIN 보기"). 시간은 `formatElapsed(ms × 1000)`, 행 수는 `formatCount`. raw/tree 선택은 component state다.
 - Explain 명령: `runSteps(tabId, statementsToRun, explainFinish)`. `explainFinish`는 문장이 둘 이상이면 Rejection, 첫 단어가 `EXPLAIN`(대소문자 무시, 앞 주석과 공백 건너뜀)이면 그대로, 아니면 `prepend(step, "EXPLAIN ANALYZE ")`.
 - Toolbar: Reformat 버튼 다음에 Main의 icon(`ExplainIcon`). 실행 버튼이 disabled인 때 같이 disabled.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

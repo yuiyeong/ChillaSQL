@@ -11,6 +11,7 @@ import { useRuns } from "../query/runsStore";
 import { Button } from "../../shared/ui/Button";
 import {
   ChevronDownIcon,
+  ExplainIcon,
   PlayIcon,
   ReformatIcon,
   StopIcon,
@@ -159,6 +160,16 @@ export function Toolbar({
           onClick={() => void execute("reformat")}
         >
           <ReformatIcon />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          aria-label={t("toolbar.explain")}
+          disabled={!connected}
+          style={{ width: ICON_WIDTH }}
+          onClick={() => void execute("explain")}
+        >
+          <ExplainIcon />
         </Button>
         <div aria-hidden="true" className="bg-line-2 h-[18px] w-px shrink-0" />
 

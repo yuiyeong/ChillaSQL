@@ -1425,3 +1425,145 @@ describe("여러 문장", () => {
     expect(screen.queryByText(/Stopped at statement/)).toBeNull();
   });
 });
+
+describe("EXPLAIN result", () => {
+  const PLAN_LINES = [
+    "Sort  (cost=1.00..2.00 rows=120 width=8) (actual time=40.900..41.000 rows=118.00 loops=1)",
+    "  ->  Seq Scan on orders  (cost=0.00..1.00 rows=1200 width=8) (actual time=0.010..36.900 rows=98410.00 loops=1)",
+    "Planning Time: 0.400 ms",
+    "Execution Time: 41.200 ms",
+  ];
+  const planRows: Cell[][] = PLAN_LINES.map((line) => [line]);
+  const planColumns = resultColumns("QUERY PLAN");
+  const planSql = "EXPLAIN ANALYZE SELECT * FROM orders";
+
+  test("completed_query_plan_draws_the_tree", () => {
+    finished(
+      { outcome: "completed", rows: 4 },
+      { sql: planSql, columns: planColumns, rows: planRows },
+    );
+
+    expect(screen.getByRole("tab", { name: "EXPLAIN" })).toBeInTheDocument();
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.queryByRole("grid")).toBeNull();
+    expect(screen.getByText("Seq Scan on orders")).toBeInTheDocument();
+    expect(
+      screen.getByText("Execution 41 ms · Planning 0.40 ms"),
+    ).toBeInTheDocument();
+  });
+
+  test("json_plan_draws_the_grid", () => {
+    finished(
+      { outcome: "completed", rows: 3 },
+      {
+        sql: "EXPLAIN (FORMAT JSON) SELECT 1",
+        columns: planColumns,
+        rows: [["[\n  {"], ['    "Plan": {'], ["  }\n]"]],
+      },
+    );
+
+    expect(screen.getByRole("grid")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  test("trimmed_plan_draws_the_grid", () => {
+    finished(
+      { outcome: "completed", rows: 4 + 600 },
+      {
+        sql: planSql,
+        columns: planColumns,
+        rows: planRows,
+        firstRow: 600,
+      },
+    );
+
+    expect(screen.getByRole("grid")).toBeInTheDocument();
+    expect(screen.queryByRole("table")).toBeNull();
+  });
+
+  test("running_plan_fetches_more", () => {
+    const fetchMore = vi.fn().mockResolvedValue(undefined);
+    useRuns.setState({ fetchMore });
+    // 창에 다 들어가지 않는 행 수라 표가 스스로 더 가져오지 않는다.
+    const many: Cell[][] = Array.from({ length: 200 }, (_, i) => [
+      `  ->  Seq Scan on t${i}  (cost=0.00..1.00 rows=1 width=8)`,
+    ]);
+    show({
+      status: "running",
+      result: result({
+        sql: planSql,
+        columns: planColumns,
+        rows: many,
+        fetch: "ready",
+      }),
+    });
+
+    expect(fetchMore).toHaveBeenCalledWith("t");
+  });
+
+  test("a_running_non_plan_result_is_not_fetched_for_the_user", () => {
+    const fetchMore = vi.fn().mockResolvedValue(undefined);
+    useRuns.setState({ fetchMore });
+    const many: Cell[][] = Array.from({ length: 200 }, (_, i) => [`${i}`]);
+    show({
+      status: "running",
+      result: result({
+        columns: resultColumns("id"),
+        rows: many,
+        fetch: "ready",
+      }),
+    });
+
+    expect(fetchMore).not.toHaveBeenCalled();
+  });
+
+  test("a_running_plan_keeps_the_grid_until_it_completes", () => {
+    show({
+      status: "running",
+      result: result({
+        sql: planSql,
+        columns: planColumns,
+        rows: planRows,
+        fetch: "none",
+      }),
+    });
+
+    expect(screen.getByRole("grid")).toBeInTheDocument();
+  });
+
+  test("a_plan_in_a_script_keeps_the_result_tabs", () => {
+    const state: RunState = {
+      status: "finished",
+      result: result({ sql: planSql, columns: planColumns, rows: planRows }),
+      outcome: { outcome: "completed", rows: 4 },
+    };
+    const first: RunState = {
+      status: "finished",
+      result: result({ columns: resultColumns("id"), rows: [["1"]] }),
+      outcome: { outcome: "completed", rows: 1 },
+    };
+    useRuns.setState({
+      runs: { t: state },
+      scripts: {
+        t: {
+          steps: [
+            { sql: "SELECT 1", from: 0, origin: { line: 1, column: 1 } },
+            { sql: planSql, from: 10, origin: { line: 2, column: 1 } },
+          ],
+          done: [first],
+          current: 1,
+          selected: 1,
+          stoppedAt: null,
+        },
+      },
+    });
+    render(<ResultPane tabId="t" hasConnection />);
+
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(
+      within(screen.getByRole("tablist", { name: "Result tabs" })).getAllByRole(
+        "tab",
+      ),
+    ).toHaveLength(2);
+  });
+});

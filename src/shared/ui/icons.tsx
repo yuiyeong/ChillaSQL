@@ -252,6 +252,17 @@ export function ReformatIcon({ size = 15, ...rest }: IconProps) {
   );
 }
 
+/** 실행 계획 tree를 줄인 모양. 위 node에서 아래 node로 내려간다. */
+export function ExplainIcon({ size = 15, ...rest }: IconProps) {
+  return (
+    <Stroke size={size} width={1.5} join {...rest}>
+      <rect x="2" y="2.5" width="5" height="3.5" rx="1" />
+      <rect x="9" y="10" width="5" height="3.5" rx="1" />
+      <path d="M4.5 6v2.5a1.5 1.5 0 0 0 1.5 1.5h3" />
+    </Stroke>
+  );
+}
+
 export function SearchIcon({ size = 12, ...rest }: IconProps) {
   return (
     <Stroke size={size} width={1.5} {...rest}>

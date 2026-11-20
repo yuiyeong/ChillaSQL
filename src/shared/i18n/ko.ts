@@ -41,6 +41,7 @@ export const ko: Record<MessageKey, string> = {
   "toolbar.chooseWhatToRun": "실행할 범위 선택",
   "toolbar.whatToRun": "실행할 범위",
   "toolbar.reformat": "Reformat (Opt+Cmd+L)",
+  "toolbar.explain": "실행 계획 (EXPLAIN ANALYZE)",
 
   "workspace.resizeResults": "결과 패널 크기 조절",
   "status.position": "줄 {line}, 열 {column}",
@@ -140,6 +141,8 @@ export const ko: Record<MessageKey, string> = {
   "run.emptySelection": "실행할 내용 없음",
   "run.emptyFile": "실행할 문장 없음",
   "run.noStatementAtCursor": "커서 위치에 문장 없음",
+  "run.explainOneStatement":
+    "Explain은 문장 하나만 실행합니다. 문장 하나를 선택하십시오.",
   "run.splitFailed.title": "문장을 찾을 수 없습니다",
   "run.splitFailed.detail":
     "닫히지 않은 따옴표 때문에 문장을 나눌 수 없습니다. 실행할 부분을 선택하면 그대로 보냅니다.",
@@ -297,6 +300,18 @@ export const ko: Record<MessageKey, string> = {
   "result.end.one": "끝 · 1행",
   "result.end.other": "끝 · {count}행",
   "result.resizeColumn": "{name} 크기 조절",
+
+  "explain.tab": "EXPLAIN",
+  "explain.timings": "실행 {execution} · 계획 {planning}",
+  "explain.timingsExecution": "실행 {execution}",
+  "explain.timingsPlanning": "계획 {planning}",
+  "explain.showRaw": "원문 보기",
+  "explain.showTree": "Tree 보기",
+  "explain.node": "Node",
+  "explain.actualTime": "실제 시간",
+  "explain.rows": "행 (추정 → 실제)",
+  "explain.loops": "Loops",
+  "explain.neverExecuted": "never executed",
 
   "tx.mode": "트랜잭션 모드",
   "tx.auto": "Auto",

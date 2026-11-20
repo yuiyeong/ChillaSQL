@@ -1,6 +1,7 @@
 import {
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -46,6 +47,8 @@ import {
   formatLive,
   resultLabel,
 } from "./format";
+import { isPlanResult, parsePlan, type Plan } from "./explainPlan";
+import { ExplainView } from "./ExplainView";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData, type RunState } from "./runReducer";
 import { endable, useRuns, type ScriptRun } from "./runsStore";
@@ -120,6 +123,16 @@ export const ResultPane = memo(function ResultPane({
     if (tabId !== null) void runAgain(tabId);
   }, [tabId]);
 
+  // 받는 중인 QUERY PLAN은 끝까지 가져온다. tree는 결과가 다 와야 그릴 수 있어서 스크롤을 기다리지 않는다.
+  // 다른 결과 탭을 보고 있어도 지금 문장은 이어서 받는다.
+  const fetchingPlan =
+    current?.status === "running" &&
+    current.result.fetch === "ready" &&
+    isPlanResult(current.result.columns);
+  useEffect(() => {
+    if (fetchingPlan) onFetchMore();
+  }, [fetchingPlan, current, onFetchMore]);
+
   const { show } = toast;
   const copy = useCallback(
     async (text: string, message: string) => {
@@ -150,6 +163,7 @@ export const ResultPane = memo(function ResultPane({
   let notice: ReactNode = null;
   let grid: ReactNode = null;
   let body: ReactNode = null;
+  let explain: ReactNode = null;
 
   const gridOf = (result: ResultData, endRows: number | null) => (
     <ResultGrid
@@ -231,6 +245,19 @@ export const ResultPane = memo(function ResultPane({
               </Centered>
             );
           } else {
+            const plan = planOf(result);
+            if (plan !== null) {
+              // 앞 행을 버리지 않았고 node 줄이 있는 EXPLAIN은 표 대신 tree로 그린다.
+              explain = (
+                <ExplainView
+                  key={result.runKey}
+                  tabs={tabs}
+                  plan={plan.plan}
+                  lines={plan.lines}
+                />
+              );
+              break;
+            }
             header = (
               <Header sql={result.sql} tabs={tabs}>
                 <Meta>{tc("result.rows", outcome.rows, { elapsed })}</Meta>
@@ -427,6 +454,7 @@ export const ResultPane = memo(function ResultPane({
         </div>
       )}
       {notice}
+      {explain}
       {grid}
       {body !== null && (
         <div className="min-h-0 flex-1 overflow-auto">{body}</div>
@@ -435,6 +463,14 @@ export const ResultPane = memo(function ResultPane({
     </section>
   );
 });
+
+/** 끝난 결과가 tree로 그릴 EXPLAIN이면 그 plan과 서버가 준 줄. 아니면 null이다. */
+function planOf(result: ResultData): { plan: Plan; lines: string[] } | null {
+  if (result.firstRow !== 0 || !isPlanResult(result.columns)) return null;
+  const lines = result.rows.map((row) => row[0] ?? "");
+  const plan = parsePlan(lines);
+  return plan === null ? null : { plan, lines };
+}
 
 function rowsMeta(result: ResultData): string {
   return t("result.rowsMore", {
