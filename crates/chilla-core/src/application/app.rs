@@ -192,19 +192,32 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         Ok(blocking(move || store.recent_projects()).await?)
     }
 
-    /// 열린 프로젝트의 탭 snapshot. 저장한 적이 없으면 `None`이다.
-    pub async fn load_workspace(&self) -> Result<Option<String>, AppError> {
+    /// `dir` 프로젝트의 탭 snapshot. 저장한 적이 없으면 `None`이다. `dir`은 열린 프로젝트의
+    /// 디렉토리여야 한다(`Project::dir`과 같은 값). 아니면 저장소를 읽지 않고 `ProjectChanged`다.
+    pub async fn load_workspace(&self, dir: &Path) -> Result<Option<String>, AppError> {
         let store = self.store()?;
-        let dir = self.project_dir().await?;
+        let dir = self.open_project_dir(dir).await?;
         Ok(blocking(move || store.load_workspace(&dir)).await?)
     }
 
-    /// 열린 프로젝트의 탭 snapshot을 덮어쓴다. 내용은 화면이 정하고 여기서는 열어 보지 않는다.
-    pub async fn save_workspace(&self, snapshot: String) -> Result<(), AppError> {
+    /// `dir` 프로젝트의 탭 snapshot을 덮어쓴다. 내용은 화면이 정하고 여기서는 열어 보지 않는다.
+    /// `dir`이 열린 프로젝트가 아니면(저장을 시작한 뒤 프로젝트가 바뀐 것이다) 저장소를 쓰지
+    /// 않고 `ProjectChanged`를 돌려준다.
+    pub async fn save_workspace(&self, dir: &Path, snapshot: String) -> Result<(), AppError> {
         let store = self.store()?;
-        let dir = self.project_dir().await?;
+        let dir = self.open_project_dir(dir).await?;
         let saved_at = unix_now();
         Ok(blocking(move || store.save_workspace(&dir, &snapshot, saved_at)).await?)
+    }
+
+    /// `dir`이 지금 열린 프로젝트의 디렉토리면 그것을 돌려준다.
+    async fn open_project_dir(&self, dir: &Path) -> Result<PathBuf, AppError> {
+        let open = self.project_dir().await?;
+        if open == dir {
+            Ok(open)
+        } else {
+            Err(AppError::ProjectChanged)
+        }
     }
 
     fn store(&self) -> Result<Arc<dyn AppStore>, AppError> {
@@ -885,6 +898,10 @@ mod tests {
 
     fn pw(value: &str) -> Password {
         Password::new(value.into())
+    }
+
+    fn p() -> &'static Path {
+        Path::new("/p")
     }
 
     const OPEN: SessionState = SessionState::Open { tx: TxStatus::Idle };
@@ -2209,29 +2226,61 @@ mod tests {
     #[tokio::test]
     async fn workspace_is_saved_and_loaded_for_the_open_project() {
         let f = opened().await;
-        assert_eq!(f.app.load_workspace().await, Ok(None));
+        assert_eq!(f.app.load_workspace(p()).await, Ok(None));
 
-        f.app.save_workspace("{\"tabs\":[]}".into()).await.unwrap();
+        f.app
+            .save_workspace(p(), "{\"tabs\":[]}".into())
+            .await
+            .unwrap();
 
         assert_eq!(
-            f.app.load_workspace().await,
+            f.app.load_workspace(p()).await,
             Ok(Some("{\"tabs\":[]}".into()))
         );
         let (snapshot, saved_at) = f.store.workspace("/p").unwrap();
         assert_eq!(snapshot, "{\"tabs\":[]}");
         assert!(saved_at > 1_700_000_000, "Unix 초다");
         f.app.open_project(Path::new("/q")).await.unwrap();
-        assert_eq!(f.app.load_workspace().await, Ok(None));
+        assert_eq!(f.app.load_workspace(Path::new("/q")).await, Ok(None));
+    }
+
+    #[tokio::test]
+    async fn a_save_for_another_project_is_rejected() {
+        let f = opened().await;
+        f.app.open_project(Path::new("/q")).await.unwrap();
+        let q = Path::new("/q");
+        f.app.save_workspace(q, "{\"q\":1}".into()).await.unwrap();
+
+        // 프로젝트 p를 닫기 전에 시작된 저장이 q가 열린 뒤에 도착했다.
+        assert_eq!(
+            f.app.save_workspace(p(), "{\"p\":1}".into()).await,
+            Err(AppError::ProjectChanged)
+        );
+
+        assert_eq!(f.store.workspace("/p"), None);
+        assert_eq!(f.store.workspace("/q").unwrap().0, "{\"q\":1}");
+    }
+
+    #[tokio::test]
+    async fn a_load_for_another_project_is_rejected() {
+        let f = opened().await;
+        f.app.save_workspace(p(), "{}".into()).await.unwrap();
+        f.app.open_project(Path::new("/q")).await.unwrap();
+
+        assert_eq!(
+            f.app.load_workspace(p()).await,
+            Err(AppError::ProjectChanged)
+        );
     }
 
     #[tokio::test]
     async fn save_workspace_needs_a_project() {
         let f = fixture();
         assert_eq!(
-            f.app.save_workspace("{}".into()).await,
+            f.app.save_workspace(p(), "{}".into()).await,
             Err(AppError::NoProject)
         );
-        assert_eq!(f.app.load_workspace().await, Err(AppError::NoProject));
+        assert_eq!(f.app.load_workspace(p()).await, Err(AppError::NoProject));
         assert!(f.store.workspace("/p").is_none());
     }
 
@@ -2245,11 +2294,11 @@ mod tests {
             Err(AppError::Store(_))
         ));
         assert!(matches!(
-            f.app.load_workspace().await,
+            f.app.load_workspace(p()).await,
             Err(AppError::Store(_))
         ));
         assert!(matches!(
-            f.app.save_workspace("{}".into()).await,
+            f.app.save_workspace(p(), "{}".into()).await,
             Err(AppError::Store(_))
         ));
     }
@@ -2275,9 +2324,12 @@ mod tests {
         app.open_project(Path::new("/p")).await.unwrap();
 
         assert_eq!(app.recent_projects().await, Err(AppError::StoreUnavailable));
-        assert_eq!(app.load_workspace().await, Err(AppError::StoreUnavailable));
         assert_eq!(
-            app.save_workspace("{}".into()).await,
+            app.load_workspace(p()).await,
+            Err(AppError::StoreUnavailable)
+        );
+        assert_eq!(
+            app.save_workspace(p(), "{}".into()).await,
             Err(AppError::StoreUnavailable)
         );
     }

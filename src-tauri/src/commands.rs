@@ -1054,15 +1054,21 @@ pub async fn recent_projects(app: State<'_, CoreApp>) -> CommandResult<Vec<Recen
     Ok(projects.into_iter().map(Into::into).collect())
 }
 
-/// 열린 프로젝트의 탭 snapshot(화면이 만든 JSON text). 저장한 적이 없으면 `None`이다.
+/// `dir` 프로젝트의 탭 snapshot(화면이 만든 JSON text). 저장한 적이 없으면 `None`이다.
+/// `dir`은 열린 프로젝트의 `dir`이어야 한다. 아니면 `project_changed`다.
 #[tauri::command]
-pub async fn load_workspace(app: State<'_, CoreApp>) -> CommandResult<Option<String>> {
-    Ok(app.load_workspace().await?)
+pub async fn load_workspace(app: State<'_, CoreApp>, dir: String) -> CommandResult<Option<String>> {
+    Ok(app.load_workspace(Path::new(&dir)).await?)
 }
 
+/// `dir`이 열린 프로젝트가 아니면 저장하지 않고 `project_changed`를 돌려준다.
 #[tauri::command]
-pub async fn save_workspace(app: State<'_, CoreApp>, snapshot: String) -> CommandResult<()> {
-    Ok(app.save_workspace(snapshot).await?)
+pub async fn save_workspace(
+    app: State<'_, CoreApp>,
+    dir: String,
+    snapshot: String,
+) -> CommandResult<()> {
+    Ok(app.save_workspace(Path::new(&dir), snapshot).await?)
 }
 
 /// 화면이 확인을 마친 뒤 앱을 끝낸다. `RunEvent::Exit`의 `shutdown`이 세션을 닫고,

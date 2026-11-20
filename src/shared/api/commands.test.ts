@@ -242,16 +242,20 @@ test("loadSettings는 인자 없이 load_settings를 부른다", async () => {
   expect(invokeMock).toHaveBeenLastCalledWith("load_settings");
 });
 
-test("recentProjects와 loadWorkspace는 인자 없이 부른다", async () => {
+test("recentProjects는 인자 없이 부른다", async () => {
   await recentProjects();
   expect(invokeMock).toHaveBeenLastCalledWith("recent_projects");
-  await loadWorkspace();
-  expect(invokeMock).toHaveBeenLastCalledWith("load_workspace");
 });
 
-test("saveWorkspace는 snapshot text를 그대로 보낸다", async () => {
-  await saveWorkspace('{"tabs":[]}');
+test("loadWorkspace는 프로젝트 dir을 보낸다", async () => {
+  await loadWorkspace("/p");
+  expect(invokeMock).toHaveBeenLastCalledWith("load_workspace", { dir: "/p" });
+});
+
+test("saveWorkspace는 프로젝트 dir과 snapshot text를 그대로 보낸다", async () => {
+  await saveWorkspace("/p", '{"tabs":[]}');
   expect(invokeMock).toHaveBeenLastCalledWith("save_workspace", {
+    dir: "/p",
     snapshot: '{"tabs":[]}',
   });
 });

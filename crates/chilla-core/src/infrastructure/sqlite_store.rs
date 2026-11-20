@@ -5,6 +5,7 @@
 
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard};
+use std::time::Duration;
 
 use rusqlite::{Connection, params};
 
@@ -12,6 +13,7 @@ use crate::application::{AppStore, RecentProject, StoreError};
 
 const SCHEMA_VERSION: i64 = 1;
 const MAX_RECENT: i64 = 10;
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct SqliteAppStore {
     connection: Mutex<Connection>,
@@ -29,6 +31,8 @@ impl SqliteAppStore {
     /// 파일이 없으면 만든다. 디렉토리는 있어야 한다.
     pub fn open(path: &Path) -> Result<Self, StoreError> {
         let mut connection = Connection::open(path)?;
+        // 다른 process가 파일을 쥐고 있으면 바로 실패하지 않고 잠시 기다린다.
+        connection.busy_timeout(BUSY_TIMEOUT)?;
         migrate(&mut connection)?;
         Ok(Self {
             connection: Mutex::new(connection),

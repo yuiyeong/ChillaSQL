@@ -176,11 +176,15 @@ export function recentProjects(): Promise<RecentProject[]> {
   return call("recent_projects");
 }
 
-/** 열린 프로젝트의 탭 snapshot(화면이 만든 JSON text). 저장한 적이 없으면 null이다. */
-export function loadWorkspace(): Promise<string | null> {
-  return call("load_workspace");
+/**
+ * `dir` 프로젝트의 탭 snapshot(화면이 만든 JSON text). 저장한 적이 없으면 null이다.
+ * `dir`은 열린 프로젝트의 `dir`이어야 하고 아니면 `project_changed`다.
+ */
+export function loadWorkspace(dir: string): Promise<string | null> {
+  return call("load_workspace", { dir });
 }
 
-export function saveWorkspace(snapshot: string): Promise<void> {
-  return call("save_workspace", { snapshot });
+/** `dir`이 열린 프로젝트가 아니면 저장하지 않고 `project_changed`로 reject한다. */
+export function saveWorkspace(dir: string, snapshot: string): Promise<void> {
+  return call("save_workspace", { dir, snapshot });
 }
