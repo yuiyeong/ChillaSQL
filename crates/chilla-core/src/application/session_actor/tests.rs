@@ -6,8 +6,8 @@ use crate::application::test_support::{
     FakeConnection, FakeFeed, FakeLink, next, numbered, server_error, sink,
 };
 use crate::domain::{
-    Column, EndOutcome, EndResult, QueryEvent, QueryId, QueryLimits, QueryOutcome, RowBatch, TxEnd,
-    TxMode, TxStatus,
+    ApplyOutcome, ApplyResult, Column, EndOutcome, EndResult, QueryEvent, QueryId, QueryLimits,
+    QueryOutcome, RowBatch, TxEnd, TxMode, TxStatus,
 };
 
 fn session() -> (SessionHandle, FakeLink) {
@@ -1981,4 +1981,312 @@ async fn closing_inside_a_transaction_cancels_without_rolling_back() {
     assert_eq!(link.cancels(), 1);
     assert_eq!(outcome(next(&mut events_a).await), QueryOutcome::Discarded);
     assert_eq!(link.sent(), [SET_SAVEPOINT, "A"]);
+}
+
+/// 셀 편집을 Apply할 때 앞뒤로 보내는 문장.
+const SET_EDIT_SAVEPOINT: &str = "SAVEPOINT chilla_edit";
+const BEGIN_WITH_EDIT_SAVEPOINT: &str = "BEGIN; SAVEPOINT chilla_edit";
+const RELEASE_EDIT: &str = "RELEASE SAVEPOINT chilla_edit";
+const UNDO_EDIT: &str = "ROLLBACK TO SAVEPOINT chilla_edit; RELEASE SAVEPOINT chilla_edit";
+
+fn edit_statements() -> Vec<String> {
+    vec![
+        "UPDATE t SET a = 1 WHERE id = 1 RETURNING a".into(),
+        "UPDATE t SET a = 2 WHERE id = 2 RETURNING a".into(),
+    ]
+}
+
+/// 문장 하나가 `Row` 하나와 `Complete { rows }`로 끝나는 결과를 예약한다.
+fn expect_update(link: &FakeLink, value: &str) {
+    let feed = link.expect_query();
+    feed.columns(&[("a", 23, -1)]);
+    feed.row(vec![Some(value.into())]);
+    feed.complete(1);
+}
+
+fn applied(values: &[&str], tx: TxStatus) -> Option<ApplyResult> {
+    Some(ApplyResult {
+        outcome: ApplyOutcome::Applied {
+            rows: values.iter().map(|v| vec![Some(v.to_string())]).collect(),
+        },
+        tx: Some(tx),
+    })
+}
+
+#[tokio::test]
+async fn auto_idle_wraps_in_begin_and_commit() {
+    let (handle, link) = session();
+    expect_update(&link, "1");
+    expect_update(&link, "2");
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Auto).await;
+
+    assert_eq!(result, applied(&["1", "2"], TxStatus::Idle));
+    let mut sent = vec!["BEGIN".to_string()];
+    sent.extend(edit_statements());
+    sent.push("COMMIT".into());
+    assert_eq!(link.sent(), sent);
+}
+
+#[tokio::test]
+async fn manual_idle_begins_and_keeps_the_transaction() {
+    let (handle, link) = session();
+    expect_update(&link, "1");
+    expect_update(&link, "2");
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Manual).await;
+
+    assert_eq!(result, applied(&["1", "2"], TxStatus::InTransaction));
+    let mut sent = vec![BEGIN_WITH_EDIT_SAVEPOINT.to_string()];
+    sent.extend(edit_statements());
+    sent.push(RELEASE_EDIT.into());
+    assert_eq!(link.sent(), sent);
+    assert_eq!(
+        handle.state().await,
+        SessionState::Open {
+            tx: TxStatus::InTransaction
+        }
+    );
+}
+
+#[tokio::test]
+async fn in_transaction_uses_a_savepoint() {
+    for mode in [TxMode::Auto, TxMode::Manual] {
+        let (handle, link) = session();
+        set_tx(&handle, &link, TxStatus::InTransaction).await;
+        expect_update(&link, "1");
+        let statements = vec![edit_statements().remove(0)];
+
+        let result = handle.apply_edits(statements.clone(), mode).await;
+
+        assert_eq!(result, applied(&["1"], TxStatus::InTransaction));
+        assert_eq!(
+            link.sent(),
+            [SET_EDIT_SAVEPOINT, statements[0].as_str(), RELEASE_EDIT]
+        );
+    }
+}
+
+/// 서버 오류로 실패해도 트랜잭션은 열린 채이고 failed가 아니다. 앞서 시작한 일은 그대로다.
+#[tokio::test]
+async fn a_server_error_in_a_transaction_rolls_back_to_the_savepoint() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    expect_update(&link, "1");
+    let failing = link.expect_query();
+    failing.fail("23505");
+    link.set_tx(TxStatus::Failed);
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Manual).await;
+
+    let statements = edit_statements();
+    assert_eq!(
+        result,
+        Some(ApplyResult {
+            outcome: ApplyOutcome::Failed {
+                index: Some(1),
+                error: server_error("23505"),
+            },
+            tx: Some(TxStatus::InTransaction),
+        })
+    );
+    assert_eq!(
+        link.sent(),
+        [
+            SET_EDIT_SAVEPOINT,
+            statements[0].as_str(),
+            statements[1].as_str(),
+            UNDO_EDIT
+        ]
+    );
+}
+
+#[tokio::test]
+async fn auto_idle_rolls_back_when_a_statement_fails() {
+    let (handle, link) = session();
+    let failing = link.expect_query();
+    failing.fail("23505");
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Auto).await;
+
+    assert_eq!(
+        result,
+        Some(ApplyResult {
+            outcome: ApplyOutcome::Failed {
+                index: Some(0),
+                error: server_error("23505"),
+            },
+            tx: Some(TxStatus::Idle),
+        })
+    );
+    assert_eq!(
+        link.sent(),
+        ["BEGIN", edit_statements()[0].as_str(), "ROLLBACK"]
+    );
+}
+
+#[tokio::test]
+async fn a_failed_commit_has_no_index_and_is_not_rolled_back_again() {
+    let (handle, link) = session();
+    expect_update(&link, "1");
+    expect_update(&link, "2");
+    link.fail_next_simple_on("COMMIT", "23503");
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Auto).await;
+
+    assert!(
+        matches!(
+            &result,
+            Some(ApplyResult {
+                outcome: ApplyOutcome::Failed { index: None, error },
+                tx: Some(TxStatus::Idle),
+            }) if error.code == "23503"
+        ),
+        "{result:?}"
+    );
+    assert_eq!(link.sent().last().map(String::as_str), Some("COMMIT"));
+}
+
+#[tokio::test]
+async fn failed_transaction_is_not_sent() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::Failed).await;
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Manual).await;
+
+    assert_eq!(
+        result,
+        Some(ApplyResult {
+            outcome: ApplyOutcome::TransactionFailed,
+            tx: Some(TxStatus::Failed),
+        })
+    );
+    assert_eq!(link.sent(), Vec::<String>::new());
+}
+
+/// 받다 만 결과가 있으면 보내지 않는다. 그 결과는 그대로 이어 받을 수 있다.
+#[tokio::test]
+async fn open_query_is_busy() {
+    let (handle, link) = session();
+    let (feed, query, mut events) = first_batch(&handle, &link, TxMode::Auto).await;
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Auto).await;
+
+    assert_eq!(
+        result,
+        Some(ApplyResult {
+            outcome: ApplyOutcome::Busy,
+            tx: None,
+        })
+    );
+    assert_eq!(link.sent(), ["A"]);
+    assert_eq!(link.cancels(), 0);
+
+    feed.complete(1200);
+    assert_eq!(handle.fetch_more(query).await, Some(true));
+    let rows = batch(next(&mut events).await);
+    assert_eq!((rows.first_row, rows.rows.len()), (500, 500));
+    assert_eq!(handle.fetch_more(query).await, Some(true));
+    let rows = batch(next(&mut events).await);
+    assert_eq!((rows.first_row, rows.rows.len()), (1000, 200));
+    assert_eq!(
+        outcome(next(&mut events).await),
+        QueryOutcome::Completed { rows: 1200 }
+    );
+}
+
+#[tokio::test]
+async fn zero_rows_rolls_back() {
+    let (handle, link) = session();
+    expect_update(&link, "1");
+    let none = link.expect_query();
+    none.columns(&[("a", 23, -1)]);
+    none.complete(0);
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Auto).await;
+
+    assert_eq!(
+        result,
+        Some(ApplyResult {
+            outcome: ApplyOutcome::WrongRowCount { index: 1, rows: 0 },
+            tx: Some(TxStatus::Idle),
+        })
+    );
+    let statements = edit_statements();
+    assert_eq!(
+        link.sent(),
+        [
+            "BEGIN",
+            statements[0].as_str(),
+            statements[1].as_str(),
+            "ROLLBACK"
+        ]
+    );
+}
+
+#[tokio::test]
+async fn a_lost_connection_is_reported_without_rolling_back() {
+    let (handle, link) = session();
+    link.fail_next_start(QueryError::ConnectionLost {
+        message: "끊김".into(),
+    });
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Auto).await;
+
+    assert!(
+        matches!(
+            &result,
+            Some(ApplyResult {
+                outcome: ApplyOutcome::ConnectionLost { .. },
+                tx: None,
+            })
+        ),
+        "{result:?}"
+    );
+    assert_eq!(link.sent(), ["BEGIN", edit_statements()[0].as_str()]);
+}
+
+/// 문장을 보내지 못하면(NUL) client 오류이고 연결은 그대로라 되돌린다.
+#[tokio::test]
+async fn an_unsendable_statement_is_a_client_error_and_rolls_back() {
+    let (handle, link) = session();
+
+    let result = handle
+        .apply_edits(vec!["UPDATE t SET a = '\0'".into()], TxMode::Auto)
+        .await;
+
+    assert!(
+        matches!(
+            &result,
+            Some(ApplyResult {
+                outcome: ApplyOutcome::Client { .. },
+                tx: Some(TxStatus::Idle),
+            })
+        ),
+        "{result:?}"
+    );
+    assert_eq!(link.sent().last().map(String::as_str), Some("ROLLBACK"));
+}
+
+/// Apply가 끝난 뒤 이어지는 문장은 세션의 savepoint를 평소처럼 쓴다.
+#[tokio::test]
+async fn a_statement_after_apply_runs_normally() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    expect_update(&link, "1");
+    handle
+        .apply_edits(vec![edit_statements().remove(0)], TxMode::Manual)
+        .await;
+
+    let (sink, mut events) = sink();
+    handle
+        .execute("B".into(), TxMode::Manual, false, sink)
+        .await;
+
+    assert_eq!(
+        outcome(next(&mut events).await),
+        QueryOutcome::Completed { rows: 0 }
+    );
+    let sent = link.sent();
+    assert_eq!(sent[sent.len() - 2..], [SET_SAVEPOINT, "B"]);
 }

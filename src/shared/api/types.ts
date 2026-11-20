@@ -179,6 +179,28 @@ export type EndResult = {
   | { outcome: "client_error"; message: string }
 );
 
+/**
+ * `applyEdits`의 결과. `tx`는 끝난 뒤의 상태이고 연결이 끊겼거나 보내지 않았으면(`busy`) null.
+ * `applied`가 아니면 아무것도 반영되지 않았다.
+ */
+export type ApplyResult = {
+  tx: TxStatus | null;
+} &
+  /** `rows`는 문장마다 `RETURNING` 행 하나, 보낸 순서. 값은 서버가 만든 text다. */
+  (
+    | { outcome: "applied"; rows: Cell[][] }
+    /** `index` 문장이 바꾼 행이 1이 아니다. */
+    | { outcome: "wrong_row_count"; index: number; rows: number }
+    /** `index`가 null이면 문장이 아니라 앞뒤의 `BEGIN`, `SAVEPOINT`, `COMMIT`이 실패했다. */
+    | { outcome: "failed"; index: number | null; error: ServerError }
+    /** 실패한 트랜잭션이라 보내지 않았다. */
+    | { outcome: "transaction_failed" }
+    /** 이 세션에 열린 쿼리가 있어 보내지 않았다. */
+    | { outcome: "busy" }
+    | { outcome: "connection_lost"; message: string }
+    | { outcome: "client_error"; message: string }
+  );
+
 export type Outcome =
   | { outcome: "completed"; rows: number }
   | { outcome: "failed"; error: ServerError }

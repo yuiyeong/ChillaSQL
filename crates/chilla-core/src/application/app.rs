@@ -19,10 +19,10 @@ use super::{
     StoreError, TunnelRunner,
 };
 use crate::domain::{
-    Catalog, ConnectionProfile, Danger, EditTable, EndResult, FileStamp, ParameterSpan, Password,
-    ProfileError, Project, QueryId, QueryLimits, SessionId, SessionInfo, SessionState, SqlFile,
-    SqlPath, SqlPathError, StatementSpan, TableDetails, TxEnd, TxMode, TypeInfo, WriteMode,
-    render_ddl,
+    ApplyResult, Catalog, ConnectionProfile, Danger, EditTable, EndResult, FileStamp,
+    ParameterSpan, Password, ProfileError, Project, QueryId, QueryLimits, SessionId, SessionInfo,
+    SessionState, SqlFile, SqlPath, SqlPathError, StatementSpan, TableDetails, TxEnd, TxMode,
+    TypeInfo, WriteMode, render_ddl,
 };
 
 /// 쿼리 기록 검색이 돌려주는 최대 개수.
@@ -731,6 +731,21 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             .ok_or(AppError::UnknownSession { id: session })
     }
 
+    /// 셀 편집의 UPDATE를 한 단위로 보낸다. 문장마다 바뀐 행이 정확히 하나여야 하고 아니면 모두
+    /// 되돌린다. 그 세션에 열린 쿼리가 있거나 트랜잭션이 실패했으면 보내지 않는다.
+    pub async fn apply_edits(
+        &self,
+        session: SessionId,
+        statements: Vec<String>,
+        mode: TxMode,
+    ) -> Result<ApplyResult, AppError> {
+        let handle = self.session_handle(session).await?;
+        handle
+            .apply_edits(statements, mode)
+            .await
+            .ok_or(AppError::UnknownSession { id: session })
+    }
+
     /// 받다 만 결과의 다음 batch를 읽게 한다. 이미 끝났거나 버려진 쿼리면 아무것도 하지 않는다.
     /// 그 세션이 만든 적 없는 쿼리면 `QueryNotActive`다.
     pub async fn fetch_more(&self, session: SessionId, query: QueryId) -> Result<(), AppError> {
@@ -887,9 +902,9 @@ mod tests {
         CancelError, PasswordKey, PasswordStore, ProjectError, QueryError, SplitError, TunnelError,
     };
     use crate::domain::{
-        Catalog, ConnectionColor, EditColumn, EditTable, EndOutcome, EndResult, FileStamp,
-        ProfileError, QueryEvent, QueryOutcome, RelationDdl, RelationKind, SessionState, SslMode,
-        StatementSpan, TableDetails, TxEnd, TxStatus, TypeInfo, WriteMode,
+        ApplyOutcome, ApplyResult, Catalog, ConnectionColor, EditColumn, EditTable, EndOutcome,
+        EndResult, FileStamp, ProfileError, QueryEvent, QueryOutcome, RelationDdl, RelationKind,
+        SessionState, SslMode, StatementSpan, TableDetails, TxEnd, TxStatus, TypeInfo, WriteMode,
     };
     use crate::domain::{TunnelEvent, TunnelFailure};
 
@@ -1397,6 +1412,40 @@ mod tests {
         assert_eq!(
             f.app.end_transaction(unknown, TxEnd::Rollback).await,
             Err(error())
+        );
+        assert_eq!(
+            f.app
+                .apply_edits(unknown, vec!["UPDATE t".into()], TxMode::Auto)
+                .await,
+            Err(error())
+        );
+    }
+
+    #[tokio::test]
+    async fn apply_edits_reaches_the_session() {
+        let f = opened().await;
+        let session = session_of(&f).await;
+        let feed = f.connector.links()[0].expect_query();
+        feed.row(vec![Some("1".into())]);
+        feed.complete(1);
+
+        let result = f
+            .app
+            .apply_edits(session, vec!["UPDATE t".into()], TxMode::Auto)
+            .await;
+
+        assert_eq!(
+            result,
+            Ok(ApplyResult {
+                outcome: ApplyOutcome::Applied {
+                    rows: vec![vec![Some("1".into())]]
+                },
+                tx: Some(TxStatus::Idle),
+            })
+        );
+        assert_eq!(
+            f.connector.links()[0].sent(),
+            ["BEGIN", "UPDATE t", "COMMIT"]
         );
     }
 

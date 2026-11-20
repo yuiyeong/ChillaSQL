@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { toCommandError } from "./errors";
 import type {
+  ApplyResult,
   Catalog,
   Connection,
   Danger,
@@ -161,6 +162,18 @@ export function endTransaction(
   end: TxEnd,
 ): Promise<EndResult> {
   return call("end_transaction", { sessionId, end });
+}
+
+/**
+ * 셀 편집의 UPDATE를 한 단위로 보낸다. 문장마다 바뀐 행이 정확히 하나여야 하고 아니면 Rust가 모두
+ * 되돌린다. 그 세션에 열린 쿼리가 있거나 트랜잭션이 실패했으면 보내지 않는다.
+ */
+export function applyEdits(
+  sessionId: number,
+  statements: string[],
+  mode: TxMode,
+): Promise<ApplyResult> {
+  return call("apply_edits", { sessionId, statements, mode });
 }
 
 /** 그 접속의 터널이 시작 중이면 멈춘다. 기다리던 세션 열기는 `tunnel_cancelled`로 끝난다. */

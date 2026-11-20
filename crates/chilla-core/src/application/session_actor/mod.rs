@@ -8,6 +8,7 @@
 //! 된다. 그래서 트랜잭션 안의 문장 앞에는 savepoint를 두고, 버리거나 취소한 문장은 cancel이 끝난 뒤
 //! 그 savepoint로 되돌려 트랜잭션을 열린 채로 둔다([`savepoint`]).
 
+mod edit;
 mod query;
 mod savepoint;
 
@@ -23,8 +24,8 @@ use tokio::time::{Instant, sleep_until, timeout};
 use self::query::{DrainReason, Pending, Query};
 use super::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
 use crate::domain::{
-    EndOutcome, EndResult, QueryEvent, QueryId, QueryLimits, QueryOutcome, SessionState, TxEnd,
-    TxMode, TxStatus,
+    ApplyResult, EndOutcome, EndResult, QueryEvent, QueryId, QueryLimits, QueryOutcome,
+    SessionState, TxEnd, TxMode, TxStatus,
 };
 
 const COMMAND_BUFFER: usize = 8;
@@ -53,6 +54,11 @@ enum SessionCommand {
     End {
         end: TxEnd,
         reply: oneshot::Sender<EndResult>,
+    },
+    Apply {
+        statements: Vec<String>,
+        mode: TxMode,
+        reply: oneshot::Sender<ApplyResult>,
     },
     FetchMore {
         query: QueryId,
@@ -206,6 +212,14 @@ impl<D: DbConnection> Actor<D> {
                     self.discard(DrainReason::Discarded, false, None);
                     self.ends.push_back((end, reply));
                 }
+            }
+            SessionCommand::Apply {
+                statements,
+                mode,
+                reply,
+            } => {
+                let result = self.apply(&statements, mode).await;
+                let _ = reply.send(result);
             }
             SessionCommand::FetchMore { query, reply } => {
                 if let Some(current) = self.query.as_mut().filter(|q| q.id == query) {
@@ -498,6 +512,21 @@ impl SessionHandle {
     pub(crate) async fn end_transaction(&self, end: TxEnd) -> Option<EndResult> {
         self.request(|reply| SessionCommand::End { end, reply })
             .await
+    }
+
+    /// 셀 편집의 UPDATE를 한 단위로 보내고 결과를 돌려준다. 열린 쿼리가 있으면 보내지 않고 `Busy`다.
+    /// task가 끝났으면 `None`이다.
+    pub(crate) async fn apply_edits(
+        &self,
+        statements: Vec<String>,
+        mode: TxMode,
+    ) -> Option<ApplyResult> {
+        self.request(|reply| SessionCommand::Apply {
+            statements,
+            mode,
+            reply,
+        })
+        .await
     }
 
     /// 받다 만 결과의 다음 batch를 읽게 한다. 이 세션이 만든 쿼리면 `Some(true)`다. 지금 쿼리가

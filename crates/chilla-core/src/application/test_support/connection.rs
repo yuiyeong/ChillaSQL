@@ -38,6 +38,8 @@ struct FakeQueries {
     start_error: Option<QueryError>,
     /// 다음 `simple_execute`가 돌려줄 서버 오류의 code.
     simple_error: Option<String>,
+    /// `(sql, code)`: 그 SQL의 다음 `simple_execute` 한 번이 서버 오류로 실패한다.
+    simple_error_on: Option<(String, String)>,
 }
 
 impl Default for FakeQueries {
@@ -52,6 +54,7 @@ impl Default for FakeQueries {
             tx: TxStatus::Idle,
             start_error: None,
             simple_error: None,
+            simple_error_on: None,
         }
     }
 }
@@ -121,6 +124,12 @@ impl FakeLink {
     /// 다음 `simple_execute` 한 번이 `code`의 서버 오류로 실패하게 한다. 트랜잭션 상태는 바꾸지 않는다.
     pub(crate) fn fail_next_simple(&self, code: &str) {
         self.queries().simple_error = Some(code.into());
+    }
+
+    /// `sql`과 같은 다음 `simple_execute` 한 번이 `code`의 서버 오류로 실패하게 한다. 서버처럼 실패한
+    /// `COMMIT`은 트랜잭션을 끝낸다.
+    pub(crate) fn fail_next_simple_on(&self, sql: &str, code: &str) {
+        self.queries().simple_error_on = Some((sql.into(), code.into()));
     }
 
     /// `tx_status`가 돌려줄 값. 처음에는 `Idle`이다.
@@ -427,6 +436,17 @@ impl DbConnection for FakeConnection {
             });
         }
         if let Some(code) = queries.simple_error.take() {
+            return Err(QueryError::Server(server_error(&code)));
+        }
+        if queries
+            .simple_error_on
+            .as_ref()
+            .is_some_and(|(on, _)| on == sql)
+        {
+            let (_, code) = queries.simple_error_on.take().unwrap();
+            if sql == "COMMIT" {
+                queries.tx = TxStatus::Idle;
+            }
             return Err(QueryError::Server(server_error(&code)));
         }
         if sql.starts_with("BEGIN") || sql.starts_with("ROLLBACK TO SAVEPOINT") {

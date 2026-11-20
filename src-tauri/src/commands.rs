@@ -11,12 +11,12 @@ use chilla_core::application::{
     App, AppError, HistoryEntry, NewHistoryEntry, RecentProject, ServerInfo,
 };
 use chilla_core::domain::{
-    Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo, ConstraintKind, Danger,
-    EditTable, EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, ParameterSpan, Password,
-    ProfileError, Project, QueryEvent, QueryId, QueryOutcome, Relation, RelationKind, RowBatch,
-    ServerError, SessionId, SessionInfo, SessionState, Settings, SettingsError, SqlFile,
-    StatementSpan, TableDetails, TunnelEvent, TunnelFailure, TunnelState, TxEnd, TxMode, TxStatus,
-    TypeInfo, WriteMode,
+    ApplyOutcome, ApplyResult, Catalog, CatalogColumn, Column, ConnectionProfile, ConstraintInfo,
+    ConstraintKind, Danger, EditTable, EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo,
+    ParameterSpan, Password, ProfileError, Project, QueryEvent, QueryId, QueryOutcome, Relation,
+    RelationKind, RowBatch, ServerError, SessionId, SessionInfo, SessionState, Settings,
+    SettingsError, SqlFile, StatementSpan, TableDetails, TunnelEvent, TunnelFailure, TunnelState,
+    TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
 };
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
@@ -696,6 +696,67 @@ impl From<EndResult> for EndResultDto {
     }
 }
 
+/// `apply_edits`의 결과에서 `tx` 옆에 펼쳐지는 부분. `outcome`이 구분자다.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "outcome", rename_all = "snake_case")]
+pub enum ApplyOutcomeDto {
+    Applied {
+        rows: Vec<Vec<Option<String>>>,
+    },
+    WrongRowCount {
+        index: usize,
+        rows: u64,
+    },
+    /// `index`가 null이면 문장이 아니라 앞뒤의 `BEGIN`, `SAVEPOINT`, `COMMIT`이 실패했다.
+    Failed {
+        index: Option<usize>,
+        error: ServerErrorDto,
+    },
+    TransactionFailed,
+    Busy,
+    ConnectionLost {
+        message: String,
+    },
+    ClientError {
+        message: String,
+    },
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ApplyResultDto {
+    #[serde(flatten)]
+    pub outcome: ApplyOutcomeDto,
+    /// 끝난 뒤의 `"idle"`, `"in_transaction"`, `"failed"`. 연결이 끊겼거나 보내지 않았으면 `null`이다.
+    pub tx: Option<&'static str>,
+}
+
+impl From<ApplyResult> for ApplyResultDto {
+    fn from(result: ApplyResult) -> Self {
+        let outcome = match result.outcome {
+            ApplyOutcome::Applied { rows } => ApplyOutcomeDto::Applied { rows },
+            ApplyOutcome::WrongRowCount { index, rows } => {
+                ApplyOutcomeDto::WrongRowCount { index, rows }
+            }
+            // 보낸 SQL은 화면이 만든 것이고 editor에 없으므로 오류 위치를 싣지 않는다.
+            ApplyOutcome::Failed { index, error } => ApplyOutcomeDto::Failed {
+                index,
+                error: ServerErrorDto {
+                    position: None,
+                    ..ServerErrorDto::new(error, "")
+                },
+            },
+            ApplyOutcome::TransactionFailed => ApplyOutcomeDto::TransactionFailed,
+            ApplyOutcome::Busy => ApplyOutcomeDto::Busy,
+            ApplyOutcome::ConnectionLost { message } => ApplyOutcomeDto::ConnectionLost { message },
+            ApplyOutcome::Client { message } => ApplyOutcomeDto::ClientError { message },
+        };
+        Self {
+            outcome,
+            tx: result.tx.map(tx_name),
+        }
+    }
+}
+
 /// 터널이 실패한 이유. `reason`이 구분자다.
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "reason", rename_all = "snake_case")]
@@ -1057,6 +1118,21 @@ pub async fn end_transaction(
 ) -> CommandResult<EndResultDto> {
     Ok(app
         .end_transaction(SessionId(session_id), end.into())
+        .await?
+        .into())
+}
+
+/// 셀 편집의 UPDATE를 한 단위로 보낸다. 문장마다 바뀐 행이 정확히 하나여야 하고 아니면 모두 되돌린다.
+/// 그 세션에 열린 쿼리가 있거나 트랜잭션이 실패했으면 보내지 않는다.
+#[tauri::command]
+pub async fn apply_edits(
+    app: State<'_, CoreApp>,
+    session_id: u64,
+    statements: Vec<String>,
+    mode: TxModeDto,
+) -> CommandResult<ApplyResultDto> {
+    Ok(app
+        .apply_edits(SessionId(session_id), statements, mode.into())
         .await?
         .into())
 }
@@ -2012,6 +2088,80 @@ mod tests {
         assert_eq!(end("commit").unwrap(), TxEnd::Commit);
         assert_eq!(end("rollback").unwrap(), TxEnd::Rollback);
         assert!(end("abort").is_err());
+    }
+
+    #[test]
+    fn apply_result_dto_shapes() {
+        let shape = |outcome, tx| {
+            serde_json::to_value(ApplyResultDto::from(ApplyResult { outcome, tx })).unwrap()
+        };
+        assert_eq!(
+            shape(
+                ApplyOutcome::Applied {
+                    rows: vec![vec![Some("1".into()), None]]
+                },
+                Some(TxStatus::Idle)
+            ),
+            json!({ "outcome": "applied", "rows": [["1", null]], "tx": "idle" })
+        );
+        assert_eq!(
+            shape(
+                ApplyOutcome::WrongRowCount { index: 1, rows: 0 },
+                Some(TxStatus::Idle)
+            ),
+            json!({ "outcome": "wrong_row_count", "index": 1, "rows": 0, "tx": "idle" })
+        );
+        let error = ServerError {
+            code: "23503".into(),
+            message: "m".into(),
+            detail: None,
+            hint: None,
+            position: Some(3),
+        };
+        let failed = |index| ApplyOutcome::Failed {
+            index,
+            error: error.clone(),
+        };
+        // 보낸 SQL은 화면의 editor에 없으므로 오류 위치는 늘 null이다.
+        let error_json = json!({
+            "code": "23503", "message": "m", "detail": null, "hint": null, "position": null
+        });
+        assert_eq!(
+            shape(failed(Some(0)), Some(TxStatus::InTransaction)),
+            json!({
+                "outcome": "failed", "index": 0, "error": error_json, "tx": "in_transaction"
+            })
+        );
+        assert_eq!(
+            shape(failed(None), Some(TxStatus::Idle)),
+            json!({ "outcome": "failed", "index": null, "error": error_json, "tx": "idle" })
+        );
+        assert_eq!(
+            shape(ApplyOutcome::TransactionFailed, Some(TxStatus::Failed)),
+            json!({ "outcome": "transaction_failed", "tx": "failed" })
+        );
+        assert_eq!(
+            shape(ApplyOutcome::Busy, None),
+            json!({ "outcome": "busy", "tx": null })
+        );
+        assert_eq!(
+            shape(
+                ApplyOutcome::ConnectionLost {
+                    message: "x".into()
+                },
+                None
+            ),
+            json!({ "outcome": "connection_lost", "message": "x", "tx": null })
+        );
+        assert_eq!(
+            shape(
+                ApplyOutcome::Client {
+                    message: "y".into()
+                },
+                Some(TxStatus::Idle)
+            ),
+            json!({ "outcome": "client_error", "message": "y", "tx": "idle" })
+        );
     }
 
     #[test]

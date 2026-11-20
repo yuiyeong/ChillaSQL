@@ -12,6 +12,7 @@ import {
   cancelQuery,
   closeSession,
   createProject,
+  applyEdits,
   endTransaction,
   executeQuery,
   fetchMore,
@@ -43,7 +44,7 @@ import {
   restartTunnel,
 } from "./commands";
 import { CommandError } from "./errors";
-import type { Connection, EndResult, QueryEvent } from "./types";
+import type { ApplyResult, Connection, EndResult, QueryEvent } from "./types";
 
 const invokeMock = vi.mocked(invoke);
 
@@ -231,6 +232,24 @@ test("endTransaction은 끝내는 방법을 넘기고 결과를 그대로 돌려
   expect(invokeMock).toHaveBeenCalledWith("end_transaction", {
     sessionId: 3,
     end: "commit",
+  });
+});
+
+test("applyEdits는 문장과 모드를 넘기고 결과를 그대로 돌려준다", async () => {
+  const result: ApplyResult = {
+    outcome: "applied",
+    rows: [["1"], [null]],
+    tx: "idle",
+  };
+  invokeMock.mockResolvedValue(result);
+
+  await expect(
+    applyEdits(3, ["UPDATE a", "UPDATE b"], "manual"),
+  ).resolves.toEqual(result);
+  expect(invokeMock).toHaveBeenCalledWith("apply_edits", {
+    sessionId: 3,
+    statements: ["UPDATE a", "UPDATE b"],
+    mode: "manual",
   });
 });
 

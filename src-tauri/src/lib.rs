@@ -111,6 +111,7 @@ pub fn run() {
             commands::inspect_statement,
             commands::execute_query,
             commands::end_transaction,
+            commands::apply_edits,
             commands::fetch_more,
             commands::cancel_query,
             commands::cancel_tunnel,

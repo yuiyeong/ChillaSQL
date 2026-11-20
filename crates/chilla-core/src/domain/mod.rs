@@ -25,7 +25,7 @@ pub use danger::Danger;
 pub use ddl::{
     DdlColumn, DdlConstraint, Generated, Identity, PartitionOf, RelationDdl, render_ddl,
 };
-pub use edit::{EditColumn, EditTable};
+pub use edit::{ApplyOutcome, ApplyResult, EditColumn, EditTable};
 pub use password::Password;
 pub use project::Project;
 pub use query::{
