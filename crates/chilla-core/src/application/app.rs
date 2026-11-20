@@ -405,7 +405,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     }
 
     pub async fn open_session(&self, connection: &str) -> Result<SessionInfo, AppError> {
-        let (profile, db, tunnel, generation) = self.connect(connection).await?;
+        let (profile, db, tunnel, generation) = self.connect(connection, false).await?;
         let mut state = self.state.lock().await;
         if state.project_generation != generation {
             // 연결하는 사이에 프로젝트가 다시 열렸다. 그때 세션을 모두 닫았으므로, 그 전의
@@ -429,12 +429,14 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
     }
 
     /// 저장된 접속으로 DB에 연결한다. 터널을 쓰는 접속이면 터널 lease를 먼저 얻는다. 연결을
-    /// 시작할 때의 `project_generation`을 함께 돌려준다.
+    /// 시작할 때의 `project_generation`을 함께 돌려준다. `for_catalog`이면 `statement_timeout`을
+    /// 걸지 않는다(사용자가 치는 쿼리를 위한 설정이다. `read_only`는 그대로 건다).
     async fn connect(
         &self,
         connection: &str,
+        for_catalog: bool,
     ) -> Result<(ConnectionProfile, C::Connection, Option<TunnelLease>, u64), AppError> {
-        let (profile, key, generation, target) = {
+        let (mut profile, key, generation, target) = {
             let state = self.state.lock().await;
             let project = state.project.as_ref().ok_or(AppError::NoProject)?;
             let profile =
@@ -450,6 +452,9 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
                 profile.tunnel_target(&project.dir),
             )
         };
+        if for_catalog {
+            profile.statement_timeout = None;
+        }
         let password = self.stored_password(key).await?;
 
         // 터널과 연결은 오래 걸릴 수 있다. 그동안 lock을 잡지 않는다.
@@ -550,7 +555,7 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
         if guard.is_some() {
             return Ok(guard);
         }
-        let (_, db, tunnel, generation) = self.connect(connection).await?;
+        let (_, db, tunnel, generation) = self.connect(connection, true).await?;
         // 연결하는 사이에 프로젝트가 다시 열렸으면 그 전의 접속 정보로 붙은 연결이다.
         // (`close_catalog`가 이 자리를 지웠으면 그 닫기가 이 guard를 기다렸다가 닫는다.)
         if self.state.lock().await.project_generation != generation {
@@ -2045,6 +2050,25 @@ mod tests {
 
         assert_eq!(f.connector.requests().len(), 1);
         assert_eq!(f.connector.catalog_reads(), 2);
+    }
+
+    /// statement_timeout은 사용자가 치는 쿼리를 위한 것이다. catalog 읽기에는 read_only만 건다.
+    #[tokio::test]
+    async fn catalog_connection_has_no_statement_timeout() {
+        let f = opened().await;
+        let mut draft = profile("local");
+        draft.read_only = true;
+        draft.statement_timeout = Some(Duration::from_secs(30));
+        f.app.save_connection(draft, None).await.unwrap();
+
+        f.app.open_session("local").await.unwrap();
+        f.app.load_catalog("local").await.unwrap();
+
+        let profiles = f.connector.profiles();
+        assert_eq!(profiles.len(), 2);
+        assert_eq!(profiles[0].statement_timeout, Some(Duration::from_secs(30)));
+        assert_eq!(profiles[1].statement_timeout, None);
+        assert!(profiles[1].read_only);
     }
 
     #[tokio::test]
