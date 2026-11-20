@@ -11,7 +11,24 @@ export function nextSort(current: SortState, column: number): SortState {
   return current.direction === "asc" ? { column, direction: "desc" } : null;
 }
 
-const DECIMAL = /^-?\d+(\.\d+)?$/;
+/** 정수부, 소수부, 지수. float는 `1e-05`, `1.5e+20`처럼 지수로 찍힌다. */
+const DECIMAL = /^-?(\d+)(?:\.(\d+))?(?:[eE]([+-]?\d+))?$/;
+
+/** 지수만큼 소수점을 옮긴 [정수부, 소수부]. 지수가 없으면 그대로다. */
+function shiftPoint(
+  int: string,
+  frac: string,
+  exponent: string | undefined,
+): [string, string] {
+  if (exponent === undefined) return [int, frac];
+  const digits = int + frac;
+  const point = int.length + Number(exponent);
+  if (point <= 0) return ["", "0".repeat(-point) + digits];
+  if (point >= digits.length) {
+    return [digits + "0".repeat(point - digits.length), ""];
+  }
+  return [digits.slice(0, point), digits.slice(point)];
+}
 
 /** `-Infinity` < 수 < `Infinity` < `NaN` 순서의 자리 */
 const RANK_FINITE = 1;
@@ -35,9 +52,10 @@ function numericKey(value: string): NumericKey | null {
   if (special !== undefined) {
     return { rank: special, negative: false, int: "", frac: "" };
   }
-  if (!DECIMAL.test(value)) return null;
+  const match = DECIMAL.exec(value);
+  if (match === null) return null;
   const negative = value.startsWith("-");
-  const [int, frac = ""] = (negative ? value.slice(1) : value).split(".");
+  const [int, frac] = shiftPoint(match[1], match[2] ?? "", match[3]);
   const key = {
     rank: RANK_FINITE,
     negative,

@@ -177,9 +177,13 @@ test("literals_escape_quotes_and_backslashes", () => {
   expect(sqlLiteral("2026-11-20", undefined)).toBe("'2026-11-20'");
 });
 
-test("numbers_are_bare_only_for_numeric_digits", () => {
+test("numbers_are_bare_only_for_integers", () => {
   expect(sqlLiteral("10482", "N")).toBe("10482");
-  expect(sqlLiteral("-1.5", "N")).toBe("-1.5");
+  expect(sqlLiteral("-7", "N")).toBe("-7");
+  // 소수는 따옴표로 보내 서버가 컬럼 type으로 바꾼다(integer 열은 거절, float4 열은 float4로 비교).
+  expect(sqlLiteral("1.5", "N")).toBe("'1.5'");
+  expect(sqlLiteral("-1.5", "N")).toBe("'-1.5'");
+  expect(sqlLiteral("0.1", "N")).toBe("'0.1'");
   expect(sqlLiteral("NaN", "N")).toBe("'NaN'");
   expect(sqlLiteral("1e5", "N")).toBe("'1e5'");
   expect(sqlLiteral("$1.00", "N")).toBe("'$1.00'");

@@ -45,6 +45,34 @@ test("numbers_sort_by_value", () => {
   ]);
 });
 
+test("exponent_numbers_sort_by_value", () => {
+  // float는 `1e-05`, `2e+10`처럼 지수로 찍힌다.
+  expect(sorted(["0.5", "1e-05", "3", "2e+10"], "asc", "N")).toEqual([
+    "1e-05",
+    "0.5",
+    "3",
+    "2e+10",
+  ]);
+  expect(sorted(["-1.5e+20", "-3", "-2.5E-3", "0"], "asc", "N")).toEqual([
+    "-1.5e+20",
+    "-3",
+    "-2.5E-3",
+    "0",
+  ]);
+  expect(compareNumeric("1e+20", "9007199254740993")).toBeGreaterThan(0);
+  expect(compareNumeric("1.5e+20", "150000000000000000000")).toBe(0);
+  expect(compareNumeric("1e-05", "0.00001")).toBe(0);
+  expect(compareNumeric("12.5e-1", "1.25")).toBe(0);
+  expect(compareNumeric("-0e+5", "0")).toBe(0);
+  expect(compareNumeric("1e400", "Infinity")).toBeLessThan(0);
+  // 같은 값은 결과 순서다.
+  expect(sorted(["0.00001", "1e-05", "1E-5"], "asc", "N")).toEqual([
+    "0.00001",
+    "1e-05",
+    "1E-5",
+  ]);
+});
+
 test("compareNumeric_reads_sign_digits_and_fraction", () => {
   expect(compareNumeric("-10", "-9")).toBeLessThan(0);
   expect(compareNumeric("-0.5", "-0.25")).toBeLessThan(0);

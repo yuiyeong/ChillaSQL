@@ -12,15 +12,16 @@ export interface UpdateStatement {
   attnums: number[];
 }
 
-const PLAIN_NUMBER = /^-?\d+(\.\d+)?$/;
+const PLAIN_INTEGER = /^-?\d+$/;
 
 /**
  * 값을 SQL literal로 쓴다. type은 붙이지 않는다(서버가 unknown literal을 컬럼 type으로 바꾼다).
- * `category`는 컬럼 type의 `pg_type.typcategory`다.
+ * `category`는 컬럼 type의 `pg_type.typcategory`다. 따옴표 없이 쓰는 것은 정수뿐이다. 소수를 그대로 쓰면
+ * numeric literal이 되어 integer 열에서 반올림되고 float4 열과는 double precision으로 비교된다.
  */
 export function sqlLiteral(value: Cell, category: string | undefined): string {
   if (value === null) return "NULL";
-  if (category === "N" && PLAIN_NUMBER.test(value)) return value;
+  if (category === "N" && PLAIN_INTEGER.test(value)) return value;
   const quoted = value.replace(/'/g, "''");
   if (!value.includes("\\")) return `'${quoted}'`;
   return `E'${quoted.replace(/\\/g, "\\\\")}'`;
