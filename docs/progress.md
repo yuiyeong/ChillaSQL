@@ -5,9 +5,9 @@
 ## 지금
 
 - **진행 중**: 없음. M8 에디터·실행 편의를 끝냄(2026-11-20, [M8](plans/M8-editor-run.md)). 3단계가 끝났다
-- **작업 위치**: branch `m8-editor-run`(main `57515cb`에서 갈라짐). origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
+- **작업 위치**: main. branch `m8-editor-run`을 2026-11-20에 fast-forward로 합치고 지움. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 기획서 8장대로 3단계를 며칠 실제로 써 본다(완료 기준: 하루 업무를 DataGrip 없이 처리). 그 뒤 M9 계획. branch `m8-editor-run`을 main에 합칠지는 사용자가 정한다. 부하가 걸리면 가끔 실패하는 test(`tunnel_process` 몇 개, `ten_thousand_statements_split_within_100ms`, vitest `aliased_columns_come_from_the_aliased_table`)를 따로 손본다. 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
+- **다음 할 일**: 기획서 8장대로 3단계를 며칠 실제로 써 본다(완료 기준: 하루 업무를 DataGrip 없이 처리). 그 뒤 M9 계획. 부하가 걸리면 가끔 실패하는 test(`tunnel_process` 몇 개, `ten_thousand_statements_split_within_100ms`, vitest `aliased_columns_come_from_the_aliased_table`)를 따로 손본다. 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
@@ -292,6 +292,7 @@
 
 ### 2026-11-20
 
+- branch `m8-editor-run`을 main에 fast-forward로 합치고 branch를 지움
 - M8 Task 21: `.app`(`scripts/build-app.sh --debug`)에서 완료 확인 14개를 Bash(CGEvent, System Events, `screencapture`)로 확인해 모두 통과함. 처음 시작은 Welcome A, 다시 시작하면 0.81 s에 마지막 프로젝트와 탭 3개. 최근 프로젝트 menu, `Cmd+Q` 뒤 저장하지 않은 탭 복원(dirty 점과 내용, 접속), Reformat(문서와 선택 영역, `Cmd+Z` 한 번), 커서 문장 강조, `SELEC` 밑줄과 Go to error(`Ln 2, Col 1`), Run file 결과 탭(`3 Error`, `4 Not run`, `Stopped at statement 3.`), header type과 숫자 오른쪽 정렬과 `{"a": {…}}`와 Mac 시간의 timestamptz와 값 보기 panel, read_only 접속의 `DELETE`(확인 없이 `SQLSTATE 25006 · prod is a read-only connection…`), `statement_timeout = 1`의 Timed out, Test의 `Connected · PostgreSQL 18.6`, `language = "ko"`와 `font_size = 13`(한국어 화면과 menu `편집, 보기, 윈도우`), `fontsize = 14` 오타의 `Settings were not applied` dialog, 1만 줄 파일에서 화살표 key 600번(30 ms 간격)에 커서가 밀리지 않음. 확인용 설정 파일, 앱 저장소, 키체인 항목, `m8_check` 스키마는 지움. 고치지 않고 본 것: 탭이 없을 때 단축키 안내가 에디터와 결과 자리에 두 번 나옴, Go to error 없이 Copy message만 있을 때 버튼이 설명 줄보다 약 14px 안쪽, 최근 목록의 없는 디렉토리는 `<dir>/chilla.toml 파일이 없습니다`로 나옴
 - M8 Task 2~20(branch `m8-editor-run`): 결과 컬럼 type(TxTap이 RowDescription을 읽음)과 `describe_types`, 접속의 `read_only`·`statement_timeout`·Mac time zone·server version, 전역 설정 파일, SQLite 앱 저장소, `drain` 실행, 오류 params와 한국어 dictionary, Reformat, 문장 span cache와 범위 강조, 오류 밑줄과 Go to error, 여러 문장 실행과 결과 탭, 타입별 표시와 timeout·read-only 오류 화면, 값 보기 panel, 접속 sheet, 자동 보관과 복원, 최근 프로젝트와 Welcome, 에디터 글꼴. task마다 리뷰를 거쳤고 고친 지적은 결정 기록에 반영함. simplify(36개 중 33개 적용), code-review high(9개 중 7개 고침, 1개는 기획서대로 둠, 1개는 이 문서 갱신). 부하가 걸리면 가끔 실패하는 test: `tunnel_process`의 몇 개, `ten_thousand_statements_split_within_100ms`, vitest `aliased_columns_come_from_the_aliased_table`(다시 돌리면 통과)
 - M8 Task 1(branch `m8-editor-run`): 계획의 결정을 결정 기록, 기획서(4.1, 4.4, 4.5, 4.6, 4.10, 5장, 9장), 마일스톤, 구조 문서에 옮김. `sql-formatter` 15.9.1을 설치해 확인함. 닫히지 않은 `/*`만 의미가 바뀌어(`/ * abc`) 그 입력은 Reformat하지 않음(Task 10 test `rejects_unclosed_block_comment`)
