@@ -885,9 +885,24 @@ pub async fn write_sql_file(
 
 /// 내보낸 결과 text를 저장 dialog가 고른 `path`에 쓴다. 있으면 덮어쓴다.
 /// 파일 쓰기는 blocking이라 main thread가 아닌 곳에서 돈다(`async`).
+/// 확장자가 `csv`나 `json`(대소문자 무관)이 아니면 쓰지 않는다. 화면이 어떤 경로를 넘겨도
+/// 설정 파일 같은 다른 파일을 덮어쓰지 않게 하기 위해서다.
 #[tauri::command(async)]
 pub fn write_export(path: String, text: String) -> CommandResult<()> {
     let path = PathBuf::from(path);
+    let exportable = path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .is_some_and(|extension| {
+            extension.eq_ignore_ascii_case("csv") || extension.eq_ignore_ascii_case("json")
+        });
+    if !exportable {
+        let error = std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            "only .csv and .json files can be exported",
+        );
+        return Err(CommandError::export_failed(&path, &error));
+    }
     write_export_file(&path, &text).map_err(|e| CommandError::export_failed(&path, &e))
 }
 
@@ -1371,7 +1386,7 @@ pub fn quit_app(app: tauri::AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::BTreeSet;
+    use std::collections::{BTreeMap, BTreeSet};
 
     use chilla_core::domain::{
         ConnectionColor, EditColumn, Language, SslMode, TunnelEvent, TunnelFailure, TunnelState,
@@ -1395,6 +1410,41 @@ mod tests {
             read_only: true,
             statement_timeout: Some(Duration::from_secs(45)),
         }
+    }
+
+    /// 테스트마다 따로 쓰는 빈 디렉토리
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("chilla-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn write_export_writes_only_csv_and_json_files() {
+        let dir = scratch_dir("write-export");
+        for name in [".zshrc", "Info.plist", "result", "result.csv.sh"] {
+            let path = dir.join(name);
+            let error = write_export(path.display().to_string(), "x".into()).unwrap_err();
+            assert_eq!(error.kind, "export_failed");
+            assert_eq!(
+                error.params,
+                BTreeMap::from([
+                    (
+                        "message",
+                        "only .csv and .json files can be exported".to_string()
+                    ),
+                    ("path", path.display().to_string()),
+                ])
+            );
+            assert!(!path.exists(), "{name} must not be written");
+        }
+        for name in ["result.csv", "result.JSON"] {
+            let path = dir.join(name);
+            write_export(path.display().to_string(), "x".into()).unwrap();
+            assert_eq!(std::fs::read_to_string(&path).unwrap(), "x");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]
