@@ -3,10 +3,14 @@
 
 mod support;
 
+use std::sync::Arc;
+use std::time::Duration;
+
 use chilla_core::domain::{
-    ApplyOutcome, ApplyResult, QueryEvent, QueryOutcome, SessionId, TxEnd, TxMode, TxStatus,
+    ApplyOutcome, ApplyResult, QueryEvent, QueryId, QueryOutcome, SessionId, TxEnd, TxMode,
+    TxStatus,
 };
-use support::{TestApp, admin, app_with_project, next, sink, store_password};
+use support::{TestApp, admin, app_with_project, eventually, next, sink, store_password};
 
 /// test가 만든 schema. 시작할 때 지난 실행이 남긴 것을 지우고, test가 실패해도 drop할 때 지운다.
 struct Schema(String);
@@ -28,7 +32,11 @@ impl Schema {
 impl Drop for Schema {
     /// test의 runtime은 이미 멈추는 중일 수 있어 따로 띄운 thread와 runtime에서 지운다.
     fn drop(&mut self) {
-        let sql = format!("DROP SCHEMA IF EXISTS {} CASCADE", self.0);
+        // test가 실패해서 다른 연결이 lock을 쥔 채 남았으면 기다리지 않고 포기한다(hang하지 않는다).
+        let sql = format!(
+            "SET lock_timeout = '3s'; DROP SCHEMA IF EXISTS {} CASCADE",
+            self.0
+        );
         let _ = std::thread::spawn(move || {
             tokio::runtime::Builder::new_current_thread()
                 .enable_all()
@@ -82,16 +90,15 @@ async fn auto_mode_commits() {
     let (app, _dir) = app_with_project().await;
     let session = open_session(&app).await;
 
-    let result = app
-        .apply_edits(
-            session,
-            statements(&[&format!(
-                "UPDATE {s}.t SET at = '2026-11-20 00:00:00+00' WHERE id = 1 RETURNING at"
-            )]),
-            TxMode::Auto,
-        )
-        .await
-        .unwrap();
+    let result = apply(
+        &app,
+        session,
+        statements(&[&format!(
+            "UPDATE {s}.t SET at = '2026-11-20 00:00:00+00' WHERE id = 1 RETURNING at"
+        )]),
+        TxMode::Auto,
+    )
+    .await;
 
     // 세션의 time zone은 Mac의 것이라 text는 test 환경마다 다르다. 서버가 만든 text가 그대로 오고,
     // 같은 시각을 가리키는지만 본다.
@@ -125,17 +132,16 @@ async fn missing_row_rolls_back_everything() {
     let (app, _dir) = app_with_project().await;
     let session = open_session(&app).await;
 
-    let result = app
-        .apply_edits(
-            session,
-            statements(&[
-                &format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a"),
-                &format!("UPDATE {s}.t SET a = 5 WHERE id = 99 RETURNING a"),
-            ]),
-            TxMode::Auto,
-        )
-        .await
-        .unwrap();
+    let result = apply(
+        &app,
+        session,
+        statements(&[
+            &format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a"),
+            &format!("UPDATE {s}.t SET a = 5 WHERE id = 99 RETURNING a"),
+        ]),
+        TxMode::Auto,
+    )
+    .await;
 
     assert_eq!(
         result,
@@ -158,14 +164,13 @@ async fn more_than_one_row_rolls_back_everything() {
     let (app, _dir) = app_with_project().await;
     let session = open_session(&app).await;
 
-    let result = app
-        .apply_edits(
-            session,
-            statements(&[&format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")]),
-            TxMode::Auto,
-        )
-        .await
-        .unwrap();
+    let result = apply(
+        &app,
+        session,
+        statements(&[&format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")]),
+        TxMode::Auto,
+    )
+    .await;
 
     assert_eq!(
         result.outcome,
@@ -194,17 +199,16 @@ async fn server_error_in_a_transaction_leaves_it_open() {
     assert_eq!(inserted, QueryOutcome::Completed { rows: 1 });
 
     // 둘째 문장이 PK를 겹치게 만든다.
-    let result = app
-        .apply_edits(
-            session,
-            statements(&[
-                &format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a"),
-                &format!("UPDATE {s}.t SET id = 2 WHERE id = 1 RETURNING id"),
-            ]),
-            TxMode::Manual,
-        )
-        .await
-        .unwrap();
+    let result = apply(
+        &app,
+        session,
+        statements(&[
+            &format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a"),
+            &format!("UPDATE {s}.t SET id = 2 WHERE id = 1 RETURNING id"),
+        ]),
+        TxMode::Manual,
+    )
+    .await;
 
     match &result.outcome {
         ApplyOutcome::Failed {
@@ -246,14 +250,13 @@ async fn manual_mode_keeps_the_applied_edits_in_the_open_transaction() {
     let (app, _dir) = app_with_project().await;
     let session = open_session(&app).await;
 
-    let result = app
-        .apply_edits(
-            session,
-            statements(&[&format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")]),
-            TxMode::Manual,
-        )
-        .await
-        .unwrap();
+    let result = apply(
+        &app,
+        session,
+        statements(&[&format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")]),
+        TxMode::Manual,
+    )
+    .await;
 
     assert_eq!(
         result,
@@ -284,16 +287,15 @@ async fn deferred_constraint_fails_at_commit() {
     let (app, _dir) = app_with_project().await;
     let session = open_session(&app).await;
 
-    let result = app
-        .apply_edits(
-            session,
-            statements(&[&format!(
-                "UPDATE {s}.child SET parent_id = 99 WHERE id = 1 RETURNING parent_id"
-            )]),
-            TxMode::Auto,
-        )
-        .await
-        .unwrap();
+    let result = apply(
+        &app,
+        session,
+        statements(&[&format!(
+            "UPDATE {s}.child SET parent_id = 99 WHERE id = 1 RETURNING parent_id"
+        )]),
+        TxMode::Auto,
+    )
+    .await;
 
     match &result.outcome {
         ApplyOutcome::Failed { index: None, error } => assert_eq!(error.code, "23503"),
@@ -319,21 +321,20 @@ async fn e_string_values_round_trip() {
     let session = open_session(&app).await;
     let expected = ["C:\\temp\\n", "O'Brien", "첫째 줄\n둘째 줄 한글", "a\\'b"];
 
-    let result = app
-        .apply_edits(
-            session,
-            statements(&[
-                &format!(r"UPDATE {s}.t SET name = E'C:\\temp\\n' WHERE id = 1 RETURNING name"),
-                &format!("UPDATE {s}.t SET name = 'O''Brien' WHERE id = 2 RETURNING name"),
-                &format!(
-                    "UPDATE {s}.t SET name = E'첫째 줄\\n둘째 줄 한글' WHERE id = 3 RETURNING name"
-                ),
-                &format!(r"UPDATE {s}.t SET name = E'a\\\'b' WHERE id = 4 RETURNING name"),
-            ]),
-            TxMode::Auto,
-        )
-        .await
-        .unwrap();
+    let result = apply(
+        &app,
+        session,
+        statements(&[
+            &format!(r"UPDATE {s}.t SET name = E'C:\\temp\\n' WHERE id = 1 RETURNING name"),
+            &format!("UPDATE {s}.t SET name = 'O''Brien' WHERE id = 2 RETURNING name"),
+            &format!(
+                "UPDATE {s}.t SET name = E'첫째 줄\\n둘째 줄 한글' WHERE id = 3 RETURNING name"
+            ),
+            &format!(r"UPDATE {s}.t SET name = E'a\\\'b' WHERE id = 4 RETURNING name"),
+        ]),
+        TxMode::Auto,
+    )
+    .await;
 
     assert_eq!(
         result.outcome,
@@ -378,14 +379,13 @@ async fn open_query_is_busy_and_keeps_its_result() {
         }
     };
 
-    let result = app
-        .apply_edits(
-            session,
-            statements(&[&format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")]),
-            TxMode::Auto,
-        )
-        .await
-        .unwrap();
+    let result = apply(
+        &app,
+        session,
+        statements(&[&format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")]),
+        TxMode::Auto,
+    )
+    .await;
 
     assert_eq!(result.outcome, ApplyOutcome::Busy);
     assert_eq!(value(&format!("SELECT a::text FROM {s}.t")).await, "0");
@@ -403,4 +403,153 @@ async fn open_query_is_busy_and_keeps_its_result() {
         }
     };
     assert_eq!(finished, QueryOutcome::Completed { rows: 1200 });
+}
+
+/// Apply가 10초 안에 돌아오지 않으면 test가 hang하지 않고 실패한다.
+async fn apply(app: &TestApp, session: SessionId, sql: Vec<String>, mode: TxMode) -> ApplyResult {
+    tokio::time::timeout(Duration::from_secs(10), app.apply_edits(session, sql, mode))
+        .await
+        .expect("Apply가 10초 안에 돌아오지 않았다")
+        .unwrap()
+}
+
+/// 다른 연결이 그 행의 lock을 쥐고 있어 UPDATE가 기다리는 상태를 만든다. 돌려주는 연결을 `ROLLBACK`하면
+/// 풀린다.
+async fn lock_row(s: &str) -> tokio_postgres::Client {
+    let holder = admin().await;
+    holder
+        .batch_execute(&format!(
+            "BEGIN; SELECT * FROM {s}.t WHERE id = 1 FOR UPDATE"
+        ))
+        .await
+        .unwrap();
+    holder
+}
+
+/// UPDATE가 lock을 기다리는 backend가 생길 때까지 기다린다.
+async fn wait_for_lock(s: &str) {
+    let waiting = eventually(async || {
+        let count: i64 = admin()
+            .await
+            .query_one(
+                "SELECT count(*) FROM pg_stat_activity
+                 WHERE wait_event_type = 'Lock' AND query LIKE $1",
+                &[&format!("UPDATE {s}.t%")],
+            )
+            .await
+            .unwrap()
+            .get(0);
+        count > 0
+    })
+    .await;
+    assert!(waiting, "UPDATE가 lock을 기다리지 않는다");
+}
+
+/// lock을 기다리는 Apply도 cancel할 수 있다. 서버의 취소 오류로 끝나고 아무것도 반영되지 않는다.
+#[tokio::test]
+async fn cancel_ends_an_apply_waiting_for_a_row_lock() {
+    let schema = Schema::create(
+        "lock_cancel",
+        "CREATE TABLE t (id int PRIMARY KEY, a int); INSERT INTO t VALUES (1, 0)",
+    )
+    .await;
+    let s = schema.0.clone();
+    let (app, _dir) = app_with_project().await;
+    let app = Arc::new(app);
+    let session = open_session(&app).await;
+    let holder = lock_row(&s).await;
+    let applying = {
+        let (app, s) = (app.clone(), s.clone());
+        tokio::spawn(async move {
+            apply(
+                &app,
+                session,
+                vec![format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")],
+                TxMode::Auto,
+            )
+            .await
+        })
+    };
+    wait_for_lock(&s).await;
+
+    let canceled = tokio::time::timeout(
+        Duration::from_secs(5),
+        app.cancel_query(session, QueryId(0)),
+    )
+    .await
+    .expect("cancel이 5초 안에 돌아오지 않았다");
+    assert_eq!(canceled, Ok(()));
+
+    let result = tokio::time::timeout(Duration::from_secs(5), applying)
+        .await
+        .expect("Apply가 cancel 뒤 5초 안에 돌아오지 않았다")
+        .unwrap();
+    match &result.outcome {
+        ApplyOutcome::Failed {
+            index: Some(0),
+            error,
+        } => assert_eq!(error.code, "57014"),
+        other => panic!("{other:?}"),
+    }
+    assert_eq!(result.tx, Some(TxStatus::Idle));
+    holder.batch_execute("ROLLBACK").await.unwrap();
+    assert_eq!(value(&format!("SELECT a::text FROM {s}.t")).await, "0");
+    // 세션은 계속 쓸 수 있다.
+    let again = apply(
+        &app,
+        session,
+        vec![format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")],
+        TxMode::Auto,
+    )
+    .await;
+    assert_eq!(
+        again.outcome,
+        ApplyOutcome::Applied {
+            rows: texts(&["5"])
+        }
+    );
+}
+
+/// 탭을 닫아도(세션 Close) lock을 기다리는 Apply가 끝없이 막지 않는다.
+#[tokio::test]
+async fn closing_the_session_ends_an_apply_waiting_for_a_row_lock() {
+    let schema = Schema::create(
+        "lock_close",
+        "CREATE TABLE t (id int PRIMARY KEY, a int); INSERT INTO t VALUES (1, 0)",
+    )
+    .await;
+    let s = schema.0.clone();
+    let (app, _dir) = app_with_project().await;
+    let app = Arc::new(app);
+    let session = open_session(&app).await;
+    let holder = lock_row(&s).await;
+    let applying = {
+        let (app, s) = (app.clone(), s.clone());
+        tokio::spawn(async move {
+            apply(
+                &app,
+                session,
+                vec![format!("UPDATE {s}.t SET a = 5 WHERE id = 1 RETURNING a")],
+                TxMode::Auto,
+            )
+            .await
+        })
+    };
+    wait_for_lock(&s).await;
+
+    let closed = tokio::time::timeout(Duration::from_secs(5), app.close_session(session))
+        .await
+        .expect("Close가 5초 안에 돌아오지 않았다");
+    assert_eq!(closed, Ok(()));
+
+    let result = tokio::time::timeout(Duration::from_secs(5), applying)
+        .await
+        .expect("Apply가 Close 뒤 5초 안에 돌아오지 않았다")
+        .unwrap();
+    assert!(
+        matches!(result.outcome, ApplyOutcome::Failed { index: Some(0), .. }),
+        "{result:?}"
+    );
+    holder.batch_execute("ROLLBACK").await.unwrap();
+    assert_eq!(value(&format!("SELECT a::text FROM {s}.t")).await, "0");
 }

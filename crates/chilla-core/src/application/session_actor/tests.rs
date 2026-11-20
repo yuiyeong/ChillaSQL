@@ -2290,3 +2290,188 @@ async fn a_statement_after_apply_runs_normally() {
     let sent = link.sent();
     assert_eq!(sent[sent.len() - 2..], [SET_SAVEPOINT, "B"]);
 }
+
+/// 첫 문장이 서버에서 끝나지 않는 Apply(row lock을 기다리는 UPDATE)를 시작하고, 그 문장이 연결에 닿을
+/// 때까지 기다린다.
+async fn start_blocked_apply(
+    handle: &SessionHandle,
+    link: &FakeLink,
+    mode: TxMode,
+) -> tokio::task::JoinHandle<Option<ApplyResult>> {
+    let _never_ends = link.expect_query();
+    let applying = handle.clone();
+    let statements = edit_statements();
+    let task = tokio::spawn(async move { applying.apply_edits(statements, mode).await });
+    assert!(eventually(|| link.sent().iter().any(|sql| sql.starts_with("UPDATE"))).await);
+    task
+}
+
+/// 2초 안에 끝나야 한다. 아니면 hang하지 않고 panic한다.
+async fn within<T>(future: impl Future<Output = T>) -> T {
+    timeout(Duration::from_secs(2), future)
+        .await
+        .expect("2초 안에 돌아오지 않았다")
+}
+
+fn canceled(index: usize, tx: TxStatus) -> Option<ApplyResult> {
+    Some(ApplyResult {
+        outcome: ApplyOutcome::Failed {
+            index: Some(index),
+            error: server_error("57014"),
+        },
+        tx: Some(tx),
+    })
+}
+
+/// Apply가 도는 동안 온 Cancel은 도는 문장을 cancel하고 되돌린다. Apply는 돌아온다.
+#[tokio::test]
+async fn cancel_during_apply_cancels_the_statement_and_rolls_back() {
+    let (handle, link) = session();
+    let apply = start_blocked_apply(&handle, &link, TxMode::Auto).await;
+
+    assert_eq!(within(handle.cancel(QueryId(1))).await, Some(Ok(())));
+
+    assert_eq!(within(apply).await.unwrap(), canceled(0, TxStatus::Idle));
+    assert_eq!(
+        link.sent(),
+        ["BEGIN", edit_statements()[0].as_str(), "ROLLBACK"]
+    );
+    assert_eq!(link.cancels(), 1);
+}
+
+/// 트랜잭션 안이면 savepoint 앞으로 되돌려 트랜잭션은 failed가 아니라 열린 채다.
+#[tokio::test]
+async fn cancel_during_apply_in_a_transaction_rolls_back_to_the_savepoint() {
+    let (handle, link) = session();
+    set_tx(&handle, &link, TxStatus::InTransaction).await;
+    let apply = start_blocked_apply(&handle, &link, TxMode::Manual).await;
+
+    assert_eq!(within(handle.cancel(QueryId(1))).await, Some(Ok(())));
+
+    assert_eq!(
+        within(apply).await.unwrap(),
+        canceled(0, TxStatus::InTransaction)
+    );
+    assert_eq!(
+        link.sent(),
+        [SET_EDIT_SAVEPOINT, edit_statements()[0].as_str(), UNDO_EDIT]
+    );
+}
+
+/// Close도 도는 문장을 cancel한다. Apply가 되돌린 뒤 Close가 이어서 처리된다.
+#[tokio::test]
+async fn close_during_apply_cancels_rolls_back_and_then_closes() {
+    let (handle, link) = session();
+    let apply = start_blocked_apply(&handle, &link, TxMode::Auto).await;
+
+    let closing = handle.clone();
+    within(closing.close()).await;
+
+    assert_eq!(within(apply).await.unwrap(), canceled(0, TxStatus::Idle));
+    assert!(link.closed());
+    assert_eq!(
+        link.sent(),
+        ["BEGIN", edit_statements()[0].as_str(), "ROLLBACK"]
+    );
+}
+
+/// cancel이 닿지 않아도 Close는 `CLOSE_WAIT` 뒤에 끝난다. 이 연결은 곧 닫히므로 되돌리지 않는다.
+#[tokio::test(start_paused = true)]
+async fn close_during_apply_gives_up_when_the_cancel_does_not_land() {
+    let (handle, link) = session();
+    link.fail_cancels();
+    let apply = start_blocked_apply(&handle, &link, TxMode::Auto).await;
+
+    let closing = handle.clone();
+    within(closing.close()).await;
+
+    let result = within(apply).await.unwrap().unwrap();
+    assert!(
+        matches!(result.outcome, ApplyOutcome::ConnectionLost { .. }),
+        "{result:?}"
+    );
+    assert_eq!(result.tx, None);
+    assert!(link.closed());
+    assert_eq!(link.sent(), ["BEGIN", edit_statements()[0].as_str()]);
+}
+
+/// Apply가 도는 동안 온 다른 명령은 잃지 않고 Apply가 끝난 뒤 처리한다.
+#[tokio::test]
+async fn other_commands_during_apply_wait_for_it() {
+    let (handle, link) = session();
+    let apply = start_blocked_apply(&handle, &link, TxMode::Auto).await;
+    let asking = handle.clone();
+    let state = tokio::spawn(async move { asking.state().await });
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(!state.is_finished());
+
+    assert_eq!(within(handle.cancel(QueryId(1))).await, Some(Ok(())));
+
+    within(apply).await.unwrap();
+    assert_eq!(
+        within(state).await.unwrap(),
+        SessionState::Open { tx: TxStatus::Idle }
+    );
+}
+
+/// 트랜잭션 밖의 Manual이 실패하면 savepoint 앞으로 되돌리고 `BEGIN`으로 연 트랜잭션은 열린 채다.
+#[tokio::test]
+async fn manual_idle_failure_undoes_and_keeps_the_transaction_open() {
+    let (handle, link) = session();
+    link.expect_query().fail("23505");
+
+    let result = handle.apply_edits(edit_statements(), TxMode::Manual).await;
+
+    assert_eq!(
+        result,
+        Some(ApplyResult {
+            outcome: ApplyOutcome::Failed {
+                index: Some(0),
+                error: server_error("23505"),
+            },
+            tx: Some(TxStatus::InTransaction),
+        })
+    );
+    assert_eq!(
+        link.sent(),
+        [
+            BEGIN_WITH_EDIT_SAVEPOINT,
+            edit_statements()[0].as_str(),
+            UNDO_EDIT
+        ]
+    );
+}
+
+/// 세션의 `chilla_statement`가 맨 위에 있으면 Apply가 성공하든 되돌리든 그대로 맨 위다. 다음 문장은
+/// 그것을 풀고 새로 둔다(`SET`이 아니라 `RENEW`).
+#[tokio::test]
+async fn the_statement_savepoint_stays_on_top_after_apply() {
+    for fails in [false, true] {
+        let (handle, link) = session();
+        let (sink, mut events) = sink();
+        handle
+            .execute("A".into(), TxMode::Manual, false, sink)
+            .await;
+        outcome(next(&mut events).await);
+        if fails {
+            link.expect_query().fail("23505");
+        } else {
+            expect_update(&link, "1");
+        }
+        let statements = vec![edit_statements().remove(0)];
+        let result = handle.apply_edits(statements, TxMode::Manual).await;
+        assert_eq!(
+            matches!(result.unwrap().outcome, ApplyOutcome::Applied { .. }),
+            !fails
+        );
+
+        let (sink, mut events) = self::sink();
+        handle
+            .execute("B".into(), TxMode::Manual, false, sink)
+            .await;
+        outcome(next(&mut events).await);
+
+        let sent = link.sent();
+        assert_eq!(sent[sent.len() - 2..], [RENEW_SAVEPOINT, "B"], "{fails}");
+    }
+}

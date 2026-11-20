@@ -88,6 +88,7 @@ pub(crate) fn spawn<D: DbConnection>(connection: D, limits: QueryLimits) -> Sess
         query: None,
         pending: None,
         ends: VecDeque::new(),
+        backlog: VecDeque::new(),
         cancel: None,
         cancel_at: None,
     };
@@ -125,6 +126,8 @@ struct Actor<D: DbConnection> {
     /// 지금 쿼리를 버리는 동안 기다리는 끝내기. 온 순서대로 `pending`보다 먼저 실행한다.
     /// `query`가 `Draining`일 때만 있다.
     ends: VecDeque<(TxEnd, oneshot::Sender<EndResult>)>,
+    /// Apply가 도는 동안 온 명령. Apply가 끝난 뒤 순서대로 처리한다.
+    backlog: VecDeque<SessionCommand>,
     /// spawn한 cancel. 한 번에 하나만 있다.
     cancel: Option<JoinHandle<()>>,
     /// cancel을 다시 보낼 시각. `Draining`이고 cancel이 끝났는데 결과는 끝나지 않았을 때만 있다.
@@ -136,7 +139,7 @@ impl<D: DbConnection> Actor<D> {
         loop {
             match self.next_event(&mut commands).await {
                 Event::Command(Some(command)) => {
-                    if let ControlFlow::Break(reply) = self.handle(command).await {
+                    if let ControlFlow::Break(reply) = self.handle(command, &mut commands).await {
                         self.close().await;
                         let _ = reply.send(());
                         return;
@@ -162,10 +165,13 @@ impl<D: DbConnection> Actor<D> {
         }
     }
 
-    /// 명령, cancel, cancel을 보낼 시각, 결과를 닫을 시각, 결과의 다음 항목 가운데 먼저 온 것을 기다린다.
+    /// 명령(Apply가 도는 동안 쌓인 것 먼저), cancel, cancel을 보낼 시각, 결과를 닫을 시각, 결과의 다음 항목 가운데 먼저 온 것을 기다린다.
     ///
     /// 각 future는 기다리기만 하고 상태를 바꾸지 않으므로 다른 쪽이 먼저 와서 drop돼도 된다.
     async fn next_event(&mut self, commands: &mut mpsc::Receiver<SessionCommand>) -> Event {
+        if let Some(command) = self.backlog.pop_front() {
+            return Event::Command(Some(command));
+        }
         let expires_at = self.query.as_ref().and_then(Query::expires_at);
         let rows = self.query.as_mut().and_then(Query::rows_to_read);
         tokio::select! {
@@ -179,7 +185,11 @@ impl<D: DbConnection> Actor<D> {
     }
 
     /// 명령 하나를 처리한다. `Close`는 세션을 끝내야 하므로 처리하지 않고 그 답장을 `Break`로 돌려준다.
-    async fn handle(&mut self, command: SessionCommand) -> ControlFlow<oneshot::Sender<()>> {
+    async fn handle(
+        &mut self,
+        command: SessionCommand,
+        commands: &mut mpsc::Receiver<SessionCommand>,
+    ) -> ControlFlow<oneshot::Sender<()>> {
         match command {
             SessionCommand::State(reply) => {
                 let state = self.state().await;
@@ -218,7 +228,7 @@ impl<D: DbConnection> Actor<D> {
                 mode,
                 reply,
             } => {
-                let result = self.apply(&statements, mode).await;
+                let result = self.apply(&statements, mode, commands).await;
                 let _ = reply.send(result);
             }
             SessionCommand::FetchMore { query, reply } => {
