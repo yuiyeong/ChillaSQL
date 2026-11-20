@@ -4,12 +4,17 @@
 //! 넘기는 stream을 [`TxTap`]으로 감싸 backend message의 framing을 따라가며 `Z` message의
 //! 상태 byte만 꺼낸다. payload는 복사하지 않고 건너뛴다.
 //!
+//! RowDescription(`T`)만 예외다. `tokio-postgres`의 simple query는 열의 type OID와 typmod를
+//! 공개하지 않으므로, payload를 모아 [`RowTypes`]에 넣는다.
+//!
 //! 서버는 ErrorResponse를 먼저 flush하고 ReadyForQuery를 따로 보낸다. `tokio-postgres`는
 //! ErrorResponse에서 바로 오류를 돌려주므로, 그 직후에 읽은 상태는 오류 전의 값이다.
 //! [`TxStatusCell::settled`]는 ErrorResponse 뒤의 ReadyForQuery가 지나갈 때까지 기다린다.
 
+use std::collections::VecDeque;
 use std::io;
 use std::pin::Pin;
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -20,6 +25,7 @@ use crate::domain::TxStatus;
 const HEADER_LEN: usize = 5;
 const READY_FOR_QUERY: u8 = b'Z';
 const ERROR_RESPONSE: u8 = b'E';
+const ROW_DESCRIPTION: u8 = b'T';
 
 /// ReadyForQuery의 상태 byte.
 fn decode_status(byte: u8) -> Option<TxStatus> {
@@ -58,6 +64,56 @@ impl TxStatusCell {
     }
 }
 
+/// RowDescription 하나의 열별 `(type OID, typmod)`.
+type FieldTypes = Vec<(u32, i32)>;
+
+/// [`TxTap`]이 본 RowDescription의 type. 도착한 순서대로 쌓인다.
+///
+/// `tokio-postgres`는 byte를 읽은 뒤에 message를 내놓으므로, 쿼리 결과에서 RowDescription을
+/// 받은 시점에는 그 type이 이미 들어 있다.
+#[derive(Clone, Default)]
+pub(crate) struct RowTypes(Arc<Mutex<VecDeque<FieldTypes>>>);
+
+impl RowTypes {
+    /// 쌓인 것을 버린다. 쿼리를 보내기 전에 부른다.
+    pub(crate) fn clear(&self) {
+        self.lock().clear();
+    }
+
+    /// 가장 오래된 RowDescription의 type.
+    pub(crate) fn pop(&self) -> Option<FieldTypes> {
+        self.lock().pop_front()
+    }
+
+    fn push(&self, types: FieldTypes) {
+        self.lock().push_back(types);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, VecDeque<FieldTypes>> {
+        // 잠근 채 panic하는 곳이 없다. 그래도 poison이면 값을 그대로 쓴다.
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
+}
+
+/// RowDescription payload에서 열별 type OID와 typmod를 꺼낸다. 모양이 틀리면 `None`이다.
+fn parse_row_description(payload: &[u8]) -> Option<FieldTypes> {
+    let (count, mut rest) = payload.split_first_chunk::<2>()?;
+    let count = u16::from_be_bytes(*count) as usize;
+    // 이름(NUL로 끝남) 뒤에 table OID 4, attnum 2, type OID 4, typlen 2, typmod 4, format 2.
+    let mut types = Vec::with_capacity(count.min(rest.len()));
+    for _ in 0..count {
+        let name_end = rest.iter().position(|&byte| byte == 0)?;
+        let (fixed, after) = rest[name_end + 1..].split_first_chunk::<18>()?;
+        let type_oid = u32::from_be_bytes(fixed[6..10].try_into().ok()?);
+        let type_modifier = i32::from_be_bytes(fixed[12..16].try_into().ok()?);
+        types.push((type_oid, type_modifier));
+        rest = after;
+    }
+    Some(types)
+}
+
 pub(crate) struct TxTap<S> {
     inner: S,
     seen: watch::Sender<Seen>,
@@ -68,14 +124,18 @@ pub(crate) struct TxTap<S> {
     status_next: bool,
     /// 건너뛸 payload의 남은 길이.
     skip: usize,
+    /// RowDescription의 payload. 다 모이면 `types`에 넣는다.
+    row_description: Option<Vec<u8>>,
+    types: RowTypes,
 }
 
 impl<S> TxTap<S> {
-    pub(crate) fn new(inner: S) -> (Self, TxStatusCell) {
+    pub(crate) fn new(inner: S) -> (Self, TxStatusCell, RowTypes) {
         let (seen, cell) = watch::channel(Seen {
             status: TxStatus::Idle,
             error_pending: false,
         });
+        let types = RowTypes::default();
         let tap = Self {
             inner,
             seen,
@@ -83,8 +143,10 @@ impl<S> TxTap<S> {
             header_filled: 0,
             status_next: false,
             skip: 0,
+            row_description: None,
+            types: types.clone(),
         };
-        (tap, TxStatusCell(cell))
+        (tap, TxStatusCell(cell), types)
     }
 
     /// 서버에서 읽은 byte를 순서대로 넘긴다. 어디서 끊겨 와도 된다.
@@ -101,6 +163,12 @@ impl<S> TxTap<S> {
             } else if self.skip > 0 {
                 let n = self.skip.min(bytes.len());
                 self.skip -= n;
+                if let Some(payload) = &mut self.row_description {
+                    payload.extend_from_slice(&bytes[..n]);
+                    if self.skip == 0 {
+                        self.finish_row_description();
+                    }
+                }
                 bytes = &bytes[n..];
             } else {
                 let n = (HEADER_LEN - self.header_filled).min(bytes.len());
@@ -123,11 +191,25 @@ impl<S> TxTap<S> {
         if ty == READY_FOR_QUERY && payload > 0 {
             self.status_next = true;
             self.skip = payload - 1;
+        } else if ty == ROW_DESCRIPTION && payload > 0 {
+            // 길이는 header에 있으므로 서버가 보낸 만큼만 모은다.
+            self.row_description = Some(Vec::new());
+            self.skip = payload;
         } else {
             if ty == ERROR_RESPONSE {
                 self.seen.send_modify(|seen| seen.error_pending = true);
             }
             self.skip = payload;
+        }
+    }
+}
+
+impl<S> TxTap<S> {
+    fn finish_row_description(&mut self) {
+        let payload = self.row_description.take().unwrap_or_default();
+        // 모양이 틀리면 넣지 않는다. 읽는 쪽은 type이 없는 열로 다룬다.
+        if let Some(types) = parse_row_description(&payload) {
+            self.types.push(types);
         }
     }
 }
@@ -191,7 +273,85 @@ mod tests {
     }
 
     fn new_tap() -> (TxTap<()>, TxStatusCell) {
-        TxTap::new(())
+        let (tap, cell, _types) = TxTap::new(());
+        (tap, cell)
+    }
+
+    /// RowDescription의 field 하나. 이름 뒤에 table OID, attnum, type OID, typlen, typmod, format이 온다.
+    fn field(name: &str, type_oid: u32, typmod: i32) -> Vec<u8> {
+        let mut bytes = name.as_bytes().to_vec();
+        bytes.push(0);
+        bytes.extend_from_slice(&0u32.to_be_bytes());
+        bytes.extend_from_slice(&0i16.to_be_bytes());
+        bytes.extend_from_slice(&type_oid.to_be_bytes());
+        bytes.extend_from_slice(&(-1i16).to_be_bytes());
+        bytes.extend_from_slice(&typmod.to_be_bytes());
+        bytes.extend_from_slice(&0i16.to_be_bytes());
+        bytes
+    }
+
+    fn row_description(fields: &[Vec<u8>]) -> Vec<u8> {
+        let mut payload = (fields.len() as i16).to_be_bytes().to_vec();
+        for field in fields {
+            payload.extend_from_slice(field);
+        }
+        msg(b'T', &payload)
+    }
+
+    fn two_fields() -> Vec<u8> {
+        row_description(&[field("a", 23, -1), field("b", 1043, 259)])
+    }
+
+    #[test]
+    fn row_description_types_are_queued() {
+        let (mut tap, _cell, types) = TxTap::new(());
+        for chunk in two_fields().chunks(3) {
+            tap.observe(chunk);
+        }
+        assert_eq!(types.pop(), Some(vec![(23, -1), (1043, 259)]));
+        assert_eq!(types.pop(), None);
+    }
+
+    #[test]
+    fn row_descriptions_are_queued_in_order() {
+        let (mut tap, _cell, types) = TxTap::new(());
+        tap.observe(&two_fields());
+        tap.observe(&msg(b'D', &[7; 20]));
+        tap.observe(&row_description(&[field("c", 25, -1)]));
+        assert_eq!(types.pop(), Some(vec![(23, -1), (1043, 259)]));
+        assert_eq!(types.pop(), Some(vec![(25, -1)]));
+    }
+
+    #[test]
+    fn clear_drops_queued_types() {
+        let (mut tap, _cell, types) = TxTap::new(());
+        tap.observe(&two_fields());
+        types.clear();
+        assert_eq!(types.pop(), None);
+    }
+
+    #[test]
+    fn status_is_still_read_after_a_row_description() {
+        let (mut tap, cell, types) = TxTap::new(());
+        let mut bytes = two_fields();
+        bytes.extend(msg(b'D', &[1; 10]));
+        bytes.extend(msg(b'Z', b"T"));
+        tap.observe(&bytes);
+        assert_eq!(cell.get(), TxStatus::InTransaction);
+        assert_eq!(types.pop(), Some(vec![(23, -1), (1043, 259)]));
+    }
+
+    #[test]
+    fn malformed_row_description_is_ignored() {
+        let (mut tap, cell, types) = TxTap::new(());
+        // field 수는 2인데 payload가 짧다.
+        let mut payload = 2i16.to_be_bytes().to_vec();
+        payload.extend(field("a", 23, -1));
+        tap.observe(&msg(b'T', &payload));
+        tap.observe(&msg(b'T', &[]));
+        tap.observe(&msg(b'Z', b"E"));
+        assert_eq!(types.pop(), None);
+        assert_eq!(cell.get(), TxStatus::Failed);
     }
 
     #[test]
@@ -309,7 +469,7 @@ mod tests {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let (client, mut server) = tokio::io::duplex(64);
-        let (mut tap, cell) = TxTap::new(client);
+        let (mut tap, cell, _types) = TxTap::new(client);
         server.write_all(&msg(b'E', b"SFATAL\0\0")).await.unwrap();
         drop(server);
 
@@ -327,7 +487,7 @@ mod tests {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let (client, mut server) = tokio::io::duplex(64);
-        let (mut tap, cell) = TxTap::new(client);
+        let (mut tap, cell, _types) = TxTap::new(client);
 
         server.write_all(&msg(b'Z', b"T")).await.unwrap();
         let mut read = [0u8; 6];

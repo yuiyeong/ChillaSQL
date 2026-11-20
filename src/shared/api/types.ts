@@ -136,8 +136,15 @@ export type Outcome =
   | { outcome: "connection_lost"; message: string }
   | { outcome: "client_error"; message: string };
 
+/** 결과의 열 하나. type은 서버 RowDescription의 OID와 typmod다(OID 0은 모름, typmod -1은 없음). */
+export interface ResultColumn {
+  name: string;
+  typeOid: number;
+  typeModifier: number;
+}
+
 export type QueryEvent =
-  | { type: "columns"; columns: { name: string }[] }
+  | { type: "columns"; columns: ResultColumn[] }
   | {
       type: "rows";
       firstRow: number;

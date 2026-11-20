@@ -8,6 +8,7 @@ use tokio_postgres::error::{DbError, ErrorPosition};
 use tokio_postgres::{SimpleQueryMessage, SimpleQueryRow, SimpleQueryStream};
 
 use super::error_message;
+use super::tx_tap::RowTypes;
 use crate::application::{QueryError, RowItem, RowSource};
 use crate::domain::{Column, Row, ServerError};
 
@@ -20,13 +21,16 @@ pub struct PgRows {
     stream: Option<Pin<Box<SimpleQueryStream>>>,
     /// 연결의 driver task. 서버 오류가 아닌 stream 오류에서 연결을 끊는 데 쓴다.
     driver: AbortHandle,
+    /// 연결의 tap이 RowDescription에서 읽은 type.
+    row_types: RowTypes,
 }
 
 impl PgRows {
-    pub(super) fn new(stream: SimpleQueryStream, driver: AbortHandle) -> Self {
+    pub(super) fn new(stream: SimpleQueryStream, driver: AbortHandle, row_types: RowTypes) -> Self {
         Self {
             stream: Some(Box::pin(stream)),
             driver,
+            row_types,
         }
     }
 }
@@ -63,14 +67,29 @@ impl RowSource for PgRows {
                 }
             };
             let item = match message {
-                SimpleQueryMessage::RowDescription(columns) => RowItem::Columns(
-                    columns
-                        .iter()
-                        .map(|column| Column {
-                            name: column.name().to_owned(),
-                        })
-                        .collect(),
-                ),
+                SimpleQueryMessage::RowDescription(columns) => {
+                    // tap은 driver가 message를 내놓기 전에 byte를 읽으므로 type이 이미 있다.
+                    // 없거나 수가 다르면 type을 모르는 열로 둔다.
+                    let types = self
+                        .row_types
+                        .pop()
+                        .filter(|types| types.len() == columns.len());
+                    RowItem::Columns(
+                        columns
+                            .iter()
+                            .enumerate()
+                            .map(|(i, column)| {
+                                let (type_oid, type_modifier) =
+                                    types.as_ref().map_or((0, -1), |types| types[i]);
+                                Column {
+                                    name: column.name().to_owned(),
+                                    type_oid,
+                                    type_modifier,
+                                }
+                            })
+                            .collect(),
+                    )
+                }
                 SimpleQueryMessage::Row(row) => match cells(&row) {
                     Some(cells) => RowItem::Row(cells),
                     // 그 행만 오류다. 결과는 이어지므로 `None`까지 읽어야 한다.

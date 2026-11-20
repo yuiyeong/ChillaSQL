@@ -217,10 +217,15 @@ impl FakeFeed {
         item
     }
 
-    pub(crate) fn columns(&self, names: &[&str]) {
-        let columns = names.iter().map(|name| Column {
-            name: name.to_string(),
-        });
+    /// `(이름, type OID, typmod)`를 그대로 넘긴다.
+    pub(crate) fn columns(&self, columns: &[(&str, u32, i32)]) {
+        let columns = columns
+            .iter()
+            .map(|&(name, type_oid, type_modifier)| Column {
+                name: name.to_string(),
+                type_oid,
+                type_modifier,
+            });
         self.push(Ok(RowItem::Columns(columns.collect())));
     }
 

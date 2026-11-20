@@ -21,7 +21,7 @@ import { t } from "../../shared/i18n/t";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
 import { deferred } from "../../test/deferred";
-import { setTabMode } from "../../test/fixtures";
+import { resultColumns, setTabMode } from "../../test/fixtures";
 import { modeOf, useTabs } from "../editor/tabsStore";
 
 function session(id: number, connection = "local"): Session {
@@ -154,13 +154,13 @@ test("event는 execute가 query id를 돌려주기 전에도 반영된다", asyn
   const running = useRuns.getState().run("t", prepared());
   await vi.waitFor(() => expect(executeQuery).toHaveBeenCalled());
   const onEvent = onEventOf(0);
-  onEvent({ type: "columns", columns: [{ name: "id" }] });
+  onEvent({ type: "columns", columns: resultColumns("id") });
   onEvent(rowsEvent);
 
   const state = runOf("t");
   expect(state.status).toBe("running");
   if (state.status !== "running") return;
-  expect(state.result.columns).toEqual(["id"]);
+  expect(state.result.columns).toEqual(resultColumns("id"));
   expect(state.result.rows).toEqual([["1"]]);
 
   execution.resolve(7);
@@ -574,7 +574,7 @@ test("실행 중에 거절된 실행은 진행 중인 쿼리를 건드리지 않
   });
 
   expect(runOf("t")).toBe(running);
-  onEvent({ type: "columns", columns: [{ name: "id" }] });
+  onEvent({ type: "columns", columns: resultColumns("id") });
   onEvent(rowsEvent);
   const state = runOf("t");
   expect(state.status === "running" && state.result.rows).toEqual([["1"]]);
@@ -598,7 +598,7 @@ test("prepare를 기다리는 동안에도 앞 쿼리의 event가 반영된다",
   const preparing = deferred<Rejection | RunRequest>();
   const runningB = useRuns.getState().run("t", () => preparing.promise);
 
-  lateA({ type: "columns", columns: [{ name: "id" }] });
+  lateA({ type: "columns", columns: resultColumns("id") });
   lateA(rowsEvent);
   const stateA = runOf("t");
   expect(stateA.status === "running" && stateA.result.rows).toEqual([["1"]]);

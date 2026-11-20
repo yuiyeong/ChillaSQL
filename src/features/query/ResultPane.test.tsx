@@ -14,7 +14,11 @@ import { stubLayout } from "../../test/layout";
 import type { Cell, Outcome } from "../../shared/api/types";
 import { cancelRun, retryTunnel, runAgain } from "../workspace/commands";
 import { useTunnels } from "../connections/tunnelsStore";
-import { connection, openProjectWith } from "../../test/fixtures";
+import {
+  connection,
+  openProjectWith,
+  resultColumns,
+} from "../../test/fixtures";
 import type { TunnelState } from "../../shared/api/types";
 import { ResultPane } from "./ResultPane";
 import { fitWidth } from "./grid";
@@ -94,7 +98,7 @@ test("실행 중이고 행이 없으면 경과 시간을 보여 준다", () => {
   show({
     status: "running",
     result: result({
-      columns: ["id", "name"],
+      columns: resultColumns("id", "name"),
       elapsedMicros: null,
       startedAt: 10_000,
     }),
@@ -117,7 +121,7 @@ test("행이 오면 rows 뒤에 +를 붙인다", () => {
   show({
     status: "running",
     result: result({
-      columns: ["id", "name"],
+      columns: resultColumns("id", "name"),
       rows: someRows,
       elapsedMicros: 38_000,
     }),
@@ -132,7 +136,7 @@ test("앞 행을 버린 뒤에도 rows는 지금까지 받은 행 수다", () =>
   show({
     status: "running",
     result: result({
-      columns: ["id", "name"],
+      columns: resultColumns("id", "name"),
       rows: someRows,
       firstRow: 124_497,
       elapsedMicros: 2_100_000,
@@ -145,7 +149,7 @@ test("앞 행을 버린 뒤에도 rows는 지금까지 받은 행 수다", () =>
 test("앞 행을 버린 결과를 cancel하면 header는 받은 행 수, 안내는 남은 행 수다", () => {
   finished(
     { outcome: "cancelled" },
-    { columns: ["id", "name"], rows: someRows, firstRow: 124_497 },
+    { columns: resultColumns("id", "name"), rows: someRows, firstRow: 124_497 },
   );
 
   expect(screen.getByText("124,500 rows · 1.23 s")).toBeInTheDocument();
@@ -160,7 +164,11 @@ test("500행이 오면 500+ rows라고 쓴다", () => {
   const rows = Array.from({ length: 500 }, (_, i) => [String(i), "x"]);
   show({
     status: "running",
-    result: result({ columns: ["id", "name"], rows, elapsedMicros: 38_000 }),
+    result: result({
+      columns: resultColumns("id", "name"),
+      rows,
+      elapsedMicros: 38_000,
+    }),
   });
 
   expect(screen.getByText("500+ rows · 38 ms")).toBeInTheDocument();
@@ -169,7 +177,11 @@ test("500행이 오면 500+ rows라고 쓴다", () => {
 test("끝나면 End 줄과 전체 행 수를 보여 준다", () => {
   finished(
     { outcome: "completed", rows: 1240 },
-    { columns: ["id", "name"], rows: someRows, elapsedMicros: 41_000 },
+    {
+      columns: resultColumns("id", "name"),
+      rows: someRows,
+      elapsedMicros: 41_000,
+    },
   );
 
   expect(screen.getByText("1,240 rows · 41 ms")).toBeInTheDocument();
@@ -256,7 +268,7 @@ test("오류의 Copy message는 서버 message를 복사하고 알린다", async
 test("cancelled면 안내와 받은 행을 보여 준다", () => {
   finished(
     { outcome: "cancelled" },
-    { columns: ["id", "name"], rows: someRows },
+    { columns: resultColumns("id", "name"), rows: someRows },
   );
 
   expect(screen.getByText("Cancelled")).toBeInTheDocument();
@@ -272,7 +284,7 @@ test("cancelled면 안내와 받은 행을 보여 준다", () => {
 });
 
 test("cancelled이고 받은 행이 없으면 표를 그리지 않는다", () => {
-  finished({ outcome: "cancelled" }, { columns: ["id", "name"] });
+  finished({ outcome: "cancelled" }, { columns: resultColumns("id", "name") });
 
   expect(screen.getByText("Cancelled")).toBeInTheDocument();
   expect(screen.getByText("Stopped on the server.")).toBeInTheDocument();
@@ -283,7 +295,7 @@ test("cancelled이고 받은 행이 없으면 표를 그리지 않는다", () =>
 test("discarded면 버렸다고 보여 준다", () => {
   finished(
     { outcome: "discarded" },
-    { columns: ["id", "name"], rows: someRows },
+    { columns: resultColumns("id", "name"), rows: someRows },
   );
 
   expect(screen.getByText("Results discarded")).toBeInTheDocument();
@@ -298,7 +310,11 @@ test("discarded면 버렸다고 보여 준다", () => {
 test("expired면 닫았다고 알리고 받은 행은 표에 남긴다", () => {
   finished(
     { outcome: "expired" },
-    { columns: ["id", "name"], rows: someRows, elapsedMicros: 41_000 },
+    {
+      columns: resultColumns("id", "name"),
+      rows: someRows,
+      elapsedMicros: 41_000,
+    },
   );
 
   expect(screen.getByText("Results closed")).toBeInTheDocument();
@@ -313,7 +329,10 @@ test("expired면 닫았다고 알리고 받은 행은 표에 남긴다", () => {
 });
 
 test("expired의 받은 행이 하나면 단수로 쓴다", () => {
-  finished({ outcome: "expired" }, { columns: ["id"], rows: [["1"]] });
+  finished(
+    { outcome: "expired" },
+    { columns: resultColumns("id"), rows: [["1"]] },
+  );
   expect(
     screen.getByText(
       "Nothing was fetched for 10 minutes, so the query was closed on the database. The 1 row received stays visible.",
@@ -323,7 +342,7 @@ test("expired의 받은 행이 하나면 단수로 쓴다", () => {
 
 test("expired의 받은 행 수는 1000 단위로 묶는다", () => {
   const rows: Cell[][] = Array.from({ length: 1500 }, (_, i) => [String(i)]);
-  finished({ outcome: "expired" }, { columns: ["id"], rows });
+  finished({ outcome: "expired" }, { columns: resultColumns("id"), rows });
   expect(
     screen.getByText(
       "Nothing was fetched for 10 minutes, so the query was closed on the database. The 1,500 rows received stay visible.",
@@ -388,7 +407,7 @@ test("rejected의 detail이 null이면 title만 보여 준다", () => {
 test("Run again은 runAgain을 부른다", () => {
   finished(
     { outcome: "completed", rows: 900 },
-    { columns: ["id", "name"], rows: someRows, firstRow: 600 },
+    { columns: resultColumns("id", "name"), rows: someRows, firstRow: 600 },
   );
 
   fireEvent.click(screen.getByRole("button", { name: "Run again" }));
@@ -402,7 +421,7 @@ test("스크롤 끝에서 fetchMore를 부른다", () => {
   show({
     status: "running",
     result: result({
-      columns: ["id", "name"],
+      columns: resultColumns("id", "name"),
       rows: someRows,
       fetch: "ready",
     }),
@@ -414,7 +433,7 @@ test("스크롤 끝에서 fetchMore를 부른다", () => {
 test("선택이 있어야 header의 복사 button이 켜지고, 누르면 복사하고 알린다", async () => {
   finished(
     { outcome: "completed", rows: 3 },
-    { columns: ["id", "name"], rows: someRows },
+    { columns: resultColumns("id", "name"), rows: someRows },
   );
   const button = screen.getByRole("button", { name: "Copy selected cells" });
   expect(button).toBeDisabled();
@@ -430,7 +449,7 @@ test("선택이 있어야 header의 복사 button이 켜지고, 누르면 복사
 test("복사 알림은 창이 아니라 결과 panel의 아래 가운데에 붙는다", async () => {
   finished(
     { outcome: "completed", rows: 3 },
-    { columns: ["id", "name"], rows: someRows },
+    { columns: resultColumns("id", "name"), rows: someRows },
   );
 
   fireEvent.click(screen.getByText("b"));
@@ -446,7 +465,10 @@ test("복사 알림은 창이 아니라 결과 panel의 아래 가운데에 붙�
 });
 
 test("끝나도 표를 다시 만들지 않는다", () => {
-  const running = result({ columns: ["id", "name"], rows: someRows });
+  const running = result({
+    columns: resultColumns("id", "name"),
+    rows: someRows,
+  });
   show({ status: "running", result: running });
   const grid = screen.getByRole("grid");
 
@@ -482,7 +504,7 @@ describe("탭을 바꿨다 돌아올 때의 결과 표", () => {
       result: result({
         sql,
         startedAt,
-        columns: ["id", "name"],
+        columns: resultColumns("id", "name"),
         rows: manyRows,
       }),
       outcome: { outcome: "completed", rows: 1000 },
@@ -899,7 +921,7 @@ describe("트랜잭션", () => {
     useRuns.setState({ discardedByEnd: { t: true } });
     finished(
       { outcome: "discarded" },
-      { columns: ["id", "name"], rows: someRows },
+      { columns: resultColumns("id", "name"), rows: someRows },
     );
 
     expect(screen.getByText("Results discarded")).toBeInTheDocument();

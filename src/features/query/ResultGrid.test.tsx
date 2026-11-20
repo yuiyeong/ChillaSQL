@@ -7,6 +7,7 @@ import {
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
 import type { Cell } from "../../shared/api/types";
+import { resultColumns } from "../../test/fixtures";
 import { stubLayout } from "../../test/layout";
 import { fitWidth } from "./grid";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
@@ -27,7 +28,7 @@ function rowsOf(count: number, from = 0): Cell[][] {
 function result(patch: Partial<ResultData> = {}): ResultData {
   return {
     ...emptyResult("SELECT id, email FROM users", { line: 1, column: 1 }, 1000),
-    columns: ["id", "email"],
+    columns: resultColumns("id", "email"),
     rows: rowsOf(3),
     elapsedMicros: 38000,
     fetch: "ready",
@@ -119,7 +120,10 @@ test("버린 행이 없으면 버린 구간 줄이 없다", () => {
 
 test("NULL과 빈 문자열을 구분해 그린다", () => {
   setup({
-    result: result({ columns: ["a", "b", "c"], rows: [[null, "", "NULL"]] }),
+    result: result({
+      columns: resultColumns("a", "b", "c"),
+      rows: [[null, "", "NULL"]],
+    }),
   });
 
   const [nullCell, textCell] = screen.getAllByText("NULL");
@@ -315,7 +319,9 @@ test("처음 너비는 header와 첫 batch에 맞춘다", () => {
 });
 
 test("header 이름은 값과 다른 글꼴(system font semibold)의 너비로 맞춘다", () => {
-  setup({ result: result({ columns: ["amount"], rows: [["1"]] }) });
+  setup({
+    result: result({ columns: resultColumns("amount"), rows: [["1"]] }),
+  });
 
   // jsdom에는 canvas가 없어 반각 한 칸 9px로 어림한다. D2Coding으로 세면 64px로 잘린다.
   expect(columnHeader("amount").style.width).toBe(`${6 * 9 + 20 + 1}px`);

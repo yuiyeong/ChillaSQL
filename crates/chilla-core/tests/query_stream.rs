@@ -21,12 +21,18 @@ async fn run(conn: &PgConnection, sql: &str) -> Vec<Item> {
     collect(&mut rows).await
 }
 
-fn columns(names: &[&str]) -> Item {
+const INT4: u32 = 23;
+const TEXT: u32 = 25;
+
+/// `(이름, type OID)`. typmod는 없다(-1).
+fn columns(columns: &[(&str, u32)]) -> Item {
     Ok(RowItem::Columns(
-        names
+        columns
             .iter()
-            .map(|name| Column {
+            .map(|&(name, type_oid)| Column {
                 name: name.to_string(),
+                type_oid,
+                type_modifier: -1,
             })
             .collect(),
     ))
@@ -56,7 +62,11 @@ fn has_server_error(items: &[Item], code: &str) -> bool {
 }
 
 fn select_42() -> Vec<Item> {
-    vec![columns(&["?column?"]), row(&[Some("42")]), complete(1)]
+    vec![
+        columns(&[("?column?", INT4)]),
+        row(&[Some("42")]),
+        complete(1),
+    ]
 }
 
 /// `Row`를 `count`개 읽는다. 다른 항목은 건너뛴다.
@@ -80,7 +90,7 @@ async fn select_yields_columns_rows_and_the_count() {
     assert_eq!(
         items,
         vec![
-            columns(&["a", "b", "c", "d"]),
+            columns(&[("a", INT4), ("b", TEXT), ("c", TEXT), ("d", 1007)]),
             row(&[Some("1"), None, Some(""), Some("{1,2}")]),
             complete(1),
         ]
@@ -103,7 +113,7 @@ async fn statements_without_rows_yield_only_the_count() {
     assert_eq!(
         run(&conn, "UPDATE t SET id = id + 1 WHERE id > 1 RETURNING id").await,
         vec![
-            columns(&["id"]),
+            columns(&[("id", INT4)]),
             row(&[Some("3")]),
             row(&[Some("4")]),
             complete(2),
@@ -147,7 +157,7 @@ async fn non_utf8_cell_is_a_client_error_and_the_rows_go_on() {
     assert_eq!(
         items,
         vec![
-            columns(&["column1", "column2"]),
+            columns(&[("column1", TEXT), ("column2", TEXT)]),
             Err(QueryError::Client {
                 message: "The result contains a value that is not UTF-8. Check client_encoding"
                     .into()
@@ -350,4 +360,57 @@ async fn close_does_not_wait_for_a_running_query() {
     assert!(closed.is_ok(), "close가 2초 안에 돌아온다");
     // 서버에서는 아직 pg_sleep이 돈다. 다음 test에 남기지 않는다.
     terminate_backend(&admin, pid).await;
+}
+
+fn column_types(items: &[Item]) -> Vec<(String, u32, i32)> {
+    items
+        .iter()
+        .find_map(|item| match item {
+            Ok(RowItem::Columns(columns)) => Some(
+                columns
+                    .iter()
+                    .map(|c| (c.name.clone(), c.type_oid, c.type_modifier))
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .expect("Columns 항목")
+}
+
+#[tokio::test]
+async fn columns_carry_type_oid_and_modifier() {
+    let conn = connect().await;
+
+    let items = run(
+        &conn,
+        "SELECT 1::int4 AS a, 'x'::varchar(10) AS b, NULL::numeric(10,2) AS c",
+    )
+    .await;
+
+    assert_eq!(
+        column_types(&items),
+        vec![
+            ("a".to_string(), 23, -1),
+            ("b".to_string(), 1043, 14),
+            ("c".to_string(), 1700, 655366),
+        ]
+    );
+    conn.close().await;
+}
+
+#[tokio::test]
+async fn types_follow_each_query() {
+    let conn = connect().await;
+
+    let first = run(&conn, "SELECT 1::int4 AS a").await;
+    let second = run(&conn, "SELECT 'x'::text AS t, true AS f").await;
+    let third = run(&conn, "SELECT 1::int8 AS n").await;
+
+    assert_eq!(column_types(&first), vec![("a".to_string(), 23, -1)]);
+    assert_eq!(
+        column_types(&second),
+        vec![("t".to_string(), 25, -1), ("f".to_string(), 16, -1)]
+    );
+    assert_eq!(column_types(&third), vec![("n".to_string(), 20, -1)]);
+    conn.close().await;
 }

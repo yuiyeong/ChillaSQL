@@ -2,7 +2,11 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { useState } from "react";
 import { beforeEach, expect, test, vi } from "vitest";
 import { click } from "../../test/click";
-import { connection, openProjectWith } from "../../test/fixtures";
+import {
+  connection,
+  openProjectWith,
+  resultColumns,
+} from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 
 vi.mock("./commands", () => ({
@@ -301,7 +305,7 @@ test("연결 중과 첫 행을 기다리는 동안 진행 막대가 있다", () 
     status: "running",
     result: {
       ...emptyResult("SELECT 1", ORIGIN, 0),
-      columns: ["a"],
+      columns: resultColumns("a"),
       rows: [["1"]],
     },
   });

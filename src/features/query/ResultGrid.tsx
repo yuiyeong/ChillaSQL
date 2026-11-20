@@ -117,7 +117,11 @@ function Grid({
   onSelectionChange,
 }: ResultGridProps & { runKey: string }) {
   const { firstRow, rows, fetch } = result;
-  const columns = result.columns ?? NO_COLUMNS;
+  const resultColumns = result.columns;
+  const columns = useMemo(
+    () => resultColumns?.map((column) => column.name) ?? NO_COLUMNS,
+    [resultColumns],
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // 떠날 때 저장한 view. 그 사이 앞 행이 버려졌으면 보던 행이 그 자리에 오게 스크롤을 당긴다.

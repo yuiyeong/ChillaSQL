@@ -10,6 +10,10 @@ pub struct QueryId(pub u64);
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Column {
     pub name: String,
+    /// RowDescription의 type OID. 알 수 없으면 0이다.
+    pub type_oid: u32,
+    /// RowDescription의 typmod. 없으면 -1이다.
+    pub type_modifier: i32,
 }
 
 /// 값은 서버가 만든 text다. `None`은 NULL, `Some("")`은 빈 문자열이다.

@@ -104,14 +104,18 @@ async fn dropping_every_handle_closes_the_connection() {
 async fn small_result_arrives_as_one_batch_then_finishes() {
     let (handle, link) = session();
     let feed = link.expect_query();
-    feed.columns(&["id"]);
+    feed.columns(&[("id", 23, -1)]);
     feed.rows(0..3);
     feed.complete(3);
     let (sink, mut events) = sink();
     let query = handle.execute("SELECT 1".into(), TxMode::Auto, sink).await;
     assert_eq!(query, Some(QueryId(1)));
 
-    let id = Column { name: "id".into() };
+    let id = Column {
+        name: "id".into(),
+        type_oid: 23,
+        type_modifier: -1,
+    };
     assert_eq!(next(&mut events).await, QueryEvent::Columns(vec![id]));
     assert_eq!(link.sent(), ["SELECT 1"]);
     let rows = batch(next(&mut events).await);
@@ -146,7 +150,7 @@ async fn statement_without_rows_finishes_with_the_count() {
 async fn rows_arrive_500_at_a_time_and_wait_for_fetch_more() {
     let (handle, link) = session();
     let feed = link.expect_query();
-    feed.columns(&["n"]);
+    feed.columns(&[("n", 23, -1)]);
     feed.rows(0..1200);
     feed.complete(1200);
     let (sink, mut events) = sink();
@@ -324,7 +328,7 @@ async fn fetch_more_is_accepted_for_every_query_this_session_issued() {
 async fn server_error_keeps_the_rows_received_before_it() {
     let (handle, link) = session();
     let feed = link.expect_query();
-    feed.columns(&["n"]);
+    feed.columns(&[("n", 23, -1)]);
     feed.rows(0..3);
     feed.fail("22012");
     let (sink, mut events) = sink();
@@ -343,7 +347,7 @@ async fn server_error_keeps_the_rows_received_before_it() {
 async fn client_error_keeps_the_rows_received_before_it() {
     let (handle, link) = session();
     let feed = link.expect_query();
-    feed.columns(&["n"]);
+    feed.columns(&[("n", 23, -1)]);
     feed.rows(0..3);
     feed.push(Err(QueryError::Client {
         message: "m".into(),

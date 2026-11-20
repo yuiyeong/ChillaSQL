@@ -1,4 +1,9 @@
-import type { Cell, Outcome, QueryEvent } from "../../shared/api/types";
+import type {
+  Cell,
+  Outcome,
+  QueryEvent,
+  ResultColumn,
+} from "../../shared/api/types";
 
 /** 보낸 text가 문서에서 시작한 곳. 1부터 센다. */
 export interface Origin {
@@ -30,7 +35,7 @@ export interface ResultData {
   /** 서버에 보낸 text */
   sql: string;
   origin: Origin;
-  columns: string[] | null;
+  columns: ResultColumn[] | null;
   /** rows[0]의 행 번호 */
   firstRow: number;
   rows: Cell[][];
@@ -85,7 +90,7 @@ export function reduce(state: RunState, event: QueryEvent): RunState {
     case "columns":
       return {
         status: "running",
-        result: { ...result, columns: event.columns.map((c) => c.name) },
+        result: { ...result, columns: event.columns },
       };
     case "rows": {
       const kept = result.rows.length;

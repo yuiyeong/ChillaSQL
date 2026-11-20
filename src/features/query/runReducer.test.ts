@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import type { QueryEvent } from "../../shared/api/types";
+import { resultColumns } from "../../test/fixtures";
 import { emptyResult, reduce, requestFetch, type RunState } from "./runReducer";
 
 const origin = { line: 1, column: 1 };
@@ -8,11 +9,29 @@ function running(): RunState {
   return { status: "running", result: emptyResult("SELECT 1", origin, 1000) };
 }
 
+test("columns_keep_their_types", () => {
+  const state = reduce(running(), {
+    type: "columns",
+    columns: [
+      { name: "id", typeOid: 23, typeModifier: -1 },
+      { name: "name", typeOid: 1043, typeModifier: 259 },
+    ],
+  });
+  expect(state).toMatchObject({
+    result: {
+      columns: [
+        { name: "id", typeOid: 23, typeModifier: -1 },
+        { name: "name", typeOid: 1043, typeModifier: 259 },
+      ],
+    },
+  });
+});
+
 test("columns, rows, finished를 차례로 쌓는다", () => {
   let state = running();
   state = reduce(state, {
     type: "columns",
-    columns: [{ name: "id" }, { name: "name" }],
+    columns: resultColumns("id", "name"),
   });
   state = reduce(state, {
     type: "rows",
@@ -41,7 +60,7 @@ test("columns, rows, finished를 차례로 쌓는다", () => {
     result: {
       sql: "SELECT 1",
       origin,
-      columns: ["id", "name"],
+      columns: resultColumns("id", "name"),
       firstRow: 0,
       rows: [
         ["1", "a"],

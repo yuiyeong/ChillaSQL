@@ -408,8 +408,11 @@ impl From<Danger> for DangerDto {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ColumnDto {
     pub name: String,
+    pub type_oid: u32,
+    pub type_modifier: i32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -483,7 +486,11 @@ fn micros(elapsed: Duration) -> u64 {
 
 impl From<Column> for ColumnDto {
     fn from(column: Column) -> Self {
-        Self { name: column.name }
+        Self {
+            name: column.name,
+            type_oid: column.type_oid,
+            type_modifier: column.type_modifier,
+        }
     }
 }
 
@@ -1361,10 +1368,17 @@ mod tests {
 
     #[test]
     fn query_event_dto_shapes() {
-        let columns = event_json(QueryEvent::Columns(vec![Column { name: "id".into() }]));
+        let columns = event_json(QueryEvent::Columns(vec![Column {
+            name: "id".into(),
+            type_oid: 1043,
+            type_modifier: 14,
+        }]));
         assert_eq!(
             columns,
-            json!({ "type": "columns", "columns": [{ "name": "id" }] })
+            json!({
+                "type": "columns",
+                "columns": [{ "name": "id", "typeOid": 1043, "typeModifier": 14 }],
+            })
         );
         assert_eq!(keys(&columns), BTreeSet::from(["type", "columns"]));
 

@@ -4,10 +4,16 @@ import type {
   Project,
   Relation,
   RelationKind,
+  ResultColumn,
   TxMode,
 } from "../shared/api/types";
 import { useTabs, type Tab } from "../features/editor/tabsStore";
 import { useProject } from "../features/project/projectStore";
+
+/** type을 모르는(OID 0) 결과 열. 이름만 중요한 test에서 쓴다. */
+export function resultColumns(...names: string[]): ResultColumn[] {
+  return names.map((name) => ({ name, typeOid: 0, typeModifier: -1 }));
+}
 
 /** test용 접속. 바꿀 값만 `patch`로 준다. */
 export function connection(

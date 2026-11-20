@@ -26,7 +26,7 @@ use crate::domain::{Catalog, ConnectionProfile, Password, SslMode, TableDetails,
 pub use cancel::PgCancel;
 pub use rows::PgRows;
 use tls::Verification;
-use tx_tap::{TxStatusCell, TxTap};
+use tx_tap::{RowTypes, TxStatusCell, TxTap};
 
 const DEFAULT_CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 /// `close`가 driver task를 기다리는 시간. 실행 중인 쿼리가 있으면 driver는 쿼리가 끝나야
@@ -132,7 +132,7 @@ async fn start<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
-    let (tap, tx_status) = TxTap::new(stream);
+    let (tap, tx_status, row_types) = TxTap::new(stream);
 
     let mut config = Config::new();
     config
@@ -159,6 +159,7 @@ where
         client,
         driver,
         tx_status,
+        row_types,
         backend_pid,
         profile: profile.clone(),
         server,
@@ -188,6 +189,8 @@ pub struct PgConnection {
     /// socket을 읽고 쓰는 task. `client`가 drop되면 Terminate를 보내고 끝난다.
     driver: JoinHandle<()>,
     tx_status: TxStatusCell,
+    /// 서버가 보낸 RowDescription의 type. `PgRows`가 꺼낸다.
+    row_types: RowTypes,
     backend_pid: i32,
     /// cancel 요청을 같은 방법(TLS 여부, 인증서 확인)으로 보내려고 갖는다.
     profile: ConnectionProfile,
@@ -215,13 +218,19 @@ impl DbConnection for PgConnection {
     }
 
     async fn start_query(&self, sql: &str) -> Result<PgRows, QueryError> {
+        // 앞선 쿼리(연결할 때의 `pg_backend_pid()` 포함)가 남긴 type을 버린다.
+        self.row_types.clear();
         // 서버의 응답을 기다리지 않으므로 오류는 보내기 전의 것(끊긴 연결, NUL이 든 text 등)뿐이다.
         let stream = self
             .client
             .simple_query_raw(sql)
             .await
             .map_err(query_error)?;
-        Ok(PgRows::new(stream, self.driver.abort_handle()))
+        Ok(PgRows::new(
+            stream,
+            self.driver.abort_handle(),
+            self.row_types.clone(),
+        ))
     }
 
     async fn simple_execute(&self, sql: &str) -> Result<(), QueryError> {
