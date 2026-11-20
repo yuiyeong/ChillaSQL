@@ -355,7 +355,7 @@ git commit -m "feat: 셀 편집의 UPDATE를 한 단위로 보내고 행이 하�
   ```
   문구 key: `edit.notEditable.readOnly`, `.running`, `.noTable`, `.manyTables`, `.notTable`, `.noPrimaryKey`, `.primaryKeyMissing`, `.gone`, `.computed`, `.generated`(이 계획 "편집할 수 있는 결과"의 문구).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `editTarget.test.ts`(fixture는 "먼저 확인한 것"의 RowDescription 값):
 - `single_table_with_primary_key_is_editable`, `alias_and_duplicate_columns_map_to_one_attnum`(`e`와 `email` 둘 다 attnum 2의 컬럼).
@@ -371,21 +371,21 @@ git commit -m "feat: 셀 편집의 UPDATE를 한 단위로 보내고 행이 하�
 - `numbers_are_bare_only_for_numeric_digits`: category `N`의 `10482`, `-1.5`는 그대로, `NaN`, `1e5`, `$1.00`(money), category `S`의 `123`은 따옴표.
 - `null_is_keyword`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query/editTarget.test.ts src/features/query/editSql.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 판단 순서는 이 계획 "편집할 수 있는 결과"의 목록 순(readOnly, running, OID 0만, 여러 OID, 없어짐, table이 아님, PK 없음, PK 컬럼 없음). 여러 OID의 이름은 `tables`에서 찾은 relname을 결과 열 순서로 처음 나온 순서대로, 없는 OID는 빼고 센다. 문구는 `en.ts`, `ko.ts`에 더한다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

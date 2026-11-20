@@ -302,6 +302,25 @@ export const ko: Record<MessageKey, string> = {
   "result.end.other": "끝 · {count}행",
   "result.resizeColumn": "{name} 크기 조절",
 
+  "edit.notEditable.readOnly": "편집할 수 없습니다: 읽기 전용 접속입니다.",
+  "edit.notEditable.running":
+    "행을 받는 중에는 편집할 수 없습니다. 취소하면 지금까지 받은 행은 남습니다.",
+  "edit.notEditable.noTable":
+    "편집할 수 없습니다: 테이블에서 온 열이 없습니다.",
+  "edit.notEditable.manyTables":
+    "편집할 수 없습니다: 행이 테이블 {count}개({names})에서 왔습니다.",
+  "edit.notEditable.notTable":
+    "편집할 수 없습니다: {name}은(는) 테이블이 아닙니다.",
+  "edit.notEditable.noPrimaryKey":
+    "편집할 수 없습니다: {name}에 primary key가 없습니다.",
+  "edit.notEditable.primaryKeyMissing":
+    "편집할 수 없습니다: 결과에 primary key({columns})가 없습니다.",
+  "edit.notEditable.gone": "편집할 수 없습니다: 테이블이 더 이상 없습니다.",
+  "edit.notEditable.computed":
+    "편집할 수 없습니다: {name}은(는) 계산한 값입니다.",
+  "edit.notEditable.generated":
+    "편집할 수 없습니다: {name}은(는) 데이터베이스가 만드는 값입니다.",
+
   "explain.tab": "EXPLAIN",
   "explain.timings": "실행 {execution} · 계획 {planning}",
   "explain.timingsExecution": "실행 {execution}",
