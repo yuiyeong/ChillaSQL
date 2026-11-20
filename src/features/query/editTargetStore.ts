@@ -2,6 +2,8 @@ import { useEffect, useMemo } from "react";
 import { create } from "zustand";
 import { describeTables } from "../../shared/api/commands";
 import type { EditTable, ResultColumn } from "../../shared/api/types";
+import { tableOids } from "./editTarget";
+import { pendingAsks } from "./pendingAsks";
 
 interface EditTablesState {
   /** connection → table OID → 테이블. 물었는데 답에 없으면(없어진 테이블) null이다. */
@@ -13,50 +15,46 @@ interface EditTablesState {
   reset(): void;
 }
 
-/** 셀 편집이 쓰는 테이블의 catalog cache. `typesStore`와 같은 모양이다. */
+/** 셀 편집이 쓰는 테이블의 catalog cache. `typesStore`와 같은 모양이다(묻는 중인 key는 `pendingAsks`). */
 export const useEditTableCache = create<EditTablesState>()((set, get) => {
   // 접속마다 묻는 중인 OID. forget과 reset은 지운다.
-  const pending = new Map<string, Set<number>>();
+  const pending = pendingAsks<number>();
 
   return {
     tables: {},
 
     async ensure(connection, oids) {
       const known = get().tables[connection] ?? {};
-      const asking = pending.get(connection) ?? new Set<number>();
       const wanted = [
         ...new Set(
           oids.filter(
-            (oid) => oid !== 0 && !(oid in known) && !asking.has(oid),
+            (oid) =>
+              oid !== 0 &&
+              !(oid in known) &&
+              !pending.isAsking(connection, oid),
           ),
         ),
       ];
       if (wanted.length === 0) return;
 
-      for (const oid of wanted) asking.add(oid);
-      pending.set(connection, asking);
-      try {
-        const found = await describeTables(connection, wanted);
-        // 묻는 사이 forget이나 reset이 있었으면 답을 버린다.
-        if (pending.get(connection) !== asking) return;
-        set((state) => {
-          const entry = { ...state.tables[connection] };
-          for (const oid of wanted) {
-            entry[oid] = found.find((table) => table.oid === oid) ?? null;
-          }
-          return { tables: { ...state.tables, [connection]: entry } };
-        });
-      } catch {
-        // 편집할 수 있는지 판단을 미룰 뿐이다. 다음 결과가 다시 묻는다.
-      } finally {
-        if (pending.get(connection) === asking) {
-          for (const oid of wanted) asking.delete(oid);
-        }
-      }
+      // 실패하면 편집할 수 있는지 판단을 미룰 뿐이다.
+      await pending.ask(
+        connection,
+        wanted,
+        () => describeTables(connection, wanted),
+        (found) =>
+          set((state) => {
+            const entry = { ...state.tables[connection] };
+            for (const oid of wanted) {
+              entry[oid] = found.find((table) => table.oid === oid) ?? null;
+            }
+            return { tables: { ...state.tables, [connection]: entry } };
+          }),
+      );
     },
 
     forget(connection) {
-      pending.delete(connection);
+      pending.forget(connection);
       set((state) => {
         const tables = { ...state.tables };
         delete tables[connection];
@@ -70,13 +68,6 @@ export const useEditTableCache = create<EditTablesState>()((set, get) => {
     },
   };
 });
-
-/** 결과 열의 table OID. 0(테이블이 아닌 열)은 뺀다. */
-function tableOids(columns: readonly ResultColumn[]): number[] {
-  return [
-    ...new Set(columns.map((column) => column.tableOid).filter((oid) => oid)),
-  ];
-}
 
 /**
  * 결과 열이 가리키는 테이블. 하나라도 아직 모르면(묻는 중, 실패) undefined이고, 답에 없던(없어진)

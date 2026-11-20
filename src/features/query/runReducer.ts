@@ -4,6 +4,7 @@ import type {
   QueryEvent,
   ResultColumn,
 } from "../../shared/api/types";
+import type { UpdateStatement } from "./editSql";
 import type { Rewrite } from "./rewrite";
 
 /** 보낸 text가 문서에서 시작한 곳. 1부터 센다. */
@@ -74,6 +75,28 @@ export interface ResultData {
 /** 지금까지 받은 행 수. 버린 앞 행(`firstRow`개)도 센다. */
 export function receivedRows(result: ResultData): number {
   return result.firstRow + result.rows.length;
+}
+
+/**
+ * Apply가 돌려준 `RETURNING` 값(`returned`)으로 바꾼 결과. 문장마다 `attnums`의 순서로 값이 오고,
+ * 같은 attnum의 결과 열은 모두 바꾼다. 표에 남지 않은(버린) 행은 건너뛴다.
+ */
+export function withReturnedRows(
+  result: ResultData,
+  statements: readonly UpdateStatement[],
+  returned: Cell[][],
+): ResultData {
+  const attnums = result.columns?.map((column) => column.columnNumber);
+  const rows = [...result.rows];
+  statements.forEach((statement, index) => {
+    const row = rows[statement.row - result.firstRow];
+    if (row === undefined) return;
+    rows[statement.row - result.firstRow] = row.map((cell, column) => {
+      const at = statement.attnums.indexOf(attnums?.[column] ?? 0);
+      return at === -1 ? cell : returned[index][at];
+    });
+  });
+  return { ...result, rows };
 }
 
 export type RunState =

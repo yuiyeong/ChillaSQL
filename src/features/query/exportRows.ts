@@ -1,4 +1,5 @@
 import type { Cell, ResultColumn, TypeInfo } from "../../shared/api/types";
+import { valueKind } from "./cellDisplay";
 import type { RowView } from "./grid";
 
 /** 내보낼 것. ResultGrid가 보관한 행을 보이는 순서로, 서버 값 그대로 준다. */
@@ -43,12 +44,11 @@ const JSON_NUMBER = /^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$/;
 /** 값 하나의 JSON text. type이 문자열로 둘 수 없다고 알려 줄 때만 서버 text를 그대로 쓴다. */
 function jsonValue(value: Cell, type: TypeInfo | undefined): string {
   if (value === null) return "null";
-  if (type !== undefined) {
-    if (type.category === "N" && JSON_NUMBER.test(value)) return value;
-    if (type.name === "boolean" && (value === "t" || value === "f")) {
-      return value === "t" ? "true" : "false";
-    }
-    if (type.name === "json" || type.name === "jsonb") return value;
+  const kind = valueKind(type);
+  if (kind === "number" && JSON_NUMBER.test(value)) return value;
+  if (kind === "json") return value;
+  if (type?.name === "boolean" && (value === "t" || value === "f")) {
+    return value === "t" ? "true" : "false";
   }
   return JSON.stringify(value);
 }

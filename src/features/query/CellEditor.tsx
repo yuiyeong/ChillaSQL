@@ -1,4 +1,5 @@
 import { useRef, type CSSProperties, type KeyboardEvent } from "react";
+import { isImeComposing } from "../../shared/ui/ime";
 import { noTextCorrection } from "../../shared/ui/noTextCorrection";
 
 interface CellEditorProps {
@@ -35,11 +36,7 @@ export function CellEditor({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // 한글 조합 중의 Enter는 조합을 끝낼 뿐이다. WKWebView는 조합을 끝내는 Enter에 isComposing을
-    // false로 보내므로 keyCode 229도 본다(ParameterDialog와 같다).
-    if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) {
-      return;
-    }
+    if (isImeComposing(event.nativeEvent)) return;
     const element = event.currentTarget;
     if (event.key === "Enter") {
       event.preventDefault();

@@ -3,12 +3,13 @@ import { EditorView } from "@codemirror/view";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
+import { rebind } from "../../test/fixtures";
 import { attachView, detachView } from "../editor/documents";
 import { useTabs } from "../editor/tabsStore";
 import { resetStores } from "../../test/resetStores";
 import { ParameterDialog } from "./ParameterDialog";
 import { askParameters } from "./parameterPrompt";
-import { DEFAULT_KEYMAP, setKeymap } from "./shortcuts";
+import { setKeymap } from "./shortcuts";
 
 let views: EditorView[] = [];
 
@@ -251,10 +252,9 @@ test("enter_on_the_cancel_button_cancels_and_does_not_run", async () => {
 });
 
 test("rebound_run_key_runs", async () => {
-  setKeymap([
-    ...DEFAULT_KEYMAP.filter((b) => b.command !== "run"),
-    { command: "run", code: "KeyR", shift: true, alt: false, ctrl: false },
-  ]);
+  setKeymap(
+    rebind("run", { code: "KeyR", shift: true, alt: false, ctrl: false }),
+  );
   const { tabId, view } = editorForActiveTab();
   const first = open(["id"], tabId);
   type("id", "3");

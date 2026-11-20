@@ -41,6 +41,7 @@ import {
   type RunRequest,
   type RunState,
   type ScriptStep,
+  withReturnedRows,
 } from "./runReducer";
 import {
   canEndTransaction,
@@ -101,7 +102,7 @@ export type RunNotice =
   { kind: "reconnected" } | ({ kind: "transactionLost" } & TxCount);
 
 /** record에서 key의 값을 바꾼다. `undefined`면 지운다. 바뀌지 않으면 같은 object를 돌려준다. */
-function withEntry<T>(
+export function withEntry<T>(
   record: Record<string, T>,
   key: string,
   value: T | undefined,
@@ -444,8 +445,8 @@ export const useRuns = create<RunsState>()((set, get) => {
   }
 
   /**
-   * `runKey` 결과의 행을 Apply가 돌려준 `RETURNING` 값으로 바꾼다. 문장마다 `attnums`의 순서로 값이
-   * 오고, 같은 attnum의 결과 열은 모두 바꾼다. 지금 문장과 여러 문장 실행의 끝난 문장에서 찾는다.
+   * `runKey` 결과의 행을 Apply가 돌려준 `RETURNING` 값으로 바꾼다(`withReturnedRows`). 지금 문장과
+   * 여러 문장 실행의 끝난 문장에서 찾는다.
    */
   function applyRows(
     tabId: string,
@@ -457,17 +458,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       if (run.status !== "running" && run.status !== "finished") return run;
       const { result } = run;
       if (runKeyOf(result) !== runKey) return run;
-      const attnums = result.columns?.map((column) => column.columnNumber);
-      const rows = [...result.rows];
-      statements.forEach((statement, index) => {
-        const row = rows[statement.row - result.firstRow];
-        if (row === undefined) return;
-        rows[statement.row - result.firstRow] = row.map((cell, column) => {
-          const at = statement.attnums.indexOf(attnums?.[column] ?? 0);
-          return at === -1 ? cell : returned[index][at];
-        });
-      });
-      return { ...run, result: { ...result, rows } };
+      return { ...run, result: withReturnedRows(result, statements, returned) };
     };
     set((s) => {
       const run = s.runs[tabId];

@@ -80,23 +80,39 @@ function keyOf(code: string): string {
   return PUNCTUATION[code] ?? code.replace(/^(Key|Digit)(?=.$)/, "");
 }
 
+/** Ctrl, Opt, Shift, Cmd 순서로 쓰는 modifier의 표기 */
+type Modifiers = readonly [
+  ctrl: string,
+  alt: string,
+  shift: string,
+  cmd: string,
+];
+
+/** 단축키를 modifier 순서(Ctrl, Opt, Shift, Cmd)대로 쓰고 key를 붙인다. */
+function format(
+  command: CommandId,
+  [ctrlText, altText, shiftText, cmdText]: Modifiers,
+  key: (code: string) => string = keyOf,
+): string {
+  const { code, shift, alt, ctrl } = bindingOf(command);
+  return `${ctrl ? ctrlText : ""}${alt ? altText : ""}${shift ? shiftText : ""}${cmdText}${key(code)}`;
+}
+
 /** 화면에 보이는 단축키 표시. 예: `⌘↵`, `⇧⌘L`, `⌃⌥⇧⌘↵` */
 export function shortcutLabel(command: CommandId): string {
-  const { code, shift, alt, ctrl } = bindingOf(command);
-  const key = code === "Enter" ? "↵" : keyOf(code);
-  return `${ctrl ? "⌃" : ""}${alt ? "⌥" : ""}${shift ? "⇧" : ""}⌘${key}`;
+  return format(command, ["⌃", "⌥", "⇧", "⌘"], (code) =>
+    code === "Enter" ? "↵" : keyOf(code),
+  );
 }
 
 /** `aria-keyshortcuts`의 값. 예: `Meta+Enter`, `Shift+Meta+L`, `Control+Alt+Shift+Meta+Enter` */
 export function shortcutKeys(command: CommandId): string {
-  const { code, shift, alt, ctrl } = bindingOf(command);
-  return `${ctrl ? "Control+" : ""}${alt ? "Alt+" : ""}${shift ? "Shift+" : ""}Meta+${keyOf(code)}`;
+  return format(command, ["Control+", "Alt+", "Shift+", "Meta+"]);
 }
 
 /** 글자로 쓴 단축키. 설정 파일의 값과 같은 꼴이다. 예: `Opt+Shift+Cmd+Enter` */
 export function shortcutText(command: CommandId): string {
-  const { code, shift, alt, ctrl } = bindingOf(command);
-  return `${ctrl ? "Ctrl+" : ""}${alt ? "Opt+" : ""}${shift ? "Shift+" : ""}Cmd+${keyOf(code)}`;
+  return format(command, ["Ctrl+", "Opt+", "Shift+", "Cmd+"]);
 }
 
 export function commandFor(event: Keys): CommandId | null {

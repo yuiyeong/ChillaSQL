@@ -1,4 +1,4 @@
-import { useId } from "react";
+import { memo, useId } from "react";
 import { t } from "../../shared/i18n/t";
 import { SECTION_LABEL } from "../../shared/ui/sectionLabel";
 import { Code } from "./DdlView";
@@ -6,9 +6,9 @@ import type { UpdateStatement } from "./editSql";
 
 /**
  * 표 아래의 미리 보기(캔버스 Tools M10). Apply가 보낼 UPDATE 문을 줄마다 하나씩, 에디터와 같은 색으로
- * 칠해 보인다. 길면 160px까지 늘고 그 뒤는 스크롤한다.
+ * 칠해 보인다. 길면 160px까지 늘고 그 뒤는 스크롤한다. 표가 스크롤할 때마다 다시 그리지 않게 memo한다.
  */
-export function EditPreview({
+export const EditPreview = memo(function EditPreview({
   statements,
 }: {
   statements: readonly UpdateStatement[];
@@ -28,4 +28,4 @@ export function EditPreview({
       </pre>
     </div>
   );
-}
+});

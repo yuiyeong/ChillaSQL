@@ -62,8 +62,6 @@ import {
   settleTransactions,
 } from "./transactionPrompts";
 
-export type { CommandId };
-
 function findTab(tabId: string) {
   return useTabs.getState().tabs.find((tab) => tab.id === tabId);
 }

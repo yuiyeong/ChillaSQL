@@ -4,7 +4,7 @@ vi.mock("../../shared/api/commands");
 
 import { loadSettings } from "../../shared/api/commands";
 import { setLanguage, t } from "../../shared/i18n/t";
-import { settingsFixture } from "../../test/fixtures";
+import { rebind, settingsFixture } from "../../test/fixtures";
 import {
   commandFor,
   DEFAULT_KEYMAP,
@@ -98,16 +98,12 @@ test("a failed load starts with the defaults", async () => {
 test("load_applies_the_keymap", async () => {
   vi.mocked(loadSettings).mockResolvedValue(
     settingsFixture({
-      shortcuts: [
-        ...DEFAULT_KEYMAP.filter((b) => b.command !== "reformat"),
-        {
-          command: "reformat",
-          code: "KeyF",
-          shift: true,
-          alt: false,
-          ctrl: false,
-        },
-      ],
+      shortcuts: rebind("reformat", {
+        code: "KeyF",
+        shift: true,
+        alt: false,
+        ctrl: false,
+      }),
     }),
   );
 

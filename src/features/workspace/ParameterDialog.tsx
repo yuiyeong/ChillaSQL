@@ -5,6 +5,7 @@ import { t } from "../../shared/i18n/t";
 import { viewShowing } from "../editor/documents";
 import { useTabs } from "../editor/tabsStore";
 import { Button } from "../../shared/ui/Button";
+import { isImeComposing } from "../../shared/ui/ime";
 import { Kbd } from "../../shared/ui/Kbd";
 import { noTextCorrection } from "../../shared/ui/noTextCorrection";
 import {
@@ -54,9 +55,8 @@ function Form({ request }: { request: ParameterRequest }) {
   // 떠 있는 동안 꺼져 있다.
   useEffect(() => {
     function onKeyDown(event: globalThis.KeyboardEvent) {
-      // 한글 조합 중의 key는 조합을 끝내는 것이다. WKWebView는 조합을 끝낸 뒤의 Enter에 isComposing을
-      // false로 보내므로 keyCode 229도 본다. key가 "Process"라서 code로 판별한다.
-      if (event.isComposing || event.keyCode === 229) return;
+      // 한글 조합 중의 key는 조합을 끝내는 것이다. key가 "Process"라서 code로 판별한다.
+      if (isImeComposing(event)) return;
       if (event.code === "Escape") {
         event.preventDefault();
         event.stopPropagation();

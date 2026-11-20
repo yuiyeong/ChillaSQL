@@ -530,7 +530,7 @@ function Grid({
   // 고칠 수 있는 셀에서만 연다. 아니면 WebKit의 menu를 그대로 둔다.
   const onBodyContextMenu = (event: MouseEvent<HTMLDivElement>) => {
     const at = cellAt(event.target as Element);
-    if (at === null || typeof editOf(target, at.column) !== "number") return;
+    if (at === null || !attnums[at.column]) return;
     event.preventDefault();
     selectCell(at.row, at.column);
     setMenu({ at: { x: event.clientX, y: event.clientY }, ...at });
@@ -646,7 +646,8 @@ function Grid({
 
   const menuChanged =
     menu !== null &&
-    changes?.get(menu.row)?.has(attnums[menu.column] ?? 0) === true;
+    changedValue(changes?.get(menu.row), attnums[menu.column] ?? 0) !==
+      undefined;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -815,6 +816,17 @@ function editOf(
   return "column" in entry ? entry.column.number : notEditableText(entry);
 }
 
+/**
+ * 행의 바뀐 셀에서 `attnum`의 바뀐 값. 바뀌지 않았거나 고칠 수 없는 열(0)이면 undefined다.
+ * NULL로 바꾼 셀은 null이다.
+ */
+function changedValue(
+  changed: ReadonlyMap<number, Cell> | undefined,
+  attnum: number,
+): Cell | undefined {
+  return attnum !== 0 ? changed?.get(attnum) : undefined;
+}
+
 /** 표에 보이는 값. 바뀐 값이 있으면 그것이다. 같은 attnum의 열은 모두 같은 바뀐 값을 보인다. */
 function shownValue(
   cells: Cell[],
@@ -823,10 +835,8 @@ function shownValue(
   attnums: readonly number[],
   changes: Changes | undefined,
 ): Cell {
-  const attnum = attnums[column] ?? 0;
-  const changed = changes?.get(row);
-  if (attnum !== 0 && changed?.has(attnum)) return changed.get(attnum) as Cell;
-  return cells[column];
+  const value = changedValue(changes?.get(row), attnums[column] ?? 0);
+  return value === undefined ? cells[column] : value;
 }
 
 /** editor의 자리. 그 셀(보이는 위치 `position`의 행)과 같은 left, top, width다. */
@@ -1017,9 +1027,9 @@ const Row = memo(function Row({
       </div>
       {cells.map((original, column) => {
         const kind = kinds[column] ?? "text";
-        const attnum = attnums[column] ?? 0;
-        const isChanged = attnum !== 0 && changed?.has(attnum) === true;
-        const value = isChanged ? (changed!.get(attnum) as Cell) : original;
+        const edited = changedValue(changed, attnums[column] ?? 0);
+        const isChanged = edited !== undefined;
+        const value = isChanged ? edited : original;
         const { text, dim, muted, italic } = cellDisplay(value, kind);
         const isSelected = column === selectedColumn;
         const tone = italic ? 2 : muted ? 1 : kind === "number" ? 3 : 0;

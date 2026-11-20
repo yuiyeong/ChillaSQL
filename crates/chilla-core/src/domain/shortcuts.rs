@@ -85,12 +85,12 @@ impl Command {
     }
 }
 
-/// key 하나와 modifier. 같은 key인지는 `code`와 modifier로 본다.
+/// key 하나와 modifier. 같은 key인지는 `code`와 modifier로 본다. Cmd는 늘 있으므로(`parse`가 막는다)
+/// 따로 두지 않는다.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shortcut {
     /// KeyboardEvent.code(`KeyL`, `Digit1`, `F2`, `Enter`, `BracketLeft`, `Comma` …)
     pub code: String,
-    pub cmd: bool,
     pub shift: bool,
     pub opt: bool,
     pub ctrl: bool,
@@ -160,14 +160,14 @@ impl Shortcut {
         let (key, modifiers) = parts.split_last().expect("split은 하나 이상을 돌려준다");
         let mut shortcut = Shortcut {
             code: String::new(),
-            cmd: false,
             shift: false,
             opt: false,
             ctrl: false,
         };
+        let mut cmd = false;
         for modifier in modifiers {
             let (flag, name) = match modifier.to_ascii_lowercase().as_str() {
-                "cmd" => (&mut shortcut.cmd, "Cmd"),
+                "cmd" => (&mut cmd, "Cmd"),
                 "shift" => (&mut shortcut.shift, "Shift"),
                 "opt" => (&mut shortcut.opt, "Opt"),
                 "ctrl" => (&mut shortcut.ctrl, "Ctrl"),
@@ -189,7 +189,7 @@ impl Shortcut {
             return Err(format!("missing a key after the modifiers, got \"{text}\""));
         }
         shortcut.code = code_of(key).ok_or_else(|| format!("unknown key \"{key}\"; {KEY_HINT}"))?;
-        if !shortcut.cmd {
+        if !cmd {
             return Err(format!("must include Cmd, got \"{text}\""));
         }
         Ok(shortcut)
@@ -201,13 +201,13 @@ impl Shortcut {
             (self.ctrl, "Ctrl+"),
             (self.opt, "Opt+"),
             (self.shift, "Shift+"),
-            (self.cmd, "Cmd+"),
         ];
         let mut label: String = modifiers
             .iter()
             .filter(|(on, _)| *on)
             .map(|(_, name)| *name)
             .collect();
+        label.push_str("Cmd+");
         label.push_str(key_of(&self.code));
         label
     }
@@ -291,7 +291,6 @@ mod tests {
     fn shortcut(code: &str, shift: bool, opt: bool, ctrl: bool) -> Shortcut {
         Shortcut {
             code: code.into(),
-            cmd: true,
             shift,
             opt,
             ctrl,

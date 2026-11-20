@@ -28,6 +28,13 @@ export interface EditTarget {
 /** 이름은 이만큼만 문구에 쓰고 그 뒤는 `…`로 줄인다. */
 const NAMES_SHOWN = 3;
 
+/** 결과 열의 table OID. 0(테이블이 아닌 열)은 뺀다. */
+export function tableOids(columns: readonly ResultColumn[]): number[] {
+  return [
+    ...new Set(columns.map((column) => column.tableOid).filter((oid) => oid)),
+  ];
+}
+
 /**
  * 결과를 UPDATE로 고칠 수 있는지 판단한다. 고칠 수 있으면 `EditTarget`, 없으면 그 이유다.
  * `tables`는 `describeTables`의 답이다. 아직 모르면 undefined를 넘기고 null(판단을 미룸)을 받는다.
@@ -41,9 +48,7 @@ export function editTargetOf(
   if (readOnly) return { reason: "readOnly" };
   if (running) return { reason: "running" };
 
-  const oids = [
-    ...new Set(columns.map((column) => column.tableOid).filter((oid) => oid)),
-  ];
+  const oids = tableOids(columns);
   if (oids.length === 0) return { reason: "noTable" };
   if (tables === undefined) return null;
 

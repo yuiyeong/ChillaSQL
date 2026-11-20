@@ -5,6 +5,7 @@ import { click } from "../../test/click";
 import {
   connection,
   openProjectWith,
+  rebind,
   resultColumns,
 } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
@@ -20,7 +21,7 @@ import { emptyResult, type RunState } from "../query/runReducer";
 import { useRuns } from "../query/runsStore";
 import { useTunnels } from "../connections/tunnelsStore";
 import { changeConnection, execute } from "./commands";
-import { DEFAULT_KEYMAP, setKeymap } from "./shortcuts";
+import { setKeymap } from "./shortcuts";
 import { Toolbar } from "./Toolbar";
 
 function tabWith(connectionName: string | null): string {
@@ -437,10 +438,9 @@ test("reformat_button_runs_the_command", async () => {
 });
 
 test("reformat_button_label_follows_the_keymap", () => {
-  setKeymap([
-    ...DEFAULT_KEYMAP.filter((b) => b.command !== "reformat"),
-    { command: "reformat", code: "KeyF", shift: true, alt: false, ctrl: false },
-  ]);
+  setKeymap(
+    rebind("reformat", { code: "KeyF", shift: true, alt: false, ctrl: false }),
+  );
   renderToolbar();
 
   const button = screen.getByRole("button", { name: "Reformat (Shift+Cmd+F)" });

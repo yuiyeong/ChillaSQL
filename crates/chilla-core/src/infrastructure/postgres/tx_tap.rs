@@ -333,10 +333,9 @@ mod tests {
     /// 테이블 정보가 없는 열(식 등)의 `FieldInfo`.
     fn info(type_oid: u32, type_modifier: i32) -> FieldInfo {
         FieldInfo {
-            table_oid: 0,
-            column_number: 0,
             type_oid,
             type_modifier,
+            ..FieldInfo::UNKNOWN
         }
     }
 

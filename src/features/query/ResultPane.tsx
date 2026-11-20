@@ -460,21 +460,22 @@ export const ResultPane = memo(function ResultPane({
     </>
   );
 
-  // 고친 셀은 표로 그리는 결과의 것일 때만 header에 센다.
-  const changed =
+  // 표로 그리는 결과. 고친 셀과 정렬 알림은 이 결과의 것만 header에 보인다.
+  const shown =
     grid !== null &&
-    (state?.status === "running" || state?.status === "finished") &&
-    tabEdits?.runKey === runKeyOf(state.result)
+    (state?.status === "running" || state?.status === "finished")
+      ? state
+      : null;
+
+  const changed =
+    shown !== null && tabEdits?.runKey === runKeyOf(shown.result)
       ? changedCount(tabEdits)
       : 0;
 
   // 일부만 받은 결과를 정렬했으면 받은 행만 정렬했다고 알린다. 수는 표에 남은 행이다.
   const sortedPartial =
-    grid !== null &&
-    sorted &&
-    (state?.status === "running" || state?.status === "finished") &&
-    isPartialResult(state)
-      ? tc("result.sortedPartial", state.result.rows.length)
+    shown !== null && sorted && isPartialResult(shown)
+      ? tc("result.sortedPartial", shown.result.rows.length)
       : null;
 
   const apply = async () => {

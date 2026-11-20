@@ -36,7 +36,7 @@ pub use session::{
     EndOutcome, EndResult, SessionId, SessionInfo, SessionState, TxEnd, TxMode, TxStatus,
 };
 pub use settings::{EditorSettings, Language, Settings, SettingsError};
-pub use shortcuts::{Command, MENU_KEYS, Shortcut, default_keymap, merge_keymap};
+pub use shortcuts::{Command, Shortcut, default_keymap, merge_keymap};
 pub use sql_file::{FileStamp, SqlFile, SqlPath, SqlPathError, WriteMode};
 pub use statement::{ParameterSpan, StatementSpan};
 pub use tunnel::{

@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { create } from "zustand";
 import { describeTypes } from "../../shared/api/commands";
 import type { ResultColumn, TypeInfo } from "../../shared/api/types";
+import { pendingAsks } from "./pendingAsks";
 
 /** cache의 key. OID와 typmod가 같으면 같은 type이다. */
 export function typeKey(oid: number, modifier: number): string {
@@ -20,49 +21,47 @@ interface TypesState {
 
 export const useTypes = create<TypesState>()((set, get) => {
   // 접속마다 묻는 중인 typeKey. forget과 reset은 지운다.
-  const pending = new Map<string, Set<string>>();
+  const pending = pendingAsks<string>();
 
   return {
     types: {},
 
     async ensure(connection, columns) {
       const known = get().types[connection] ?? {};
-      const asking = pending.get(connection) ?? new Set<string>();
       const wanted = new Map<string, { oid: number; modifier: number }>();
       for (const { typeOid: oid, typeModifier: modifier } of columns) {
         const key = typeKey(oid, modifier);
         // OID 0은 서버도 모르는 type이다.
-        if (oid === 0 || key in known || asking.has(key) || wanted.has(key)) {
+        if (
+          oid === 0 ||
+          key in known ||
+          pending.isAsking(connection, key) ||
+          wanted.has(key)
+        ) {
           continue;
         }
         wanted.set(key, { oid, modifier });
       }
       if (wanted.size === 0) return;
 
-      for (const key of wanted.keys()) asking.add(key);
-      pending.set(connection, asking);
-      try {
-        const infos = await describeTypes(connection, [...wanted.values()]);
-        // 묻는 사이 forget이나 reset이 있었으면 답을 버린다.
-        if (pending.get(connection) !== asking) return;
-        set((state) => {
-          const entry = { ...state.types[connection] };
-          for (const info of infos) {
-            entry[typeKey(info.oid, info.modifier)] = info;
-          }
-          return { types: { ...state.types, [connection]: entry } };
-        });
-      } catch {
-        // header에 type이 없을 뿐이다. 다음 결과가 다시 묻는다.
-      } finally {
-        if (pending.get(connection) === asking) {
-          for (const key of wanted.keys()) asking.delete(key);
-        }
-      }
+      // 실패하면 header에 type이 없을 뿐이다.
+      await pending.ask(
+        connection,
+        [...wanted.keys()],
+        () => describeTypes(connection, [...wanted.values()]),
+        (infos) =>
+          set((state) => {
+            const entry = { ...state.types[connection] };
+            for (const info of infos) {
+              entry[typeKey(info.oid, info.modifier)] = info;
+            }
+            return { types: { ...state.types, [connection]: entry } };
+          }),
+      );
     },
 
     forget(connection) {
-      pending.delete(connection);
+      pending.forget(connection);
       set((state) => {
         const types = { ...state.types };
         delete types[connection];

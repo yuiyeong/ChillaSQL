@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { ApplyResult, Cell } from "../../shared/api/types";
 import { formatCount, t, tc } from "../../shared/i18n/t";
 import type { Changes, UpdateStatement } from "./editSql";
-import { applyBlocked, useRuns } from "./runsStore";
+import { applyBlocked, useRuns, withEntry } from "./runsStore";
 
 /** 탭의 보이는 결과(`runKey`)에서 고친 셀. Apply하기 전까지 `result.rows`는 그대로다. */
 export interface TabEdits {
@@ -51,18 +51,16 @@ function withChanges(
   runKey: string,
   changes: Changes,
 ): Record<string, TabEdits> {
-  const next = { ...edits };
-  if (changes.size === 0) delete next[tabId];
-  else next[tabId] = { runKey, changes };
-  return next;
+  return withEntry(
+    edits,
+    tabId,
+    changes.size === 0 ? undefined : { runKey, changes },
+  );
 }
 
 /** record에서 key를 지운다. 없으면 같은 object를 돌려준다. */
 function without<T>(record: Record<string, T>, key: string): Record<string, T> {
-  if (!(key in record)) return record;
-  const next = { ...record };
-  delete next[key];
-  return next;
+  return withEntry(record, key, undefined);
 }
 
 /** 반영하지 못한 Apply의 note 문구. `{row}`는 1부터 센 결과 행 번호다. */
@@ -105,16 +103,25 @@ function withoutApplied(
   sent: Changes,
   statements: UpdateStatement[],
 ): Changes {
-  let next = changes;
+  // 바깥 Map은 한 번만 복사한다. 지운 셀이 없는 행의 Map은 그대로 둔다.
+  let next: Changes | null = null;
   for (const { row, attnums } of statements) {
+    const current = (next ?? changes).get(row);
+    const sentCells = sent.get(row);
+    if (current === undefined || sentCells === undefined) continue;
+    let cells: Map<number, Cell> | null = null;
     for (const attnum of attnums) {
-      const value = sent.get(row)?.get(attnum);
-      if (value !== undefined && next.get(row)?.get(attnum) === value) {
-        next = changed(next, row, attnum, undefined);
+      const value = sentCells.get(attnum);
+      if (value !== undefined && current.get(attnum) === value) {
+        (cells ??= new Map(current)).delete(attnum);
       }
     }
+    if (cells === null) continue;
+    next ??= new Map(changes);
+    if (cells.size === 0) next.delete(row);
+    else next.set(row, cells);
   }
-  return next;
+  return next ?? changes;
 }
 
 /** `row`행의 `attnum`을 `value`로 두거나(undefined면 지운) 새 Changes. */
@@ -187,7 +194,7 @@ export const useEdits = create<EditsState>()((set, get) => ({
     const current = get().edits[tabId];
     if (current === undefined || get().applying[tabId]) return null;
     // 앞 Apply의 이유는 답이 올 때까지 둔다.
-    set((state) => ({ applying: { ...state.applying, [tabId]: true } }));
+    set((state) => ({ applying: withEntry(state.applying, tabId, true) }));
     let result: ApplyResult | null;
     try {
       result = await useRuns

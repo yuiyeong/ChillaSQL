@@ -9,14 +9,14 @@ import {
 } from "vitest";
 import { change } from "../../test/change";
 import { click } from "../../test/click";
-import { connection, openProjectWith } from "../../test/fixtures";
+import { connection, openProjectWith, rebind } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 import { expectNoTextCorrection } from "../../test/textCorrection";
 import { TabBar } from "./TabBar";
 import { useTabs } from "./tabsStore";
 import { useTunnels } from "../connections/tunnelsStore";
 import { useRuns } from "../query/runsStore";
-import { DEFAULT_KEYMAP, setKeymap } from "../workspace/shortcuts";
+import { setKeymap } from "../workspace/shortcuts";
 
 beforeEach(async () => {
   await resetStores();
@@ -98,10 +98,9 @@ test("닫기와 새 탭 버튼이 handler를 부른다", async () => {
 });
 
 test("new_tab_button_label_follows_the_keymap", () => {
-  setKeymap([
-    ...DEFAULT_KEYMAP.filter((b) => b.command !== "newTab"),
-    { command: "newTab", code: "KeyT", shift: false, alt: false, ctrl: false },
-  ]);
+  setKeymap(
+    rebind("newTab", { code: "KeyT", shift: false, alt: false, ctrl: false }),
+  );
   renderBar();
 
   expect(

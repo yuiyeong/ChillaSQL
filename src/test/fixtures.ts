@@ -6,6 +6,7 @@ import type {
   RelationKind,
   ResultColumn,
   Settings,
+  ShortcutBinding,
   TxMode,
 } from "../shared/api/types";
 import { useTabs, type Tab } from "../features/editor/tabsStore";
@@ -145,4 +146,15 @@ export function settingsFixture(patch: Partial<Settings> = {}): Settings {
     storeError: null,
     ...patch,
   };
+}
+
+/** 기본값에서 `command`의 key만 바꾼 keymap. */
+export function rebind(
+  command: ShortcutBinding["command"],
+  binding: Omit<ShortcutBinding, "command">,
+): ShortcutBinding[] {
+  return [
+    ...DEFAULT_KEYMAP.filter((b) => b.command !== command),
+    { command, ...binding },
+  ];
 }

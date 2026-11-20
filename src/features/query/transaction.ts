@@ -39,23 +39,9 @@ export function nextTx(
   counts = true,
 ): TxInfo | null {
   if (tx === null) return outcome === "connection_lost" ? null : previous;
-  if (tx === "idle") return null;
-  const status = tx === "failed" ? "failed" : "open";
   const counted = counts && tx === "in_transaction" && outcome === "completed";
-  if (previous === null) {
-    return {
-      status,
-      statements: counted && mode === "manual" ? 1 : 0,
-      openedAt: startedAt,
-      openedBy: mode === "manual" ? "app" : "user",
-    };
-  }
-  const statements = previous.statements + (counted ? 1 : 0);
-  // 바뀐 것이 없으면 같은 object를 돌려주어 구독한 화면을 다시 그리지 않는다.
-  if (status === previous.status && statements === previous.statements) {
-    return previous;
-  }
-  return { ...previous, status, statements };
+  const count = counted && (previous !== null || mode === "manual") ? 1 : 0;
+  return advanceTx(previous, tx, mode, startedAt, count);
 }
 
 /**
@@ -71,6 +57,17 @@ export function txAfterApply(
   count: number,
 ): TxInfo | null {
   if (tx === null) return previous;
+  return advanceTx(previous, tx, mode, startedAt, count);
+}
+
+/** 서버가 알려 준 `tx`로 상태를 바꾸고 문장 수에 `count`를 더한다. `idle`이면 트랜잭션이 없다. */
+function advanceTx(
+  previous: TxInfo | null,
+  tx: TxStatus,
+  mode: TxMode,
+  startedAt: number,
+  count: number,
+): TxInfo | null {
   if (tx === "idle") return null;
   const status = tx === "failed" ? "failed" : "open";
   if (previous === null) {
@@ -81,6 +78,8 @@ export function txAfterApply(
       openedBy: mode === "manual" ? "app" : "user",
     };
   }
+  // 바뀐 것이 없으면 같은 object를 돌려주어 구독한 화면을 다시 그리지 않는다.
+  if (status === previous.status && count === 0) return previous;
   return { ...previous, status, statements: previous.statements + count };
 }
 

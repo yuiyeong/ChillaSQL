@@ -7,10 +7,10 @@ vi.mock("../../shared/api/dialog");
 
 import { useTabs } from "../editor/tabsStore";
 import { useRuns } from "../query/runsStore";
+import { rebind } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 import { answerParameters, askParameters } from "./parameterPrompt";
 import {
-  type Binding,
   commandFor,
   DEFAULT_KEYMAP,
   setKeymap,
@@ -181,17 +181,6 @@ test("shortcuts_are_ignored_while_the_prompt_is_open", async () => {
 });
 
 const NO_MODIFIERS = { shift: false, alt: false, ctrl: false };
-
-/** 기본값에서 `command`의 key만 바꾼 keymap. */
-function rebind(
-  command: Binding["command"],
-  binding: Omit<Binding, "command">,
-) {
-  return [
-    ...DEFAULT_KEYMAP.filter((b) => b.command !== command),
-    { command, ...binding },
-  ];
-}
 
 test("default_keymap_matches_the_spec", () => {
   expect(DEFAULT_KEYMAP).toEqual([
