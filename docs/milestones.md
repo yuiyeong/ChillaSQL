@@ -142,4 +142,4 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **목표**: 4장의 모든 기능 동작
 - **범위**: 셀 편집(PK가 있는 단일 테이블 결과에서 UPDATE로 반영, 4.6), 화면 내 정렬(일부만 받은 결과면 표시), CSV와 JSON 내보내기, 전역 설정 파일로 단축키 변경(4.10)
 - **완료 기준 (4단계)**: 기획서 4장의 모든 기능 동작
-- **먼저 확인할 것**: 결과가 단일 테이블에서 왔는지 판별하는 방법(RowDescription의 테이블 OID와 컬럼 번호)
+- **먼저 확인할 것**: 결과가 단일 테이블에서 왔는지 판별하는 방법(RowDescription의 테이블 OID와 컬럼 번호) → 정함: 열마다 table OID와 attnum으로 판별한다. OID 0이 아닌 열이 모두 같은 OID이고, 그 relation이 table 또는 partitioned table이고, PK가 있고, PK 컬럼이 모두 결과에 있을 때만 편집한다. view와 materialized view는 base table이 아니라 자기 OID를 주므로 편집하지 않는다. OID 0인 열, generated 컬럼, `GENERATED ALWAYS` identity 컬럼은 그 열만 고칠 수 없다. 내보내기는 받은 행만 저장하고 SQL을 다시 보내지 않는다

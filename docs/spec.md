@@ -149,9 +149,9 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 보관 상한 | 탭당 10만 행을 넘으면 앞쪽 행부터 버림. 버려진 구간은 자동으로 다시 조회하지 않고 "다시 실행해야 볼 수 있음"으로 표시. 행은 화면이 보관하고, 어디부터 보관할지는 Rust가 알려 줌 |
 | 가상 스크롤 | 화면에 보이는 행만 그림 |
 | 타입별 표시 | header에 컬럼 type을 보이고 숫자 type은 오른쪽 정렬. JSON/JSONB는 한 줄로 그리고 둘째 단계부터의 object와 array를 접음, 배열은 서버 text 그대로, NULL과 빈 문자열 구분, vector 같은 긴 값 줄임 표시. timestamptz는 세션을 열 때 Mac의 time zone을 startup option `TimeZone`으로 보내 서버가 Mac 시간으로 text를 만듦(이름을 못 얻으면 보내지 않고, 사용자의 `SET TimeZone`은 그대로 들음). 셀을 고르고 Shift+Enter를 누르면 옆 panel에 전체 값을 보여 줌(JSON은 들여쓰고 색을 칠함) |
-| 표 조작 | 컬럼 너비 조절, 화면 내 정렬. 일부만 받은 결과를 정렬하면 받은 행만 정렬됐다고 표시 |
-| 복사와 내보내기 | 셀, 행 복사(행은 header 없는 TSV, NULL은 빈 칸. 복사하면 알림). CSV, JSON 내보내기 |
-| 셀 편집 | PK가 있는 단일 테이블 결과에서 셀을 고치면 UPDATE로 반영 |
+| 표 조작 | 컬럼 너비 조절, 화면 내 정렬. header의 이름 부분을 누르면 오름차순, 내림차순, 정렬 없음 순으로 바뀌고 한 번에 한 열만 정렬함. 숫자 type은 값의 크기로, 그 밖은 UTF-16 code unit 순(`COLLATE "C"`와 같은 순)으로 비교하고 NULL은 오름차순에서 끝, 내림차순에서 처음. 정렬한 동안은 스크롤로 다음 batch를 요청하지 않음. 일부만 받은 결과(받는 중, `cancelled`, `expired`, 앞 행을 버린 결과)를 정렬하면 받은 행만 정렬됐다고 표시 |
+| 복사와 내보내기 | 셀, 행 복사(행은 header 없는 TSV, NULL은 빈 칸. 복사하면 알림). CSV, JSON 내보내기는 받은 행만(앞에서 버린 행 제외) 보이는 순서(정렬 반영)대로 서버 값으로 저장하고 SQL을 다시 보내지 않음. CSV는 첫 줄이 컬럼 이름이고 PostgreSQL `COPY … CSV HEADER`와 같은 규칙(UTF-8, 줄 끝 LF, NULL은 빈 칸), JSON은 행마다 object를 하나씩 담은 배열(NULL은 `null`, 숫자와 boolean은 JSON 값으로). 일부만 받은 결과면 받은 행만 저장했다고 알림 |
+| 셀 편집 | PK가 있는 단일 테이블 결과에서 셀을 고치면 UPDATE로 반영. 결과 컬럼의 table OID와 attnum으로 단일 테이블인지 판별함(RowDescription). 표를 그리는 끝난 결과(`completed`, `cancelled`, `expired`)만 편집하고 행을 받는 중인 결과와 읽기 전용 접속은 편집하지 않음. 고친 셀은 표시해 두고 Apply 전에 보낼 UPDATE 문장(행마다 한 문장, PK로 행을 지정하고 `RETURNING`으로 서버가 저장한 값을 받음)을 미리 보여 줌. Apply는 문장들을 한 단위로 보내고(Auto는 `BEGIN`…`COMMIT`, Manual과 트랜잭션 안은 savepoint) 문장마다 정확히 한 행이 바뀌어야 하며 아니면 전부 되돌리고 바뀐 값을 그대로 둠. Manual 모드의 트랜잭션은 열린 채 둠. 편집할 수 없는 결과는 셀을 두 번 누르면 이유(여러 테이블, PK 없음, 계산한 컬럼 등)를 알림 |
 
 ### 4.7 스키마 트리
 
@@ -185,7 +185,7 @@ DataGrip의 macOS 기본 키맵과 같게 한다. 예: 쿼리 실행 Cmd+Enter, 
 | 항목 | 내용 |
 | --- | --- |
 | 범위 | 실행, Formatting, Commit, Rollback, 탭 이동처럼 ChillaSQL에 있는 기능만 맞춤 |
-| 변경 | 전역 설정 파일에서 키를 바꿀 수 있음 (5장) |
+| 변경 | 전역 설정 파일의 `[shortcuts]`에서 키를 바꿀 수 있음 (5장). key는 command 이름(`run`, `run_file`, `explain`, `cancel`, `save`, `new_tab`, `close_tab`, `next_tab`, `prev_tab`, `commit`, `rollback`, `reformat`, `open_project`), 값은 `"Opt+Shift+Cmd+Enter"`처럼 modifier(`Ctrl`, `Opt`, `Shift`, `Cmd`, 순서와 대소문자 무관)와 key 하나를 `+`로 이은 글자이고 `Cmd`가 꼭 있어야 함. 쓰지 않은 command는 기본값이고 `run_file`과 `explain`은 기본값이 없음. 두 command가 같은 키이거나 app menu의 키(`Cmd+Q`, `Cmd+C` 등)와 겹치면 오류이고, 오류면 전역 설정의 다른 오류처럼 파일 전체를 기본값으로 시작하고 첫 화면에 이유를 보임. 결과 표 안의 key(값 보기 `Shift+Enter`, 편집 `Enter`)는 바꾸지 않음 |
 | M3의 키 | 실행 Cmd+Enter, 취소 Cmd+F2, 저장 Cmd+S, 새 탭 Shift+Cmd+L, 탭 닫기 Cmd+W, 다음 탭 Shift+Cmd+], 이전 탭 Shift+Cmd+[. 입력 소스와 무관하게 key의 위치로 판별. 접속 form이 열려 있는 동안은 동작하지 않음 |
 | M4 이후의 키 | Formatting Opt+Cmd+L, 프로젝트 열기 Cmd+O(macOS 관례. DataGrip의 Cmd+O는 database object 찾기이고 프로젝트 열기 단축키는 없음), 값 보기 Shift+Enter(DataGrip의 "Open in Value Editor"와 같음), Commit Opt+Shift+Cmd+Enter, Rollback Opt+Shift+Cmd+Z. Commit은 DataGrip의 `Console.Transaction.Commit`과 같고, DataGrip에 단축키가 없는 Rollback은 디자인의 값을 씀 |
 
@@ -241,7 +241,7 @@ color = "green"
 | --- | --- |
 | 프로젝트 디렉토리 | 설정 파일(접속 정보와 터널 명령, 비밀번호 제외), `.sql` 파일. git에 올려도 안전 |
 | 전역 설정 파일 `~/.config/chilla/config.toml` | 단축키(M10), 결과 보관 상한, 화면 언어, 에디터 글꼴과 크기처럼 모든 프로젝트에 적용되는 설정. 앱 시작 때 한 번 읽고 바꾸면 다시 시작해야 반영됨. 파일이 없으면 기본값이고 만들지 않음. 형식이 틀리거나 모르는 key, 범위를 벗어난 값이 있으면 기본값으로 시작하고 첫 화면에 오류 dialog로 이유를 보임 |
-| 전역 설정의 key | `language`(`"en"` \| `"ko"`, 기본 `"en"`), `editor.font`(CSS font-family 이름, 기본 `"D2Coding"`, 없으면 D2Coding으로 대신 그림), `editor.font_size`(px, 10~32, 기본 15), `results.retained_rows`(1000~1000000, 기본 100000), `results.idle_timeout`(받다 만 결과를 닫는 초, 60~86400, 기본 600) |
+| 전역 설정의 key | `language`(`"en"` \| `"ko"`, 기본 `"en"`), `editor.font`(CSS font-family 이름, 기본 `"D2Coding"`, 없으면 D2Coding으로 대신 그림), `editor.font_size`(px, 10~32, 기본 15), `results.retained_rows`(1000~1000000, 기본 100000), `results.idle_timeout`(받다 만 결과를 닫는 초, 60~86400, 기본 600), `shortcuts.<command>`(단축키. `[shortcuts]` table, 값 형식은 4.10, 기본값은 4.10의 키) |
 | macOS 키체인 | 모든 접속의 비밀번호. 프로젝트 경로와 접속 이름으로 구분하므로 디렉토리를 옮기면 다시 입력 |
 | 앱 내부 저장소 (SQLite) | 프로젝트마다 최근 10,000개의 쿼리 기록(`query_history` table), 열려 있던 탭과 저장하지 않은 내용, 최근 프로젝트 목록. 위치는 `~/Library/Application Support/com.yuiyeong.chillasql/chilla.sqlite3`. 열지 못하면 최근 프로젝트와 자동 보관 없이 앱이 뜨고 오류 dialog를 보임 |
 
@@ -297,6 +297,4 @@ color = "green"
 - [ ] 받다 만 결과를 자동으로 닫는 시간: 10분
 - [ ] 터널 재실행 연속 실패 허용 횟수: 3회
 
-디자인(2026-11-18)에서 남은 것은 괄호 안의 마일스톤에서 정한다.
-
-- [ ] 내보내기가 받은 행만 저장하는지, 전체를 다시 조회하는지(M10)
+디자인(2026-11-18)에서 남은 것은 모두 마일스톤에서 정해 각 장에 반영되어 있다.
