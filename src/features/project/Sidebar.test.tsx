@@ -254,3 +254,19 @@ test("위 38px은 창을 끄는 빈 자리다", async () => {
     "data-tauri-drag-region",
   );
 });
+
+test("read_only_connections_show_the_lock", async () => {
+  useProject.setState({
+    project: {
+      name: "demo",
+      dir: "/p",
+      connections: [connection("dev"), connection("prod", { readOnly: true })],
+    },
+  });
+  await renderSidebar();
+
+  const dev = screen.getByRole("button", { name: /^Edit connection dev/ });
+  const prod = screen.getByRole("button", { name: /^Edit connection prod/ });
+  expect(within(dev).queryByRole("img", { name: "Read-only" })).toBeNull();
+  expect(within(prod).getByRole("img", { name: "Read-only" })).toBeVisible();
+});

@@ -57,6 +57,7 @@ import { useDialogs } from "../../shared/ui/dialogs";
 import { answerDialog, textOf } from "../../test/dialogs";
 import { deferred } from "../../test/deferred";
 import { catalogFixture, connection, relation } from "../../test/fixtures";
+import { targetChanged } from "../connections/connectionValues";
 import { useSchema } from "../schema/schemaStore";
 import { resetStores } from "../../test/resetStores";
 
@@ -1631,4 +1632,61 @@ test("select_first_rows_quotes_names", async () => {
       { drain: false },
     ),
   );
+});
+
+test("saving_a_read_only_change_releases_sessions_but_keeps_the_password", async () => {
+  useProject.setState({
+    project: { ...project, connections: [connection("local")] },
+  });
+  const id = await ranTab("local", 3);
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  await useSchema.getState().ensure("local");
+  vi.mocked(loadCatalog).mockClear();
+  vi.mocked(closeSession).mockClear();
+
+  await applySavedProject({
+    ...project,
+    connections: [connection("local", { readOnly: true })],
+  });
+
+  expect(closeSession).toHaveBeenCalledExactlyOnceWith(3);
+  expect(runOf(id)).toBeUndefined();
+  expect(loadCatalog).toHaveBeenCalledExactlyOnceWith("local");
+  // 비밀번호를 지우는 기준은 연결 대상이다. 세션 설정만 바뀌면 지우지 않는다.
+  expect(
+    targetChanged(
+      connection("local", { readOnly: true, statementTimeout: 30 }),
+      connection("local"),
+    ),
+  ).toBe(false);
+});
+
+test("saving_a_statement_timeout_change_releases_sessions", async () => {
+  useProject.setState({
+    project: { ...project, connections: [connection("local")] },
+  });
+  await ranTab("local", 3);
+  vi.mocked(closeSession).mockClear();
+
+  await applySavedProject({
+    ...project,
+    connections: [connection("local", { statementTimeout: 30 })],
+  });
+
+  expect(closeSession).toHaveBeenCalledExactlyOnceWith(3);
+});
+
+test("a_color_only_change_keeps_sessions", async () => {
+  useProject.setState({
+    project: { ...project, connections: [connection("local")] },
+  });
+  await ranTab("local", 3);
+  vi.mocked(closeSession).mockClear();
+
+  await applySavedProject({
+    ...project,
+    connections: [connection("local", { color: "blue" })],
+  });
+
+  expect(closeSession).not.toHaveBeenCalled();
 });

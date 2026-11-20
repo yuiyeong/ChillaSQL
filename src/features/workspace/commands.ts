@@ -14,7 +14,7 @@ import type {
   TxEnd,
 } from "../../shared/api/types";
 import { quoteIdent } from "../../shared/sql/identifiers";
-import { targetChanged } from "../connections/connectionValues";
+import { sessionChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { documentState } from "../editor/documents";
 import { showEditorNotice } from "../editor/editorNotice";
@@ -426,8 +426,8 @@ export function connectionInUse(name: string): Connection | undefined {
 }
 
 /**
- * 접속을 저장한 뒤의 project를 반영한다. 연결 대상이 바뀐 접속을 쓰는 탭은 세션을 놓아서
- * 다음 실행이 새 대상으로 연다. 세션은 접속 이름이 같으면 다시 쓰이기 때문이다.
+ * 접속을 저장한 뒤의 project를 반영한다. 연결 대상이나 세션 설정(read-only, statement_timeout)이
+ * 바뀐 접속을 쓰는 탭은 세션을 놓아서 다음 실행이 새 설정으로 연다. 세션은 접속 이름이 같으면 다시 쓰이기 때문이다.
  * `saved`는 form에서 저장한 접속이다. 반영하지 못한 앞 접속은 그 접속만 비교한다. 다른 접속의
  * 탭은 저장하기 전에 묻지 않았으므로 놓지 않는다.
  */
@@ -443,7 +443,7 @@ export async function applySavedProject(
           connection.name === saved
             ? connectionInUse(connection.name)
             : before?.connections.find((c) => c.name === connection.name);
-        return previous !== undefined && targetChanged(connection, previous);
+        return previous !== undefined && sessionChanged(connection, previous);
       })
       .map((connection) => connection.name),
   );
@@ -476,7 +476,7 @@ export function applySavedProjectKeepingSessions(project: Project): void {
   const unapplied = { ...useProject.getState().unapplied };
   for (const connection of project.connections) {
     const inUse = connectionInUse(connection.name);
-    if (inUse !== undefined && targetChanged(connection, inUse)) {
+    if (inUse !== undefined && sessionChanged(connection, inUse)) {
       unapplied[connection.name] = inUse;
     } else {
       delete unapplied[connection.name];

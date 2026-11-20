@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useState } from "react";
 import { homeDir } from "../../shared/api/path";
 import { ConnectionDot } from "../connections/ConnectionDot";
 import { connectionTarget } from "../connections/connectionTarget";
+import { ReadOnlyLock } from "../connections/ReadOnlyLock";
 import { useTabs } from "../editor/tabsStore";
 import {
   ChevronDownIcon,
@@ -181,6 +182,7 @@ export function Sidebar({
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="flex items-center gap-1.5 font-medium">
                 <span className="truncate">{connection.name}</span>
+                {connection.readOnly && <ReadOnlyLock />}
                 {connection.tunnel !== null && (
                   <span
                     role="img"

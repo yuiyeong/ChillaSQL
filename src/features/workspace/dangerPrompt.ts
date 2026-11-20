@@ -5,6 +5,7 @@ import { bold, rt, sqlCode } from "../../shared/i18n/rich";
 import { t } from "../../shared/i18n/t";
 import { ask, type DialogSpec } from "../../shared/ui/dialogs";
 import { modeOf, useTabs } from "../editor/tabsStore";
+import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 
 function keyword(text: string): ReactNode {
@@ -116,12 +117,17 @@ function specOf(
 /**
  * 실행하기 전에 위험한 문장(WHERE 없는 UPDATE와 DELETE, DROP, TRUNCATE)이면 묻는다. 위험하지
  * 않거나 Run을 고르면 true. 문장을 살펴보지 못하면 묻지 않고 true다(서버가 판단한다).
- * 여러 문장의 실행은 문장마다 그 차례에 부른다.
+ * 여러 문장의 실행은 문장마다 그 차례에 부른다. read-only 접속은 서버가 쓰기를 거절하므로 묻지
+ * 않고 true다.
  */
 export async function confirmDanger(
   tabId: string,
   request: DangerRequest,
 ): Promise<boolean> {
+  const connections = useProject.getState().project?.connections ?? [];
+  if (connections.find((c) => c.name === request.connection)?.readOnly) {
+    return true;
+  }
   let danger: Danger | null;
   try {
     danger = await inspectStatement(request.sql);

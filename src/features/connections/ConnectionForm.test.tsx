@@ -259,7 +259,9 @@ test("테스트는 성공과 실패를 문구로 보여 준다", async () => {
     expect.objectContaining({ name: "local", host: "localhost" }),
     "secret",
   );
-  expect(await screen.findByText("Connected")).toBeInTheDocument();
+  expect(
+    await screen.findByText("Connected · PostgreSQL 18.6"),
+  ).toBeInTheDocument();
   expect(saveConnection).not.toHaveBeenCalled();
 
   vi.mocked(testConnection).mockRejectedValue(
@@ -267,7 +269,7 @@ test("테스트는 성공과 실패를 문구로 보여 준다", async () => {
   );
   await click(testButton());
   expect(screen.getByText("비밀번호가 맞지 않습니다")).toBeInTheDocument();
-  expect(screen.queryByText("Connected")).not.toBeInTheDocument();
+  expect(screen.queryByText(/^Connected/)).not.toBeInTheDocument();
 });
 
 test("저장이 실패하면 message를 보여 주고 닫지 않는다", async () => {
@@ -329,7 +331,9 @@ test("결과 줄과 경고 줄의 icon은 접속 색(conn-*)을 쓰지 않는다
 
   change(screen.getByLabelText("host"), "localhost");
   await click(testButton());
-  const checkIcon = (await screen.findByText("Connected")).querySelector("svg");
+  const checkIcon = (
+    await screen.findByText("Connected · PostgreSQL 18.6")
+  ).querySelector("svg");
   expect(checkIcon).not.toBeNull();
   expect(checkIcon?.getAttribute("class") ?? "").not.toMatch(/conn-/);
 });
@@ -454,6 +458,7 @@ test("입력란은 자동 수정, 자동 대문자, 맞춤법 검사를 끈다",
     "user",
     "password",
     "tunnel",
+    "statement_timeout",
     "tunnel_timeout",
     "sslrootcert",
   ]) {
@@ -671,4 +676,119 @@ test("before_save_is_asked_only_when_the_target_changes", async () => {
 
   expect(beforeSave).not.toHaveBeenCalled();
   expect(saveConnection).toHaveBeenCalledOnce();
+});
+
+const readOnlySwitch = () => screen.getByRole("switch", { name: "read_only" });
+
+test("read_only_switch_saves", async () => {
+  renderForm();
+  fillNew();
+  expect(readOnlySwitch()).toHaveAttribute("aria-checked", "false");
+  expect(
+    screen.getByText("Opens sessions read-only so the database rejects writes"),
+  ).toBeInTheDocument();
+
+  await click(readOnlySwitch());
+  expect(readOnlySwitch()).toHaveAttribute("aria-checked", "true");
+  await click(saveButton());
+
+  expect(saveConnection).toHaveBeenLastCalledWith(
+    expect.objectContaining({ readOnly: true, statementTimeout: null }),
+    null,
+  );
+});
+
+test("read_only_switch_starts_from_the_saved_value", () => {
+  renderForm(connection("local", { readOnly: true }));
+  expect(readOnlySwitch()).toHaveAttribute("aria-checked", "true");
+});
+
+test("advanced_is_collapsed_and_lists_its_keys", async () => {
+  renderForm();
+
+  expect(advanced()).toHaveAttribute("aria-expanded", "false");
+  expect(advanced()).toHaveTextContent(
+    "statement_timeout · tunnel_timeout · sslrootcert",
+  );
+  expect(screen.queryByLabelText("statement_timeout")).not.toBeInTheDocument();
+
+  await click(advanced());
+
+  const labels = ["statement_timeout", "tunnel_timeout", "sslrootcert"].map(
+    (name) => screen.getByLabelText(name),
+  );
+  const [first, ...rest] = labels;
+  for (const later of rest) {
+    expect(
+      first.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  }
+  expect(screen.getByText("Seconds. Empty means none")).toBeInTheDocument();
+  expect(advanced()).not.toHaveTextContent("statement_timeout ·");
+});
+
+test("advanced_opens_when_a_value_is_set", () => {
+  renderForm(connection("local", { statementTimeout: 30 }));
+  expect(advanced()).toHaveAttribute("aria-expanded", "true");
+  expect(screen.getByLabelText("statement_timeout")).toHaveValue("30");
+});
+
+test("statement_timeout_is_saved_and_checked", async () => {
+  renderForm();
+  fillNew();
+  await click(advanced());
+
+  change(screen.getByLabelText("statement_timeout"), "90000");
+  await click(saveButton());
+  expect(saveConnection).not.toHaveBeenCalled();
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "statement_timeout must be 1 to 86400 seconds",
+  );
+
+  change(screen.getByLabelText("statement_timeout"), "30");
+  await click(saveButton());
+  expect(saveConnection).toHaveBeenLastCalledWith(
+    expect.objectContaining({ statementTimeout: 30 }),
+    null,
+  );
+});
+
+test("changing_session_settings_does_not_warn_about_the_password", async () => {
+  vi.mocked(hasPassword).mockResolvedValue(true);
+  renderForm(original);
+  await screen.findByPlaceholderText("Keep saved password");
+
+  await click(readOnlySwitch());
+
+  expect(screen.queryByText(warning)).not.toBeInTheDocument();
+});
+
+test("test_success_shows_the_version", async () => {
+  vi.mocked(testConnection).mockResolvedValue({ version: "16.4" });
+  renderForm();
+  fillNew();
+
+  await click(testButton());
+
+  expect(
+    await screen.findByText("Connected · PostgreSQL 16.4"),
+  ).toBeInTheDocument();
+});
+
+test("before_save_is_asked_when_a_session_setting_changes", async () => {
+  const beforeSave = vi.fn(async () => async () => true);
+  render(
+    <ConnectionForm
+      original={{ ...original, readOnly: true }}
+      inUse={original}
+      existingNames={["local"]}
+      beforeSave={beforeSave}
+      onSaved={vi.fn()}
+      onClose={vi.fn()}
+    />,
+  );
+
+  await click(saveButton());
+
+  expect(beforeSave).toHaveBeenCalledOnce();
 });

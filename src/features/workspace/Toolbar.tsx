@@ -3,6 +3,7 @@ import { ConnectionDot } from "../connections/ConnectionDot";
 import { TunnelChipStatus } from "../connections/TunnelStatus";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
 import { connectionTarget } from "../connections/connectionTarget";
+import { ReadOnlyLock } from "../connections/ReadOnlyLock";
 import { useEditorStatus } from "../editor/editorStatus";
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
@@ -98,6 +99,7 @@ export function Toolbar({
                   {current.database}
                 </span>
               )}
+              {current?.readOnly === true && <ReadOnlyLock />}
               {tab.connection !== null && (
                 <TunnelChipStatus connection={tab.connection} />
               )}
@@ -129,6 +131,7 @@ export function Toolbar({
               >
                 <ConnectionDot color={c.color} />
                 <span className="font-medium">{c.name}</span>
+                {c.readOnly && <ReadOnlyLock />}
                 {c.tunnel !== null && (
                   <TunnelIcon className="text-fg-2 shrink-0" />
                 )}

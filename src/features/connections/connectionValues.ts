@@ -18,6 +18,9 @@ export interface FormValues {
   /** 초. 비우면 기본값(20초)이다 */
   tunnelTimeout: string;
   color: ConnectionColor | null;
+  readOnly: boolean;
+  /** 초. 비우면 없음 */
+  statementTimeout: string;
 }
 
 export function initialValues(original: Connection | null): FormValues {
@@ -33,6 +36,8 @@ export function initialValues(original: Connection | null): FormValues {
       tunnel: "",
       tunnelTimeout: "",
       color: null,
+      readOnly: false,
+      statementTimeout: "",
     };
   }
   return {
@@ -47,11 +52,19 @@ export function initialValues(original: Connection | null): FormValues {
     tunnelTimeout:
       original.tunnelTimeout === null ? "" : String(original.tunnelTimeout),
     color: original.color,
+    readOnly: original.readOnly,
+    statementTimeout:
+      original.statementTimeout === null
+        ? ""
+        : String(original.statementTimeout),
   };
 }
 
 /** Rust의 `MAX_TUNNEL_TIMEOUT_SECS`와 같다. */
 const MAX_TUNNEL_TIMEOUT = 300;
+
+/** Rust의 `MAX_STATEMENT_TIMEOUT_SECS`와 같다. */
+const MAX_STATEMENT_TIMEOUT = 86400;
 
 const required = ["name", "host", "database", "user"] as const;
 
@@ -93,6 +106,14 @@ export function toConnection(
       return { error: t("connectionForm.tunnelTimeoutRange") };
     }
   }
+  let statementTimeout: number | null = null;
+  const statementText = values.statementTimeout.trim();
+  if (statementText !== "") {
+    statementTimeout = /^\d+$/.test(statementText) ? Number(statementText) : 0;
+    if (statementTimeout < 1 || statementTimeout > MAX_STATEMENT_TIMEOUT) {
+      return { error: t("connectionForm.statementTimeoutRange") };
+    }
+  }
   return {
     connection: {
       name: original?.name ?? trimmed.name,
@@ -108,9 +129,8 @@ export function toConnection(
       tunnel: tunnel === "" ? null : tunnel,
       tunnelTimeout,
       color: values.color,
-      // 이 칸들의 form 항목은 따로 만든다. 그 전에는 저장된 값을 그대로 둔다.
-      readOnly: original?.readOnly ?? false,
-      statementTimeout: original?.statementTimeout ?? null,
+      readOnly: values.readOnly,
+      statementTimeout,
     },
   };
 }
@@ -129,5 +149,21 @@ export function targetChanged(
     connection.sslmode !== original.sslmode ||
     connection.sslrootcert !== original.sslrootcert ||
     connection.tunnel !== original.tunnel
+  );
+}
+
+/**
+ * 접속의 세션을 놓아야 하면 true다. 연결 대상이 바뀌었거나 세션을 열 때 쓰는 설정(readOnly,
+ * statementTimeout)이 다르다(Rust의 `same_session`과 같은 항목). 비밀번호를 지울지는
+ * `targetChanged`가 정한다.
+ */
+export function sessionChanged(
+  connection: Connection,
+  original: Connection,
+): boolean {
+  return (
+    targetChanged(connection, original) ||
+    connection.readOnly !== original.readOnly ||
+    connection.statementTimeout !== original.statementTimeout
   );
 }

@@ -11,6 +11,7 @@ export const ko: Record<MessageKey, string> = {
   "common.save": "저장",
   "common.close": "닫기",
   "common.ok": "확인",
+  "common.readOnly": "Read-only",
 
   "tunnel.starting": "터널 시작 중",
   "tunnel.seconds": "{elapsed} / {total}초",
@@ -184,12 +185,17 @@ export const ko: Record<MessageKey, string> = {
     "키체인에 저장하며 chilla.toml에는 저장하지 않습니다",
   "connectionForm.tunnelHint": "비워 두면 직접 연결합니다",
   "connectionForm.tunnelPlaceholder": "ssh -N -L … 또는 다른 터널 명령",
+  "connectionForm.readOnlyHint":
+    "세션을 read-only로 열어 데이터베이스가 쓰기를 거절합니다",
   "connectionForm.advanced": "고급",
+  "connectionForm.advancedKeys":
+    "statement_timeout · tunnel_timeout · sslrootcert",
+  "connectionForm.statementTimeoutHint": "초. 비우면 제한 없음",
   "connectionForm.tunnelTimeoutHint": "초 · tunnel이 있을 때만",
   "connectionForm.sslrootcertHint": "verify-full에서 이 CA만 신뢰합니다",
   "connectionForm.choose": "선택…",
   "connectionForm.elapsed": "{ms} ms",
-  "connectionForm.connected": "연결됨",
+  "connectionForm.connectedVersion": "연결됨 · PostgreSQL {version}",
   "connectionForm.test": "테스트",
   "connectionForm.keepPassword": "저장된 비밀번호 유지",
   "connectionForm.passwordWillClear":
@@ -200,6 +206,8 @@ export const ko: Record<MessageKey, string> = {
   "connectionForm.nameTaken":
     "이미 쓰고 있는 이름입니다. 그 접속을 편집하려면 사이드바에서 여십시오.",
   "connectionForm.portRange": "port는 1부터 65535까지의 숫자여야 합니다",
+  "connectionForm.statementTimeoutRange":
+    "statement_timeout은 1부터 86400까지의 초여야 합니다",
   "connectionForm.tunnelTimeoutRange":
     "tunnel_timeout은 1부터 300까지의 정수 초여야 합니다",
 

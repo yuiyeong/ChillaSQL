@@ -25,6 +25,7 @@ import { Pre } from "./CommandOutput";
 import { CONNECTION_COLORS, connectionColor } from "./colors";
 import {
   initialValues,
+  sessionChanged,
   targetChanged,
   toConnection,
   type FormValues,
@@ -43,7 +44,7 @@ const sslmodes: SslMode[] = ["disable", "require", "verify-full"];
 
 /** 테스트 결과. 성공은 걸린 시간, 실패는 message와 터널 명령의 stderr. */
 type Notice =
-  | { kind: "ok"; elapsedMs: number }
+  | { kind: "ok"; elapsedMs: number; version: string }
   | { kind: "error"; text: string; output: string | null };
 
 /** 이름표 한 줄과 입력 칸. 오른쪽 설명(`hint`)은 입력 칸의 설명으로 읽힌다. */
@@ -184,10 +185,13 @@ export function ConnectionForm({
   const [advanced, setAdvanced] = useState(
     () =>
       original !== null &&
-      (original.tunnelTimeout !== null || original.sslrootcert !== null),
+      (original.statementTimeout !== null ||
+        original.tunnelTimeout !== null ||
+        original.sslrootcert !== null),
   );
   const headingId = useId();
   const sslmodeId = useId();
+  const readOnlyId = useId();
 
   // StrictMode가 effect를 두 번 돌려도 hasPassword는 한 번만 부른다.
   const asked = useRef(false);
@@ -237,16 +241,17 @@ export function ConnectionForm({
   const test = () =>
     run(async (connection, secret) => {
       const started = performance.now();
-      await testConnection(connection, secret);
+      const server = await testConnection(connection, secret);
       setNotice({
         kind: "ok",
+        version: server.version,
         elapsedMs: Math.round(performance.now() - started),
       });
     });
 
   const save = () =>
     run(async (connection, secret) => {
-      const retargeted = inUse !== null && targetChanged(connection, inUse);
+      const retargeted = inUse !== null && sessionChanged(connection, inUse);
       const settle =
         retargeted && beforeSave ? await beforeSave(connection) : undefined;
       if (settle === null) return;
@@ -444,6 +449,36 @@ export function ConnectionForm({
           </Field>
         </div>
 
+        <div className={`${groupClass} flex-row items-center gap-3`}>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span id={readOnlyId} className="text-small font-mono">
+              read_only
+            </span>
+            <span className="text-small text-fg-3">
+              {t("connectionForm.readOnlyHint")}
+            </span>
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={values.readOnly}
+            aria-labelledby={readOnlyId}
+            className={[
+              "focus-visible:outline-accent relative h-5 w-[34px] shrink-0 cursor-pointer rounded-[10px] border-0 p-0 focus-visible:outline-2",
+              values.readOnly ? "bg-accent" : "bg-line-2",
+            ].join(" ")}
+            onClick={() => edit({ readOnly: !values.readOnly })}
+          >
+            <span
+              aria-hidden="true"
+              className={[
+                "bg-fg absolute top-0.5 size-4 rounded-full",
+                values.readOnly ? "left-4" : "left-0.5",
+              ].join(" ")}
+            />
+          </button>
+        </div>
+
         <div className={groupClass}>
           <button
             type="button"
@@ -455,13 +490,31 @@ export function ConnectionForm({
             {t("connectionForm.advanced")}
             {!advanced && (
               <span className="text-fg-3 font-mono">
-                tunnel_timeout · sslrootcert
+                {t("connectionForm.advancedKeys")}
               </span>
             )}
           </button>
           {advanced && (
             <>
               <div className="grid grid-cols-2 gap-2.5">
+                <Field
+                  label="statement_timeout"
+                  hint={t("connectionForm.statementTimeoutHint")}
+                >
+                  {({ id, describedBy }) => (
+                    <input
+                      id={id}
+                      aria-describedby={describedBy}
+                      className={inputClass}
+                      {...noTextCorrection}
+                      inputMode="numeric"
+                      value={values.statementTimeout}
+                      onChange={(e) =>
+                        edit({ statementTimeout: e.target.value })
+                      }
+                    />
+                  )}
+                </Field>
                 <Field
                   label="tunnel_timeout"
                   hint={t("connectionForm.tunnelTimeoutHint")}
@@ -518,7 +571,7 @@ export function ConnectionForm({
             className="border-line-2 bg-bg-0 text-small mx-6 mb-3.5 flex items-center gap-2.5 rounded-[8px] border px-3 py-2.5"
           >
             <CheckIcon className="shrink-0" size={15} />
-            {t("connectionForm.connected")}
+            {t("connectionForm.connectedVersion", { version: notice.version })}
             <span className="flex-1" />
             <span className="text-fg-2 font-mono">
               {t("connectionForm.elapsed", { ms: notice.elapsedMs })}

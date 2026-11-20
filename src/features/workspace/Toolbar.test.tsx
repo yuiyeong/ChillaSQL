@@ -442,3 +442,26 @@ test("탭이 없으면 Reformat이 disabled다", () => {
     screen.getByRole("button", { name: "Reformat (Opt+Cmd+L)" }),
   ).toBeDisabled();
 });
+
+test("read_only_connections_show_the_lock", async () => {
+  openProjectWith([connection("dev"), connection("prod", { readOnly: true })]);
+  tabWith("prod");
+  renderToolbar();
+
+  expect(within(chip()).getByRole("img", { name: "Read-only" })).toBeVisible();
+
+  await click(chip());
+  const [dev, prod] = within(
+    screen.getByRole("menu", { name: "Connections" }),
+  ).getAllByRole("menuitemradio");
+  expect(within(dev).queryByRole("img", { name: "Read-only" })).toBeNull();
+  expect(within(prod).getByRole("img", { name: "Read-only" })).toBeVisible();
+});
+
+test("a_writable_connection_shows_no_lock_on_the_chip", () => {
+  openProjectWith([connection("dev")]);
+  tabWith("dev");
+  renderToolbar();
+
+  expect(within(chip()).queryByRole("img", { name: "Read-only" })).toBeNull();
+});

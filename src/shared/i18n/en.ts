@@ -11,6 +11,7 @@ export const en = {
   "common.save": "Save",
   "common.close": "Close",
   "common.ok": "OK",
+  "common.readOnly": "Read-only",
 
   "tunnel.starting": "Starting tunnel",
   "tunnel.seconds": "{elapsed} / {total} s",
@@ -182,12 +183,17 @@ export const en = {
   "connectionForm.passwordHint": "Saved in Keychain, never in chilla.toml",
   "connectionForm.tunnelHint": "Leave empty to connect directly",
   "connectionForm.tunnelPlaceholder": "ssh -N -L … or another tunnel command",
+  "connectionForm.readOnlyHint":
+    "Opens sessions read-only so the database rejects writes",
   "connectionForm.advanced": "Advanced",
+  "connectionForm.advancedKeys":
+    "statement_timeout · tunnel_timeout · sslrootcert",
+  "connectionForm.statementTimeoutHint": "Seconds. Empty means none",
   "connectionForm.tunnelTimeoutHint": "Seconds · only with tunnel",
   "connectionForm.sslrootcertHint": "Trust only this CA with verify-full",
   "connectionForm.choose": "Choose…",
   "connectionForm.elapsed": "{ms} ms",
-  "connectionForm.connected": "Connected",
+  "connectionForm.connectedVersion": "Connected · PostgreSQL {version}",
   "connectionForm.test": "Test",
   "connectionForm.keepPassword": "Keep saved password",
   "connectionForm.passwordWillClear":
@@ -198,6 +204,8 @@ export const en = {
   "connectionForm.nameTaken":
     "This name is already taken. To edit that connection, open it from the sidebar.",
   "connectionForm.portRange": "port must be a number from 1 to 65535",
+  "connectionForm.statementTimeoutRange":
+    "statement_timeout must be 1 to 86400 seconds",
   "connectionForm.tunnelTimeoutRange":
     "tunnel_timeout must be a whole number of seconds from 1 to 300",
 

@@ -5,7 +5,7 @@ vi.mock("../../shared/api/commands");
 import { inspectStatement } from "../../shared/api/commands";
 import type { Danger } from "../../shared/api/types";
 import { answerDialog, textOf } from "../../test/dialogs";
-import { setTabMode } from "../../test/fixtures";
+import { connection, openProjectWith, setTabMode } from "../../test/fixtures";
 import { resetStores } from "../../test/resetStores";
 import { useDialogs } from "../../shared/ui/dialogs";
 import { useRuns } from "../query/runsStore";
@@ -160,4 +160,23 @@ test("an_inspection_error_runs_without_asking", async () => {
   );
 
   expect(useDialogs.getState().current).toBeNull();
+});
+
+test("read_only_connection_is_not_asked", async () => {
+  openProjectWith([connection("staging", { readOnly: true })]);
+  vi.mocked(inspectStatement).mockResolvedValue(deleteAll);
+
+  await expect(
+    confirmDanger(TAB, request("DELETE FROM sessions;")),
+  ).resolves.toBe(true);
+
+  expect(useDialogs.getState().current).toBeNull();
+});
+
+test("a_writable_connection_in_the_project_is_still_asked", async () => {
+  openProjectWith([connection("staging")]);
+
+  const { allowed } = await confirmWith(deleteAll);
+
+  expect(allowed).toBe(false);
 });

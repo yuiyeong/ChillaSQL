@@ -3,6 +3,7 @@ import { connection } from "../../test/fixtures";
 import type { Connection } from "../../shared/api/types";
 import {
   initialValues,
+  sessionChanged,
   targetChanged,
   toConnection,
   type FormValues,
@@ -19,6 +20,8 @@ const values: FormValues = {
   tunnel: "",
   tunnelTimeout: "",
   color: null,
+  readOnly: false,
+  statementTimeout: "",
 };
 
 const original = connection("local", {
@@ -40,6 +43,8 @@ test("새 접속의 초기값은 port 5432와 sslmode disable이다", () => {
     tunnel: "",
     tunnelTimeout: "",
     color: null,
+    readOnly: false,
+    statementTimeout: "",
   });
 });
 
@@ -55,6 +60,8 @@ test("수정의 초기값은 original에서 온다", () => {
     tunnel: "bastion",
     tunnelTimeout: "",
     color: "red",
+    readOnly: false,
+    statementTimeout: "",
   });
   expect(initialValues({ ...original, tunnelTimeout: 30 }).tunnelTimeout).toBe(
     "30",
@@ -284,14 +291,53 @@ describe("targetChanged", () => {
   });
 });
 
-test("수정은 form에 없는 readOnly와 statementTimeout을 original 그대로 둔다", () => {
-  const result = toConnection(
-    { ...values, name: "local" },
-    { ...original, readOnly: true, statementTimeout: 30 },
-    [],
-  );
+test("statement_timeout_is_parsed_and_checked", () => {
+  const withTimeout = (statementTimeout: string, readOnly = false) =>
+    toConnection({ ...values, statementTimeout, readOnly }, null, []);
 
-  expect(result).toMatchObject({
+  expect(withTimeout("30", true)).toMatchObject({
     connection: { readOnly: true, statementTimeout: 30 },
+  });
+  expect(withTimeout(" 86400 ")).toMatchObject({
+    connection: { statementTimeout: 86400 },
+  });
+  expect(withTimeout("")).toMatchObject({
+    connection: { readOnly: false, statementTimeout: null },
+  });
+  for (const bad of ["0", "86401", "2.5", "30s", "-1"]) {
+    expect(withTimeout(bad)).toEqual({
+      error: "statement_timeout must be 1 to 86400 seconds",
+    });
+  }
+  expect(
+    initialValues({ ...original, readOnly: true, statementTimeout: 30 }),
+  ).toMatchObject({ readOnly: true, statementTimeout: "30" });
+});
+
+describe("sessionChanged", () => {
+  test("session_changed_includes_session_settings", () => {
+    expect(sessionChanged({ ...original }, original)).toBe(false);
+    expect(sessionChanged({ ...original, readOnly: true }, original)).toBe(
+      true,
+    );
+    expect(
+      sessionChanged({ ...original, statementTimeout: 30 }, original),
+    ).toBe(true);
+    expect(sessionChanged({ ...original, host: "other" }, original)).toBe(true);
+    expect(sessionChanged({ ...original, color: "blue" }, original)).toBe(
+      false,
+    );
+    expect(sessionChanged({ ...original, tunnelTimeout: 30 }, original)).toBe(
+      false,
+    );
+  });
+
+  test("target_changed_ignores_them", () => {
+    expect(targetChanged({ ...original, readOnly: true }, original)).toBe(
+      false,
+    );
+    expect(targetChanged({ ...original, statementTimeout: 30 }, original)).toBe(
+      false,
+    );
   });
 });
