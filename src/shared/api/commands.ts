@@ -13,6 +13,7 @@ import type {
   TableDetails,
   TxEnd,
   TxMode,
+  TypeInfo,
   WriteMode,
 } from "./types";
 
@@ -74,6 +75,17 @@ export function loadTableDetails(
   relation: number,
 ): Promise<TableDetails> {
   return call("load_table_details", { connection, relation });
+}
+
+/**
+ * 결과 컬럼의 type 이름과 category를 그 접속의 catalog 연결이 답한다. 모르는 OID는 답에 없다.
+ * 답은 받은 순서대로다.
+ */
+export function describeTypes(
+  connection: string,
+  types: { oid: number; modifier: number }[],
+): Promise<TypeInfo[]> {
+  return call("describe_types", { connection, types });
 }
 
 /** 그 접속의 catalog 연결을 닫는다. 그 접속을 쓰는 탭이 없어졌을 때 부른다. */

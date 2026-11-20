@@ -5,7 +5,7 @@ mod support;
 
 use chilla_core::application::DbConnection;
 use chilla_core::domain::{
-    CatalogColumn, ConstraintKind, FunctionName, Relation, RelationKind, TableDetails,
+    CatalogColumn, ConstraintKind, FunctionName, Relation, RelationKind, TableDetails, TypeInfo,
 };
 use support::{admin, connect};
 
@@ -182,5 +182,93 @@ async fn table_details_of_an_unknown_oid_are_empty() {
             indexes: vec![],
             constraints: vec![],
         }
+    );
+}
+
+fn type_info(oid: u32, modifier: i32, name: &str, category: char) -> TypeInfo {
+    TypeInfo {
+        oid,
+        modifier,
+        name: name.into(),
+        category,
+    }
+}
+
+#[tokio::test]
+async fn describe_types_formats_with_typmod() {
+    let db = connect().await;
+    let types = db
+        .describe_types(&[
+            (23, -1),
+            (1043, 259),
+            (1700, 655366),
+            (1184, -1),
+            (1009, -1),
+            (3802, -1),
+            (114, -1),
+        ])
+        .await
+        .unwrap();
+
+    assert_eq!(
+        types,
+        vec![
+            type_info(23, -1, "integer", 'N'),
+            type_info(1043, 259, "character varying(255)", 'S'),
+            type_info(1700, 655366, "numeric(10,2)", 'N'),
+            type_info(1184, -1, "timestamp with time zone", 'D'),
+            type_info(1009, -1, "text[]", 'A'),
+            type_info(3802, -1, "jsonb", 'U'),
+            type_info(114, -1, "json", 'U'),
+        ]
+    );
+}
+
+#[tokio::test]
+async fn describe_types_skips_unknown_oids() {
+    let db = connect().await;
+    let types = db
+        .describe_types(&[(0, -1), (4_000_000_000, -1), (23, -1)])
+        .await
+        .unwrap();
+
+    assert_eq!(types, vec![type_info(23, -1, "integer", 'N')]);
+    assert_eq!(db.describe_types(&[]).await.unwrap(), vec![]);
+}
+
+#[tokio::test]
+async fn describe_types_of_a_domain_and_enum() {
+    reset_schema(
+        "m8_types_a",
+        r#"
+        CREATE TYPE mood AS ENUM ('happy', 'sad');
+        CREATE DOMAIN positive AS int CHECK (VALUE > 0);
+        "#,
+    )
+    .await;
+    let admin = admin().await;
+    let oids = admin
+        .query(
+            "SELECT 'm8_types_a.mood'::regtype::oid, 'm8_types_a.positive'::regtype::oid",
+            &[],
+        )
+        .await
+        .unwrap();
+    let mood: u32 = oids[0].get(0);
+    let positive: u32 = oids[0].get(1);
+
+    let db = connect().await;
+    // search_path에 없는 schema의 type은 schema를 붙여 쓴다.
+    let types = db
+        .describe_types(&[(mood, -1), (positive, -1)])
+        .await
+        .unwrap();
+
+    assert_eq!(
+        types,
+        vec![
+            type_info(mood, -1, "m8_types_a.mood", 'E'),
+            type_info(positive, -1, "m8_types_a.positive", 'N'),
+        ]
     );
 }

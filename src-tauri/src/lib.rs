@@ -73,6 +73,7 @@ pub fn run() {
             commands::close_session,
             commands::load_catalog,
             commands::load_table_details,
+            commands::describe_types,
             commands::close_catalog,
             commands::split_statements,
             commands::inspect_statement,

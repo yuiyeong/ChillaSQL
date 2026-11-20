@@ -13,7 +13,7 @@ mod tunnel;
 
 pub use catalog::{
     Catalog, CatalogColumn, ConstraintInfo, ConstraintKind, FunctionName, IndexInfo, Relation,
-    RelationKind, TableDetails,
+    RelationKind, TableDetails, TypeInfo,
 };
 pub use connection::{ConnectionColor, ConnectionProfile, ProfileError, SslMode};
 pub use danger::Danger;

@@ -79,6 +79,16 @@ export interface TableDetails {
   constraints: { name: string; kind: ConstraintKind; definition: string }[];
 }
 
+/** 결과 컬럼 type 하나의 이름과 category. `oid`와 `modifier`는 `ResultColumn`의 것이다. */
+export interface TypeInfo {
+  oid: number;
+  modifier: number;
+  /** `format_type`이 만든 이름(`character varying(255)`, `timestamp with time zone` 등) */
+  name: string;
+  /** `pg_type.typcategory`, 한 글자(`N`은 숫자, `S`는 문자열, `D`는 날짜·시간, `A`는 배열 등) */
+  category: string;
+}
+
 /** 문장의 위치. `start`와 `end`는 JS 문자열의 UTF-16 code unit offset이다. */
 export interface StatementSpan {
   start: number;

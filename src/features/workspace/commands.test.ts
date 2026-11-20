@@ -34,6 +34,7 @@ import {
 import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
+import { useTypes } from "../query/typesStore";
 import {
   applySavedProject,
   applySavedProjectKeepingSessions,
@@ -1225,6 +1226,22 @@ test("switching_projects_resets_schemas", async () => {
   await switchProject();
 
   expect(useSchema.getState().entries).toEqual({});
+});
+
+test("switching_projects_resets_cached_types", async () => {
+  useTypes.setState({
+    types: {
+      local: {
+        "23:-1": { oid: 23, modifier: -1, name: "integer", category: "N" },
+      },
+    },
+  });
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+
+  await switchProject();
+
+  expect(useTypes.getState().types).toEqual({});
 });
 
 test("select_first_rows_quotes_names", async () => {

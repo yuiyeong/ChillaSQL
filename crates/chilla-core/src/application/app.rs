@@ -19,7 +19,7 @@ use super::{
 use crate::domain::{
     Catalog, ConnectionProfile, Danger, EndResult, FileStamp, Password, ProfileError, Project,
     QueryId, QueryLimits, SessionId, SessionInfo, SessionState, SqlFile, SqlPath, SqlPathError,
-    StatementSpan, TableDetails, TxEnd, TxMode, WriteMode,
+    StatementSpan, TableDetails, TxEnd, TxMode, TypeInfo, WriteMode,
 };
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
@@ -404,6 +404,21 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             .await
     }
 
+    /// 그 접속의 catalog connection으로 결과 컬럼의 type 이름과 category를 읽는다.
+    /// 모르는 OID는 결과에 없다.
+    pub async fn describe_types(
+        &self,
+        connection: &str,
+        types: Vec<(u32, i32)>,
+    ) -> Result<Vec<TypeInfo>, AppError> {
+        self.read_catalog_with(connection, |db| {
+            // future가 types를 빌리면 `read`가 돌려주는 future의 lifetime이 `db`와 달라진다.
+            let types = types.clone();
+            Box::pin(async move { db.describe_types(&types).await })
+        })
+        .await
+    }
+
     /// catalog connection을 닫고 터널 lease를 놓는다. 없으면 아무것도 하지 않는다.
     pub async fn close_catalog(&self, connection: &str) -> Result<(), AppError> {
         let slot = self.catalogs.lock().await.remove(connection);
@@ -722,7 +737,7 @@ mod tests {
     use crate::domain::{
         Catalog, ConnectionColor, EndOutcome, EndResult, FileStamp, ProfileError, QueryEvent,
         QueryOutcome, SessionState, SslMode, StatementSpan, TableDetails, TxEnd, TxStatus,
-        WriteMode,
+        TypeInfo, WriteMode,
     };
     use crate::domain::{TunnelEvent, TunnelFailure};
 
@@ -1870,6 +1885,25 @@ mod tests {
 
         assert_eq!(f.connector.requests().len(), 1);
         assert_eq!(f.connector.catalog_reads(), 2);
+    }
+
+    #[tokio::test]
+    async fn describe_types_uses_the_catalog_connection() {
+        let f = opened().await;
+        f.connector.set_catalog(sample_catalog());
+        let integer = TypeInfo {
+            oid: 23,
+            modifier: -1,
+            name: "integer".into(),
+            category: 'N',
+        };
+        f.connector.set_types(vec![integer.clone()]);
+
+        f.app.load_catalog("local").await.unwrap();
+        let types = f.app.describe_types("local", vec![(23, -1), (0, -1)]).await;
+
+        assert_eq!(types, Ok(vec![integer]));
+        assert_eq!(f.connector.requests().len(), 1);
     }
 
     #[tokio::test(start_paused = true)]

@@ -23,7 +23,7 @@ use super::{
 };
 use crate::domain::{
     Catalog, ConnectionColor, ConnectionProfile, Danger, FileStamp, Password, Project, QueryEvent,
-    Row, SqlFile, SqlPath, StatementSpan, TableDetails, WriteMode,
+    Row, SqlFile, SqlPath, StatementSpan, TableDetails, TypeInfo, WriteMode,
 };
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
@@ -342,6 +342,11 @@ impl FakeConnector {
             .unwrap()
             .details
             .insert(relation, details);
+    }
+
+    /// 만든 연결들의 `describe_types`가 아는 type.
+    pub(crate) fn set_types(&self, types: Vec<TypeInfo>) {
+        self.catalog.lock().unwrap().types = types;
     }
 
     /// 다음 catalog 읽기 한 번이 `error`로 실패한다. 여러 번 부르면 차례로 쓴다.

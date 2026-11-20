@@ -82,3 +82,14 @@ pub enum ConstraintKind {
     Check,
     Exclusion,
 }
+
+/// 결과 컬럼의 type 하나. `(oid, modifier)`는 RowDescription이 알려 준 값이다.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TypeInfo {
+    pub oid: u32,
+    pub modifier: i32,
+    /// `format_type(oid, modifier)`가 만든 이름(`character varying(255)` 등).
+    pub name: String,
+    /// `pg_type.typcategory`. `N`은 숫자, `S`는 문자열, `D`는 날짜·시간, `A`는 배열 등이다.
+    pub category: char,
+}

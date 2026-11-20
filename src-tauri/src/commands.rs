@@ -13,7 +13,7 @@ use chilla_core::domain::{
     EndOutcome, EndResult, FileStamp, FunctionName, IndexInfo, Password, ProfileError, Project,
     QueryEvent, QueryId, QueryOutcome, Relation, RelationKind, RowBatch, ServerError, SessionId,
     SessionInfo, SessionState, SqlFile, StatementSpan, TableDetails, TunnelEvent, TunnelFailure,
-    TunnelState, TxEnd, TxMode, TxStatus, WriteMode,
+    TunnelState, TxEnd, TxMode, TxStatus, TypeInfo, WriteMode,
 };
 use chilla_core::infrastructure::{PgConnector, ShellTunnelRunner};
 use serde::{Deserialize, Serialize};
@@ -811,6 +811,45 @@ pub async fn load_table_details(
     Ok(app.load_table_details(&connection, relation).await?.into())
 }
 
+/// 결과 컬럼의 type. RowDescription이 알려 준 OID와 typmod다.
+#[derive(Debug, Deserialize)]
+pub struct TypeKeyDto {
+    pub oid: u32,
+    pub modifier: i32,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TypeInfoDto {
+    pub oid: u32,
+    pub modifier: i32,
+    pub name: String,
+    /// `pg_type.typcategory`, 한 글자다.
+    pub category: char,
+}
+
+impl From<TypeInfo> for TypeInfoDto {
+    fn from(info: TypeInfo) -> Self {
+        Self {
+            oid: info.oid,
+            modifier: info.modifier,
+            name: info.name,
+            category: info.category,
+        }
+    }
+}
+
+/// 그 접속의 catalog connection이 결과 컬럼의 type 이름과 category를 답한다. 모르는 OID는 없다.
+#[tauri::command]
+pub async fn describe_types(
+    app: State<'_, CoreApp>,
+    connection: String,
+    types: Vec<TypeKeyDto>,
+) -> CommandResult<Vec<TypeInfoDto>> {
+    let types = types.into_iter().map(|t| (t.oid, t.modifier)).collect();
+    let infos = app.describe_types(&connection, types).await?;
+    Ok(infos.into_iter().map(Into::into).collect())
+}
+
 #[tauri::command]
 pub async fn close_catalog(app: State<'_, CoreApp>, connection: String) -> CommandResult<()> {
     Ok(app.close_catalog(&connection).await?)
@@ -981,6 +1020,32 @@ mod tests {
                 }],
                 "functions": [{ "schema": "pg_catalog", "name": "now" }],
                 "reservedWords": ["select"],
+            })
+        );
+    }
+
+    #[test]
+    fn type_dtos_use_the_documented_shape() {
+        let key: TypeKeyDto = serde_json::from_value(serde_json::json!({
+            "oid": 1043,
+            "modifier": 259,
+        }))
+        .unwrap();
+        assert_eq!((key.oid, key.modifier), (1043, 259));
+
+        let info = TypeInfo {
+            oid: 1043,
+            modifier: 259,
+            name: "character varying(255)".into(),
+            category: 'S',
+        };
+        assert_eq!(
+            serde_json::to_value(TypeInfoDto::from(info)).unwrap(),
+            serde_json::json!({
+                "oid": 1043,
+                "modifier": 259,
+                "name": "character varying(255)",
+                "category": "S",
             })
         );
     }

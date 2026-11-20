@@ -7,6 +7,7 @@ import {
 import { messageOf } from "../../shared/api/errors";
 import type { Catalog, TableDetails } from "../../shared/api/types";
 import { relationNamed } from "../../shared/sql/catalog";
+import { useTypes } from "../query/typesStore";
 
 export interface DetailsEntry {
   status: "loading" | "ready" | "failed";
@@ -151,7 +152,11 @@ export const useSchema = create<SchemaState>()((set, get) => {
       await load(connection);
     },
 
-    refresh: load,
+    refresh(connection) {
+      // DDL로 type 이름이 바뀌었을 수 있다. 다음 결과가 다시 묻는다.
+      useTypes.getState().forget(connection);
+      return load(connection);
+    },
 
     async loadDetails(connection, relation) {
       const entry = get().entries[connection];
@@ -192,6 +197,7 @@ export const useSchema = create<SchemaState>()((set, get) => {
 
     async forget(connection) {
       latest.delete(connection);
+      useTypes.getState().forget(connection);
       set((state) => {
         const entries = { ...state.entries };
         delete entries[connection];

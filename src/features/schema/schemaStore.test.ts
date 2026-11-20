@@ -11,6 +11,7 @@ import { CommandError } from "../../shared/api/errors";
 import type { Catalog, TableDetails } from "../../shared/api/types";
 import { deferred } from "../../test/deferred";
 import { catalogFixture, relation } from "../../test/fixtures";
+import { useTypes } from "../query/typesStore";
 import { nodeKey, useSchema } from "./schemaStore";
 
 const details: TableDetails = {
@@ -30,8 +31,18 @@ function entry(connection = "local") {
   return useSchema.getState().entries[connection];
 }
 
+const integer = { oid: 23, modifier: -1, name: "integer", category: "N" };
+
+/** 두 접속이 type을 cache에 갖게 한다. */
+function seedTypes() {
+  useTypes.setState({
+    types: { local: { "23:-1": integer }, other: { "23:-1": integer } },
+  });
+}
+
 beforeEach(() => {
   useSchema.getState().reset();
+  useTypes.getState().reset();
   vi.resetAllMocks();
 });
 
@@ -172,6 +183,26 @@ test("forget_closes_and_drops_the_entry", async () => {
 
   expect(closeCatalog).toHaveBeenCalledWith("local");
   expect(entry()).toBeUndefined();
+});
+
+test("forget_drops_the_cached_types_of_that_connection", async () => {
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  await useSchema.getState().ensure("local");
+  seedTypes();
+
+  await useSchema.getState().forget("local");
+
+  expect(useTypes.getState().types).toEqual({ other: { "23:-1": integer } });
+});
+
+test("refresh_drops_the_cached_types_of_that_connection", async () => {
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  await useSchema.getState().ensure("local");
+  seedTypes();
+
+  await useSchema.getState().refresh("local");
+
+  expect(useTypes.getState().types).toEqual({ other: { "23:-1": integer } });
 });
 
 test("a_response_after_forget_is_ignored", async () => {

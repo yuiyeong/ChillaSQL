@@ -9,7 +9,7 @@ use tokio::sync::{OwnedRwLockWriteGuard, RwLock, watch};
 
 use super::numbered;
 use crate::application::{CancelError, DbConnection, QueryCancel, QueryError, RowItem, RowSource};
-use crate::domain::{Catalog, Column, Row, ServerError, TableDetails, TxStatus};
+use crate::domain::{Catalog, Column, Row, ServerError, TableDetails, TxStatus, TypeInfo};
 
 /// 가짜 연결 하나를 test가 밖에서 보고 조작하는 손잡이.
 #[derive(Clone, Default)]
@@ -132,7 +132,9 @@ impl FakeLink {
 pub(crate) struct FakeCatalog {
     pub(crate) catalog: Catalog,
     pub(crate) details: HashMap<u32, TableDetails>,
-    /// 다음 읽기(`read_catalog`, `read_table_details`)들이 차례로 돌려줄 오류.
+    /// `describe_types`가 아는 type.
+    pub(crate) types: Vec<TypeInfo>,
+    /// 다음 읽기(`read_catalog`, `read_table_details`, `describe_types`)들이 차례로 돌려줄 오류.
     pub(crate) failures: VecDeque<QueryError>,
     /// `read_catalog`가 불린 횟수.
     pub(crate) reads: usize,
@@ -432,6 +434,23 @@ impl DbConnection for FakeConnection {
         match self.catalog_failure(&mut catalog) {
             Some(error) => Err(error),
             None => Ok(catalog.details.get(&relation).cloned().unwrap_or_default()),
+        }
+    }
+
+    async fn describe_types(&self, types: &[(u32, i32)]) -> Result<Vec<TypeInfo>, QueryError> {
+        let mut catalog = self.catalog.lock().unwrap();
+        match self.catalog_failure(&mut catalog) {
+            Some(error) => Err(error),
+            None => Ok(types
+                .iter()
+                .filter_map(|&(oid, modifier)| {
+                    catalog
+                        .types
+                        .iter()
+                        .find(|info| info.oid == oid && info.modifier == modifier)
+                        .cloned()
+                })
+                .collect()),
         }
     }
 

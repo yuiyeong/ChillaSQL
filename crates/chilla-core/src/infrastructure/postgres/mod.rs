@@ -22,7 +22,9 @@ use tokio_postgres::error::SqlState;
 use tokio_postgres::{Client, Config, NoTls, SimpleQueryMessage};
 
 use crate::application::{ConnectError, Connector, DbConnection, QueryError};
-use crate::domain::{Catalog, ConnectionProfile, Password, SslMode, TableDetails, TxStatus};
+use crate::domain::{
+    Catalog, ConnectionProfile, Password, SslMode, TableDetails, TxStatus, TypeInfo,
+};
 pub use cancel::PgCancel;
 pub use rows::PgRows;
 use tls::Verification;
@@ -189,7 +191,8 @@ pub struct PgConnection {
     /// socket을 읽고 쓰는 task. `client`가 drop되면 Terminate를 보내고 끝난다.
     driver: JoinHandle<()>,
     tx_status: TxStatusCell,
-    /// 서버가 보낸 RowDescription의 type. `PgRows`가 꺼낸다.
+    /// 서버가 보낸 RowDescription의 type. `PgRows`가 꺼낸다. catalog 읽기는 꺼내지 않으므로
+    /// 읽기마다 비운다.
     row_types: RowTypes,
     backend_pid: i32,
     /// cancel 요청을 같은 방법(TLS 여부, 인증서 확인)으로 보내려고 갖는다.
@@ -238,11 +241,18 @@ impl DbConnection for PgConnection {
     }
 
     async fn read_catalog(&self) -> Result<Catalog, QueryError> {
+        self.row_types.clear();
         catalog::read_catalog(&self.client).await
     }
 
     async fn read_table_details(&self, relation: u32) -> Result<TableDetails, QueryError> {
+        self.row_types.clear();
         catalog::read_table_details(&self.client, relation).await
+    }
+
+    async fn describe_types(&self, types: &[(u32, i32)]) -> Result<Vec<TypeInfo>, QueryError> {
+        self.row_types.clear();
+        catalog::describe_types(&self.client, types).await
     }
 
     fn cancel_handle(&self) -> PgCancel {
@@ -363,6 +373,24 @@ mod tests {
         assert_eq!(socket.tcp_keepalive_time().unwrap(), KEEPALIVE_IDLE);
         assert_eq!(socket.tcp_keepalive_interval().unwrap(), KEEPALIVE_INTERVAL);
         assert_eq!(socket.tcp_keepalive_retries().unwrap(), KEEPALIVE_RETRIES);
+    }
+
+    /// catalog 읽기도 RowDescription을 tap에 쌓는데 catalog connection은 꺼내 가지 않는다.
+    /// 읽기마다 비우지 않으면 queue가 끝없이 자란다.
+    #[tokio::test]
+    async fn catalog_reads_do_not_pile_up_row_types() {
+        let conn = connect().await;
+
+        for _ in 0..3 {
+            conn.describe_types(&[(23, -1)]).await.unwrap();
+        }
+        conn.read_table_details(0).await.unwrap();
+        conn.describe_types(&[(23, -1)]).await.unwrap();
+
+        // 마지막 읽기(쿼리 하나)가 쌓은 것뿐이다.
+        assert!(conn.row_types.pop().is_some());
+        assert!(conn.row_types.pop().is_none());
+        conn.close().await;
     }
 
     #[tokio::test]

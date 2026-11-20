@@ -5,6 +5,7 @@ vi.mock("../../shared/api/commands");
 import {
   cancelQuery,
   closeSession,
+  describeTypes,
   endTransaction,
   executeQuery,
   fetchMore,
@@ -20,6 +21,7 @@ import type {
 import { t } from "../../shared/i18n/t";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
+import { useTypes } from "./typesStore";
 import { deferred } from "../../test/deferred";
 import { resultColumns, setTabMode } from "../../test/fixtures";
 import { modeOf, useTabs } from "../editor/tabsStore";
@@ -56,6 +58,7 @@ beforeEach(async () => {
   // 앞 test의 세션을 닫는 호출이 mock 기록을 지우기 전에 끝나게 한다.
   await useRuns.getState().reset();
   useTabs.getState().reset();
+  useTypes.getState().reset();
   vi.resetAllMocks();
   vi.mocked(openSession).mockResolvedValue(session(3));
   vi.mocked(executeQuery).mockResolvedValue(7);
@@ -162,6 +165,30 @@ test("event는 execute가 query id를 돌려주기 전에도 반영된다", asyn
   if (state.status !== "running") return;
   expect(state.result.columns).toEqual(resultColumns("id"));
   expect(state.result.rows).toEqual([["1"]]);
+
+  execution.resolve(7);
+  await running;
+});
+
+test("columns event는 그 탭의 접속에 type 이름을 묻는다", async () => {
+  const execution = deferred<number>();
+  vi.mocked(executeQuery).mockReturnValue(execution.promise);
+  const integer = { oid: 23, modifier: -1, name: "integer", category: "N" };
+  vi.mocked(describeTypes).mockResolvedValue([integer]);
+
+  const running = useRuns.getState().run("t", prepared("SELECT 1", "staging"));
+  await vi.waitFor(() => expect(executeQuery).toHaveBeenCalled());
+  onEventOf(0)({
+    type: "columns",
+    columns: [{ name: "id", typeOid: 23, typeModifier: -1 }],
+  });
+
+  expect(describeTypes).toHaveBeenCalledWith("staging", [
+    { oid: 23, modifier: -1 },
+  ]);
+  await vi.waitFor(() =>
+    expect(useTypes.getState().types.staging?.["23:-1"]).toEqual(integer),
+  );
 
   execution.resolve(7);
   await running;

@@ -7,7 +7,7 @@ use super::query_error;
 use crate::application::QueryError;
 use crate::domain::{
     Catalog, CatalogColumn, ConstraintInfo, ConstraintKind, FunctionName, IndexInfo, Relation,
-    RelationKind, TableDetails,
+    RelationKind, TableDetails, TypeInfo,
 };
 
 /// 트리와 테이블 자동완성에서 빼는 schema. `alias`는 `pg_namespace`의 별칭이다.
@@ -85,6 +85,13 @@ const CONSTRAINTS_SQL: &str = "\
     SELECT conname::text, contype::text, pg_get_constraintdef(oid) \
     FROM pg_constraint \
     WHERE conrelid = $1 AND contypid = 0 AND contype IN ('p', 'f', 'u', 'c', 'x') ORDER BY conname";
+
+/// 받은 순서대로 돌려준다(JOIN만으로는 순서가 정해지지 않는다). pg_type에 없는 OID는 빠진다.
+const TYPES_SQL: &str = "\
+    SELECT m.oid, m.typmod, format_type(m.oid, m.typmod), t.typcategory::text \
+    FROM unnest($1::oid[], $2::int4[]) WITH ORDINALITY AS m(oid, typmod, i) \
+    JOIN pg_type t ON t.oid = m.oid \
+    ORDER BY m.i";
 
 /// 쿼리는 한 연결에 함께 보낸다(tokio-postgres가 pipeline으로 보낸다). 터널 너머에서 왕복이 준다.
 pub(super) async fn read_catalog(client: &Client) -> Result<Catalog, QueryError> {
@@ -171,6 +178,32 @@ pub(super) async fn read_table_details(
         indexes,
         constraints,
     })
+}
+
+pub(super) async fn describe_types(
+    client: &Client,
+    types: &[(u32, i32)],
+) -> Result<Vec<TypeInfo>, QueryError> {
+    if types.is_empty() {
+        return Ok(Vec::new());
+    }
+    let oids: Vec<u32> = types.iter().map(|&(oid, _)| oid).collect();
+    let modifiers: Vec<i32> = types.iter().map(|&(_, modifier)| modifier).collect();
+    let params: [&(dyn ToSql + Sync); 2] = [&oids, &modifiers];
+    let rows = query(client, TYPES_SQL, &params).await?;
+    Ok(rows
+        .iter()
+        .map(|row| {
+            let category: String = row.get(3);
+            TypeInfo {
+                oid: row.get(0),
+                modifier: row.get(1),
+                name: row.get(2),
+                // typcategory는 한 글자다.
+                category: category.chars().next().unwrap_or('X'),
+            }
+        })
+        .collect())
 }
 
 async fn query(

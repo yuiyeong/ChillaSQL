@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use crate::domain::{
     Catalog, Column, ConnectionProfile, Danger, EndOutcome, FileStamp, Password, ProfileError,
     Project, QueryOutcome, Row, ServerError, SqlFile, SqlPath, StatementSpan, TableDetails,
-    TxStatus, WriteMode,
+    TxStatus, TypeInfo, WriteMode,
 };
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽고 쓴다.
@@ -111,7 +111,8 @@ pub trait Connector: Send + Sync + 'static {
 }
 
 /// 열려 있는 DB 연결 하나.
-pub trait DbConnection: Send + 'static {
+/// `Sync`인 것은 catalog 읽기가 연결을 빌린 채 `async move` 안에서 기다리기 때문이다.
+pub trait DbConnection: Send + Sync + 'static {
     type Rows: RowSource;
     type Cancel: QueryCancel;
 
@@ -134,6 +135,12 @@ pub trait DbConnection: Send + 'static {
         &self,
         relation: u32,
     ) -> impl Future<Output = Result<TableDetails, QueryError>> + Send;
+    /// 결과 컬럼의 `(type OID, typmod)`마다 이름과 category. 모르는 OID(0 포함)는 결과에 없다.
+    /// 연결이 끊겨 있으면 `ConnectionLost`다.
+    fn describe_types(
+        &self,
+        types: &[(u32, i32)],
+    ) -> impl Future<Output = Result<Vec<TypeInfo>, QueryError>> + Send;
     /// 이 연결에서 실행 중인 쿼리를 멈추는 요청. 연결과 따로 살아서 다른 task에서 쓸 수 있다.
     fn cancel_handle(&self) -> Self::Cancel;
     /// 서버가 세션을 끝낼 때까지 기다린다. 실행 중인 쿼리가 있으면 끝날 때까지 기다리지 않는다.

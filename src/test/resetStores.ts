@@ -3,6 +3,7 @@ import { useEditorStatus } from "../features/editor/editorStatus";
 import { useTabs } from "../features/editor/tabsStore";
 import { useProject } from "../features/project/projectStore";
 import { useRuns } from "../features/query/runsStore";
+import { useTypes } from "../features/query/typesStore";
 import { useSchema } from "../features/schema/schemaStore";
 import { resetDialogs } from "../shared/ui/dialogs";
 
@@ -19,6 +20,7 @@ export async function resetStores(): Promise<void> {
   useEditorStatus.setState(useEditorStatus.getInitialState(), true);
   useTunnels.setState(useTunnels.getInitialState(), true);
   useSchema.getState().reset();
+  useTypes.getState().reset();
   // 답을 기다리던 ask는 cancel로 끝내고 차례를 비운다.
   resetDialogs();
 }

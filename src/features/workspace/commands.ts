@@ -21,6 +21,7 @@ import { useTabs } from "../editor/tabsStore";
 import { useProject } from "../project/projectStore";
 import type { Origin, Rejection, RunRequest } from "../query/runReducer";
 import { endable, useRuns } from "../query/runsStore";
+import { useTypes } from "../query/typesStore";
 import { useSchema } from "../schema/schemaStore";
 import { mono, rt } from "../../shared/i18n/rich";
 import { t, tc } from "../../shared/i18n/t";
@@ -381,6 +382,7 @@ export async function switchProject(): Promise<void> {
   useTunnels.getState().reset();
   // 옛 프로젝트의 catalog 연결도 Rust가 이미 닫았다.
   useSchema.getState().reset();
+  useTypes.getState().reset();
   await closing;
 }
 

@@ -35,6 +35,7 @@ import {
   type TxCount,
   type TxInfo,
 } from "./transaction";
+import { useTypes } from "./typesStore";
 
 /**
  * 실행할 것을 정한다. 실행하지 않을 이유가 있으면 그 Rejection을, 사용자가 그만두게 했으면(위험 쿼리
@@ -432,6 +433,10 @@ export const useRuns = create<RunsState>()((set, get) => {
       };
 
       const onEvent = (event: QueryEvent) => {
+        // header의 type 이름은 접속의 catalog connection이 답한다. 밀려난 실행의 type도 cache에 쓸모 있다.
+        if (event.type === "columns") {
+          void useTypes.getState().ensure(connection, event.columns);
+        }
         // 세션이 죽었다. 늦은 event여도 그 세션이 아직 이 탭의 것이면 버린다.
         if (
           event.type === "finished" &&
