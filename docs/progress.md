@@ -5,9 +5,9 @@
 ## 지금
 
 - **진행 중**: 없음(M9 쿼리 도구가 2026-11-20에 끝남, [M9](plans/M9-query-tools.md)). 4단계의 다음은 M10(결과 표 확장)이다
-- **작업 위치**: branch `m9-query-tools`(main에서 만듦. main에 합치지 않았고 push하지 않았다). main은 `m8-editor-run`을 2026-11-20에 fast-forward로 합친 상태이고 origin/main은 `d2be9bf`이며 그 뒤의 commit은 push하지 않았다
+- **작업 위치**: main. branch `m9-query-tools`를 2026-11-20에 fast-forward로 합치고 지움. origin/main은 `d2be9bf`이고 그 뒤의 commit은 push하지 않았다
 - **디자인 기준**: [docs/design](design/README.md)의 캔버스 사본과 D2Coding. M4부터 화면은 이것을 따른다
-- **다음 할 일**: 파라미터 dialog의 한글 IME 확인(사용자), branch `m9-query-tools` 합치기, M10 계획. 기획서 8장대로 3단계를 며칠 실제로 써 본다(완료 기준: 하루 업무를 DataGrip 없이 처리). 부하가 걸리면 가끔 실패하는 test(`tunnel_process` 몇 개, `ten_thousand_statements_split_within_100ms`, `first_500_rows_of_a_million_arrive_within_100ms`, vitest `aliased_columns_come_from_the_aliased_table`)를 따로 손본다. 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함. 알려진 것: 긴 줄을 가로로 scroll하면 줄 번호 gutter가 사라진다
+- **다음 할 일**: 파라미터 dialog의 한글 IME 확인(사용자), M10 계획. 기획서 8장대로 3단계를 며칠 실제로 써 본다(완료 기준: 하루 업무를 DataGrip 없이 처리). 부하가 걸리면 가끔 실패하는 test(`tunnel_process` 몇 개, `ten_thousand_statements_split_within_100ms`, `first_500_rows_of_a_million_arrive_within_100ms`, vitest `aliased_columns_come_from_the_aliased_table`)를 따로 손본다. 터널 test 몇 개는 동작이 망가지면 실패 대신 멈춘다(작업 로그 M5 Task 4, 7). 사용자가 시간 제한을 넣지 않기로 함. 알려진 것: 긴 줄을 가로로 scroll하면 줄 번호 gutter가 사라진다
 - **앱 동작 확인 방법** (M3 Task 13, M4 Task 1, M4 Task 13에서 확인한 것)
   - computer use는 dev binary(`pnpm tauri dev`)를 조작할 앱으로 고르지 못한다. `scripts/build-app.sh --debug`로 `target/debug/bundle/macos/ChillaSQL.app`을 만들어(dev 빌드와 같은 identity로 서명됨) `open`한다. 그러면 키체인 확인 창이 뜨지 않는다. 이 `.app`은 dev와 `localStorage`가 따로라 마지막 프로젝트가 다르다
   - computer use 도구가 없는 세션에서는 Bash로 한다: `open --stderr <file>`로 앱의 stderr를 받고, `screencapture -x -R<x,y,w,h>`로 창을 찍고, System Events(`osascript`)로 창 위치와 menu를 다루고, 클릭과 끌기는 CGEvent를 보내는 작은 Swift script로 한다. 한글 입력기가 켜져 있으면 `keystroke "c" using command down`이 다른 key로 들어가 에디터에 한글이 입력되므로 `key code 8 using command down`처럼 key code로 보낸다
