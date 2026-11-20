@@ -208,7 +208,8 @@ test("forget_drops_the_cached_edit_tables_of_that_connection", async () => {
   expect(useEditTableCache.getState().tables).toEqual({ other: { 1: null } });
 });
 
-test("refresh_drops_the_cached_edit_tables_of_that_connection", async () => {
+test("refresh_keeps_the_cached_edit_tables", async () => {
+  // 보이는 결과는 refresh로 다시 묻지 않으므로 버리면 편집할 수 없게 된다. 결과마다 다시 묻는다.
   vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
   await useSchema.getState().ensure("local");
   useEditTableCache.setState({
@@ -217,7 +218,10 @@ test("refresh_drops_the_cached_edit_tables_of_that_connection", async () => {
 
   await useSchema.getState().refresh("local");
 
-  expect(useEditTableCache.getState().tables).toEqual({ other: { 1: null } });
+  expect(useEditTableCache.getState().tables).toEqual({
+    local: { 1: null },
+    other: { 1: null },
+  });
 });
 
 test("refresh_keeps_the_cached_types", async () => {
