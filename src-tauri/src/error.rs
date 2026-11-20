@@ -84,6 +84,7 @@ impl From<AppError> for CommandError {
             AppError::Catalog(query) => ("catalog_failed", message_param(&query.to_string())),
             AppError::Store(StoreError { message }) => ("store_failed", message_param(message)),
             AppError::StoreUnavailable => ("store_unavailable", Params::new()),
+            AppError::RelationGone => ("relation_gone", Params::new()),
             AppError::File(file) => match file {
                 FileError::NotFound { path } => {
                     ("file_not_found", params([("path", path.clone())]))
@@ -188,6 +189,7 @@ mod tests {
                 "store_failed",
             ),
             (AppError::StoreUnavailable, "store_unavailable"),
+            (AppError::RelationGone, "relation_gone"),
             (
                 SplitError {
                     message: message.clone(),

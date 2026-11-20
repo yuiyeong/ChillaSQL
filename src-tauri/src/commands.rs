@@ -866,6 +866,16 @@ pub async fn load_table_details(
     Ok(app.load_table_details(&connection, relation).await?.into())
 }
 
+/// 그 접속의 catalog connection으로 테이블이나 view 하나의 생성문을 읽어 조립한 text.
+#[tauri::command]
+pub async fn load_ddl(
+    app: State<'_, CoreApp>,
+    connection: String,
+    relation: u32,
+) -> CommandResult<String> {
+    Ok(app.load_ddl(&connection, relation).await?)
+}
+
 /// 결과 컬럼의 type. RowDescription이 알려 준 OID와 typmod다.
 #[derive(Debug, Deserialize)]
 pub struct TypeKeyDto {

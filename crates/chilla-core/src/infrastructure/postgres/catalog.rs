@@ -6,8 +6,9 @@ use tokio_postgres::types::ToSql;
 use super::query_error;
 use crate::application::QueryError;
 use crate::domain::{
-    Catalog, CatalogColumn, ConstraintInfo, ConstraintKind, FunctionName, IndexInfo, Relation,
-    RelationKind, TableDetails, TypeInfo,
+    Catalog, CatalogColumn, ConstraintInfo, ConstraintKind, DdlColumn, DdlConstraint, FunctionName,
+    Generated, Identity, IndexInfo, PartitionOf, Relation, RelationDdl, RelationKind, TableDetails,
+    TypeInfo,
 };
 
 /// 트리와 테이블 자동완성에서 빼는 schema. `alias`는 `pg_namespace`의 별칭이다.
@@ -178,6 +179,171 @@ pub(super) async fn read_table_details(
         indexes,
         constraints,
     })
+}
+
+/// DDL을 보이는 relation 하나. 이름은 `quote_ident`로 감싸고 schema를 붙인다. 부모는 상속 순서다
+/// (partition이면 하나뿐이고 그것이 `PARTITION OF`의 부모다).
+const DDL_RELATION_SQL: &str = "\
+    SELECT quote_ident(n.nspname) || '.' || quote_ident(c.relname), c.relkind::text, \
+           c.relpersistence = 'u', COALESCE(c.reloptions, '{}'), c.relispartition, \
+           pg_get_partkeydef(c.oid), \
+           CASE WHEN c.relispartition THEN pg_get_expr(c.relpartbound, c.oid) END, \
+           CASE WHEN c.relkind IN ('v', 'm') THEN pg_get_viewdef(c.oid, true) END, \
+           ARRAY(SELECT quote_ident(pn.nspname) || '.' || quote_ident(p.relname) \
+                 FROM pg_inherits i \
+                 JOIN pg_class p ON p.oid = i.inhparent \
+                 JOIN pg_namespace pn ON pn.oid = p.relnamespace \
+                 WHERE i.inhrelid = c.oid ORDER BY i.inhseqno), \
+           quote_literal(obj_description(c.oid, 'pg_class')) \
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace \
+    WHERE c.oid = $1 AND c.relkind IN ('r', 'p', 'v', 'm')";
+
+/// 테이블이 정의한 컬럼. partition의 컬럼과 부모에게서만 받은 컬럼(`NOT attislocal`)은 쓰지 않는다.
+/// collation은 type의 기본과 다를 때만 있고 `pg_catalog`가 아니면 schema를 붙인다.
+/// generated 컬럼의 `adbin`은 기본값이 아니라 생성 식이다.
+const DDL_COLUMNS_SQL: &str = "\
+    SELECT quote_ident(a.attname), format_type(a.atttypid, a.atttypmod), \
+           CASE WHEN a.attcollation <> t.typcollation THEN \
+               CASE WHEN cn.nspname = 'pg_catalog' THEN '' \
+                    ELSE quote_ident(cn.nspname) || '.' END || quote_ident(co.collname) \
+           END, \
+           a.attnotnull, COALESCE(a.attnum = ANY (pk.indkey), false), \
+           a.attidentity::text, a.attgenerated::text, pg_get_expr(d.adbin, d.adrelid) \
+    FROM pg_class c \
+    JOIN pg_attribute a ON a.attrelid = c.oid \
+    JOIN pg_type t ON t.oid = a.atttypid \
+    LEFT JOIN pg_collation co ON co.oid = a.attcollation \
+    LEFT JOIN pg_namespace cn ON cn.oid = co.collnamespace \
+    LEFT JOIN pg_attrdef d ON d.adrelid = a.attrelid AND d.adnum = a.attnum \
+    LEFT JOIN pg_index pk ON pk.indrelid = c.oid AND pk.indisprimary \
+    WHERE c.oid = $1 AND c.relkind IN ('r', 'p') AND NOT c.relispartition \
+      AND a.attnum > 0 AND NOT a.attisdropped AND a.attislocal \
+    ORDER BY a.attnum";
+
+/// 이 relation이 정의한 제약조건. PostgreSQL 18의 NOT NULL 제약(`n`)은 컬럼의 NOT NULL로 쓰고,
+/// 부모나 partitioned table에게서 받은 것(`NOT conislocal`)은 쓰지 않는다.
+const DDL_CONSTRAINTS_SQL: &str = "\
+    SELECT quote_ident(conname), pg_get_constraintdef(oid) \
+    FROM pg_constraint \
+    WHERE conrelid = $1 AND conislocal AND contype IN ('p', 'u', 'f', 'c', 'x') \
+    ORDER BY position(contype::text IN 'pufcx'), conname";
+
+/// 제약조건이 만든 인덱스와 partition이 부모의 인덱스에 attach한 인덱스는 뺀다.
+/// partitioned table의 인덱스는 `ON ONLY`를 뗀다. `ON ONLY`로 만들면 partition에 내려가지 않아
+/// 부모 인덱스가 invalid로 남는다. 첫 `ON ONLY`는 `CREATE INDEX name` 바로 뒤다.
+const DDL_INDEXES_SQL: &str = "\
+    SELECT CASE WHEN c.relkind = 'p' \
+                THEN regexp_replace(pg_get_indexdef(i.indexrelid), ' ON ONLY ', ' ON ') \
+                ELSE pg_get_indexdef(i.indexrelid) END \
+    FROM pg_index i \
+    JOIN pg_class c ON c.oid = i.indrelid \
+    JOIN pg_class ic ON ic.oid = i.indexrelid \
+    WHERE i.indrelid = $1 \
+      AND NOT EXISTS (SELECT 1 FROM pg_constraint k WHERE k.conindid = i.indexrelid \
+                      AND k.conrelid = i.indrelid AND k.contype IN ('p', 'u', 'x')) \
+      AND NOT EXISTS (SELECT 1 FROM pg_inherits h WHERE h.inhrelid = i.indexrelid) \
+    ORDER BY ic.relname";
+
+/// partition이 부모에게서 받은 trigger(`tgparentid`)는 뺀다. `pretty`를 쓰지 않는 것은 그래야
+/// search_path에 있는 테이블에도 schema를 붙이기 때문이다.
+const DDL_TRIGGERS_SQL: &str = "\
+    SELECT pg_get_triggerdef(oid) FROM pg_trigger \
+    WHERE tgrelid = $1 AND NOT tgisinternal AND tgparentid = 0 \
+    ORDER BY tgname";
+
+const DDL_COLUMN_COMMENTS_SQL: &str = "\
+    SELECT quote_ident(attname), quote_literal(col_description(attrelid, attnum)) \
+    FROM pg_attribute \
+    WHERE attrelid = $1 AND attnum > 0 AND NOT attisdropped \
+      AND col_description(attrelid, attnum) IS NOT NULL \
+    ORDER BY attnum";
+
+/// relation 하나의 DDL 재료. 테이블, partitioned table, view, materialized view가 아니면 `None`이다.
+pub(super) async fn read_ddl(
+    client: &Client,
+    relation: u32,
+) -> Result<Option<RelationDdl>, QueryError> {
+    let params: [&(dyn ToSql + Sync); 1] = [&relation];
+    let (relations, columns, constraints, indexes, triggers, column_comments) = tokio::try_join!(
+        query(client, DDL_RELATION_SQL, &params),
+        query(client, DDL_COLUMNS_SQL, &params),
+        query(client, DDL_CONSTRAINTS_SQL, &params),
+        query(client, DDL_INDEXES_SQL, &params),
+        query(client, DDL_TRIGGERS_SQL, &params),
+        query(client, DDL_COLUMN_COMMENTS_SQL, &params),
+    )?;
+    let Some(row) = relations.first() else {
+        return Ok(None);
+    };
+    let kind: String = row.get(1);
+    let is_partition: bool = row.get(4);
+    let mut parents: Vec<String> = row.get(8);
+    // partition의 부모는 하나다. 같은 쿼리에서 읽었으므로 비어 있지 않다.
+    let partition_of = match is_partition && !parents.is_empty() {
+        true => Some(PartitionOf {
+            parent: parents.remove(0),
+            bound: row.get(6),
+        }),
+        false => None,
+    };
+    let strings = |rows: Vec<tokio_postgres::Row>| -> Vec<String> {
+        rows.iter().map(|row| row.get(0)).collect()
+    };
+    Ok(Some(RelationDdl {
+        name: row.get(0),
+        kind: relation_kind(&kind),
+        unlogged: row.get(2),
+        columns: columns.iter().map(ddl_column).collect(),
+        constraints: constraints
+            .iter()
+            .map(|row| DdlConstraint {
+                name: row.get(0),
+                definition: row.get(1),
+            })
+            .collect(),
+        inherits: parents,
+        partition_of,
+        partition_by: row.get(5),
+        options: row.get(3),
+        view_definition: row.get(7),
+        indexes: strings(indexes),
+        triggers: strings(triggers),
+        comment: row.get(9),
+        column_comments: column_comments
+            .iter()
+            .map(|row| (row.get(0), row.get(1)))
+            .collect(),
+    }))
+}
+
+fn ddl_column(row: &tokio_postgres::Row) -> DdlColumn {
+    let identity: String = row.get(5);
+    let generated: String = row.get(6);
+    let expression: Option<String> = row.get(7);
+    let (default, generated) = match generated.as_str() {
+        "s" | "v" => (
+            None,
+            Some(Generated {
+                expression: expression.unwrap_or_default(),
+                stored: generated == "s",
+            }),
+        ),
+        _ => (expression, None),
+    };
+    DdlColumn {
+        name: row.get(0),
+        type_name: row.get(1),
+        collation: row.get(2),
+        not_null: row.get(3),
+        primary_key: row.get(4),
+        default,
+        identity: match identity.as_str() {
+            "a" => Some(Identity::Always),
+            "d" => Some(Identity::ByDefault),
+            _ => None,
+        },
+        generated,
+    }
 }
 
 pub(super) async fn describe_types(

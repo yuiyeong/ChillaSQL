@@ -3,6 +3,7 @@
 mod catalog;
 mod connection;
 mod danger;
+mod ddl;
 mod password;
 mod project;
 mod query;
@@ -20,6 +21,9 @@ pub use connection::{
     ConnectionColor, ConnectionProfile, MAX_STATEMENT_TIMEOUT_SECS, ProfileError, SslMode,
 };
 pub use danger::Danger;
+pub use ddl::{
+    DdlColumn, DdlConstraint, Generated, Identity, PartitionOf, RelationDdl, render_ddl,
+};
 pub use password::Password;
 pub use project::Project;
 pub use query::{

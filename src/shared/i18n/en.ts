@@ -383,6 +383,8 @@ export const en = {
   "error.store_failed": "Could not use the app database: {message}",
   "error.store_unavailable":
     "The app database could not be opened, so recent projects and tabs are not kept",
+  "error.relation_gone":
+    "The table or view no longer exists. Refresh the schema",
   "error.file_not_found": "{path} was not found",
   "error.file_exists": "{path} already exists",
   "error.file_changed": "{path} was changed on disk after it was opened",

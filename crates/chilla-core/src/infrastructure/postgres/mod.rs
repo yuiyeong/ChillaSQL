@@ -23,7 +23,7 @@ use tokio_postgres::{Client, Config, NoTls, SimpleQueryMessage};
 
 use crate::application::{ConnectError, Connector, DbConnection, QueryError};
 use crate::domain::{
-    Catalog, ConnectionProfile, Password, SslMode, TableDetails, TxStatus, TypeInfo,
+    Catalog, ConnectionProfile, Password, RelationDdl, SslMode, TableDetails, TxStatus, TypeInfo,
 };
 pub use cancel::PgCancel;
 pub use rows::PgRows;
@@ -320,6 +320,10 @@ impl DbConnection for PgConnection {
 
     async fn read_table_details(&self, relation: u32) -> Result<TableDetails, QueryError> {
         catalog::read_table_details(self.catalog_client(), relation).await
+    }
+
+    async fn read_ddl(&self, relation: u32) -> Result<Option<RelationDdl>, QueryError> {
+        catalog::read_ddl(self.catalog_client(), relation).await
     }
 
     async fn describe_types(&self, types: &[(u32, i32)]) -> Result<Vec<TypeInfo>, QueryError> {

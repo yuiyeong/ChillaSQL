@@ -102,6 +102,7 @@ pub fn run() {
             commands::close_session,
             commands::load_catalog,
             commands::load_table_details,
+            commands::load_ddl,
             commands::describe_types,
             commands::close_catalog,
             commands::split_statements,

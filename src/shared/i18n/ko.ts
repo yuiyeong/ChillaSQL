@@ -385,6 +385,8 @@ export const ko: Record<MessageKey, string> = {
   "error.store_failed": "앱 데이터베이스를 사용할 수 없습니다: {message}",
   "error.store_unavailable":
     "앱 데이터베이스를 열 수 없어 최근 프로젝트와 탭을 보관할 수 없습니다",
+  "error.relation_gone":
+    "테이블이나 뷰가 더 이상 없습니다. 스키마를 새로 고치세요",
   "error.file_not_found": "{path} 파일이 없습니다",
   "error.file_exists": "{path} 파일이 이미 있습니다",
   "error.file_changed": "{path} 파일을 연 뒤 디스크에서 바뀌었습니다",

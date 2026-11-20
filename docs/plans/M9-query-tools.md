@@ -564,7 +564,7 @@ git commit -m "feat: EXPLAIN 결과를 tree로 그리고 toolbar의 Explain으�
   function loadDdl(connection: string, relation: number): Promise<string>;
   ```
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 `domain/ddl.rs` unit:
 - `renders_the_design_example`: Tools M9의 users(identity, NOT NULL, `DEFAULT now()`, jsonb, `CONSTRAINT users_pkey PRIMARY KEY (id)`, unique index)가 이름을 13칸으로 맞추고 identity·PK 컬럼에 NOT NULL을 쓰지 않는다.
@@ -576,22 +576,22 @@ git commit -m "feat: EXPLAIN 결과를 tree로 그리고 toolbar의 Explain으�
 - `unknown_oid_is_none`.
 - `quoted_names`: `"Order Items"`, 한글 컬럼 이름이 따옴표와 함께 나온다.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `cargo test --workspace ddl`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - 읽기는 `catalog.rs`에 SQL을 둔다: relation(`pg_class`의 `relkind`, `relpersistence`, `reloptions`, `relispartition`, `pg_get_partkeydef`, `pg_get_expr(relpartbound, oid)`), 컬럼(`attnum > 0 AND NOT attisdropped`, partition이 아니면 `attislocal`인 것만, `format_type`, 타입의 기본과 다른 `attcollation`, `attidentity`, `attgenerated`, `pg_get_expr(adbin)`), 제약(`conislocal`, contype `p u f c x`, `pg_get_constraintdef`), 인덱스(`pg_index`에서 `conindid`로 쓰이지 않은 것, partition이면 부모 인덱스에 attach된 것 제외), trigger(`NOT tgisinternal`), comment(`obj_description`, `col_description`을 `quote_literal`로), `pg_inherits`의 부모, view는 `pg_get_viewdef(oid, true)`. 이름은 `quote_ident(nspname) || '.' || quote_ident(relname)`.
 - 읽기는 M7의 `read_catalog_with`로 catalog connection을 쓴다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add crates src-tauri src

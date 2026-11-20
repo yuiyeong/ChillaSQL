@@ -19,6 +19,7 @@
   "catalog_failed": ["message"],
   "store_failed": ["message"],
   "store_unavailable": [],
+  "relation_gone": [],
   "file_not_found": ["path"],
   "file_exists": ["path"],
   "file_changed": ["path"],

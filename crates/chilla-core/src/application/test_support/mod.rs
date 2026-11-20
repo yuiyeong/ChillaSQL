@@ -23,7 +23,8 @@ use super::{
 };
 use crate::domain::{
     Catalog, ConnectionColor, ConnectionProfile, Danger, FileStamp, ParameterSpan, Password,
-    Project, QueryEvent, Row, SqlFile, SqlPath, StatementSpan, TableDetails, TypeInfo, WriteMode,
+    Project, QueryEvent, RelationDdl, Row, SqlFile, SqlPath, StatementSpan, TableDetails, TypeInfo,
+    WriteMode,
 };
 
 pub(crate) fn profile(name: &str) -> ConnectionProfile {
@@ -379,6 +380,11 @@ impl FakeConnector {
             .unwrap()
             .details
             .insert(relation, details);
+    }
+
+    /// 만든 연결들의 `read_ddl(relation)`이 돌려줄 값. 없으면 `None`이다.
+    pub(crate) fn set_ddl(&self, relation: u32, ddl: RelationDdl) {
+        self.catalog.lock().unwrap().ddls.insert(relation, ddl);
     }
 
     /// 만든 연결들의 `describe_types`가 아는 type.

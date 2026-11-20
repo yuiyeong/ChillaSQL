@@ -22,6 +22,7 @@ use crate::domain::{
     Catalog, ConnectionProfile, Danger, EndResult, FileStamp, ParameterSpan, Password,
     ProfileError, Project, QueryId, QueryLimits, SessionId, SessionInfo, SessionState, SqlFile,
     SqlPath, SqlPathError, StatementSpan, TableDetails, TxEnd, TxMode, TypeInfo, WriteMode,
+    render_ddl,
 };
 
 /// 쿼리 기록 검색이 돌려주는 최대 개수.
@@ -74,6 +75,8 @@ pub enum AppError {
     Store(#[from] StoreError),
     #[error("The app database could not be opened, so recent projects and tabs are not kept")]
     StoreUnavailable,
+    #[error("The table or view no longer exists. Refresh the schema")]
+    RelationGone,
 }
 
 pub struct App<C: Connector, T: TunnelRunner> {
@@ -512,6 +515,16 @@ impl<C: Connector, T: TunnelRunner> App<C, T> {
             .await
     }
 
+    /// 그 접속의 catalog connection으로 relation 하나의 생성문을 읽어 조립한다. 지워졌거나 DDL을
+    /// 보이지 않는 종류의 relation이면 `RelationGone`이다.
+    pub async fn load_ddl(&self, connection: &str, relation: u32) -> Result<String, AppError> {
+        let ddl = self
+            .read_catalog_with(connection, |db| Box::pin(db.read_ddl(relation)))
+            .await?;
+        ddl.map(|ddl| render_ddl(&ddl))
+            .ok_or(AppError::RelationGone)
+    }
+
     /// 그 접속의 catalog connection으로 결과 컬럼의 type 이름과 category를 읽는다.
     /// 모르는 OID는 결과에 없다.
     pub async fn describe_types(
@@ -861,8 +874,8 @@ mod tests {
     };
     use crate::domain::{
         Catalog, ConnectionColor, EndOutcome, EndResult, FileStamp, ProfileError, QueryEvent,
-        QueryOutcome, SessionState, SslMode, StatementSpan, TableDetails, TxEnd, TxStatus,
-        TypeInfo, WriteMode,
+        QueryOutcome, RelationDdl, RelationKind, SessionState, SslMode, StatementSpan,
+        TableDetails, TxEnd, TxStatus, TypeInfo, WriteMode,
     };
     use crate::domain::{TunnelEvent, TunnelFailure};
 
@@ -2136,6 +2149,61 @@ mod tests {
 
         assert_eq!(types, Ok(vec![integer]));
         assert_eq!(f.connector.requests().len(), 1);
+    }
+
+    fn users_ddl() -> RelationDdl {
+        RelationDdl {
+            name: "public.users".into(),
+            kind: RelationKind::Table,
+            unlogged: false,
+            columns: vec![],
+            constraints: vec![],
+            inherits: vec![],
+            partition_of: None,
+            partition_by: None,
+            options: vec![],
+            view_definition: None,
+            indexes: vec![],
+            triggers: vec![],
+            comment: Some("'people'".into()),
+            column_comments: vec![],
+        }
+    }
+
+    #[tokio::test]
+    async fn load_ddl_renders_what_the_catalog_connection_read() {
+        let f = opened().await;
+        f.connector.set_ddl(7, users_ddl());
+
+        f.app.load_catalog("local").await.unwrap();
+        let ddl = f.app.load_ddl("local", 7).await;
+
+        assert_eq!(
+            ddl,
+            Ok("CREATE TABLE public.users ();
+COMMENT ON TABLE public.users IS 'people';"
+                .into())
+        );
+        assert_eq!(f.connector.requests().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn load_ddl_of_a_missing_relation_is_relation_gone() {
+        let f = opened().await;
+        assert_eq!(
+            f.app.load_ddl("local", 7).await,
+            Err(AppError::RelationGone)
+        );
+    }
+
+    #[tokio::test]
+    async fn load_ddl_reconnects_once_when_the_catalog_connection_was_lost() {
+        let f = opened().await;
+        f.connector.set_ddl(7, users_ddl());
+        f.connector.fail_next_catalog(lost());
+
+        assert!(f.app.load_ddl("local", 7).await.is_ok());
+        assert_eq!(f.connector.requests().len(), 2);
     }
 
     #[tokio::test(start_paused = true)]

@@ -35,6 +35,7 @@ import {
   closeCatalog,
   describeTypes,
   loadCatalog,
+  loadDdl,
   loadSettings,
   loadTableDetails,
   quitApp,
@@ -96,6 +97,12 @@ test("command 이름과 인자 key를 그대로 보낸다", async () => {
 
   await loadTableDetails("local", 16385);
   expect(invokeMock).toHaveBeenLastCalledWith("load_table_details", {
+    connection: "local",
+    relation: 16385,
+  });
+
+  await loadDdl("local", 16385);
+  expect(invokeMock).toHaveBeenLastCalledWith("load_ddl", {
     connection: "local",
     relation: 16385,
   });

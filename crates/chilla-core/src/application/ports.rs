@@ -5,8 +5,8 @@ use std::path::{Path, PathBuf};
 
 use crate::domain::{
     Catalog, Column, ConnectionProfile, Danger, EndOutcome, FileStamp, ParameterSpan, Password,
-    ProfileError, Project, QueryOutcome, Row, ServerError, SqlFile, SqlPath, StatementSpan,
-    TableDetails, TxStatus, TypeInfo, WriteMode,
+    ProfileError, Project, QueryOutcome, RelationDdl, Row, ServerError, SqlFile, SqlPath,
+    StatementSpan, TableDetails, TxStatus, TypeInfo, WriteMode,
 };
 
 /// 프로젝트 디렉토리의 `chilla.toml`을 읽고 쓴다.
@@ -137,6 +137,12 @@ pub trait DbConnection: Send + Sync + 'static {
         &self,
         relation: u32,
     ) -> impl Future<Output = Result<TableDetails, QueryError>> + Send;
+    /// 테이블, partitioned table, view, materialized view 하나의 DDL 재료. 없는 OID나 다른 종류의
+    /// relation이면 `None`이다. 연결이 끊겨 있으면 `ConnectionLost`다.
+    fn read_ddl(
+        &self,
+        relation: u32,
+    ) -> impl Future<Output = Result<Option<RelationDdl>, QueryError>> + Send;
     /// 결과 컬럼의 `(type OID, typmod)`마다 이름과 category. 모르는 OID(0 포함)는 결과에 없다.
     /// 연결이 끊겨 있으면 `ConnectionLost`다.
     fn describe_types(
