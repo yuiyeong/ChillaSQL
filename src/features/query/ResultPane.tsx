@@ -327,6 +327,8 @@ export const ResultPane = memo(function ResultPane({
     }
     case "rejected": {
       const { rejection } = state;
+      // 여러 문장의 실행 가운데 보내지 못한 문장이면 결과 탭과 멈춘 안내를 둔다.
+      if (tabs !== null) header = tabs;
       const { retry } = rejection;
       if (retry !== undefined) {
         body = (
@@ -347,6 +349,9 @@ export const ResultPane = memo(function ResultPane({
             <p className="text-body text-fg">{state.rejection.title}</p>
             {state.rejection.detail !== null && (
               <p className="text-small text-fg-2">{state.rejection.detail}</p>
+            )}
+            {stopped !== null && (
+              <p className="text-small text-fg-2">{stopped}</p>
             )}
           </div>
         </MessageBlock>
@@ -493,8 +498,10 @@ function ScriptTabs({
     () => steps.map((step) => resultLabel(step.sql)),
     [steps],
   );
+  // 서버 오류로 끝났거나 보내지 못한 문장은 Error다.
   const failed =
-    current?.status === "finished" && current.outcome.outcome === "failed";
+    current?.status === "rejected" ||
+    (current?.status === "finished" && current.outcome.outcome === "failed");
   return (
     <div
       role="tablist"

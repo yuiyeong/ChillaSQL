@@ -421,6 +421,7 @@ function Grid({
           top={totalSize - FOOTER_HEIGHT}
           fetching={fetch === "fetching"}
           endRows={endRows}
+          received={firstRow + rows.length}
         />
       </div>
     </div>
@@ -548,18 +549,32 @@ const Row = memo(function Row({
   );
 });
 
+/**
+ * 표 끝 줄. 끝난 결과는 전체 행 수다. 끝까지 읽은 앞 문장(`drain`)은 첫 batch만 받았으므로 받은 행이
+ * 전체보다 적으면 그만큼만 보인다고 쓴다.
+ */
 function Footer({
   top,
   fetching,
   endRows,
+  received,
 }: {
   top: number;
   fetching: boolean;
   endRows: number | null;
+  /** 지금까지 받은 행 수(버린 앞 행 포함) */
+  received: number;
 }) {
   const content =
     endRows !== null ? (
-      tc("result.end", endRows)
+      received < endRows ? (
+        t("result.firstRowsOf", {
+          shown: formatCount(received),
+          total: formatCount(endRows),
+        })
+      ) : (
+        tc("result.end", endRows)
+      )
     ) : fetching ? (
       <>
         <SpinnerIcon />

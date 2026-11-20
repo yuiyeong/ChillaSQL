@@ -1814,3 +1814,49 @@ test("select_step_shows_a_step_that_has_a_result", async () => {
   useRuns.getState().selectStep("t", 1);
   expect(scriptOf("t").selected).toBe(1);
 });
+
+test("a_rejected_step_keeps_the_earlier_results", async () => {
+  vi.mocked(executeQuery)
+    .mockResolvedValueOnce(7)
+    .mockRejectedValueOnce(
+      new CommandError("unknown_session", "세션이 없습니다"),
+    );
+  await useRuns.getState().run("t", script("SELECT 1", "SELECT 2", "SELECT 3"));
+  complete(0, "idle");
+
+  await vi.waitFor(() => expect(runOf("t").status).toBe("rejected"));
+  expect(runOf("t")).toEqual({
+    status: "rejected",
+    rejection: { title: "세션이 없습니다", detail: null },
+  });
+  expect(scriptOf("t")).toMatchObject({
+    current: 1,
+    selected: 1,
+    stoppedAt: 1,
+  });
+  expect(scriptOf("t").done).toHaveLength(1);
+  expect(executeQuery).toHaveBeenCalledTimes(2);
+});
+
+test("an_end_between_statements_stops_the_script", async () => {
+  vi.mocked(endTransaction).mockResolvedValue({ outcome: "ended", tx: "idle" });
+  setTabMode("t1", "manual");
+  const answer = deferred<boolean>();
+  await useRuns
+    .getState()
+    .run(
+      "t1",
+      script("UPDATE a SET b = 1", "UPDATE a SET b = 2"),
+      () => answer.promise,
+    );
+  complete(0, "in_transaction");
+
+  // 다음 문장의 확인을 기다리는 동안 Commit이 끝났다.
+  await expect(useRuns.getState().endTransaction("t1", "commit")).resolves.toBe(
+    true,
+  );
+  answer.resolve(true);
+
+  await vi.waitFor(() => expect(scriptOf("t1").stoppedAt).toBe(0));
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+});

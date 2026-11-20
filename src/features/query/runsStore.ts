@@ -272,6 +272,9 @@ export const useRuns = create<RunsState>()((set, get) => {
   const executions = new Map<string, Execution>();
   // 탭의 트랜잭션에 null이 아닌 tx를 마지막으로 반영한 실행의 token.
   const txReads = new Map<string, number>();
+  // 탭마다 마지막으로 보낸 Commit이나 Rollback의 번호. 여러 문장의 실행은 그 사이 끝내기가 있었으면
+  // 다음 문장을 보내지 않는다.
+  const ends = new Map<string, number>();
   // 세션이 끊겨(connection_lost, unknown_session) 잊은 탭. 다음 세션이 열리면 Reconnected를 알린다.
   const lost = new Set<string>();
 
@@ -407,6 +410,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     sessions.delete(tabId);
     executions.delete(tabId);
     txReads.delete(tabId);
+    ends.delete(tabId);
     lost.delete(tabId);
     return slot;
   }
@@ -481,6 +485,7 @@ export const useRuns = create<RunsState>()((set, get) => {
           : undefined,
       );
       const current = () => tokens.get(tabId) === token;
+      const endBefore = ends.get(tabId);
 
       const slot = slotFor(tabId, connection);
       if (slot.id === null) setRun(tabId, { status: "connecting" });
@@ -627,7 +632,17 @@ export const useRuns = create<RunsState>()((set, get) => {
           await queryId;
         } catch (error) {
           if (isCommandError(error, "unknown_session")) forgetLost(tabId, slot);
-          if (current()) reject(tabId, rejectionOf(error));
+          if (!current()) return;
+          if (tabId in get().scripts) {
+            // 앞 문장의 결과(Auto면 이미 Commit됨)는 남기고 이 문장의 결과로 이유를 보인다.
+            setRun(tabId, {
+              status: "rejected",
+              rejection: rejectionOf(error),
+            });
+            stopScript(tabId, index);
+          } else {
+            reject(tabId, rejectionOf(error));
+          }
         }
       };
 
@@ -642,10 +657,10 @@ export const useRuns = create<RunsState>()((set, get) => {
           }
         }
         if (!current()) return;
-        // 끝내기를 기다리는 중이거나 세션이 끊겼으면 다음 문장을 보내지 않는다.
+        // 실행을 시작한 뒤 Commit이나 Rollback을 보냈거나(끝났어도) 세션이 끊겼으면 다음 문장을 보내지 않는다.
         if (
           !confirmed ||
-          get().ending[tabId] !== undefined ||
+          ends.get(tabId) !== endBefore ||
           sessions.get(tabId) !== slot ||
           slot.stale
         ) {
@@ -699,6 +714,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       if (!(tabId in get().transactions)) return true;
       const call = {};
       setEntry("ending", tabId, call);
+      bump(ends, tabId);
       // 행을 받다 만 쿼리는 끝내기가 버린다. 그 discarded는 다음 쿼리가 아니라 끝내기 때문이다.
       if (get().runs[tabId]?.status === "running") {
         setEntry("discardedByEnd", tabId, true);

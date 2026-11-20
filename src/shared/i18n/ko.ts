@@ -131,6 +131,7 @@ export const ko: Record<MessageKey, string> = {
 
   "run.noConnection": "쿼리를 실행하려면 접속을 선택하십시오.",
   "run.emptySelection": "실행할 내용 없음",
+  "run.emptyFile": "실행할 문장 없음",
   "run.noStatementAtCursor": "커서 위치에 문장 없음",
   "run.splitFailed.title": "문장을 찾을 수 없습니다",
   "run.splitFailed.detail":
@@ -256,6 +257,7 @@ export const ko: Record<MessageKey, string> = {
   "result.dropped": "1–{end}행은 버렸습니다 · 다시 실행하면 볼 수 있습니다",
   "result.runAgain": "다시 실행",
   "result.fetchingMore": "다음 500행 가져오는 중",
+  "result.firstRowsOf": "{total}행 중 처음 {shown}행",
   "result.end.one": "끝 · 1행",
   "result.end.other": "끝 · {count}행",
   "result.resizeColumn": "{name} 크기 조절",

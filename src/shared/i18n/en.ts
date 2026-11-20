@@ -130,6 +130,7 @@ export const en = {
 
   "run.noConnection": "Choose a connection to run queries.",
   "run.emptySelection": "Nothing to run",
+  "run.emptyFile": "Nothing to run",
   "run.noStatementAtCursor": "No statement at the cursor",
   "run.splitFailed.title": "Couldn't find a statement",
   "run.splitFailed.detail":
@@ -255,6 +256,7 @@ export const en = {
   "result.dropped": "Rows 1–{end} were dropped · run again to see them",
   "result.runAgain": "Run again",
   "result.fetchingMore": "Fetching next 500 rows",
+  "result.firstRowsOf": "First {shown} of {total} rows",
   "result.end.one": "End · 1 row",
   "result.end.other": "End · {count} rows",
   "result.resizeColumn": "Resize {name}",

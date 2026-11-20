@@ -211,6 +211,8 @@ test("끝나면 End 줄과 전체 행 수를 보여 준다", () => {
     { outcome: "completed", rows: 1240 },
     {
       columns: resultColumns("id", "name"),
+      // 끝난 결과는 모든 행을 받았다. 앞 행은 보관 상한으로 버렸다.
+      firstRow: 1237,
       rows: someRows,
       elapsedMicros: 41_000,
     },
@@ -1195,6 +1197,65 @@ describe("여러 문장", () => {
     // 실행하지 않은 문장은 고를 수 없다.
     fireEvent.click(screen.getByRole("tab", { name: "4 Not run" }));
     expect(useRuns.getState().scripts.t.selected).toBe(1);
+  });
+
+  test("a_drained_statement_says_how_many_rows_it_shows", () => {
+    // 끝까지 읽은 앞 문장은 첫 batch만 받았다.
+    const drained: RunState = {
+      ...users,
+      outcome: { outcome: "completed", rows: 1200 },
+    } as RunState;
+    useRuns.setState({
+      runs: { t: failed },
+      scripts: {
+        t: {
+          steps,
+          done: [drained, updated],
+          current: 2,
+          selected: 0,
+          stoppedAt: 2,
+        },
+      },
+    });
+    render(<ResultPane tabId="t" hasConnection />);
+
+    expect(screen.getByText("First 3 of 1,200 rows")).toBeInTheDocument();
+    expect(screen.queryByText(/^End/)).toBeNull();
+  });
+
+  test("a_rejected_statement_keeps_the_result_tabs", () => {
+    useRuns.setState({
+      runs: {
+        t: {
+          status: "rejected",
+          rejection: { title: "Session not found", detail: null },
+        },
+      },
+      scripts: {
+        t: {
+          steps,
+          done: [users, updated],
+          current: 2,
+          selected: 2,
+          stoppedAt: 2,
+        },
+      },
+    });
+    render(<ResultPane tabId="t" hasConnection />);
+
+    expect(tabs().map((tab) => tab.name)).toEqual([
+      "1 SELECT users",
+      "2 UPDATE users",
+      "3 Error",
+      "4 Not run",
+    ]);
+    expect(screen.getByText("Session not found")).toBeInTheDocument();
+    expect(
+      screen.getByText("Stopped at statement 3. Statement 4 was not run."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "1 SELECT users" }));
+    expect(screen.getByRole("grid")).toBeInTheDocument();
   });
 
   test("statements_after_the_running_one_wait_with_their_names", () => {

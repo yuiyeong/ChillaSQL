@@ -152,7 +152,7 @@ async function fileToRun(tabId: string): Promise<ScriptStep[] | Rejection> {
     return splitRejection(error);
   }
   if (spans.length === 0) {
-    return { title: t("run.emptySelection"), detail: null };
+    return { title: t("run.emptyFile"), detail: null };
   }
   return spans.map((span) => stepOf(text, span));
 }
