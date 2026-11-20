@@ -320,6 +320,8 @@ export const en = {
   "edit.txFailed": "Roll back the failed transaction first.",
   "edit.busy":
     "Another query is still running on this session. Nothing was applied.",
+  "edit.noSession":
+    "This tab has no open session. Run the query again, then edit. Nothing was applied.",
   "edit.notEditable.readOnly": "Not editable: the connection is read-only.",
   "edit.notEditable.running":
     "Not editable while rows are still coming. Cancel keeps the rows received so far.",

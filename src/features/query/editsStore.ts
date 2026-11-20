@@ -2,7 +2,7 @@ import { create } from "zustand";
 import type { ApplyResult, Cell } from "../../shared/api/types";
 import { formatCount, t, tc } from "../../shared/i18n/t";
 import type { Changes, UpdateStatement } from "./editSql";
-import { useRuns } from "./runsStore";
+import { applyBlocked, useRuns } from "./runsStore";
 
 /** 탭의 보이는 결과(`runKey`)에서 고친 셀. Apply하기 전까지 `result.rows`는 그대로다. */
 export interface TabEdits {
@@ -15,7 +15,7 @@ interface EditsState {
   edits: Record<string, TabEdits>;
   /** Apply의 답을 기다리는 탭 */
   applying: Record<string, true>;
-  /** tab id → Apply하지 못한 이유(note 문구). 그 탭의 다음 Apply나 편집이 지운다. */
+  /** tab id → Apply하지 못한 이유(note 문구). 그 탭의 다음 Apply의 답이나 편집이 지운다. */
   failure: Record<string, string>;
   /**
    * 셀 하나를 고친다. 다른 runKey의 변경은 버리고 시작한다. 원래 값과 같으면 그 변경을 지운다.
@@ -34,9 +34,11 @@ interface EditsState {
   /** 같은 탭의 다음 실행과 release가 묻지 않고 버린다. */
   drop(tabId: string): void;
   /**
-   * 그 탭의 고친 셀을 `statements`(미리 보기의 UPDATE 문)로 반영한다. 반영했으면 고친 셀을 지우고
-   * toast 문구(`Updated 2 rows`)를 돌려준다. 반영하지 못했으면 고친 셀을 두고 이유를 `failure`에
-   * 둔다(보내지 않았으면 이유 없이). 고친 셀이 없거나 Apply를 기다리는 중이면 보내지 않는다.
+   * 그 탭의 고친 셀을 `statements`(미리 보기의 UPDATE 문)로 반영한다. 반영했으면 보낸 셀 가운데
+   * 보낸 값 그대로인 것만 지우고(답을 기다리는 동안 고친 셀은 남는다) toast 문구(`Updated 2 rows`)를
+   * 돌려준다. 반영하지 못했으면 고친 셀을 두고 이유를 `failure`에 둔다. 세션이 없어 보내지 못한 것도
+   * 이유를 둔다(실행 중이거나 끝내기를 기다려 보내지 않았으면 두지 않는다). 고친 셀이 없거나 Apply를
+   * 기다리는 중이면 보내지 않는다.
    */
   apply(tabId: string, statements: UpdateStatement[]): Promise<string | null>;
   reset(): void;
@@ -92,6 +94,27 @@ function failureText(
     case "client_error":
       return t("edit.failedCommit", { message: result.message });
   }
+}
+
+/**
+ * Apply가 반영한 셀을 지운 Changes. `statements`의 셀 가운데 지금 값이 보낸 값(`sent`)과 같은 것만
+ * 지운다. 답을 기다리는 동안 다시 고친 셀과 보내지 않은 셀은 남는다.
+ */
+function withoutApplied(
+  changes: Changes,
+  sent: Changes,
+  statements: UpdateStatement[],
+): Changes {
+  let next = changes;
+  for (const { row, attnums } of statements) {
+    for (const attnum of attnums) {
+      const value = sent.get(row)?.get(attnum);
+      if (value !== undefined && next.get(row)?.get(attnum) === value) {
+        next = changed(next, row, attnum, undefined);
+      }
+    }
+  }
+  return next;
 }
 
 /** `row`행의 `attnum`을 `value`로 두거나(undefined면 지운) 새 Changes. */
@@ -163,10 +186,8 @@ export const useEdits = create<EditsState>()((set, get) => ({
   async apply(tabId, statements) {
     const current = get().edits[tabId];
     if (current === undefined || get().applying[tabId]) return null;
-    set((state) => ({
-      applying: { ...state.applying, [tabId]: true },
-      failure: without(state.failure, tabId),
-    }));
+    // 앞 Apply의 이유는 답이 올 때까지 둔다.
+    set((state) => ({ applying: { ...state.applying, [tabId]: true } }));
     let result: ApplyResult | null;
     try {
       result = await useRuns
@@ -175,15 +196,29 @@ export const useEdits = create<EditsState>()((set, get) => ({
     } finally {
       set((state) => ({ applying: without(state.applying, tabId) }));
     }
-    // 그 사이 다시 실행했거나 release해서 고친 셀이 다른 결과의 것이 되었으면 건드리지 않는다.
-    if (result === null || get().edits[tabId]?.runKey !== current.runKey) {
-      return null;
-    }
-    if (result.outcome === "applied") {
-      get().drop(tabId);
+    // 그 사이 다시 실행했거나 release해서(Revert도) 고친 셀이 이 결과의 것이 아니면 건드리지 않는다.
+    if (get().edits[tabId]?.runKey !== current.runKey) return null;
+    if (result?.outcome === "applied") {
+      set((state) => {
+        const latest = state.edits[tabId]!;
+        const changes = withoutApplied(
+          latest.changes,
+          current.changes,
+          statements,
+        );
+        return {
+          edits: withChanges(state.edits, tabId, latest.runKey, changes),
+          failure: without(state.failure, tabId),
+        };
+      });
       return tc("edit.updated", statements.length);
     }
-    const text = failureText(result, statements);
+    // 실행 중이거나 끝내기를 기다려 보내지 않은 것은 버튼이 막으므로 이유를 두지 않는다. 그 밖의 null은 세션이 없다.
+    if (result === null && applyBlocked(useRuns.getState(), tabId)) {
+      return null;
+    }
+    const text =
+      result === null ? t("edit.noSession") : failureText(result, statements);
     set((state) => ({ failure: { ...state.failure, [tabId]: text } }));
     return null;
   },

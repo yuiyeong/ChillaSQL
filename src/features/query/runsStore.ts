@@ -263,6 +263,19 @@ export function endable(
 }
 
 /**
+ * 그 탭에 지금 Apply를 보내지 않는지. 실행 중이거나(연결 중 포함) 끝내기를 기다리는 중이다. 여러 문장의
+ * 실행에서 앞 문장의 결과를 보는 중이어도 지금 문장을 본다. Apply 버튼의 disabled도 이것이다.
+ */
+export function applyBlocked(
+  state: Pick<RunsState, "runs" | "ending">,
+  tabId: string,
+): boolean {
+  if (state.ending[tabId] !== undefined) return true;
+  const status = state.runs[tabId]?.status;
+  return status === "running" || status === "connecting";
+}
+
+/**
  * 끝까지 읽는 문장(`drain`)의 실행 중 상태는 이어서 가져올 수 없다. Rust가 아직 읽는 중이므로
  * Commit과 Rollback도 처음 batch 전처럼 기다린다.
  */
@@ -870,14 +883,7 @@ export const useRuns = create<RunsState>()((set, get) => {
     },
 
     async applyEdits(tabId, runKey, statements) {
-      const status = get().runs[tabId]?.status;
-      if (
-        get().ending[tabId] ||
-        status === "running" ||
-        status === "connecting"
-      ) {
-        return null;
-      }
+      if (applyBlocked(get(), tabId)) return null;
       const slot = sessions.get(tabId);
       const sessionId = slot?.id ?? null;
       if (slot === undefined || sessionId === null) return null;

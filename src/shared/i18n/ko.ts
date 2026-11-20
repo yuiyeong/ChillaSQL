@@ -322,6 +322,8 @@ export const ko: Record<MessageKey, string> = {
   "edit.txFailed": "실패한 트랜잭션을 먼저 Rollback하십시오.",
   "edit.busy":
     "이 세션에서 다른 쿼리가 아직 실행 중입니다. 아무것도 반영하지 않았습니다.",
+  "edit.noSession":
+    "이 탭에 열린 세션이 없습니다. 쿼리를 다시 실행한 뒤 편집하십시오. 아무것도 반영하지 않았습니다.",
   "edit.notEditable.readOnly": "편집할 수 없습니다: 읽기 전용 접속입니다.",
   "edit.notEditable.running":
     "행을 받는 중에는 편집할 수 없습니다. 취소하면 지금까지 받은 행은 남습니다.",

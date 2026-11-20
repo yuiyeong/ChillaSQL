@@ -16,7 +16,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useRuns.setState({ applyEdits: realApplyEdits });
+  useRuns.setState({ applyEdits: realApplyEdits, runs: {}, ending: {} });
 });
 
 test("keeps_the_new_value_by_row_and_attnum", () => {
@@ -254,13 +254,81 @@ test("busy_keeps_the_changes_with_a_note", async () => {
   expect(changedCount(editsOf())).toBe(2);
 });
 
-test("not_sent_keeps_the_changes_without_a_note", async () => {
+test("not_sent_without_a_session_explains_it", async () => {
   changedAndAnswering(Promise.resolve(null));
 
   await expect(useEdits.getState().apply("t", statements)).resolves.toBeNull();
 
+  expect(useEdits.getState().failure.t).toBe(
+    "This tab has no open session. Run the query again, then edit. Nothing was applied.",
+  );
+  expect(changedCount(editsOf())).toBe(2);
+});
+
+test("not_sent_while_running_or_ending_has_no_note", async () => {
+  changedAndAnswering(Promise.resolve(null));
+  useRuns.setState({ runs: { t: { status: "connecting" } } });
+
+  await useEdits.getState().apply("t", statements);
+  expect(useEdits.getState().failure.t).toBeUndefined();
+
+  useRuns.setState({ runs: {}, ending: { t: {} } });
+  await useEdits.getState().apply("t", statements);
   expect(useEdits.getState().failure.t).toBeUndefined();
   expect(changedCount(editsOf())).toBe(2);
+});
+
+test("the_old_failure_stays_until_the_answer", async () => {
+  changedAndAnswering({ outcome: "transaction_failed", tx: "failed" });
+  await useEdits.getState().apply("t", statements);
+  const answer = deferred<ApplyResult | null>();
+  useRuns.setState({ applyEdits: vi.fn(() => answer.promise) });
+
+  const applying = useEdits.getState().apply("t", statements);
+  expect(useEdits.getState().failure.t).toBe(
+    "Roll back the failed transaction first.",
+  );
+
+  answer.resolve({ outcome: "applied", tx: "idle", rows: [["x"], ["y"]] });
+  await applying;
+  expect(useEdits.getState().failure.t).toBeUndefined();
+});
+
+test("a_cell_edited_during_apply_stays_changed", async () => {
+  const answer = deferred<ApplyResult | null>();
+  changedAndAnswering(answer.promise);
+
+  const applying = useEdits.getState().apply("t", statements);
+  useEdits.getState().setCell("t", "run-1", 4, 3, "new", "old");
+  answer.resolve({ outcome: "applied", tx: "idle", rows: [["x"], ["y"]] });
+
+  await expect(applying).resolves.toBe("Updated 2 rows");
+  expect(editsOf()?.changes).toEqual(new Map([[4, new Map([[3, "new"]])]]));
+});
+
+test("a_sent_cell_edited_again_during_apply_keeps_the_new_value", async () => {
+  const answer = deferred<ApplyResult | null>();
+  changedAndAnswering(answer.promise);
+
+  const applying = useEdits.getState().apply("t", statements);
+  useEdits.getState().setCell("t", "run-1", 7, 2, "y2", "old");
+  answer.resolve({ outcome: "applied", tx: "idle", rows: [["x"], ["y"]] });
+
+  await applying;
+  expect(editsOf()?.changes).toEqual(new Map([[7, new Map([[2, "y2"]])]]));
+});
+
+test("revert_during_apply_loses_nothing", async () => {
+  const answer = deferred<ApplyResult | null>();
+  changedAndAnswering(answer.promise);
+
+  const applying = useEdits.getState().apply("t", statements);
+  useEdits.getState().revertAll("t");
+  answer.resolve({ outcome: "applied", tx: "idle", rows: [["x"], ["y"]] });
+
+  await expect(applying).resolves.toBeNull();
+  expect(editsOf()).toBeUndefined();
+  expect(useEdits.getState().applying.t).toBeUndefined();
 });
 
 test("apply_is_ignored_while_applying", async () => {

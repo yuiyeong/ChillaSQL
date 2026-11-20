@@ -57,7 +57,7 @@ import { runKeyOf } from "./gridViews";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { ResultNote } from "./ResultNote";
 import { receivedRows, type ResultData, type RunState } from "./runReducer";
-import { endable, useRuns, type ScriptRun } from "./runsStore";
+import { applyBlocked, endable, useRuns, type ScriptRun } from "./runsStore";
 import {
   failedHintOf,
   TransactionFailedHeader,
@@ -128,12 +128,7 @@ export const ResultPane = memo(function ResultPane({
   const applyFailure = useEdits((s) =>
     tabId === null ? undefined : s.failure[tabId],
   );
-  // 그 탭이 실행 중이거나 끝내기를 기다리면 Apply하지 않는다. 앞 문장의 결과를 보는 중이어도 같다.
-  const applyBlocked = useRuns((s) => {
-    if (tabId === null || s.ending[tabId] !== undefined) return true;
-    const status = s.runs[tabId]?.status;
-    return status === "running" || status === "connecting";
-  });
+  const blocked = useRuns((s) => tabId === null || applyBlocked(s, tabId));
   const idleTimeoutSecs = useSettings((s) => s.idleTimeoutSecs);
   const toast = useToast();
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
@@ -503,7 +498,7 @@ export const ResultPane = memo(function ResultPane({
                   <Button
                     variant="primary"
                     size="small"
-                    disabled={applying || applyBlocked}
+                    disabled={applying || blocked}
                     onClick={() => void apply()}
                   >
                     {t("edit.apply")}
