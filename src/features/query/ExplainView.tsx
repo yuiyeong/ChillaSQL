@@ -129,7 +129,10 @@ export function ExplainView({
               className="border-line-1 text-small text-fg-2 grid h-7 shrink-0 border-b"
               style={{ gridTemplateColumns: GRID }}
             >
-              <div role="columnheader" className="flex items-center px-2.5">
+              <div
+                role="columnheader"
+                className="flex items-center overflow-hidden px-2.5 whitespace-nowrap"
+              >
                 {t("explain.node")}
               </div>
               {(
@@ -138,7 +141,7 @@ export function ExplainView({
                 <div
                   key={key}
                   role="columnheader"
-                  className="flex items-center justify-end px-2.5"
+                  className="flex items-center justify-end overflow-hidden px-2.5 whitespace-nowrap"
                 >
                   {t(key)}
                 </div>

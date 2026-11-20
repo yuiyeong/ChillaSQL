@@ -140,3 +140,14 @@ test("without_tabs_it_draws_the_explain_tab", () => {
 
   expect(screen.getByRole("tab", { name: "EXPLAIN" })).toBeInTheDocument();
 });
+
+test("header_cells_stay_on_one_line", () => {
+  view(ANALYZE);
+
+  const headers = screen.getAllByRole("columnheader");
+  expect(headers).toHaveLength(4);
+  for (const header of headers) {
+    expect(header.className).toContain("whitespace-nowrap");
+    expect(header.className).toContain("overflow-hidden");
+  }
+});

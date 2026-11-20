@@ -168,6 +168,19 @@ test("underline_is_one_character_when_not_a_word", () => {
   expect(errorRange(Text.of(["a😀b"]), 1)).toEqual({ from: 1, to: 3 });
 });
 
+test("underline_covers_the_whole_parameter_name", () => {
+  const doc = Text.of(["SELECT :name, x"]);
+  // 오류 위치가 `:name`의 `:`를 가리키면 `:name` 전체에 긋는다.
+  expect(errorRange(doc, 7)).toEqual({ from: 7, to: 12 });
+  // `::date` cast의 첫 `:`는 뒤가 `:`라서 한 글자다.
+  expect(errorRange(Text.of(["SELECT x::date"]), 8)).toEqual({
+    from: 8,
+    to: 9,
+  });
+  // `:` 뒤에 단어가 없으면 한 글자다.
+  expect(errorRange(Text.of(["SELECT : 1"]), 7)).toEqual({ from: 7, to: 8 });
+});
+
 test("underline_at_the_end_of_a_line_falls_back_to_the_last_character", () => {
   const text = "SELECT '한글😀', x FROM";
   expect(errorRange(Text.of([text]), text.length)).toEqual({

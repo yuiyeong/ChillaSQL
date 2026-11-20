@@ -104,11 +104,15 @@ export function errorRange(
   const rest = line.text.slice(pos - line.from);
   const first = rest.codePointAt(0)!;
   const firstLength = first > 0xffff ? 2 : 1;
-  if (!WORD_CHAR.test(String.fromCodePoint(first))) {
+  // 파라미터 `:name`을 가리키면 `:`에 이어지는 단어까지 긋는다. `::date`의 `:`는 뒤가 단어가 아니라 한 글자다.
+  const parameter =
+    first === 0x3a &&
+    WORD_CHAR.test(String.fromCodePoint(rest.codePointAt(1) ?? 0x20));
+  if (!parameter && !WORD_CHAR.test(String.fromCodePoint(first))) {
     return { from: pos, to: pos + firstLength };
   }
-  let end = 0;
-  for (const char of rest) {
+  let end = parameter ? 1 : 0;
+  for (const char of rest.slice(end)) {
     if (!WORD_CHAR.test(char)) break;
     end += char.length;
   }
