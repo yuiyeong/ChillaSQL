@@ -21,6 +21,7 @@ vi.mock("../../shared/api/path");
 import {
   cancelQuery,
   executeQuery,
+  findParameters,
   hasPassword,
   listSqlFiles,
   loadCatalog,
@@ -39,6 +40,7 @@ import { useProject } from "../project/projectStore";
 import { useRuns } from "../query/runsStore";
 import { ask, resolveDialog } from "../../shared/ui/dialogs";
 import { answerDialog, textOf } from "../../test/dialogs";
+import { answerParameters, isParameterPromptOpen } from "./parameterPrompt";
 import { Workspace } from "./Workspace";
 
 /** 새 탭을 만들고 text와 접속을 둔다. */
@@ -79,6 +81,7 @@ beforeEach(async () => {
   vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
   // 에디터가 보이는 문서를 나눈다.
   vi.mocked(splitStatements).mockResolvedValue([]);
+  vi.mocked(findParameters).mockResolvedValue([]);
 });
 
 test("탭이 없으면 toolbar는 disabled다", () => {
@@ -145,6 +148,35 @@ test("실행 중에는 실행 버튼이 취소 버튼으로 바뀐다", async ()
   act(() => onEvent(finished));
 
   expect(toolbarButton("Run statement")).toBeEnabled();
+});
+
+test("파라미터 물음은 에디터 영역에 뜨고 다른 탭을 고르면 그만둔다", async () => {
+  openProjectWith([connection("local")]);
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 12 }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "id", start: 9, end: 12 },
+  ]);
+  const first = tabWith("SELECT 1 :id", "local");
+  renderWorkspace();
+
+  await click(toolbarButton("Run statement"));
+
+  const dialog = await screen.findByRole("dialog", {
+    name: "Parameter values",
+  });
+  expect(screen.getByTestId("editor-area")).toContainElement(dialog);
+  expect(within(dialog).getByLabelText(":id")).toHaveFocus();
+
+  vi.mocked(splitStatements).mockResolvedValue([]);
+  act(() => {
+    const second = useTabs.getState().newTab();
+    openDocument(second, "SELECT 2");
+  });
+
+  expect(isParameterPromptOpen()).toBe(false);
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(useRuns.getState().runs[first]).toBeUndefined();
+  answerParameters(null);
 });
 
 test("접속 chip의 menu는 프로젝트의 접속을 나열하고 고르면 탭의 접속이 바뀐다", async () => {

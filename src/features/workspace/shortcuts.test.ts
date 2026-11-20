@@ -8,6 +8,7 @@ vi.mock("../../shared/api/dialog");
 import { useTabs } from "../editor/tabsStore";
 import { useRuns } from "../query/runsStore";
 import { resetStores } from "../../test/resetStores";
+import { answerParameters, askParameters } from "./parameterPrompt";
 import {
   commandFor,
   shortcutKeys,
@@ -151,4 +152,26 @@ test("opt_cmd_l_is_reformat", () => {
   expect(commandFor(key("KeyL", { altKey: true }))).toBeNull();
   expect(shortcutLabel("reformat")).toBe("⌥⌘L");
   expect(shortcutKeys("reformat")).toBe("Alt+Meta+L");
+});
+
+test("shortcuts_are_ignored_while_the_prompt_is_open", async () => {
+  render(createElement(Shortcuts));
+  const tabId = useTabs.getState().newTab();
+  const pending = askParameters(tabId, ["id"]);
+
+  const run = key("Enter", cmd);
+  window.dispatchEvent(run);
+
+  expect(run.defaultPrevented).toBe(false);
+  expect(useRuns.getState().runs[tabId]).toBeUndefined();
+
+  // 닫히면 다시 잡는다.
+  answerParameters(null);
+  await pending;
+  const again = key("Enter", cmd);
+  window.dispatchEvent(again);
+  expect(again.defaultPrevented).toBe(true);
+  await vi.waitFor(() =>
+    expect(useRuns.getState().runs[tabId]?.status).toBe("rejected"),
+  );
 });

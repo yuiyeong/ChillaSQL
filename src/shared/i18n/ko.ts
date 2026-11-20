@@ -57,6 +57,12 @@ export const ko: Record<MessageKey, string> = {
   "tabs.filePath": "프로젝트 안의 경로",
   "tabs.filePathPlaceholder": "queries/name.sql",
 
+  "params.title": "파라미터 값",
+  "params.note":
+    "값은 SQL 그대로 들어갑니다. 문자열은 따옴표로 감싸세요. {cast}는 형변환이지 파라미터가 아닙니다.",
+  "params.run": "실행",
+  "params.cancel": "취소",
+
   "dialog.closeTab.title": "{title}의 변경 사항을 저장하겠습니까?",
   "dialog.closeTab.body": "저장하지 않으면 변경 사항이 사라집니다.",
   "dialog.closeTab.discard": "저장 안 함",

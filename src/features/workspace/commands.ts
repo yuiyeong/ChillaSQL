@@ -1,12 +1,14 @@
 import type { EditorState, Text } from "@codemirror/state";
 import {
   cancelTunnel,
+  findParameters,
   restartTunnel,
   splitStatements,
 } from "../../shared/api/commands";
 import { pickDirectory } from "../../shared/api/dialog";
 import { isCommandError, messageOf } from "../../shared/api/errors";
 import type {
+  ParameterSpan,
   Project,
   Relation,
   StatementSpan,
@@ -15,8 +17,13 @@ import type {
 import { quoteIdent } from "../../shared/sql/identifiers";
 import { sessionChanged } from "../connections/connectionValues";
 import { isTunnelStarting, useTunnels } from "../connections/tunnelsStore";
-import { documentState } from "../editor/documents";
+import {
+  dispatchToDocument,
+  documentState,
+  findDocument,
+} from "../editor/documents";
 import { editorNotice } from "../editor/editorNotice";
+import { setParameterMarks } from "../editor/parameterMarks";
 import { reformatDocument } from "../editor/reformat";
 import { saveTab } from "../editor/saveTab";
 import { anchorLocation, anchorOf } from "../editor/runAnchors";
@@ -30,6 +37,7 @@ import type {
   RunRequest,
   ScriptStep,
 } from "../query/runReducer";
+import { substitute } from "../query/rewrite";
 import { endable, useRuns, type ConfirmStep } from "../query/runsStore";
 import { useTypes } from "../query/typesStore";
 import { useHistory } from "../history/historyStore";
@@ -39,6 +47,11 @@ import { t, tc } from "../../shared/i18n/t";
 import { ask } from "../../shared/ui/dialogs";
 import { flushAutosave, reopenTabs } from "./autosave";
 import { confirmDanger } from "./dangerPrompt";
+import {
+  askParameters,
+  resetParameterPrompt,
+  useParameterPrompt,
+} from "./parameterPrompt";
 import {
   applySettlement,
   chooseSettlement,
@@ -187,20 +200,93 @@ function confirmStepOf(tabId: string, connection: string): ConfirmStep {
 }
 
 /**
- * 탭에서 `choose`가 고른 문장을 실행한다. 위험한 문장이면 그 차례에 묻는다. 접속이 없으면 문장을
+ * 문장마다 `:name` 파라미터의 위치를 찾는다. 하나라도 찾지 못하면(나눌 수 없는 text) null이다.
+ * 그 문장은 파라미터 없이 그대로 보낸다.
+ */
+async function findAllParameters(
+  steps: ScriptStep[],
+): Promise<ParameterSpan[][] | null> {
+  try {
+    return await Promise.all(steps.map((step) => findParameters(step.sql)));
+  } catch {
+    return null;
+  }
+}
+
+/** 이름의 첫 등장 순서대로, 문장에 걸쳐 한 번씩 */
+function namesOf(found: ParameterSpan[][]): string[] {
+  return [...new Set(found.flatMap((spans) => spans.map((span) => span.name)))];
+}
+
+/** 문서에서 `:name`이 있는 자리. 문서 자리를 모르는 문장(`from`이 null)은 표시하지 않는다. */
+function markRanges(
+  tabId: string,
+  steps: ScriptStep[],
+  found: ParameterSpan[][],
+): { from: number; to: number }[] {
+  const length = findDocument(tabId)?.doc.length ?? 0;
+  return steps
+    .flatMap((step, index) =>
+      step.from === null
+        ? []
+        : found[index].map((span) => ({
+            from: step.from! + span.start,
+            to: step.from! + span.end,
+          })),
+    )
+    .filter((range) => range.to <= length);
+}
+
+/**
+ * `:name`이 있으면 값을 물어 문장에 넣는다. 물어보는 동안 문서의 `:name` 자리를 표시한다. Cancel이면
+ * null이다. 파라미터가 없거나 찾지 못하면 문장 그대로다.
+ */
+async function fillParameters(
+  tabId: string,
+  steps: ScriptStep[],
+): Promise<ScriptStep[] | null> {
+  const found = await findAllParameters(steps);
+  if (found === null) return steps;
+  const names = namesOf(found);
+  if (names.length === 0) return steps;
+  dispatchToDocument(tabId, {
+    effects: setParameterMarks.of(markRanges(tabId, steps, found)),
+  });
+  let values: Record<string, string> | null;
+  try {
+    values = await askParameters(tabId, names);
+  } finally {
+    // 같은 탭에서 다시 실행해 물음이 이어졌으면 그 표시는 새 물음이 거둔다.
+    if (useParameterPrompt.getState().request?.tabId !== tabId) {
+      dispatchToDocument(tabId, { effects: setParameterMarks.of([]) });
+    }
+  }
+  return values === null
+    ? null
+    : steps.map((step, index) => substitute(step, found[index], values));
+}
+
+/**
+ * 탭에서 `choose`가 고른 문장을 실행한다. `:name`이 있으면 값을 묻고, `finish`가 있으면 값을 넣은
+ * 문장을 그것으로 바꾼 뒤(Explain의 접두어), 위험한 문장이면 그 차례에 묻는다. 접속이 없으면 문장을
  * 나누지 않는다.
  */
-function runSteps(
+export function runSteps(
   tabId: string,
   choose: (tabId: string) => Promise<ScriptStep[] | Rejection>,
+  finish?: (steps: ScriptStep[]) => ScriptStep[] | Rejection,
 ): Promise<void> {
   const connection = findTab(tabId)?.connection ?? null;
-  // 문장을 나누는 동안 탭을 닫거나 접속을 바꾸면 release가 이 실행을 버린다.
+  // 문장을 나누거나 값을 묻는 동안 탭을 닫거나 접속을 바꾸면 release가 이 실행을 버린다.
   return useRuns.getState().run(
     tabId,
     async () => {
       if (connection === null) return noConnection();
-      const steps = await choose(tabId);
+      const chosen = await choose(tabId);
+      if ("title" in chosen) return chosen;
+      const filled = await fillParameters(tabId, chosen);
+      if (filled === null) return null;
+      const steps = finish === undefined ? filled : finish(filled);
       if ("title" in steps) return steps;
       return confirmed(tabId, requestFor(tabId, steps));
     },
@@ -537,6 +623,8 @@ export async function enterProject(
   useTypes.getState().reset();
   // 기록은 프로젝트마다 따로다. 열려 있는 History 화면은 프로젝트가 바뀌면 다시 읽는다.
   useHistory.getState().reset();
+  // 물어보던 파라미터 값과 기억한 값도 프로젝트마다 따로다.
+  resetParameterPrompt();
   // reset이 부른 빈 탭의 저장은 reopenTabs가 바로 거둔다.
   await Promise.all([closing, reopenTabs()]);
   return true;

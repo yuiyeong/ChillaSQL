@@ -56,6 +56,12 @@ export const en = {
   "tabs.filePath": "Path inside the project",
   "tabs.filePathPlaceholder": "queries/name.sql",
 
+  "params.title": "Parameter values",
+  "params.note":
+    "Values are inserted as SQL. Quote strings. {cast} is a cast, not a parameter.",
+  "params.run": "Run",
+  "params.cancel": "Cancel",
+
   "dialog.closeTab.title": "Save changes to {title}?",
   "dialog.closeTab.body": "Your changes will be lost if you don't save them.",
   "dialog.closeTab.discard": "Don't save",

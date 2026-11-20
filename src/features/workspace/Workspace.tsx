@@ -27,6 +27,8 @@ import {
   execute,
 } from "./commands";
 import { documentChanged, startAutosave } from "./autosave";
+import { ParameterDialog } from "./ParameterDialog";
+import { answerParameters, useParameterPrompt } from "./parameterPrompt";
 import { useShortcuts } from "./shortcuts";
 import { StatusBar } from "./StatusBar";
 import { Toolbar } from "./Toolbar";
@@ -72,6 +74,12 @@ export function Workspace() {
   // 확인 dialog는 useShortcuts가 스스로 본다.
   useShortcuts(form === null && !naming);
   useSchemaLifecycle();
+
+  // 값을 묻던 탭이 활성이 아니게 되면(다른 탭을 고르거나 그 탭을 닫으면) 묻기를 그만둔다.
+  const askingTab = useParameterPrompt((s) => s.request?.tabId ?? null);
+  useEffect(() => {
+    if (askingTab !== null && askingTab !== activeId) answerParameters(null);
+  }, [askingTab, activeId]);
 
   // 탭과 문서가 바뀌면 1초 뒤 앱 저장소에 보관한다.
   useEffect(() => startAutosave(), []);
@@ -184,6 +192,7 @@ export function Workspace() {
                 <Hints />
               )}
             </div>
+            <ParameterDialog />
             <Toast message={notice} />
           </div>
           <ResultSplit

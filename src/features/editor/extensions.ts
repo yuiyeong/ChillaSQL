@@ -30,6 +30,7 @@ import {
 import { tags } from "@lezer/highlight";
 import { t } from "../../shared/i18n/t";
 import { catalogCompletion, kindLetter } from "./completion";
+import { parameterMarksField } from "./parameterMarks";
 import { runMarksField } from "./runMarks";
 import {
   runRangeHighlight,
@@ -62,6 +63,11 @@ const editorTheme = EditorView.theme(
     ".cm-errorMark": {
       textDecoration: `underline wavy ${color("danger")}`,
       textUnderlineOffset: "4px",
+    },
+    // 값을 묻는 동안의 `:name`. 캔버스 Tools의 M9 파라미터다.
+    ".cm-parameterMark": {
+      backgroundColor: `color-mix(in srgb, ${color("accent")} 16%, transparent)`,
+      borderRadius: "3px",
     },
     ".cm-cursor, .cm-dropCursor": { borderLeftColor: color("fg") },
     "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground":
@@ -308,6 +314,7 @@ const extensions: Extension = [
   statementSpansPlugin,
   runRangeHighlight,
   runMarksField,
+  parameterMarksField,
   editorTheme,
   editorFontCompartment.of(editorFontTheme("D2Coding", 15)),
   editorEditableCompartment.of(editorEditable(true)),

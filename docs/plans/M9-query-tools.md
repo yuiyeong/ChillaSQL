@@ -385,7 +385,7 @@ git commit -m "feat: 바꿔 보낸 text의 오류 위치를 문서 자리로 옮
   `runSteps(tabId, choose, finish?)`: `choose` 뒤 문장마다 `findParameters`, 있으면 `askParameters`, null이면 prepare가 null(실행하지 않음), 값이 오면 `substitute`, 그 뒤 `finish`(Task 8의 Explain), 그 뒤 위험 쿼리 확인. `findParameters`가 실패하면(나눌 수 없는 text) 파라미터 없이 보낸다.
   문구 key: `params.title`(`Parameter values`), `params.note`(rich: `Values are inserted as SQL. Quote strings. {cast} is a cast, not a parameter.`), `params.run`(`Run`), `params.cancel`.
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `parameterPrompt.test.ts`: `remembers_values_per_tab`, `a_second_ask_cancels_the_first`, `reset_forgets_values`.
 - `ParameterPrompt.test.tsx`: `one_row_per_name_in_order`, `run_is_disabled_while_a_value_is_empty`, `enter_and_cmd_enter_run`, `escape_cancels`, `focuses_the_first_empty_input`.
@@ -393,23 +393,23 @@ git commit -m "feat: 바꿔 보낸 text의 오류 위치를 문서 자리로 옮
 - `shortcuts.test.ts`: `shortcuts_are_ignored_while_the_prompt_is_open`.
 - `parameterMarks.test.ts`: `marks_follow_edits_and_clear`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/workspace src/features/editor/parameterMarks.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - dialog는 Tools M9를 따른다: 에디터 영역 안 absolute(right 16px, bottom 16px), 330px, padding 14px, gap 10px, `bg-2` 배경, `border-strong`, radius 10px, dialog 그림자 token. 줄은 grid `64px minmax(0, 1fr)`, gap 8px. 안내는 12px meta, `::date`는 inline code. 버튼은 ghost Cancel과 primary `Run ⌘↵`.
 - 떠 있는 동안 `step.from`이 있는 문장의 span에 `setParameterMarks`(`accent/16` 배경, 3px radius)를 보내고 닫힐 때 빈 배열을 보낸다.
 - `useShortcuts`는 `isDialogOpen() || isParameterPromptOpen()`이면 event를 건드리지 않는다. dialog의 `Cmd+Enter`는 input의 keydown이 받는다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

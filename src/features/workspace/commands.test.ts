@@ -10,6 +10,7 @@ import {
   closeSession,
   endTransaction,
   executeQuery,
+  findParameters,
   inspectStatement,
   listSqlFiles,
   loadCatalog,
@@ -51,9 +52,16 @@ import {
   cancelRun,
   retryRun,
   runAgain,
+  runSteps,
   selectFirstRows,
   switchProject,
 } from "./commands";
+import { parameterMarksField } from "../editor/parameterMarks";
+import {
+  answerParameters,
+  isParameterPromptOpen,
+  useParameterPrompt,
+} from "./parameterPrompt";
 import { switchMode } from "./transactionPrompts";
 import { reopenTabs, startAutosave } from "./autosave";
 import { useTunnels } from "../connections/tunnelsStore";
@@ -116,6 +124,7 @@ beforeEach(async () => {
   vi.mocked(listSqlFiles).mockResolvedValue([]);
   vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
   vi.mocked(inspectStatement).mockResolvedValue(null);
+  vi.mocked(findParameters).mockResolvedValue([]);
   vi.mocked(loadWorkspace).mockResolvedValue(null);
   vi.mocked(saveWorkspace).mockResolvedValue();
   // 열린 프로젝트의 탭을 보관한다. 보관하지 못하면 프로젝트를 바꿀 때 dirty 탭을 묻는다.
@@ -1986,4 +1995,214 @@ test("a_color_only_change_keeps_sessions", async () => {
   });
 
   expect(closeSession).not.toHaveBeenCalled();
+});
+
+/** 파라미터 dialog가 뜰 때까지 기다려 요청을 돌려준다. */
+async function promptRequest() {
+  await vi.waitFor(() => expect(isParameterPromptOpen()).toBe(true));
+  return useParameterPrompt.getState().request!;
+}
+
+function marksIn(tabId: string): { from: number; to: number }[] {
+  const out: { from: number; to: number }[] = [];
+  documentState(tabId)
+    .field(parameterMarksField)
+    .between(0, 1000, (from, to) => {
+      out.push({ from, to });
+    });
+  return out;
+}
+
+test("asks_before_running_a_statement_with_parameters", async () => {
+  const sql = "SELECT * FROM t WHERE id = :id";
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: sql.length }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "id", start: 27, end: 30 },
+  ]);
+  const id = tabWith(sql);
+
+  const running = execute("run");
+  const request = await promptRequest();
+
+  expect(findParameters).toHaveBeenCalledWith(sql);
+  expect(request).toMatchObject({ tabId: id, names: ["id"] });
+  // 물어보는 동안 문서의 `:id` 자리가 표시된다.
+  expect(marksIn(id)).toEqual([{ from: 27, to: 30 }]);
+  expect(executeQuery).not.toHaveBeenCalled();
+  answerParameters({ id: "10482" });
+  await running;
+
+  expect(executeQuery).toHaveBeenCalledWith(
+    3,
+    "SELECT * FROM t WHERE id = 10482",
+    "auto",
+    expect.any(Function),
+    { drain: false },
+  );
+  expect(marksIn(id)).toEqual([]);
+  expect(runOf(id)).toMatchObject({
+    result: {
+      sql: "SELECT * FROM t WHERE id = 10482",
+      rewrite: { source: sql },
+    },
+  });
+});
+
+test("a_second_run_replaces_the_prompt_and_keeps_the_marks", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 9 }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "id", start: 7, end: 9 },
+  ]);
+  const id = tabWith("SELECT :id");
+
+  const first = execute("run");
+  await promptRequest();
+  const second = execute("run");
+  await vi.waitFor(() => expect(findParameters).toHaveBeenCalledTimes(2));
+  await first;
+
+  // 앞의 물음이 끝나도 새 물음의 표시는 남는다.
+  expect(isParameterPromptOpen()).toBe(true);
+  expect(marksIn(id)).toEqual([{ from: 7, to: 9 }]);
+  answerParameters({ id: "1" });
+  await second;
+  expect(executeQuery).toHaveBeenCalledTimes(1);
+  expect(marksIn(id)).toEqual([]);
+});
+
+test("cancel_does_not_run", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 9 }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "id", start: 7, end: 9 },
+  ]);
+  const id = tabWith("SELECT :id");
+
+  const running = execute("run");
+  await promptRequest();
+  answerParameters(null);
+  await running;
+
+  expect(openSession).not.toHaveBeenCalled();
+  expect(executeQuery).not.toHaveBeenCalled();
+  expect(runOf(id)).toBeUndefined();
+  expect(marksIn(id)).toEqual([]);
+});
+
+test("script_asks_once_for_all_statements", async () => {
+  const text = "SELECT :a, :b;\nSELECT :b, :c";
+  vi.mocked(splitStatements).mockResolvedValue([
+    { start: 0, end: 13 },
+    { start: 15, end: 28 },
+  ]);
+  vi.mocked(findParameters).mockImplementation(async (sql) =>
+    sql === "SELECT :a, :b"
+      ? [
+          { name: "a", start: 7, end: 9 },
+          { name: "b", start: 11, end: 13 },
+        ]
+      : [
+          { name: "b", start: 7, end: 9 },
+          { name: "c", start: 11, end: 13 },
+        ],
+  );
+  const id = tabWith(text);
+
+  const running = execute("runFile");
+  const request = await promptRequest();
+
+  expect(request.names).toEqual(["a", "b", "c"]);
+  expect(marksIn(id)).toEqual([
+    { from: 7, to: 9 },
+    { from: 11, to: 13 },
+    { from: 22, to: 24 },
+    { from: 26, to: 28 },
+  ]);
+  answerParameters({ a: "1", b: "2", c: "3" });
+  await running;
+
+  expect(useRuns.getState().scripts[id]?.steps.map((step) => step.sql)).toEqual(
+    ["SELECT 1, 2", "SELECT 2, 3"],
+  );
+});
+
+test("no_parameters_no_prompt", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 8 }]);
+  const id = tabWith("SELECT 1");
+
+  await execute("run");
+
+  expect(isParameterPromptOpen()).toBe(false);
+  expect(runOf(id)).toMatchObject({
+    status: "running",
+    result: { sql: "SELECT 1" },
+  });
+  expect(runOf(id)).not.toHaveProperty("result.rewrite");
+});
+
+test("danger_check_sees_the_substituted_text", async () => {
+  const sql = "DELETE FROM t WHERE :cond";
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: sql.length }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "cond", start: 20, end: 25 },
+  ]);
+  tabWith(sql);
+
+  const running = execute("run");
+  await promptRequest();
+  answerParameters({ cond: "id = 1" });
+  await running;
+
+  expect(inspectStatement).toHaveBeenCalledWith("DELETE FROM t WHERE id = 1");
+});
+
+test("split_error_runs_without_asking", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 10 }]);
+  vi.mocked(findParameters).mockRejectedValue(
+    new CommandError("split_failed", "문장을 나눌 수 없습니다"),
+  );
+  const id = tabWith("SELECT ':a");
+
+  await execute("run");
+
+  expect(isParameterPromptOpen()).toBe(false);
+  expect(runOf(id)).toMatchObject({
+    status: "running",
+    result: { sql: "SELECT ':a" },
+  });
+});
+
+test("finish_runs_after_substitution_and_before_the_danger_check", async () => {
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "n", start: 7, end: 9 },
+  ]);
+  const id = tabWith("SELECT :n");
+
+  const running = runSteps(
+    id,
+    async () => [{ sql: "SELECT :n", from: 0, origin: { line: 1, column: 1 } }],
+    (steps) => steps.map((step) => ({ ...step, sql: `EXPLAIN ${step.sql}` })),
+  );
+  await promptRequest();
+  answerParameters({ n: "5" });
+  await running;
+
+  expect(inspectStatement).toHaveBeenCalledWith("EXPLAIN SELECT 5");
+});
+
+test("switching_projects_forgets_the_asking_prompt", async () => {
+  vi.mocked(splitStatements).mockResolvedValue([{ start: 0, end: 9 }]);
+  vi.mocked(findParameters).mockResolvedValue([
+    { name: "n", start: 7, end: 9 },
+  ]);
+  tabWith("SELECT :n");
+  const running = execute("run");
+  await promptRequest();
+
+  vi.mocked(pickDirectory).mockResolvedValue("/other");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/other" });
+  await switchProject();
+  await running;
+
+  expect(isParameterPromptOpen()).toBe(false);
+  expect(executeQuery).not.toHaveBeenCalled();
 });
