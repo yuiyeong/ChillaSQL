@@ -190,7 +190,15 @@ test("executeQuery는 Channel의 message를 onEvent로 넘긴다", async () => {
   const channel = (args as { onEvent: Channel<QueryEvent> }).onEvent;
   const event: QueryEvent = {
     type: "columns",
-    columns: [{ name: "id", typeOid: 23, typeModifier: -1 }],
+    columns: [
+      {
+        name: "id",
+        typeOid: 23,
+        typeModifier: -1,
+        tableOid: 0,
+        columnNumber: 0,
+      },
+    ],
   };
   channel.onmessage(event);
   expect(onEvent).toHaveBeenCalledWith(event);

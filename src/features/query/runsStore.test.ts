@@ -254,7 +254,15 @@ test("late_columns_from_a_superseded_run_do_not_ask_types", async () => {
 
   lateA({
     type: "columns",
-    columns: [{ name: "id", typeOid: 23, typeModifier: -1 }],
+    columns: [
+      {
+        name: "id",
+        typeOid: 23,
+        typeModifier: -1,
+        tableOid: 0,
+        columnNumber: 0,
+      },
+    ],
   });
 
   expect(describeTypes).not.toHaveBeenCalled();
@@ -270,7 +278,15 @@ test("columns event는 그 탭의 접속에 type 이름을 묻는다", async () 
   await vi.waitFor(() => expect(executeQuery).toHaveBeenCalled());
   onEventOf(0)({
     type: "columns",
-    columns: [{ name: "id", typeOid: 23, typeModifier: -1 }],
+    columns: [
+      {
+        name: "id",
+        typeOid: 23,
+        typeModifier: -1,
+        tableOid: 0,
+        columnNumber: 0,
+      },
+    ],
   });
 
   expect(describeTypes).toHaveBeenCalledWith("staging", [

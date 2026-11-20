@@ -33,9 +33,31 @@ fn columns(columns: &[(&str, u32)]) -> Item {
                 name: name.to_string(),
                 type_oid,
                 type_modifier: -1,
+                table_oid: 0,
+                column_number: 0,
             })
             .collect(),
     ))
+}
+
+/// 테이블 컬럼을 돌려주는 쿼리의 OID는 test마다 달라지므로, 비교하기 전에 0으로 맞춘다.
+fn without_table(items: Vec<Item>) -> Vec<Item> {
+    items
+        .into_iter()
+        .map(|item| match item {
+            Ok(RowItem::Columns(columns)) => Ok(RowItem::Columns(
+                columns
+                    .into_iter()
+                    .map(|column| Column {
+                        table_oid: 0,
+                        column_number: 0,
+                        ..column
+                    })
+                    .collect(),
+            )),
+            other => other,
+        })
+        .collect()
 }
 
 fn row(cells: &[Option<&str>]) -> Item {
@@ -111,7 +133,7 @@ async fn statements_without_rows_yield_only_the_count() {
         vec![complete(3)]
     );
     assert_eq!(
-        run(&conn, "UPDATE t SET id = id + 1 WHERE id > 1 RETURNING id").await,
+        without_table(run(&conn, "UPDATE t SET id = id + 1 WHERE id > 1 RETURNING id").await),
         vec![
             columns(&[("id", INT4)]),
             row(&[Some("3")]),
@@ -412,5 +434,51 @@ async fn types_follow_each_query() {
         vec![("t".to_string(), 25, -1), ("f".to_string(), 16, -1)]
     );
     assert_eq!(column_types(&third), vec![("n".to_string(), 20, -1)]);
+    conn.close().await;
+}
+
+#[tokio::test]
+async fn columns_carry_table_and_number() {
+    let conn = connect().await;
+    let admin = admin().await;
+    let table_oid: u32 = admin
+        .query_one("SELECT 'big_table'::regclass::oid", &[])
+        .await
+        .unwrap()
+        .get(0);
+    let attnum = |name: &'static str| {
+        let admin = &admin;
+        async move {
+            admin
+                .query_one(
+                    "SELECT attnum FROM pg_attribute \
+                     WHERE attrelid = 'big_table'::regclass AND attname = $1",
+                    &[&name],
+                )
+                .await
+                .unwrap()
+                .get::<_, i16>(0)
+        }
+    };
+    let note_number = attnum("note").await;
+
+    let items = run(&conn, "SELECT id, note, id + 1 FROM big_table LIMIT 1").await;
+
+    let found: Vec<(u32, i16)> = items
+        .iter()
+        .find_map(|item| match item {
+            Ok(RowItem::Columns(columns)) => Some(
+                columns
+                    .iter()
+                    .map(|c| (c.table_oid, c.column_number))
+                    .collect(),
+            ),
+            _ => None,
+        })
+        .expect("Columns 항목");
+    assert_eq!(
+        found,
+        vec![(table_oid, 1), (table_oid, note_number), (0, 0)]
+    );
     conn.close().await;
 }

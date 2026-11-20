@@ -165,11 +165,16 @@ export type Outcome =
   | { outcome: "connection_lost"; message: string }
   | { outcome: "client_error"; message: string };
 
-/** 결과의 열 하나. type은 서버 RowDescription의 OID와 typmod다(OID 0은 모름, typmod -1은 없음). */
+/**
+ * 결과의 열 하나. type은 서버 RowDescription의 OID와 typmod다(OID 0은 모름, typmod -1은 없음).
+ * `tableOid`와 `columnNumber`도 RowDescription의 값이며, 테이블 컬럼이 아니면(식, UNION) 0이다.
+ */
 export interface ResultColumn {
   name: string;
   typeOid: number;
   typeModifier: number;
+  tableOid: number;
+  columnNumber: number;
 }
 
 export type QueryEvent =

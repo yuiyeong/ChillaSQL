@@ -468,6 +468,8 @@ pub struct ColumnDto {
     pub name: String,
     pub type_oid: u32,
     pub type_modifier: i32,
+    pub table_oid: u32,
+    pub column_number: i16,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -545,6 +547,8 @@ impl From<Column> for ColumnDto {
             name: column.name,
             type_oid: column.type_oid,
             type_modifier: column.type_modifier,
+            table_oid: column.table_oid,
+            column_number: column.column_number,
         }
     }
 }
@@ -1758,12 +1762,20 @@ mod tests {
             name: "id".into(),
             type_oid: 1043,
             type_modifier: 14,
+            table_oid: 16385,
+            column_number: 2,
         }]));
         assert_eq!(
             columns,
             json!({
                 "type": "columns",
-                "columns": [{ "name": "id", "typeOid": 1043, "typeModifier": 14 }],
+                "columns": [{
+                    "name": "id",
+                    "typeOid": 1043,
+                    "typeModifier": 14,
+                    "tableOid": 16385,
+                    "columnNumber": 2,
+                }],
             })
         );
         assert_eq!(keys(&columns), BTreeSet::from(["type", "columns"]));

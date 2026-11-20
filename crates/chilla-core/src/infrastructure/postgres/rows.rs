@@ -8,7 +8,7 @@ use tokio_postgres::error::{DbError, ErrorPosition};
 use tokio_postgres::{SimpleQueryMessage, SimpleQueryRow, SimpleQueryStream};
 
 use super::error_message;
-use super::tx_tap::RowTypes;
+use super::tx_tap::{FieldInfo, RowTypes};
 use crate::application::{QueryError, RowItem, RowSource};
 use crate::domain::{Column, Row, ServerError};
 
@@ -69,7 +69,7 @@ impl RowSource for PgRows {
             let item = match message {
                 SimpleQueryMessage::RowDescription(columns) => {
                     // tap은 driver가 message를 내놓기 전에 byte를 읽으므로 type이 이미 있다.
-                    // 없거나 수가 다르면 type을 모르는 열로 둔다.
+                    // 없거나 수가 다르면 type도 테이블도 모르는 열로 둔다.
                     let types = self
                         .row_types
                         .pop()
@@ -79,12 +79,14 @@ impl RowSource for PgRows {
                             .iter()
                             .enumerate()
                             .map(|(i, column)| {
-                                let (type_oid, type_modifier) =
-                                    types.as_ref().map_or((0, -1), |types| types[i]);
+                                let info =
+                                    types.as_ref().map_or(FieldInfo::UNKNOWN, |types| types[i]);
                                 Column {
                                     name: column.name().to_owned(),
-                                    type_oid,
-                                    type_modifier,
+                                    type_oid: info.type_oid,
+                                    type_modifier: info.type_modifier,
+                                    table_oid: info.table_oid,
+                                    column_number: info.column_number,
                                 }
                             })
                             .collect(),

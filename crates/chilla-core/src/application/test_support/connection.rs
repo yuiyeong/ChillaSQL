@@ -232,6 +232,8 @@ impl FakeFeed {
                 name: name.to_string(),
                 type_oid,
                 type_modifier,
+                table_oid: 0,
+                column_number: 0,
             });
         self.push(Ok(RowItem::Columns(columns.collect())));
     }

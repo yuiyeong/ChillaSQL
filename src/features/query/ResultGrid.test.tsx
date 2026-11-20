@@ -417,6 +417,8 @@ function typedColumns(
     name,
     typeOid: 100 + i,
     typeModifier: -1,
+    tableOid: 0,
+    columnNumber: 0,
   }));
 }
 
@@ -450,7 +452,13 @@ test("header_has_no_type_until_it_arrives", () => {
 
 test("the_type_shows_up_when_it_arrives_later", () => {
   const columns: ResultColumn[] = [
-    { name: "id", typeOid: 100, typeModifier: -1 },
+    {
+      name: "id",
+      typeOid: 100,
+      typeModifier: -1,
+      tableOid: 0,
+      columnNumber: 0,
+    },
   ];
   setup({ result: result({ columns, rows: [["1"]] }) });
   const before = columnHeader("id").style.width;
@@ -482,7 +490,13 @@ test("the_type_shows_up_when_it_arrives_later", () => {
 
 test("a_dragged_column_keeps_its_width_when_the_type_arrives", () => {
   const columns: ResultColumn[] = [
-    { name: "id", typeOid: 100, typeModifier: -1 },
+    {
+      name: "id",
+      typeOid: 100,
+      typeModifier: -1,
+      tableOid: 0,
+      columnNumber: 0,
+    },
   ];
   setup({ result: result({ columns, rows: [["1"]] }) });
   const header = columnHeader("id");

@@ -14,6 +14,10 @@ pub struct Column {
     pub type_oid: u32,
     /// RowDescription의 typmod. 없으면 -1이다.
     pub type_modifier: i32,
+    /// RowDescription의 table OID. 테이블 컬럼이 아니면(식, UNION) 0이다.
+    pub table_oid: u32,
+    /// RowDescription의 attnum. 테이블 컬럼이 아니면 0이다.
+    pub column_number: i16,
 }
 
 /// 값은 서버가 만든 text다. `None`은 NULL, `Some("")`은 빈 문자열이다.

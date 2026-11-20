@@ -117,6 +117,8 @@ async fn small_result_arrives_as_one_batch_then_finishes() {
         name: "id".into(),
         type_oid: 23,
         type_modifier: -1,
+        table_oid: 0,
+        column_number: 0,
     };
     assert_eq!(next(&mut events).await, QueryEvent::Columns(vec![id]));
     assert_eq!(link.sent(), ["SELECT 1"]);

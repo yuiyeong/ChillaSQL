@@ -39,6 +39,8 @@ function typedColumns(
     name,
     typeOid: 100 + i,
     typeModifier: -1,
+    tableOid: 0,
+    columnNumber: 0,
   }));
 }
 
@@ -150,6 +152,8 @@ describe("ValueViewer", () => {
     name: "profile",
     typeOid: 100,
     typeModifier: -1,
+    tableOid: 0,
+    columnNumber: 0,
   };
   const jsonb = { oid: 100, modifier: -1, name: "jsonb", category: "U" };
 

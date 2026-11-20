@@ -223,7 +223,7 @@ test("json_format_is_not_a_plan", () => {
 });
 
 function col(name: string): ResultColumn {
-  return { name, typeOid: 25, typeModifier: -1 };
+  return { name, typeOid: 25, typeModifier: -1, tableOid: 0, columnNumber: 0 };
 }
 
 test("is_plan_result_needs_exactly_the_query_plan_column", () => {

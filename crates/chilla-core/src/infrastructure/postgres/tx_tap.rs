@@ -4,8 +4,8 @@
 //! 넘기는 stream을 [`TxTap`]으로 감싸 backend message의 framing을 따라가며 `Z` message의
 //! 상태 byte만 꺼낸다. payload는 복사하지 않고 건너뛴다.
 //!
-//! RowDescription(`T`)만 예외다. `tokio-postgres`의 simple query는 열의 type OID와 typmod를
-//! 공개하지 않으므로, payload를 모아 [`RowTypes`]에 넣는다.
+//! RowDescription(`T`)만 예외다. `tokio-postgres`의 simple query는 열의 table OID, attnum,
+//! type OID, typmod를 공개하지 않으므로, payload를 모아 [`RowTypes`]에 넣는다.
 //!
 //! 서버는 ErrorResponse를 먼저 flush하고 ReadyForQuery를 따로 보낸다. `tokio-postgres`는
 //! ErrorResponse에서 바로 오류를 돌려주므로, 그 직후에 읽은 상태는 오류 전의 값이다.
@@ -64,8 +64,29 @@ impl TxStatusCell {
     }
 }
 
-/// RowDescription 하나의 열별 `(type OID, typmod)`.
-type FieldTypes = Vec<(u32, i32)>;
+/// RowDescription의 열 하나가 가진 값.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct FieldInfo {
+    /// 테이블 컬럼이 아니면(식, UNION) 0이다.
+    pub(crate) table_oid: u32,
+    /// 테이블 컬럼이 아니면 0이다.
+    pub(crate) column_number: i16,
+    pub(crate) type_oid: u32,
+    pub(crate) type_modifier: i32,
+}
+
+impl FieldInfo {
+    /// RowDescription을 받지 못했을 때의 값. 테이블도 type도 모른다.
+    pub(crate) const UNKNOWN: Self = Self {
+        table_oid: 0,
+        column_number: 0,
+        type_oid: 0,
+        type_modifier: -1,
+    };
+}
+
+/// RowDescription 하나의 열별 [`FieldInfo`].
+type FieldTypes = Vec<FieldInfo>;
 
 /// [`TxTap`]이 본 RowDescription의 type. 도착한 순서대로 쌓인다.
 ///
@@ -97,7 +118,7 @@ impl RowTypes {
     }
 }
 
-/// RowDescription payload에서 열별 type OID와 typmod를 꺼낸다. 모양이 틀리면 `None`이다.
+/// RowDescription payload에서 열별 table OID, attnum, type OID, typmod를 꺼낸다. 모양이 틀리면 `None`이다.
 fn parse_row_description(payload: &[u8]) -> Option<FieldTypes> {
     let (count, mut rest) = payload.split_first_chunk::<2>()?;
     let count = u16::from_be_bytes(*count) as usize;
@@ -106,9 +127,12 @@ fn parse_row_description(payload: &[u8]) -> Option<FieldTypes> {
     for _ in 0..count {
         let name_end = rest.iter().position(|&byte| byte == 0)?;
         let (fixed, after) = rest[name_end + 1..].split_first_chunk::<18>()?;
-        let type_oid = u32::from_be_bytes(fixed[6..10].try_into().ok()?);
-        let type_modifier = i32::from_be_bytes(fixed[12..16].try_into().ok()?);
-        types.push((type_oid, type_modifier));
+        types.push(FieldInfo {
+            table_oid: u32::from_be_bytes(fixed[0..4].try_into().ok()?),
+            column_number: i16::from_be_bytes(fixed[4..6].try_into().ok()?),
+            type_oid: u32::from_be_bytes(fixed[6..10].try_into().ok()?),
+            type_modifier: i32::from_be_bytes(fixed[12..16].try_into().ok()?),
+        });
         rest = after;
     }
     Some(types)
@@ -277,10 +301,20 @@ mod tests {
 
     /// RowDescription의 field 하나. 이름 뒤에 table OID, attnum, type OID, typlen, typmod, format이 온다.
     fn field(name: &str, type_oid: u32, typmod: i32) -> Vec<u8> {
+        table_field(name, 0, 0, type_oid, typmod)
+    }
+
+    fn table_field(
+        name: &str,
+        table_oid: u32,
+        column_number: i16,
+        type_oid: u32,
+        typmod: i32,
+    ) -> Vec<u8> {
         let mut bytes = name.as_bytes().to_vec();
         bytes.push(0);
-        bytes.extend_from_slice(&0u32.to_be_bytes());
-        bytes.extend_from_slice(&0i16.to_be_bytes());
+        bytes.extend_from_slice(&table_oid.to_be_bytes());
+        bytes.extend_from_slice(&column_number.to_be_bytes());
         bytes.extend_from_slice(&type_oid.to_be_bytes());
         bytes.extend_from_slice(&(-1i16).to_be_bytes());
         bytes.extend_from_slice(&typmod.to_be_bytes());
@@ -296,6 +330,16 @@ mod tests {
         msg(b'T', &payload)
     }
 
+    /// 테이블 정보가 없는 열(식 등)의 `FieldInfo`.
+    fn info(type_oid: u32, type_modifier: i32) -> FieldInfo {
+        FieldInfo {
+            table_oid: 0,
+            column_number: 0,
+            type_oid,
+            type_modifier,
+        }
+    }
+
     fn two_fields() -> Vec<u8> {
         row_description(&[field("a", 23, -1), field("b", 1043, 259)])
     }
@@ -306,8 +350,36 @@ mod tests {
         for chunk in two_fields().chunks(3) {
             tap.observe(chunk);
         }
-        assert_eq!(types.pop(), Some(vec![(23, -1), (1043, 259)]));
+        assert_eq!(types.pop(), Some(vec![info(23, -1), info(1043, 259)]));
         assert_eq!(types.pop(), None);
+    }
+
+    #[test]
+    fn row_description_carries_table_and_number() {
+        let (mut tap, _cell, types) = TxTap::new(());
+        tap.observe(&row_description(&[
+            table_field("id", 16385, 1, 23, -1),
+            table_field("note", 16385, 3, 25, -1),
+            field("expr", 23, -1),
+        ]));
+        assert_eq!(
+            types.pop(),
+            Some(vec![
+                FieldInfo {
+                    table_oid: 16385,
+                    column_number: 1,
+                    type_oid: 23,
+                    type_modifier: -1,
+                },
+                FieldInfo {
+                    table_oid: 16385,
+                    column_number: 3,
+                    type_oid: 25,
+                    type_modifier: -1,
+                },
+                info(23, -1),
+            ])
+        );
     }
 
     #[test]
@@ -316,8 +388,8 @@ mod tests {
         tap.observe(&two_fields());
         tap.observe(&msg(b'D', &[7; 20]));
         tap.observe(&row_description(&[field("c", 25, -1)]));
-        assert_eq!(types.pop(), Some(vec![(23, -1), (1043, 259)]));
-        assert_eq!(types.pop(), Some(vec![(25, -1)]));
+        assert_eq!(types.pop(), Some(vec![info(23, -1), info(1043, 259)]));
+        assert_eq!(types.pop(), Some(vec![info(25, -1)]));
     }
 
     #[test]
@@ -336,7 +408,7 @@ mod tests {
         bytes.extend(msg(b'Z', b"T"));
         tap.observe(&bytes);
         assert_eq!(cell.get(), TxStatus::InTransaction);
-        assert_eq!(types.pop(), Some(vec![(23, -1), (1043, 259)]));
+        assert_eq!(types.pop(), Some(vec![info(23, -1), info(1043, 259)]));
     }
 
     #[test]

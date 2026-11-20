@@ -16,15 +16,39 @@ test("columns_keep_their_types", () => {
   const state = reduce(running(), {
     type: "columns",
     columns: [
-      { name: "id", typeOid: 23, typeModifier: -1 },
-      { name: "name", typeOid: 1043, typeModifier: 259 },
+      {
+        name: "id",
+        typeOid: 23,
+        typeModifier: -1,
+        tableOid: 0,
+        columnNumber: 0,
+      },
+      {
+        name: "name",
+        typeOid: 1043,
+        typeModifier: 259,
+        tableOid: 0,
+        columnNumber: 0,
+      },
     ],
   });
   expect(state).toMatchObject({
     result: {
       columns: [
-        { name: "id", typeOid: 23, typeModifier: -1 },
-        { name: "name", typeOid: 1043, typeModifier: 259 },
+        {
+          name: "id",
+          typeOid: 23,
+          typeModifier: -1,
+          tableOid: 0,
+          columnNumber: 0,
+        },
+        {
+          name: "name",
+          typeOid: 1043,
+          typeModifier: 259,
+          tableOid: 0,
+          columnNumber: 0,
+        },
       ],
     },
   });

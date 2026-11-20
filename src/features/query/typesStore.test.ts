@@ -21,7 +21,13 @@ const varchar: TypeInfo = {
 };
 
 function column(name: string, info: TypeInfo): ResultColumn {
-  return { name, typeOid: info.oid, typeModifier: info.modifier };
+  return {
+    name,
+    typeOid: info.oid,
+    typeModifier: info.modifier,
+    tableOid: 0,
+    columnNumber: 0,
+  };
 }
 
 function typesOf(connection = "local") {
@@ -64,7 +70,9 @@ test("asks_only_unknown_types", async () => {
 test("skips_columns_of_unknown_oid", async () => {
   await useTypes
     .getState()
-    .ensure("local", [{ name: "x", typeOid: 0, typeModifier: -1 }]);
+    .ensure("local", [
+      { name: "x", typeOid: 0, typeModifier: -1, tableOid: 0, columnNumber: 0 },
+    ]);
 
   expect(describeTypes).not.toHaveBeenCalled();
 });
