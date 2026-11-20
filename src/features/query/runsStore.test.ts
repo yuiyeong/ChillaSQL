@@ -170,6 +170,19 @@ test("event는 execute가 query id를 돌려주기 전에도 반영된다", asyn
   await running;
 });
 
+test("late_columns_from_a_superseded_run_do_not_ask_types", async () => {
+  await useRuns.getState().run("t", prepared("SELECT 1", "staging"));
+  const lateA = onEventOf(0);
+  await useRuns.getState().run("t", prepared("SELECT 2", "staging"));
+
+  lateA({
+    type: "columns",
+    columns: [{ name: "id", typeOid: 23, typeModifier: -1 }],
+  });
+
+  expect(describeTypes).not.toHaveBeenCalled();
+});
+
 test("columns event는 그 탭의 접속에 type 이름을 묻는다", async () => {
   const execution = deferred<number>();
   vi.mocked(executeQuery).mockReturnValue(execution.promise);

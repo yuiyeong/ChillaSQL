@@ -88,7 +88,7 @@ const CONSTRAINTS_SQL: &str = "\
 
 /// 받은 순서대로 돌려준다(JOIN만으로는 순서가 정해지지 않는다). pg_type에 없는 OID는 빠진다.
 const TYPES_SQL: &str = "\
-    SELECT m.oid, m.typmod, format_type(m.oid, m.typmod), t.typcategory::text \
+    SELECT m.oid, m.typmod, format_type(m.oid, m.typmod), t.typcategory \
     FROM unnest($1::oid[], $2::int4[]) WITH ORDINALITY AS m(oid, typmod, i) \
     JOIN pg_type t ON t.oid = m.oid \
     ORDER BY m.i";
@@ -194,13 +194,13 @@ pub(super) async fn describe_types(
     Ok(rows
         .iter()
         .map(|row| {
-            let category: String = row.get(3);
+            // typcategory는 NOT NULL인 "char"(1 byte)이고 ASCII 한 글자다.
+            let category: i8 = row.get(3);
             TypeInfo {
                 oid: row.get(0),
                 modifier: row.get(1),
                 name: row.get(2),
-                // typcategory는 한 글자다.
-                category: category.chars().next().unwrap_or('X'),
+                category: char::from(category as u8),
             }
         })
         .collect())

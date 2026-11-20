@@ -433,10 +433,6 @@ export const useRuns = create<RunsState>()((set, get) => {
       };
 
       const onEvent = (event: QueryEvent) => {
-        // header의 type 이름은 접속의 catalog connection이 답한다. 밀려난 실행의 type도 cache에 쓸모 있다.
-        if (event.type === "columns") {
-          void useTypes.getState().ensure(connection, event.columns);
-        }
         // 세션이 죽었다. 늦은 event여도 그 세션이 아직 이 탭의 것이면 버린다.
         if (
           event.type === "finished" &&
@@ -447,6 +443,11 @@ export const useRuns = create<RunsState>()((set, get) => {
         }
         const fresh = current();
         if (!fresh && event.type !== "finished") return;
+        // header의 type 이름은 접속의 catalog connection이 답한다. 밀려난 실행이 묻으면 이미 닫은
+        // catalog connection(과 터널)을 다시 연다.
+        if (event.type === "columns") {
+          void useTypes.getState().ensure(connection, event.columns);
+        }
         set((s) => {
           const before = s.runs[tabId] ?? { status: "idle" };
           const after = fresh ? reduce(before, event) : before;
