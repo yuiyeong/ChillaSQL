@@ -681,7 +681,10 @@ function Grid({
                   headers.map((header) => header.getSize()),
                 )}
                 onCommit={(value) => {
-                  setCell(editing.row, editing.column, value);
+                  // 연 값 그대로 확정하면 변경이 아니다. NULL이 보이던 셀은 빈 채로 열리므로 NULL 그대로다.
+                  if (value !== editing.value) {
+                    setCell(editing.row, editing.column, value);
+                  }
                   closeEditor();
                 }}
                 onCancel={closeEditor}

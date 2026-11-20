@@ -21,7 +21,7 @@ import { resultColumns } from "../../test/fixtures";
 import { stubLayout } from "../../test/layout";
 import { useEditTableCache } from "./editTargetStore";
 import { useEdits } from "./editsStore";
-import { fitWidth } from "./grid";
+import { fitWidth, rowNumberWidth } from "./grid";
 import { runKeyOf } from "./gridViews";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { emptyResult, type ResultData } from "./runReducer";
@@ -877,4 +877,68 @@ test("changes_of_another_run_are_not_shown", async () => {
 
   expect(cellAt(0, 1)).toHaveTextContent("a@x");
   expect(cellAt(0, 1)).not.toHaveAttribute("data-changed");
+});
+
+test("confirming_a_set_null_cell_without_typing_keeps_null", async () => {
+  await setupEditable();
+  fireEvent.contextMenu(cellAt(0, 1), { clientX: 50, clientY: 60 });
+  fireEvent.click(screen.getByRole("menuitem", { name: "Set NULL" }));
+
+  fireEvent.doubleClick(cellAt(0, 1));
+  expect(editor()?.value).toBe("");
+  fireEvent.keyDown(editor()!, { key: "Enter" });
+
+  expect(useEdits.getState().edits.t?.changes.get(0)?.get(2)).toBeNull();
+  expect(cellAt(0, 1)).toHaveTextContent("NULL");
+});
+
+test("blur_without_typing_keeps_the_change", async () => {
+  await setupEditable();
+  fireEvent.contextMenu(cellAt(0, 1), { clientX: 50, clientY: 60 });
+  fireEvent.click(screen.getByRole("menuitem", { name: "Set NULL" }));
+  fireEvent.doubleClick(cellAt(1, 1));
+  change(editor()!, "x@x");
+  fireEvent.keyDown(editor()!, { key: "Enter" });
+
+  fireEvent.doubleClick(cellAt(0, 1));
+  fireEvent.blur(editor()!);
+  fireEvent.doubleClick(cellAt(1, 1));
+  expect(editor()?.value).toBe("x@x");
+  fireEvent.blur(editor()!);
+
+  expect(useEdits.getState().edits.t?.changes).toEqual(
+    new Map([
+      [0, new Map<number, Cell>([[2, null]])],
+      [1, new Map<number, Cell>([[2, "x@x"]])],
+    ]),
+  );
+});
+
+test("the_editor_opens_on_the_result_row_after_dropped_rows", async () => {
+  const rows: Cell[][] = Array.from({ length: 3 }, (_, i) => [
+    String(5001 + i),
+    `u${5001 + i}@x`,
+    `u${5001 + i}@x`,
+    "1",
+  ]);
+  await setupEditable({ result: editable({ firstRow: 5000, rows }) });
+
+  fireEvent.doubleClick(cellAt(5001, 1));
+
+  const input = editor()!;
+  expect(input.value).toBe("u5002@x");
+  // 버린 구간 줄(40px) 아래 두 번째 행이다.
+  expect(input.style.top).toBe(`${40 + 26}px`);
+  expect(input.style.left).toBe(
+    `${rowNumberWidth(5003) + parseFloat(columnHeader("id").style.width)}px`,
+  );
+  expect(input.style.width).toBe(columnHeader("email").style.width);
+
+  change(input, "moved@x");
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  expect(useEdits.getState().edits.t?.changes).toEqual(
+    new Map([[5001, new Map([[2, "moved@x"]])]]),
+  );
+  expect(cellAt(5001, 2)).toHaveTextContent("moved@x");
 });

@@ -40,6 +40,15 @@ test("enter_while_composing_does_not_commit", () => {
   expect(onCommit).not.toHaveBeenCalled();
 });
 
+test("enter_with_key_code_229_does_not_commit", () => {
+  const { editor, onCommit } = setup();
+
+  // WKWebView는 조합을 끝내는 Enter에 isComposing을 false로, keyCode를 229로 보낸다.
+  fireEvent.keyDown(editor, { key: "Enter", keyCode: 229 });
+
+  expect(onCommit).not.toHaveBeenCalled();
+});
+
 test("opt_enter_inserts_a_newline", () => {
   const { editor, onCommit } = setup("ab");
   editor.setSelectionRange(1, 1);
