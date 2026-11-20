@@ -1121,7 +1121,7 @@ Expected: 통과
 
 앱을 띄우기 전에 사용자에게 해도 되는지 묻는다. 방법은 진행상황 "지금"의 "앱 동작 확인 방법"이다. test DB(54318)에 `CREATE SCHEMA m8_check`의 테이블을 만들어 쓰고 끝나면 지운다. `~/.config/chilla/config.toml`이 이미 있으면 내용을 기록해 두고 확인 뒤 되돌린다.
 
-- [ ] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
+- [x] **Step 1: local test DB로 화면을 본다** (`scripts/build-app.sh --debug`)
 
 | 확인 | 기준 |
 | --- | --- |
@@ -1141,7 +1141,7 @@ Expected: 통과
 
 1만 줄 파일(`SELECT 1;`을 1만 줄)에서 화살표 key를 누르고 있어도 커서가 밀리지 않는지 본다.
 
-- [ ] **Step 2: 기록하고 commit한다**
+- [x] **Step 2: 기록하고 commit한다**
 
 - 진행상황: M8을 `완료`(날짜), 작업 로그에 Task별 결과와 Step 1의 결과, "지금"의 다음 할 일(3단계를 며칠 실제로 써 본 뒤 M9)을 쓴다.
 - 이 계획의 체크박스를 모두 체크한다.
