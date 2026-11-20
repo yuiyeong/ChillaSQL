@@ -36,7 +36,7 @@
 - **Reformat.** `Opt+Cmd+L`, toolbar의 Reformat icon 버튼(`Reformat (Opt+Cmd+L)`), 빈 상태 안내 `⌥⌘L Reformat`. 선택 영역이 있으면 그것만, 없으면 문서 전체를 `sql-formatter`(`language: "postgresql"`, `keywordCase: "preserve"`, `tabWidth: 2`)로 바꾼다. 실행 취소 한 번으로 돌아간다. 실패하면 문서를 그대로 두고 toast `Couldn't reformat: {첫 줄}`. `sql-formatter`가 throw하지 않고 의미를 바꾸는 입력(닫히지 않은 `/*`)은 실패로 친다.
 - **읽기 전용 접속.** `read_only = true`면 세션과 catalog connection을 `default_transaction_read_only=on`으로 연다. 위험 쿼리 확인을 하지 않는다. 서버가 SQLSTATE `25006`으로 거절하면 오류 화면의 설명 줄이 `SQLSTATE 25006 · {접속} is a read-only connection, so the database rejected the write. Nothing changed.`(Safety C). 자물쇠 icon(`Read-only`)을 sidebar 접속 목록, 접속 menu, toolbar chip에 그린다. 임시 테이블도 거절된다(서버 동작).
 - **statement timeout.** `statement_timeout`이 있는 접속에서 outcome이 `failed`이고 SQLSTATE가 `57014`면 결과 panel은 Timed out 화면(States): 제목 `Timed out`, 서버 메시지, `SQLSTATE 57014 · This connection's statement_timeout is {n}s.`. 사용자의 Cancel은 지금처럼 `cancelled`로 온다.
-- **세션 설정이 바뀐 저장.** `read_only`나 `statement_timeout`을 바꿔 저장하면 연결 대상을 바꾼 저장처럼 그 접속을 쓰는 탭의 세션을 놓고 catalog를 다시 읽는다(열린 트랜잭션이 있으면 먼저 묻는다). 비밀번호는 지우지 않는다. Rust `same_session`과 화면 `sessionChanged`가 이 비교다.
+- **세션 설정이 바뀐 저장.** `read_only`나 `statement_timeout`을 바꿔 저장하면 연결 대상을 바꾼 저장처럼 그 접속을 쓰는 탭의 세션을 놓고 catalog를 다시 읽는다(열린 트랜잭션이 있으면 먼저 묻는다). 비밀번호는 지우지 않는다. 화면 `sessionChanged`가 이 비교다(code-review에서 쓰이지 않는 Rust `same_session`을 지움).
 - **접속 sheet(ConnectionForm B).** `tunnel` 아래에 `read_only` switch와 설명 `Opens sessions read-only so the database rejects writes`. 그 아래 접힌 Advanced(`statement_timeout · tunnel_timeout · sslrootcert`를 mono fg-3로 함께 보임)를 펼치면 세 칸. `statement_timeout`의 hint는 `Seconds. Empty means none`. 기존 값이 있는 칸이 있으면 펼친 채 연다. 테스트 성공은 `Connected · PostgreSQL {version}`과 오른쪽의 `{ms} ms`. version은 `SHOW server_version`의 첫 단어다.
 - **전역 설정 파일.** `~/.config/chilla/config.toml`. key는 아래 넷이고 모두 생략할 수 있다. 앱 시작 때 한 번 읽고, 바꾸면 다시 시작해야 반영된다. 파일이 없으면 기본값이고 만들지 않는다. 형식이 틀리거나 모르는 key, 범위를 벗어난 값이 있으면 기본값으로 시작하고 첫 화면에 오류 dialog로 이유를 보인다. 단축키 변경(`[keys]`)은 M10이다.
 
@@ -1105,9 +1105,9 @@ git commit -m "feat: 에디터 글꼴과 크기, 받다 만 결과를 닫는 시
 
 ### Task 20: 정리와 code review
 
-- [ ] **Step 1:** `simplify`를 돌려 고친 것을 commit한다(`chore: …`).
-- [ ] **Step 2:** `code-review`를 high로 돌린다.
-- [ ] **Step 3:** 지적마다 `superpowers:receiving-code-review`로 다시 검토해 고칠 것만 고치고 commit한다(`fix: …`). 고치지 않은 지적은 이유와 함께 진행상황의 결정 기록에 남긴다.
+- [x] **Step 1:** `simplify`를 돌려 고친 것을 commit한다(`chore: …`).
+- [x] **Step 2:** `code-review`를 high로 돌린다.
+- [x] **Step 3:** 지적마다 `superpowers:receiving-code-review`로 다시 검토해 고칠 것만 고치고 commit한다(`fix: …`). 고치지 않은 지적은 이유와 함께 진행상황의 결정 기록에 남긴다.
 
 Run: `pnpm check`
 Expected: 통과

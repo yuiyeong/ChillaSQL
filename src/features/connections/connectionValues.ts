@@ -160,7 +160,7 @@ export function targetChanged(
 
 /**
  * 접속의 세션을 놓아야 하면 true다. 연결 대상이 바뀌었거나 세션을 열 때 쓰는 설정(readOnly,
- * statementTimeout)이 다르다(Rust의 `same_session`과 같은 항목). 비밀번호를 지울지는
+ * statementTimeout)이 다르다. 비밀번호를 지울지는
  * `targetChanged`가 정한다.
  */
 export function sessionChanged(

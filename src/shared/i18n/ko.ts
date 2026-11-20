@@ -22,7 +22,7 @@ export const ko: Record<MessageKey, string> = {
   "tunnel.externalHint":
     "{target}에 이미 연결할 수 있어 터널 명령을 실행하지 않았습니다. ChillaSQL을 종료해도 이 터널은 닫지 않습니다.",
   "tunnel.ranCommand":
-    "터널 명령을 실행했습니다. {target}에 연결할 수 있게 되면 접속합니다.",
+    "터널 명령을 실행했습니다. {target}에 연결할 수 있게 되면 연결합니다.",
   "tunnel.output": "명령 출력 (stderr)",
   "tunnel.tryAgain": "다시 시도",
   "tunnel.editConnection": "접속 편집",
@@ -79,16 +79,16 @@ export const ko: Record<MessageKey, string> = {
   "dialog.tx.switchProject.title": "열린 트랜잭션이 있는 탭이 있습니다",
   "dialog.tx.switchProject.body":
     "프로젝트를 바꾸면 모든 탭의 세션이 닫힙니다. {question}",
-  "dialog.tx.question.one": "Commit하지 않은 문장 1개를 어떻게 하겠습니까?",
+  "dialog.tx.question.one": "Commit하지 않은 문장 1개를 어떻게 처리하겠습니까?",
   "dialog.tx.question.other":
-    "Commit하지 않은 문장 {count}개를 어떻게 하겠습니까?",
-  "dialog.tx.question.none": "열린 트랜잭션을 어떻게 하겠습니까?",
+    "Commit하지 않은 문장 {count}개를 어떻게 처리하겠습니까?",
+  "dialog.tx.question.none": "열린 트랜잭션을 어떻게 처리하겠습니까?",
   "dialog.tx.questionIn.one":
-    "{title} 탭에서 Commit하지 않은 문장 1개를 어떻게 하겠습니까?",
+    "{title} 탭에서 Commit하지 않은 문장 1개를 어떻게 처리하겠습니까?",
   "dialog.tx.questionIn.other":
-    "{title} 탭에서 Commit하지 않은 문장 {count}개를 어떻게 하겠습니까?",
+    "{title} 탭에서 Commit하지 않은 문장 {count}개를 어떻게 처리하겠습니까?",
   "dialog.tx.questionIn.none":
-    "{title} 탭의 열린 트랜잭션을 어떻게 하겠습니까?",
+    "{title} 탭의 열린 트랜잭션을 어떻게 처리하겠습니까?",
   "dialog.tx.manyTabs.title.one": "탭 1개에 열린 트랜잭션이 있습니다",
   "dialog.tx.manyTabs.title.other": "탭 {count}개에 열린 트랜잭션이 있습니다",
   "dialog.tx.manyTabs.item": "{connection} · {statements} · {elapsed}",
@@ -112,7 +112,7 @@ export const ko: Record<MessageKey, string> = {
     "{connection}의 {tables}에서 모든 행을 삭제합니다.",
   "dialog.danger.first.update":
     "{connection}의 {tables}에서 모든 행을 변경합니다.",
-  "dialog.danger.first.drop": "{connection}에서 다음을 삭제합니다: {names}.",
+  "dialog.danger.first.drop": "{connection}에서 {names}을(를) 삭제합니다.",
   "dialog.danger.first.dropOwned":
     "{connection}에서 {names} 소유의 모든 객체를 삭제합니다.",
   "dialog.danger.second.reversible":
@@ -333,7 +333,7 @@ export const ko: Record<MessageKey, string> = {
 
   "settings.errorTitle": "설정을 적용하지 못했습니다",
   "settings.storeErrorTitle":
-    "최근 프로젝트와 저장하지 않은 탭을 보관하지 않습니다",
+    "최근 프로젝트와 저장하지 않은 탭을 보관할 수 없습니다",
 
   "error.no_project": "프로젝트를 먼저 여십시오",
   "error.project_changed":
@@ -356,9 +356,9 @@ export const ko: Record<MessageKey, string> = {
   "error.cancel_failed": "취소 요청을 보낼 수 없습니다: {message}",
   "error.invalid_path": "{message}",
   "error.catalog_failed": "스키마를 읽을 수 없습니다: {message}",
-  "error.store_failed": "앱 데이터베이스를 쓸 수 없습니다: {message}",
+  "error.store_failed": "앱 데이터베이스를 사용할 수 없습니다: {message}",
   "error.store_unavailable":
-    "앱 데이터베이스를 열 수 없어 최근 프로젝트와 탭을 보관하지 않습니다",
+    "앱 데이터베이스를 열 수 없어 최근 프로젝트와 탭을 보관할 수 없습니다",
   "error.file_not_found": "{path} 파일이 없습니다",
   "error.file_exists": "{path} 파일이 이미 있습니다",
   "error.file_changed": "{path} 파일을 연 뒤 디스크에서 바뀌었습니다",
