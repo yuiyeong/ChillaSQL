@@ -137,8 +137,8 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 취소 | 실행 중인 쿼리를 DB 쪽에서 중단 |
 | 타임아웃 | 접속별 기본값 설정. `chilla.toml`의 `statement_timeout`(초 단위 정수, 1~86400, 없으면 서버 기본값)을 startup option으로 보냄. 시간이 지나 서버가 끊으면(SQLSTATE `57014`) "Timed out" 화면으로 알림 |
 | 실행 정보 | 소요 시간, 영향받은 행 수 표시 |
-| 파라미터 | `:id` 같은 변수에 값을 입력해 실행. pg\_query의 scanner로 `::` 캐스팅과 구분 |
-| 실행 계획 | EXPLAIN ANALYZE 결과를 tree로 보기. 가장 오래 걸린 노드를 강조하고 원문도 볼 수 있음 |
+| 파라미터 | `:id` 같은 변수에 값을 입력해 실행. pg\_query의 scanner로 `::` 캐스팅과 구분하고 `[ ]` 안의 `:`(slice)와 문자열, 주석 안의 `:name`은 파라미터로 보지 않음. 실행할 문장에 파라미터가 있으면 보내기 전에 에디터 오른쪽 아래의 dialog로 이름마다 값을 물음. 값은 SQL text에 그대로 들어가므로 문자열은 사용자가 따옴표를 씀. 값은 탭마다 이름별로 기억함. 위험 쿼리 확인과 기록은 값을 넣은 text를 보고, 서버 오류의 위치는 문서의 `:name` 자리로 옮겨 밑줄과 Go to error에 씀 |
+| 실행 계획 | toolbar의 Explain 버튼이 문장 하나(커서 문장 또는 선택 영역)를 `EXPLAIN ANALYZE`로 실행함. 서버의 text 출력을 parse해 tree로 보고, 자기 시간(자식 시간을 뺀 시간)이 가장 큰 노드를 강조하며 원문도 볼 수 있음. 문장이 둘 이상이면 실행하지 않음 |
 
 ### 4.6 결과 표
 
@@ -161,7 +161,7 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 | 지연 로딩 | 스키마, 테이블, 뷰, 컬럼은 접속 뒤 한 번에 불러와 메모리에 두고(자동완성), 인덱스와 제약조건은 처음 펼칠 때 조회 |
 | 새로고침 | 수동 새로고침. 자동완성 정보도 함께 갱신 |
 | 빠른 조회 | 테이블이나 뷰를 더블클릭하면 새 탭에서 앞 500행 조회. 트리 항목의 menu에서 앞부분 행 조회, DDL 보기, 이름 복사 |
-| DDL 보기 | 테이블 생성문 확인. 복사하거나 새 탭에 열 수 있음 |
+| DDL 보기 | 테이블, partitioned table, view, materialized view의 생성문을 결과 panel에서 확인. 복사하거나 새 탭에 열 수 있고 Close로 닫음. 컬럼, 제약조건, 인덱스, 내부가 아닌 trigger, comment, UNLOGGED, 상속과 partition을 catalog로 조립하고 view는 `pg_get_viewdef`를 씀. owner, GRANT, RLS policy, tablespace, statistics, rule, publication은 넣지 않음 |
 
 ### 4.8 안전장치
 
@@ -175,8 +175,8 @@ layer 구성과 의존 규칙은 [구조](architecture.md)에 있다.
 
 | 기능 | 동작 |
 | --- | --- |
-| 저장 | 실행한 쿼리, 시각, 접속, 소요 시간을 자동 기록 |
-| 검색 | 기록에서 검색해 에디터로 다시 불러오기 |
+| 저장 | 서버에 보낸 쿼리(파라미터 값을 넣은 text), 시각, 접속, 소요 시간을 자동 기록. 문장마다 첫 응답을 받을 때 기록하고 오류로 끝난 문장도 기록함. 프로젝트마다 최근 10,000개만 남김 |
+| 검색 | 검색어를 공백으로 나눈 단어가 모두 들어 있는 기록을 최근 것부터 200개 찾음. 대소문자를 구분하지 않음. 항목을 두 번 누르거나 `Enter`를 누르면 그 SQL로 새 탭을 열고(실행하지 않음) 접속이 있으면 그 접속을 고름 |
 
 ### 4.10 단축키
 
@@ -243,7 +243,7 @@ color = "green"
 | 전역 설정 파일 `~/.config/chilla/config.toml` | 단축키(M10), 결과 보관 상한, 화면 언어, 에디터 글꼴과 크기처럼 모든 프로젝트에 적용되는 설정. 앱 시작 때 한 번 읽고 바꾸면 다시 시작해야 반영됨. 파일이 없으면 기본값이고 만들지 않음. 형식이 틀리거나 모르는 key, 범위를 벗어난 값이 있으면 기본값으로 시작하고 첫 화면에 오류 dialog로 이유를 보임 |
 | 전역 설정의 key | `language`(`"en"` \| `"ko"`, 기본 `"en"`), `editor.font`(CSS font-family 이름, 기본 `"D2Coding"`, 없으면 D2Coding으로 대신 그림), `editor.font_size`(px, 10~32, 기본 15), `results.retained_rows`(1000~1000000, 기본 100000), `results.idle_timeout`(받다 만 결과를 닫는 초, 60~86400, 기본 600) |
 | macOS 키체인 | 모든 접속의 비밀번호. 프로젝트 경로와 접속 이름으로 구분하므로 디렉토리를 옮기면 다시 입력 |
-| 앱 내부 저장소 (SQLite) | 쿼리 기록, 열려 있던 탭과 저장하지 않은 내용, 최근 프로젝트 목록. 위치는 `~/Library/Application Support/com.yuiyeong.chillasql/chilla.sqlite3`. 열지 못하면 최근 프로젝트와 자동 보관 없이 앱이 뜨고 오류 dialog를 보임 |
+| 앱 내부 저장소 (SQLite) | 프로젝트마다 최근 10,000개의 쿼리 기록(`query_history` table), 열려 있던 탭과 저장하지 않은 내용, 최근 프로젝트 목록. 위치는 `~/Library/Application Support/com.yuiyeong.chillasql/chilla.sqlite3`. 열지 못하면 최근 프로젝트와 자동 보관 없이 앱이 뜨고 오류 dialog를 보임 |
 
 ## 6. 성능 기준
 
@@ -299,5 +299,4 @@ color = "green"
 
 디자인(2026-11-18)에서 남은 것은 괄호 안의 마일스톤에서 정한다.
 
-- [ ] 파라미터 값을 SQL text에 그대로 넣을지(M9)
 - [ ] 내보내기가 받은 행만 저장하는지, 전체를 다시 조회하는지(M10)

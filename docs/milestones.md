@@ -134,8 +134,8 @@ M5는 M1에만 의존하므로 앞당길 수 있다. 나머지는 순서대로 �
 - **범위**: 쿼리 기록 자동 저장과 검색, 에디터로 다시 불러오기(4.9), `:id` 파라미터 입력(`::` 캐스팅과 구분, 4.5), EXPLAIN ANALYZE 결과 보기(tree, 가장 오래 걸린 노드 강조, 원문 보기), 테이블 생성문 보기(복사, 새 탭에 열기, 4.7)
 - **완료 기준**: 어제 실행한 쿼리를 검색해 다시 실행. `:id`가 있는 쿼리를 값을 넣어 실행
 - **먼저 확인할 것**:
-  - PostgreSQL에는 생성문을 돌려주는 함수가 없으므로 DDL을 카탈로그로 조립할 범위(컬럼, 제약조건, 인덱스, 코멘트 등)
-  - `pg_query`의 parser는 `:id`를 문법 오류로 본다(M2에서 확인). 파라미터는 scanner token으로 `::`와 구분한다
+  - PostgreSQL에는 생성문을 돌려주는 함수가 없으므로 DDL을 카탈로그로 조립할 범위(컬럼, 제약조건, 인덱스, 코멘트 등) → 정함: 컬럼, 제약(`p` `u` `f` `c` `x`), UNLOGGED, INHERITS, PARTITION BY, PARTITION OF, `WITH`, 인덱스, trigger, comment. view는 `pg_get_viewdef`. owner, GRANT, RLS policy, tablespace, statistics, rule, publication, identity의 sequence option은 넣지 않는다
+  - `pg_query`의 parser는 `:id`를 문법 오류로 본다(M2에서 확인). 파라미터는 scanner token으로 `::`와 구분한다 → 정함: `[ ]` 밖의 `:` 바로 뒤에 붙은 identifier나 keyword token이 파라미터다. `::`(Typecast), `:=`, 문자열과 주석 안, `a[lo:hi]`의 slice, psql 변수 문법(`:"q"`, `:'s'`)은 아니다. 값은 SQL text에 그대로 넣는다
 
 ### M10. 결과 표 확장
 
