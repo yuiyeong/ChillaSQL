@@ -658,9 +658,9 @@ git commit -m "feat: 스키마 트리의 Show DDL로 생성문을 결과 panel�
 
 ### Task 11: 정리와 code review
 
-- [ ] **Step 1:** `simplify`를 돌려 고친 것을 commit한다(`chore: …`).
-- [ ] **Step 2:** `code-review`를 high로 돌린다.
-- [ ] **Step 3:** 지적마다 `superpowers:receiving-code-review`로 다시 검토해 고칠 것만 고치고 commit한다(`fix: …`). 고치지 않은 지적은 이유와 함께 진행상황의 결정 기록에 남긴다.
+- [x] **Step 1:** `simplify`를 돌려 고친 것을 commit한다(`chore: …`).
+- [x] **Step 2:** `code-review`를 high로 돌린다.
+- [x] **Step 3:** 지적마다 `superpowers:receiving-code-review`로 다시 검토해 고칠 것만 고치고 commit한다(`fix: …`). 고치지 않은 지적은 이유와 함께 진행상황의 결정 기록에 남긴다.
 
 Run: `pnpm check`
 Expected: 통과
