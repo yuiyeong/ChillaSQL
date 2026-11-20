@@ -301,6 +301,15 @@ export const en = {
   "result.end.other": "End · {count} rows",
   "result.resizeColumn": "Resize {name}",
 
+  "edit.changed.one": "1 cell changed",
+  "edit.changed.other": "{count} cells changed",
+  "edit.revert": "Revert",
+  "edit.apply": "Apply",
+  "edit.preview": "SQL to send on Apply",
+  "edit.setNull": "Set NULL",
+  "edit.revertValue": "Revert value",
+  "edit.editor": "Edit {name}",
+  "edit.menu": "Cell",
   "edit.notEditable.readOnly": "Not editable: the connection is read-only.",
   "edit.notEditable.running":
     "Not editable while rows are still coming. Cancel keeps the rows received so far.",

@@ -43,6 +43,8 @@ import { useTabs } from "../editor/tabsStore";
 import { connectionInUse, useProject } from "../project/projectStore";
 import { prepend, substitute } from "../query/rewrite";
 import { useRuns } from "../query/runsStore";
+import { useEditTableCache } from "../query/editTargetStore";
+import { useEdits } from "../query/editsStore";
 import { useTypes } from "../query/typesStore";
 import {
   applySavedProject,
@@ -1912,6 +1914,18 @@ test("switching_projects_resets_cached_types", async () => {
   await switchProject();
 
   expect(useTypes.getState().types).toEqual({});
+});
+
+test("switching_projects_resets_edits_and_edit_tables", async () => {
+  useEdits.getState().setCell("t", "run-1", 0, 2, "new", "old");
+  useEditTableCache.setState({ tables: { local: { 1: null } } });
+  vi.mocked(pickDirectory).mockResolvedValue("/q");
+  vi.mocked(openProject).mockResolvedValue({ ...project, dir: "/q" });
+
+  await switchProject();
+
+  expect(useEdits.getState().edits).toEqual({});
+  expect(useEditTableCache.getState().tables).toEqual({});
 });
 
 test("select_first_rows_quotes_names", async () => {

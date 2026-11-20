@@ -421,7 +421,7 @@ git commit -m "feat: 결과가 편집할 수 있는 단일 테이블인지 판�
   ```
   문구 key: `edit.changed.one/other`(`1 cell changed`, `{count} cells changed`), `edit.revert`, `edit.apply`, `edit.preview`(`SQL to send on Apply`), `edit.setNull`(`Set NULL`), `edit.revertValue`(`Revert value`).
 
-- [ ] **Step 1: test를 쓴다**
+- [x] **Step 1: test를 쓴다**
 
 - `editsStore.test.ts`: `same_as_original_removes_the_change`, `null_cell_left_empty_stays_null`, `another_run_key_drops_old_changes`, `count_counts_cells`.
 - `CellEditor.test.tsx`: `enter_commits`, `opt_enter_inserts_a_newline`, `escape_cancels`, `blur_commits`, `starts_with_the_full_value`(300자보다 긴 값도 전부).
@@ -429,12 +429,12 @@ git commit -m "feat: 결과가 편집할 수 있는 단일 테이블인지 판�
 - `ResultPane.test.tsx`: `header_shows_changed_count_revert_and_apply`, `preview_shows_the_statements`, `revert_clears_changes`.
 - `runsStore.test.ts`: `a_run_drops_the_edits`, `release_drops_the_edits`.
 
-- [ ] **Step 2: 실패를 확인한다**
+- [x] **Step 2: 실패를 확인한다**
 
 Run: `pnpm vitest run src/features/query`
 Expected: FAIL
 
-- [ ] **Step 3: 구현한다**
+- [x] **Step 3: 구현한다**
 
 - ResultGrid가 `useEditTables`와 `editTargetOf`로 target을 정한다(`readOnly`는 탭 접속의 `readOnly`, `running`은 `fetch !== "none"`). 바뀐 값은 표시 값만 덮고 `result.rows`는 바꾸지 않는다.
 - editor는 고른 셀 위에 absolute로 그린다(셀과 같은 left, top, width, `ROW_HEIGHT`). 열린 동안 가상 스크롤이 그 행을 지워도 editor는 남는다(값은 store가 아니라 editor state). 확정하면 `setCell`, 표에 focus를 돌린다.
@@ -444,12 +444,12 @@ Expected: FAIL
 - `runsStore.run`과 `release`가 `useEdits.getState().drop(tabId)`를 부른다. 프로젝트를 바꾸면 `reset`(`resetStores.ts`에도).
 - `editTargetStore`는 schema 새로고침 때 `useTypes.forget`을 부르는 곳에서 함께 `forget`한다.
 
-- [ ] **Step 4: 통과를 확인한다**
+- [x] **Step 4: 통과를 확인한다**
 
 Run: `pnpm check`
 Expected: 통과
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add src

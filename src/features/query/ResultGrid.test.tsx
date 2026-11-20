@@ -6,10 +6,23 @@ import {
 } from "react";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, expect, test, vi } from "vitest";
-import type { Cell, ResultColumn, TypeInfo } from "../../shared/api/types";
+
+vi.mock("../../shared/api/commands");
+
+import { describeTables } from "../../shared/api/commands";
+import type {
+  Cell,
+  EditTable,
+  ResultColumn,
+  TypeInfo,
+} from "../../shared/api/types";
+import { change } from "../../test/change";
 import { resultColumns } from "../../test/fixtures";
 import { stubLayout } from "../../test/layout";
+import { useEditTableCache } from "./editTargetStore";
+import { useEdits } from "./editsStore";
 import { fitWidth } from "./grid";
+import { runKeyOf } from "./gridViews";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { emptyResult, type ResultData } from "./runReducer";
 import { typeKey, useTypes } from "./typesStore";
@@ -18,8 +31,11 @@ type Props = ComponentProps<typeof ResultGrid>;
 
 // 결과 panel 크기의 viewport로 둔다.
 beforeEach(() => {
+  vi.resetAllMocks();
   stubLayout({ width: 800, height: 400 });
   useTypes.getState().reset();
+  useEditTableCache.getState().reset();
+  useEdits.getState().reset();
 });
 
 function rowsOf(count: number, from = 0): Cell[][] {
@@ -52,6 +68,7 @@ function props(patch: Partial<Props> = {}): Props {
   return {
     tabId: "t",
     connection: "local",
+    readOnly: false,
     result: result(),
     endRows: null,
     onFetchMore: vi.fn(),
@@ -587,4 +604,277 @@ test("header_width_counts_the_type", () => {
   expect(columnHeader("account_identifier").style.width).not.toBe(
     `${fitWidth("account_identifier", ["1"])}px`,
   );
+});
+
+const USERS = 100;
+const ORDERS = 200;
+
+function editColumn(number: number, name: string, primaryKey = false) {
+  return { number, name, quotedName: name, primaryKey, updatable: true };
+}
+
+const usersTable: EditTable = {
+  oid: USERS,
+  qualifiedName: "public.users",
+  name: "users",
+  kind: "table",
+  columns: [editColumn(1, "id", true), editColumn(2, "email")],
+};
+
+const ordersTable: EditTable = {
+  oid: ORDERS,
+  qualifiedName: "public.orders",
+  name: "orders",
+  kind: "table",
+  columns: [editColumn(1, "id", true)],
+};
+
+function tableColumn(
+  name: string,
+  tableOid: number,
+  columnNumber: number,
+): ResultColumn {
+  return { name, typeOid: 0, typeModifier: -1, tableOid, columnNumber };
+}
+
+/** `SELECT id, email, email AS e, 1 AS n FROM users`의 끝난 결과. */
+function editable(patch: Partial<ResultData> = {}): ResultData {
+  return result({
+    columns: [
+      tableColumn("id", USERS, 1),
+      tableColumn("email", USERS, 2),
+      tableColumn("e", USERS, 2),
+      tableColumn("n", 0, 0),
+    ],
+    rows: [
+      ["1", "a@x", "a@x", "1"],
+      ["2", "b@x", "b@x", "1"],
+      ["3", null, null, "1"],
+    ],
+    fetch: "none",
+    ...patch,
+  });
+}
+
+/** 결과 r행(0부터)의 c번째 열 칸 */
+function cellAt(row: number, column: number): HTMLElement {
+  return document.querySelector<HTMLElement>(
+    `[data-row="${row}"] [data-col="${column}"]`,
+  )!;
+}
+
+async function setupEditable(patch: Partial<Props> = {}) {
+  vi.mocked(describeTables).mockResolvedValue([usersTable, ordersTable]);
+  const view = setup({ result: editable(), ...patch });
+  // describeTables의 답을 기다린다.
+  await act(async () => {});
+  return view;
+}
+
+function editor(): HTMLTextAreaElement | null {
+  return screen.queryByRole<HTMLTextAreaElement>("textbox");
+}
+
+function note(): HTMLElement | null {
+  return screen.queryByRole("status");
+}
+
+test("double_click_opens_the_editor_on_an_editable_cell", async () => {
+  const { grid } = await setupEditable();
+
+  fireEvent.click(cellAt(1, 1));
+  fireEvent.doubleClick(cellAt(1, 1));
+
+  const input = screen.getByRole<HTMLTextAreaElement>("textbox", {
+    name: "Edit email",
+  });
+  expect(input.value).toBe("b@x");
+  expect(input).toHaveFocus();
+  expect(describeTables).toHaveBeenCalledWith("local", [USERS]);
+
+  change(input, "new@x");
+  fireEvent.keyDown(input, { key: "Enter" });
+
+  expect(editor()).toBeNull();
+  expect(grid()).toHaveFocus();
+  expect(cellAt(1, 1)).toHaveTextContent("new@x");
+  expect(useEdits.getState().edits.t).toEqual({
+    runKey: runKeyOf(editable()),
+    changes: new Map([[1, new Map([[2, "new@x"]])]]),
+  });
+});
+
+test("enter_on_a_selected_cell_opens_the_editor", async () => {
+  const { grid } = await setupEditable();
+
+  fireEvent.click(cellAt(0, 1));
+  const notPrevented = fireEvent.keyDown(grid(), { key: "Enter" });
+
+  expect(notPrevented).toBe(false);
+  expect(editor()?.value).toBe("a@x");
+
+  fireEvent.keyDown(editor()!, { key: "Escape" });
+  expect(editor()).toBeNull();
+  expect(grid()).toHaveFocus();
+  expect(useEdits.getState().edits.t).toBeUndefined();
+});
+
+test("a_null_cell_opens_empty_and_stays_null_when_left_empty", async () => {
+  await setupEditable();
+
+  fireEvent.doubleClick(cellAt(2, 1));
+  expect(editor()?.value).toBe("");
+  fireEvent.keyDown(editor()!, { key: "Enter" });
+
+  expect(cellAt(2, 1)).toHaveTextContent("NULL");
+  expect(useEdits.getState().edits.t).toBeUndefined();
+});
+
+test("changed_cell_is_marked_in_every_column_with_that_attnum", async () => {
+  await setupEditable();
+
+  fireEvent.doubleClick(cellAt(0, 2));
+  change(editor()!, "new@x");
+  fireEvent.keyDown(editor()!, { key: "Enter" });
+  fireEvent.click(cellAt(1, 0));
+
+  for (const column of [1, 2]) {
+    expect(cellAt(0, column)).toHaveTextContent("new@x");
+    expect(cellAt(0, column)).toHaveAttribute("data-changed", "true");
+  }
+  expect(cellAt(0, 0)).not.toHaveAttribute("data-changed");
+  expect(cellAt(1, 1)).toHaveTextContent("b@x");
+  expect(cellAt(1, 1)).not.toHaveAttribute("data-changed");
+});
+
+test("the_editor_stays_while_virtual_scroll_drops_its_row", async () => {
+  const rows: Cell[][] = Array.from({ length: 1000 }, (_, i) => [
+    String(i + 1),
+    `u${i + 1}@x`,
+    `u${i + 1}@x`,
+    "1",
+  ]);
+  const { grid } = await setupEditable({ result: editable({ rows }) });
+
+  fireEvent.doubleClick(cellAt(0, 1));
+  change(editor()!, "kept");
+  grid().scrollTop = 20_000;
+  fireEvent.scroll(grid());
+
+  expect(document.querySelector('[data-row="0"]')).toBeNull();
+  expect(editor()?.value).toBe("kept");
+  fireEvent.keyDown(editor()!, { key: "Enter" });
+  expect(useEdits.getState().edits.t?.changes.get(0)?.get(2)).toBe("kept");
+});
+
+test("not_editable_cell_shows_the_note", async () => {
+  await setupEditable({
+    result: editable({
+      columns: [
+        tableColumn("order_id", ORDERS, 1),
+        tableColumn("id", USERS, 1),
+        tableColumn("email", USERS, 2),
+        tableColumn("n", 0, 0),
+      ],
+    }),
+  });
+
+  fireEvent.doubleClick(cellAt(0, 2));
+
+  expect(editor()).toBeNull();
+  expect(note()).toHaveTextContent(
+    "Not editable: rows come from 2 tables (orders, users).",
+  );
+});
+
+test("a_computed_column_shows_its_note_on_enter", async () => {
+  const { grid } = await setupEditable();
+
+  fireEvent.click(cellAt(0, 3));
+  fireEvent.keyDown(grid(), { key: "Enter" });
+
+  expect(editor()).toBeNull();
+  expect(note()).toHaveTextContent("Not editable: n is computed.");
+});
+
+test("note_hides_when_the_selection_changes", async () => {
+  await setupEditable();
+
+  fireEvent.click(cellAt(0, 3));
+  fireEvent.doubleClick(cellAt(0, 3));
+  expect(note()).not.toBeNull();
+
+  // 같은 칸을 다시 누르는 것은 선택이 바뀐 것이 아니다.
+  fireEvent.click(cellAt(0, 3));
+  expect(note()).not.toBeNull();
+
+  fireEvent.click(cellAt(1, 3));
+  expect(note()).toBeNull();
+});
+
+test("context_menu_sets_null_and_reverts", async () => {
+  await setupEditable();
+
+  fireEvent.contextMenu(cellAt(0, 1), { clientX: 50, clientY: 60 });
+  const menu = screen.getByRole("menu");
+  expect(
+    within(menu)
+      .getAllByRole("menuitem")
+      .map((item) => item.textContent),
+  ).toEqual(["Set NULL"]);
+  expect(cellAt(0, 1)).toHaveAttribute("aria-selected", "true");
+
+  fireEvent.click(within(menu).getByRole("menuitem", { name: "Set NULL" }));
+  expect(screen.queryByRole("menu")).toBeNull();
+  expect(cellAt(0, 1)).toHaveTextContent("NULL");
+  expect(cellAt(0, 2)).toHaveTextContent("NULL");
+  expect(useEdits.getState().edits.t?.changes.get(0)?.get(2)).toBeNull();
+
+  fireEvent.contextMenu(cellAt(0, 2), { clientX: 50, clientY: 60 });
+  fireEvent.click(screen.getByRole("menuitem", { name: "Revert value" }));
+  expect(cellAt(0, 1)).toHaveTextContent("a@x");
+  expect(cellAt(0, 1)).not.toHaveAttribute("data-changed");
+  expect(useEdits.getState().edits.t).toBeUndefined();
+});
+
+test("context_menu_does_not_open_on_a_not_editable_cell", async () => {
+  await setupEditable();
+
+  const notPrevented = fireEvent.contextMenu(cellAt(0, 3));
+
+  expect(notPrevented).toBe(true);
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
+test("running_result_is_not_editable", async () => {
+  await setupEditable({ result: editable({ fetch: "ready" }) });
+
+  fireEvent.doubleClick(cellAt(0, 1));
+
+  expect(editor()).toBeNull();
+  expect(note()).toHaveTextContent(
+    "Not editable while rows are still coming. Cancel keeps the rows received so far.",
+  );
+  fireEvent.contextMenu(cellAt(0, 1));
+  expect(screen.queryByRole("menu")).toBeNull();
+});
+
+test("read_only_connection_is_not_editable", async () => {
+  await setupEditable({ readOnly: true });
+
+  fireEvent.doubleClick(cellAt(0, 1));
+
+  expect(editor()).toBeNull();
+  expect(note()).toHaveTextContent(
+    "Not editable: the connection is read-only.",
+  );
+});
+
+test("changes_of_another_run_are_not_shown", async () => {
+  useEdits.getState().setCell("t", "run-other", 0, 2, "elsewhere", "a@x");
+
+  await setupEditable();
+
+  expect(cellAt(0, 1)).toHaveTextContent("a@x");
+  expect(cellAt(0, 1)).not.toHaveAttribute("data-changed");
 });

@@ -10,8 +10,8 @@ import { useTabs } from "../editor/tabsStore";
 import { closeDdl, type DdlView as DdlViewState } from "./ddlStore";
 import { ResultBar, SingleTab } from "./ResultBar";
 
-/** 칠한 DDL. 줄 사이에 줄바꿈을 두어 pre의 text가 원문과 같다. */
-function Code({ text }: { text: string }) {
+/** 칠한 SQL. 줄 사이에 줄바꿈을 두어 pre의 text가 원문과 같다. 셀 편집의 미리 보기도 쓴다. */
+export function Code({ text }: { text: string }) {
   const lines = useMemo(() => highlightSql(text), [text]);
   return (
     <>

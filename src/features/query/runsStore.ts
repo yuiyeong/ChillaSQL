@@ -44,6 +44,7 @@ import {
   type TxCount,
   type TxInfo,
 } from "./transaction";
+import { useEdits } from "./editsStore";
 import { useTypes } from "./typesStore";
 
 /**
@@ -477,6 +478,7 @@ export const useRuns = create<RunsState>()((set, get) => {
         const status = get().runs[tabId]?.status;
         if (status === "connecting" || status === "running") return;
         bump(tokens, tabId);
+        useEdits.getState().drop(tabId);
         reject(tabId, request);
         return;
       }
@@ -494,6 +496,8 @@ export const useRuns = create<RunsState>()((set, get) => {
         ),
       );
       dropGridView(tabId);
+      // 고친 셀은 이 실행이 덮을 결과에 묶여 있다. 묻지 않고 버린다.
+      useEdits.getState().drop(tabId);
       setEntry(
         "scripts",
         tabId,
@@ -812,6 +816,7 @@ export const useRuns = create<RunsState>()((set, get) => {
       closeDdl(tabId);
       const slot = drop(tabId);
       dropGridView(tabId);
+      useEdits.getState().drop(tabId);
       set((s) => ({
         runs: withEntry(s.runs, tabId, undefined),
         scripts: withEntry(s.scripts, tabId, undefined),

@@ -7,6 +7,7 @@ import {
 import { messageOf } from "../../shared/api/errors";
 import type { Catalog, TableDetails } from "../../shared/api/types";
 import { relationNamed } from "../../shared/sql/catalog";
+import { useEditTableCache } from "../query/editTargetStore";
 import { useTypes } from "../query/typesStore";
 
 export interface DetailsEntry {
@@ -197,6 +198,7 @@ export const useSchema = create<SchemaState>()((set, get) => {
     async forget(connection) {
       latest.delete(connection);
       useTypes.getState().forget(connection);
+      useEditTableCache.getState().forget(connection);
       set((state) => {
         const entries = { ...state.entries };
         delete entries[connection];

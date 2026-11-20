@@ -21,6 +21,7 @@ import type {
 } from "../../shared/api/types";
 import { t } from "../../shared/i18n/t";
 import { resetDdl, useDdl } from "./ddlStore";
+import { useEdits } from "./editsStore";
 import { prepend, substitute } from "./rewrite";
 import type { Rejection, RunRequest } from "./runReducer";
 import { useRuns, type Prepare } from "./runsStore";
@@ -79,6 +80,7 @@ beforeEach(async () => {
   // 앞 test의 세션을 닫는 호출이 mock 기록을 지우기 전에 끝나게 한다.
   await useRuns.getState().reset();
   resetDdl();
+  useEdits.getState().reset();
   useProject.setState(useProject.getInitialState(), true);
   useTabs.getState().reset();
   useTypes.getState().reset();
@@ -2176,4 +2178,30 @@ test("release_closes_the_ddl", async () => {
   await useRuns.getState().release("t");
 
   expect(useDdl.getState().views.t).toBeUndefined();
+});
+
+test("a_run_drops_the_edits", async () => {
+  useEdits.getState().setCell("t", "run-old", 0, 2, "new", "old");
+  useEdits.getState().setCell("other", "run-x", 0, 2, "new", "old");
+
+  await useRuns.getState().run("t", prepared());
+
+  expect(useEdits.getState().edits.t).toBeUndefined();
+  expect(useEdits.getState().edits.other).toBeDefined();
+});
+
+test("a_run_that_never_starts_keeps_the_edits", async () => {
+  useEdits.getState().setCell("t", "run-old", 0, 2, "new", "old");
+
+  await useRuns.getState().run("t", () => null);
+
+  expect(useEdits.getState().edits.t).toBeDefined();
+});
+
+test("release_drops_the_edits", async () => {
+  useEdits.getState().setCell("t", "run-old", 0, 2, "new", "old");
+
+  await useRuns.getState().release("t");
+
+  expect(useEdits.getState().edits.t).toBeUndefined();
 });

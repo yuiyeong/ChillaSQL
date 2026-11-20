@@ -26,6 +26,18 @@ import type { Cell, ResultColumn, TypeInfo } from "../../shared/api/types";
 import { formatCount, t, tc } from "../../shared/i18n/t";
 import { Button } from "../../shared/ui/Button";
 import { SpinnerIcon } from "../../shared/ui/icons";
+import { Menu, MenuItem } from "../../shared/ui/Menu";
+import { CellEditor } from "./CellEditor";
+import { EditPreview } from "./EditPreview";
+import { buildUpdates, type Changes } from "./editSql";
+import { useEdits } from "./editsStore";
+import {
+  editTargetOf,
+  notEditableText,
+  type EditTarget,
+  type NotEditable,
+} from "./editTarget";
+import { useEditTables } from "./editTargetStore";
 import {
   anchorShift,
   cellDisplay,
@@ -54,6 +66,7 @@ import {
   saveGridView,
   type GridView,
 } from "./gridViews";
+import { ResultNote } from "./ResultNote";
 import { receivedRows, type ResultData } from "./runReducer";
 import { useRuns } from "./runsStore";
 import { useColumnTypes } from "./typesStore";
@@ -63,8 +76,10 @@ import { ValueViewer } from "./ValueViewer";
 export type CopyTarget = { text: string; message: string } | null;
 
 interface ResultGridProps {
-  /** 결과를 낸 탭의 접속. 컬럼의 type을 이 접속에서 읽는다. */
+  /** 결과를 낸 탭의 접속. 컬럼의 type과 편집할 테이블을 이 접속에서 읽는다. */
   connection: string | null;
+  /** 탭 접속이 읽기 전용이면 셀을 편집하지 않는다. */
+  readOnly: boolean;
   /** 결과를 낸 탭. 탭을 바꿨다 돌아오면 그 탭의 view(너비, 선택, 스크롤)를 이어 간다. */
   tabId: string;
   /** columns가 null이 아니다 */
@@ -86,6 +101,7 @@ type Features = typeof features;
 const NO_ROWS: Cell[][] = [];
 const NO_COLUMNS: string[] = [];
 const NO_RESULT_COLUMNS: ResultColumn[] = [];
+const NO_ATTNUMS: number[] = [];
 
 /** 첫 render가 쓰는 viewport 크기. 실제 크기는 ResizeObserver가 알려 준다. */
 const INITIAL_RECT = { width: 800, height: 400 };
@@ -119,6 +135,7 @@ function isShownRun(tabId: string, runKey: string): boolean {
 function Grid({
   tabId,
   connection,
+  readOnly,
   runKey,
   result,
   endRows,
@@ -142,6 +159,32 @@ function Grid({
   const fits = useMemo(() => columnTypes.map(fitColumnOf), [columnTypes]);
   const kinds = useMemo(() => fits.map((fit) => fit.kind), [fits]);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // 셀 편집. 행을 받는 중이면 편집하지 않는다. 테이블을 묻는 동안은 판단을 미룬다(null).
+  const editTables = useEditTables(
+    connection,
+    resultColumns ?? NO_RESULT_COLUMNS,
+  );
+  const target = useMemo(
+    () =>
+      resultColumns === null
+        ? null
+        : editTargetOf(resultColumns, editTables, readOnly, fetch !== "none"),
+    [resultColumns, editTables, readOnly, fetch],
+  );
+  // 결과 열마다 고칠 수 있는 컬럼의 attnum. 고칠 수 없는 열은 0이라 바뀐 값을 넣지도 보이지도 않는다.
+  const attnums = useMemo(
+    () =>
+      target !== null && "table" in target
+        ? target.columns.map((entry) =>
+            "column" in entry ? entry.column.number : 0,
+          )
+        : NO_ATTNUMS,
+    [target],
+  );
+  const tabEdits = useEdits((state) => state.edits[tabId]);
+  // 다른 결과에서 고친 값은 이 표의 것이 아니다.
+  const changes = tabEdits?.runKey === runKey ? tabEdits.changes : undefined;
 
   // 떠날 때 저장한 view. 그 사이 앞 행이 버려졌으면 보던 행이 그 자리에 오게 스크롤을 당긴다.
   const [restored] = useState((): GridView | undefined => {
@@ -220,6 +263,25 @@ function Grid({
     viewerOpen && selection?.kind === "cell"
       ? rows[selection.row - firstRow]
       : undefined;
+  const viewedValue =
+    viewedRow !== undefined && selection?.kind === "cell"
+      ? shownValue(viewedRow, selection.row, selection.column, attnums, changes)
+      : null;
+  // 열린 editor, 편집할 수 없다는 note, 셀의 우클릭 menu.
+  // note는 띄운 때의 선택 object가 그대로인 동안만 보인다. 선택이 바뀌면 사라진다.
+  const [editing, setEditing] = useState<{
+    row: number;
+    column: number;
+    value: string;
+  } | null>(null);
+  const [note, setNote] = useState<{ text: string; at: Selection } | null>(
+    null,
+  );
+  const [menu, setMenu] = useState<{
+    at: { x: number; y: number };
+    row: number;
+    column: number;
+  } | null>(null);
   const closeViewer = useCallback(() => {
     setViewerOpen(false);
     scrollRef.current?.focus({ preventScroll: true });
@@ -334,6 +396,8 @@ function Grid({
     const onCopy = (event: ClipboardEvent) => {
       const grid = scrollRef.current;
       if (grid === null || !grid.contains(document.activeElement)) return;
+      // 셀 editor 안의 복사는 editor의 글자를 복사한다.
+      if (document.activeElement instanceof HTMLTextAreaElement) return;
       if (event.clipboardData === null) return;
       const target = copyTargetOf(latest.current);
       if (target === null) return;
@@ -362,17 +426,94 @@ function Grid({
     }
     const cellElement = target.closest<HTMLElement>("[data-col]");
     if (cellElement === null) return;
-    setSelection({
-      kind: "cell",
-      row,
+    // 같은 칸을 다시 누르면 선택 object를 그대로 둔다. note가 남는다.
+    selectCell(row, Number(cellElement.dataset.col));
+  };
+
+  /** 그 칸을 고른다. 이미 고른 칸이면 지금 선택 object를 그대로 돌려준다. */
+  const selectCell = (row: number, column: number): Selection => {
+    const same =
+      selection?.kind === "cell" &&
+      selection.row === row &&
+      selection.column === column;
+    const next: Selection = same ? selection : { kind: "cell", row, column };
+    setSelection(next);
+    return next;
+  };
+
+  /** 고칠 수 있는 칸이면 editor를 열고, 아니면 그 이유를 note로 띄운다. 판단을 미루는 동안은 아무것도 않는다. */
+  const startEdit = (row: number, column: number, at: Selection) => {
+    const cells = rows[row - firstRow];
+    const edit = editOf(target, column);
+    if (cells === undefined || edit === null) return;
+    if (typeof edit === "string") {
+      setNote({ text: edit, at });
+      return;
+    }
+    setNote(null);
+    const value = shownValue(cells, row, column, attnums, changes);
+    setEditing({ row, column, value: value ?? "" });
+  };
+
+  /** 이벤트가 난 셀의 결과 행 번호와 열. 셀이 아니면 null */
+  const cellAt = (element: Element): { row: number; column: number } | null => {
+    const rowElement = element.closest<HTMLElement>("[data-row]");
+    const cellElement = element.closest<HTMLElement>("[data-col]");
+    if (rowElement === null || cellElement === null) return null;
+    return {
+      row: Number(rowElement.dataset.row),
       column: Number(cellElement.dataset.col),
-    });
+    };
+  };
+
+  const onBodyDoubleClick = (event: MouseEvent<HTMLDivElement>) => {
+    const at = cellAt(event.target as Element);
+    if (at === null) return;
+    startEdit(at.row, at.column, selectCell(at.row, at.column));
+  };
+
+  // 고칠 수 있는 셀에서만 연다. 아니면 WebKit의 menu를 그대로 둔다.
+  const onBodyContextMenu = (event: MouseEvent<HTMLDivElement>) => {
+    const at = cellAt(event.target as Element);
+    if (at === null || typeof editOf(target, at.column) !== "number") return;
+    event.preventDefault();
+    selectCell(at.row, at.column);
+    setMenu({ at: { x: event.clientX, y: event.clientY }, ...at });
+  };
+
+  /** 셀의 값을 바꾼다. 원래 값과 같으면 store가 변경을 지운다. */
+  const setCell = (row: number, column: number, value: Cell) => {
+    const original = rows[row - firstRow]?.[column];
+    const attnum = attnums[column] ?? 0;
+    if (original === undefined || attnum === 0) return;
+    useEdits.getState().setCell(tabId, runKey, row, attnum, value, original);
+  };
+
+  /** editor를 닫는다. key로 닫았으면(focus가 editor에 있음) 표에 focus를 돌린다. blur면 누른 곳이 focus를 가진다. */
+  const closeEditor = () => {
+    setEditing(null);
+    if (document.activeElement instanceof HTMLTextAreaElement) {
+      scrollRef.current?.focus({ preventScroll: true });
+    }
   };
 
   // WebKit은 Home, End(Cmd+위아래 화살표)를 애니메이션으로 스크롤한다. 한 frame에 수천 행씩 지나가
   // 그 frame의 행을 그리기 전에 화면이 먼저 움직여 빈 몸통이 보인다. 끝으로 바로 가면 scroll event가 한 번이다.
   const onGridKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.target !== event.currentTarget) return;
+    if (
+      event.key === "Enter" &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.metaKey &&
+      !event.ctrlKey
+    ) {
+      if (selection?.kind === "cell") {
+        event.preventDefault();
+        startEdit(selection.row, selection.column, selection);
+      }
+      return;
+    }
     if (event.key === "Enter" && event.shiftKey) {
       // 고른 셀이 있을 때만 연다. 전역 단축키가 아니라 표에 focus가 있을 때의 key다.
       if (viewerOpen) {
@@ -433,96 +574,207 @@ function Grid({
 
   const rowRange = rowSpan(selection);
 
+  // Apply가 보낼 UPDATE 문. 바뀐 값이 있고 편집할 수 있는 결과일 때만 있다.
+  const statements = useMemo(() => {
+    if (changes === undefined || target === null || !("table" in target)) {
+      return [];
+    }
+    return buildUpdates(
+      target,
+      changes,
+      (row) => rows[row - firstRow],
+      columnTypes.map((type) => type?.category),
+    );
+  }, [changes, target, rows, firstRow, columnTypes]);
+
+  const menuChanged =
+    menu !== null &&
+    changes?.get(menu.row)?.has(attnums[menu.column] ?? 0) === true;
+
   return (
-    <div
-      className="flex min-h-0 flex-1"
-      onKeyDown={(event) => {
-        if (event.key === "Escape" && viewerOpen) {
-          event.preventDefault();
-          closeViewer();
-        }
-      }}
-    >
-      <div
-        ref={scrollRef}
-        role="grid"
-        tabIndex={0}
-        aria-rowcount={receivedRows(result) + 1}
-        className="bg-bg-0 text-small text-fg @container relative min-h-0 min-w-0 flex-1 overflow-auto font-mono outline-none"
-        style={sizeVars}
-        onKeyDown={onGridKeyDown}
-      >
-        <HeaderRow
-          headers={headers}
-          columns={columns}
-          types={columnTypes}
-          kinds={kinds}
-          columnSizing={columnSizing}
-          resizing={resizing}
-          onFit={fitColumn}
-        />
-        <div
-          className="relative w-(--row-width) min-w-full select-none"
-          style={{ height: totalSize }}
-          onClick={onBodyClick}
-        >
-          {firstRow > 0 && (
-            <div
-              role="row"
-              className="border-line-1 absolute top-0 left-0 h-10 w-full border-b bg-[repeating-linear-gradient(135deg,var(--color-bg-1)_0_8px,var(--color-bg-0)_8px_16px)]"
-            >
-              <div className="sticky left-0 flex h-full w-[100cqw] items-center gap-3 px-3 font-sans">
-                <span className="min-w-0 flex-1 truncate">
-                  {t("result.dropped", { end: formatCount(firstRow) })}
-                </span>
-                <Button size="small" onClick={onRunAgain}>
-                  {t("result.runAgain")}
-                </Button>
-              </div>
-            </div>
-          )}
-          {items.map((item) => {
-            const rowNumber = firstRow + item.index;
-            return (
-              <Row
-                key={item.key}
-                cells={rows[item.index]}
-                kinds={kinds}
-                rowNumber={rowNumber}
-                top={item.start - HEADER_HEIGHT}
-                selected={
-                  rowRange !== null &&
-                  rowNumber >= rowRange[0] &&
-                  rowNumber <= rowRange[1]
-                }
-                selectedColumn={
-                  selection?.kind === "cell" && selection.row === rowNumber
-                    ? selection.column
-                    : -1
-                }
-              />
-            );
-          })}
-          <Footer
-            top={totalSize - FOOTER_HEIGHT}
-            fetching={fetch === "fetching"}
-            endRows={endRows}
-            received={receivedRows(result)}
-          />
-        </div>
-      </div>
-      {viewedRow !== undefined && selection?.kind === "cell" && (
-        <ValueViewer
-          column={resultColumns![selection.column]}
-          type={columnTypes[selection.column]}
-          row={selection.row + 1}
-          value={viewedRow[selection.column]}
-          onClose={closeViewer}
-          onCopied={onCopied}
-        />
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      {note !== null && note.at === selection && (
+        <ResultNote>{note.text}</ResultNote>
       )}
+      <div
+        className="flex min-h-0 flex-1"
+        onKeyDown={(event) => {
+          if (event.key === "Escape" && viewerOpen && !event.defaultPrevented) {
+            event.preventDefault();
+            closeViewer();
+          }
+        }}
+      >
+        <div
+          ref={scrollRef}
+          role="grid"
+          tabIndex={0}
+          aria-rowcount={receivedRows(result) + 1}
+          className="bg-bg-0 text-small text-fg @container relative min-h-0 min-w-0 flex-1 overflow-auto font-mono outline-none"
+          style={sizeVars}
+          onKeyDown={onGridKeyDown}
+        >
+          <HeaderRow
+            headers={headers}
+            columns={columns}
+            types={columnTypes}
+            kinds={kinds}
+            columnSizing={columnSizing}
+            resizing={resizing}
+            onFit={fitColumn}
+          />
+          <div
+            className="relative w-(--row-width) min-w-full select-none"
+            style={{ height: totalSize }}
+            onClick={onBodyClick}
+            onDoubleClick={onBodyDoubleClick}
+            onContextMenu={onBodyContextMenu}
+          >
+            {firstRow > 0 && (
+              <div
+                role="row"
+                className="border-line-1 absolute top-0 left-0 h-10 w-full border-b bg-[repeating-linear-gradient(135deg,var(--color-bg-1)_0_8px,var(--color-bg-0)_8px_16px)]"
+              >
+                <div className="sticky left-0 flex h-full w-[100cqw] items-center gap-3 px-3 font-sans">
+                  <span className="min-w-0 flex-1 truncate">
+                    {t("result.dropped", { end: formatCount(firstRow) })}
+                  </span>
+                  <Button size="small" onClick={onRunAgain}>
+                    {t("result.runAgain")}
+                  </Button>
+                </div>
+              </div>
+            )}
+            {items.map((item) => {
+              const rowNumber = firstRow + item.index;
+              return (
+                <Row
+                  key={item.key}
+                  cells={rows[item.index]}
+                  kinds={kinds}
+                  attnums={attnums}
+                  changed={changes?.get(rowNumber)}
+                  rowNumber={rowNumber}
+                  top={item.start - HEADER_HEIGHT}
+                  selected={
+                    rowRange !== null &&
+                    rowNumber >= rowRange[0] &&
+                    rowNumber <= rowRange[1]
+                  }
+                  selectedColumn={
+                    selection?.kind === "cell" && selection.row === rowNumber
+                      ? selection.column
+                      : -1
+                  }
+                />
+              );
+            })}
+            {editing !== null && (
+              // 행이 아니라 몸통에 두어 가상 스크롤이 그 행을 지워도 남는다.
+              <CellEditor
+                label={t("edit.editor", { name: columns[editing.column] })}
+                value={editing.value}
+                style={editorBox(
+                  editing,
+                  firstRow,
+                  numberWidth,
+                  headers.map((header) => header.getSize()),
+                )}
+                onCommit={(value) => {
+                  setCell(editing.row, editing.column, value);
+                  closeEditor();
+                }}
+                onCancel={closeEditor}
+              />
+            )}
+            <Footer
+              top={totalSize - FOOTER_HEIGHT}
+              fetching={fetch === "fetching"}
+              endRows={endRows}
+              received={receivedRows(result)}
+            />
+          </div>
+        </div>
+        {viewedRow !== undefined && selection?.kind === "cell" && (
+          <ValueViewer
+            column={resultColumns![selection.column]}
+            type={columnTypes[selection.column]}
+            row={selection.row + 1}
+            value={viewedValue}
+            onClose={closeViewer}
+            onCopied={onCopied}
+          />
+        )}
+      </div>
+      {statements.length > 0 && <EditPreview statements={statements} />}
+      <Menu
+        open={menu !== null}
+        onClose={() => setMenu(null)}
+        anchor={scrollRef}
+        at={menu?.at}
+        label={t("edit.menu")}
+      >
+        {menu !== null && (
+          <>
+            <MenuItem onSelect={() => setCell(menu.row, menu.column, null)}>
+              {t("edit.setNull")}
+            </MenuItem>
+            {menuChanged && (
+              <MenuItem
+                onSelect={() =>
+                  useEdits
+                    .getState()
+                    .revertCell(tabId, menu.row, attnums[menu.column])
+                }
+              >
+                {t("edit.revertValue")}
+              </MenuItem>
+            )}
+          </>
+        )}
+      </Menu>
     </div>
   );
+}
+
+/**
+ * 그 열을 고칠 수 있으면 attnum, 없으면 note 문구다. 아직 모르면(테이블을 묻는 중) null이다.
+ */
+function editOf(
+  target: EditTarget | NotEditable | null,
+  column: number,
+): number | string | null {
+  if (target === null) return null;
+  if (!("table" in target)) return notEditableText(target);
+  const entry = target.columns[column];
+  return "column" in entry ? entry.column.number : notEditableText(entry);
+}
+
+/** 표에 보이는 값. 바뀐 값이 있으면 그것이다. 같은 attnum의 열은 모두 같은 바뀐 값을 보인다. */
+function shownValue(
+  cells: Cell[],
+  row: number,
+  column: number,
+  attnums: readonly number[],
+  changes: Changes | undefined,
+): Cell {
+  const attnum = attnums[column] ?? 0;
+  const changed = changes?.get(row);
+  if (attnum !== 0 && changed?.has(attnum)) return changed.get(attnum) as Cell;
+  return cells[column];
+}
+
+/** editor의 자리. 그 셀과 같은 left, top, width다. */
+function editorBox(
+  { row, column }: { row: number; column: number },
+  firstRow: number,
+  numberWidth: number,
+  sizes: readonly number[],
+): CSSProperties {
+  let left = numberWidth;
+  for (let index = 0; index < column; index++) left += sizes[index];
+  const top = (firstRow > 0 ? GAP_HEIGHT : 0) + (row - firstRow) * ROW_HEIGHT;
+  return { left, top, width: sizes[column] };
 }
 
 interface HeaderRowProps {
@@ -599,6 +851,8 @@ const ROW_NUMBER_SELECTED = [ROW_NUMBER_BASE, "text-fg"].join(" ");
 const CELL = "truncate border-r border-bg-2 px-2.5";
 const CELL_SELECTED =
   "bg-accent/16 shadow-[inset_0_0_0_1.5px_var(--color-accent)]";
+/** Apply하지 않은 바뀐 값(캔버스 Tools M10) */
+const CELL_CHANGED = "bg-accent/8 shadow-[inset_2px_0_0_var(--color-accent)]";
 /** 0 보통, 1 muted, 2 muted italic(NULL), 3 숫자 */
 const TONES = [
   [],
@@ -606,16 +860,11 @@ const TONES = [
   ["text-fg-3", "italic"],
   ["text-syntax-number"],
 ];
-/** [selected][tone][right]. 숫자 열은 오른쪽 정렬이다. */
-const CELL_CLASSES = [false, true].map((selected) =>
+/** [보통 0, 고름 1, 바뀜 2][tone][right]. 숫자 열은 오른쪽 정렬이다. 고른 칸은 바뀌었어도 고른 모양이다. */
+const CELL_CLASSES = [[], [CELL_SELECTED], [CELL_CHANGED]].map((state) =>
   TONES.map((tone) =>
     [false, true].map((right) =>
-      [
-        CELL,
-        ...tone,
-        ...(right ? ["text-right"] : []),
-        ...(selected ? [CELL_SELECTED] : []),
-      ].join(" "),
+      [CELL, ...tone, ...(right ? ["text-right"] : []), ...state].join(" "),
     ),
   ),
 );
@@ -624,6 +873,10 @@ interface RowProps {
   cells: Cell[];
   /** 열마다 값을 그리는 방법 */
   kinds: readonly ValueKind[];
+  /** 열마다 고칠 수 있는 컬럼의 attnum. 고칠 수 없는 열은 0 */
+  attnums: readonly number[];
+  /** 이 행의 바뀐 값(attnum →). 없으면 undefined */
+  changed: Map<number, Cell> | undefined;
   /** 0부터 센 결과 안의 행 번호 */
   rowNumber: number;
   /** 몸통 위에서부터의 px */
@@ -637,6 +890,8 @@ interface RowProps {
 const Row = memo(function Row({
   cells,
   kinds,
+  attnums,
+  changed,
   rowNumber,
   top,
   selected,
@@ -657,20 +912,23 @@ const Row = memo(function Row({
       >
         {formatCount(rowNumber + 1)}
       </div>
-      {cells.map((value, column) => {
+      {cells.map((original, column) => {
         const kind = kinds[column] ?? "text";
+        const attnum = attnums[column] ?? 0;
+        const isChanged = attnum !== 0 && changed?.has(attnum) === true;
+        const value = isChanged ? (changed!.get(attnum) as Cell) : original;
         const { text, dim, muted, italic } = cellDisplay(value, kind);
         const isSelected = column === selectedColumn;
         const tone = italic ? 2 : muted ? 1 : kind === "number" ? 3 : 0;
+        const state = isSelected ? 1 : isChanged ? 2 : 0;
         return (
           <div
             key={column}
             role="gridcell"
             aria-selected={isSelected || undefined}
             data-col={column}
-            className={
-              CELL_CLASSES[isSelected ? 1 : 0][tone][kind === "number" ? 1 : 0]
-            }
+            data-changed={isChanged || undefined}
+            className={CELL_CLASSES[state][tone][kind === "number" ? 1 : 0]}
           >
             {text}
             {dim !== null && <span className="text-fg-3"> {dim}</span>}

@@ -51,6 +51,8 @@ import { DdlView } from "./DdlView";
 import { useDdl } from "./ddlStore";
 import { ExplainView } from "./ExplainView";
 import { ResultBar, SingleTab } from "./ResultBar";
+import { changedCount, useEdits } from "./editsStore";
+import { runKeyOf } from "./gridViews";
 import { ResultGrid, type CopyTarget } from "./ResultGrid";
 import { receivedRows, type ResultData, type RunState } from "./runReducer";
 import { endable, useRuns, type ScriptRun } from "./runsStore";
@@ -114,6 +116,10 @@ export const ResultPane = memo(function ResultPane({
   const ddl = useDdl((s) => (tabId === null ? undefined : s.views[tabId]));
   const tunnel = useTunnel(connection);
   const tabConnection = useConnection(connection);
+  const readOnly = tabConnection?.readOnly === true;
+  const tabEdits = useEdits((s) =>
+    tabId === null ? undefined : s.edits[tabId],
+  );
   const idleTimeoutSecs = useSettings((s) => s.idleTimeoutSecs);
   const toast = useToast();
   const copyTargetRef = useRef<(() => CopyTarget) | null>(null);
@@ -167,12 +173,12 @@ export const ResultPane = memo(function ResultPane({
   let grid: ReactNode = null;
   let body: ReactNode = null;
   let explain: ReactNode = null;
-
   const gridOf = (result: ResultData, endRows: number | null) => (
     <ResultGrid
       // 실행 상태가 있으면 tabId는 null이 아니다.
       tabId={tabId!}
       connection={connection}
+      readOnly={readOnly}
       result={result}
       endRows={endRows}
       onFetchMore={onFetchMore}
@@ -432,6 +438,14 @@ export const ResultPane = memo(function ResultPane({
     </>
   );
 
+  // 고친 셀은 표로 그리는 결과의 것일 때만 header에 센다.
+  const changed =
+    grid !== null &&
+    (state?.status === "running" || state?.status === "finished") &&
+    tabEdits?.runKey === runKeyOf(state.result)
+      ? changedCount(tabEdits)
+      : 0;
+
   const copySelection = () => {
     const target = copyTargetRef.current?.();
     if (target != null) void copy(target.text, target.message);
@@ -448,7 +462,27 @@ export const ResultPane = memo(function ResultPane({
           {header !== null && (
             <ResultBar>
               {header}
+              {changed > 0 && (
+                <span className="text-small text-fg-2">
+                  {tc("edit.changed", changed)}
+                </span>
+              )}
               <div className="flex-1" />
+              {changed > 0 && tabId !== null && (
+                <>
+                  <Button
+                    variant="ghost"
+                    size="small"
+                    onClick={() => useEdits.getState().revertAll(tabId)}
+                  >
+                    {t("edit.revert")}
+                  </Button>
+                  {/* Apply는 Task 7이 단다. 그때까지 누를 수 없다. */}
+                  <Button variant="primary" size="small" disabled>
+                    {t("edit.apply")}
+                  </Button>
+                </>
+              )}
               {grid !== null && (
                 <IconButton
                   label={t("result.copySelected")}

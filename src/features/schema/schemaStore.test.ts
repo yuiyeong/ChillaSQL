@@ -11,6 +11,7 @@ import { CommandError } from "../../shared/api/errors";
 import type { Catalog, TableDetails } from "../../shared/api/types";
 import { deferred } from "../../test/deferred";
 import { catalogFixture, relation } from "../../test/fixtures";
+import { useEditTableCache } from "../query/editTargetStore";
 import { useTypes } from "../query/typesStore";
 import { nodeKey, useSchema } from "./schemaStore";
 
@@ -193,6 +194,18 @@ test("forget_drops_the_cached_types_of_that_connection", async () => {
   await useSchema.getState().forget("local");
 
   expect(useTypes.getState().types).toEqual({ other: { "23:-1": integer } });
+});
+
+test("forget_drops_the_cached_edit_tables_of_that_connection", async () => {
+  vi.mocked(loadCatalog).mockResolvedValue(catalogFixture());
+  await useSchema.getState().ensure("local");
+  useEditTableCache.setState({
+    tables: { local: { 1: null }, other: { 1: null } },
+  });
+
+  await useSchema.getState().forget("local");
+
+  expect(useEditTableCache.getState().tables).toEqual({ other: { 1: null } });
 });
 
 test("refresh_keeps_the_cached_types", async () => {

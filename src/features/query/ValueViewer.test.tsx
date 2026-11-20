@@ -69,6 +69,7 @@ function setup(
     <ResultGrid
       tabId="t"
       connection="local"
+      readOnly={false}
       result={result(
         typedColumns(["profile", "jsonb"], ["note", "text"]),
         rows,

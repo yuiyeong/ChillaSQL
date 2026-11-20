@@ -12,8 +12,14 @@ vi.mock("../workspace/commands", () => ({
 
 import { EditorView } from "@codemirror/view";
 import { copyText } from "../../shared/api/clipboard";
+import { describeTables } from "../../shared/api/commands";
 import { stubLayout } from "../../test/layout";
-import type { Cell, Outcome } from "../../shared/api/types";
+import type {
+  Cell,
+  EditTable,
+  Outcome,
+  TypeInfo,
+} from "../../shared/api/types";
 import {
   cancelRun,
   retryRun,
@@ -37,8 +43,12 @@ import {
 } from "../editor/documents";
 import { useEditorStatus } from "../editor/editorStatus";
 import { markRunStart } from "../editor/runAnchors";
+import { useEditTableCache } from "./editTargetStore";
+import { useEdits } from "./editsStore";
 import { ResultPane } from "./ResultPane";
+import { useTypes } from "./typesStore";
 import { fitWidth } from "./grid";
+import { runKeyOf } from "./gridViews";
 import { emptyResult, type ResultData, type RunState } from "./runReducer";
 import { shortcutLabel } from "../workspace/shortcuts";
 import { useRuns } from "./runsStore";
@@ -1529,5 +1539,161 @@ describe("EXPLAIN result", () => {
         "tab",
       ),
     ).toHaveLength(2);
+  });
+});
+
+describe("cell editing", () => {
+  const usersTable: EditTable = {
+    oid: 100,
+    qualifiedName: "public.users",
+    name: "users",
+    kind: "table",
+    columns: [
+      {
+        number: 1,
+        name: "id",
+        quotedName: "id",
+        primaryKey: true,
+        updatable: true,
+      },
+      {
+        number: 2,
+        name: "email",
+        quotedName: "email",
+        primaryKey: false,
+        updatable: true,
+      },
+    ],
+  };
+  const integer: TypeInfo = {
+    oid: 23,
+    modifier: -1,
+    name: "integer",
+    category: "N",
+  };
+
+  beforeEach(() => {
+    useEdits.getState().reset();
+    useEditTableCache.getState().reset();
+    openProjectWith([connection("local")]);
+    useTypes.setState({ types: { local: { "23:-1": integer } } });
+    vi.mocked(describeTables).mockResolvedValue([usersTable]);
+  });
+
+  afterEach(() => {
+    useTypes.getState().reset();
+  });
+
+  /** showEditable이 그리는 결과의 key */
+  let shownKey = "";
+
+  async function showEditable() {
+    const shown = result({
+      sql: "SELECT id, email FROM users",
+      columns: [
+        {
+          name: "id",
+          typeOid: 23,
+          typeModifier: -1,
+          tableOid: 100,
+          columnNumber: 1,
+        },
+        {
+          name: "email",
+          typeOid: 0,
+          typeModifier: -1,
+          tableOid: 100,
+          columnNumber: 2,
+        },
+      ],
+      rows: [
+        ["1", "a@x"],
+        ["2", "b@x"],
+      ],
+    });
+    shownKey = runKeyOf(shown);
+    useRuns.setState({
+      runs: {
+        t: {
+          status: "finished",
+          result: shown,
+          outcome: { outcome: "completed", rows: 2 },
+        },
+      },
+    });
+    render(<ResultPane tabId="t" connection="local" hasConnection />);
+    await act(async () => {});
+  }
+
+  test("header_shows_changed_count_revert_and_apply", async () => {
+    await showEditable();
+    expect(screen.queryByText(/cells? changed/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Revert" })).toBeNull();
+
+    act(() => useEdits.getState().setCell("t", shownKey, 0, 2, "c@x", "a@x"));
+    expect(screen.getByText("1 cell changed")).toBeInTheDocument();
+
+    act(() => useEdits.getState().setCell("t", shownKey, 1, 2, "d@x", "b@x"));
+    expect(screen.getByText("2 cells changed")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Revert" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+  });
+
+  test("changes_of_another_run_do_not_show_in_the_header", async () => {
+    useEdits.getState().setCell("t", "run-old", 0, 2, "c@x", "a@x");
+
+    await showEditable();
+
+    expect(screen.queryByText(/cells? changed/)).toBeNull();
+    expect(screen.queryByText("SQL to send on Apply")).toBeNull();
+  });
+
+  test("preview_shows_the_statements", async () => {
+    await showEditable();
+    expect(screen.queryByText("SQL to send on Apply")).toBeNull();
+
+    act(() => {
+      useEdits.getState().setCell("t", shownKey, 1, 2, "it's", "b@x");
+      useEdits.getState().setCell("t", shownKey, 0, 2, null, "a@x");
+    });
+
+    expect(screen.getByText("SQL to send on Apply")).toBeInTheDocument();
+    const preview = screen.getByLabelText("SQL to send on Apply");
+    expect(preview.textContent).toBe(
+      [
+        "UPDATE public.users SET email = NULL WHERE id = 1 RETURNING email;",
+        "UPDATE public.users SET email = 'it''s' WHERE id = 2 RETURNING email;",
+      ].join("\n"),
+    );
+    expect(within(preview).getAllByText("UPDATE")[0].className).toContain(
+      "text-syntax-keyword",
+    );
+  });
+
+  test("revert_clears_changes", async () => {
+    await showEditable();
+    act(() => useEdits.getState().setCell("t", shownKey, 0, 2, "c@x", "a@x"));
+    expect(screen.getByText("c@x")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Revert" }));
+
+    expect(useEdits.getState().edits.t).toBeUndefined();
+    expect(screen.queryByText("1 cell changed")).toBeNull();
+    expect(screen.queryByText("SQL to send on Apply")).toBeNull();
+    expect(screen.getByText("a@x")).toBeInTheDocument();
+  });
+
+  test("read_only_connection_of_the_tab_is_not_editable", async () => {
+    openProjectWith([connection("local", { readOnly: true })]);
+    await showEditable();
+
+    fireEvent.doubleClick(screen.getByText("a@x"));
+
+    expect(screen.queryByRole("textbox")).toBeNull();
+    expect(
+      screen
+        .getByText("Not editable: the connection is read-only.")
+        .closest("[role=status]"),
+    ).not.toBeNull();
   });
 });

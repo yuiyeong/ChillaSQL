@@ -40,6 +40,8 @@ import type {
 import { startsWithWord } from "../query/format";
 import { prepend, substitute } from "../query/rewrite";
 import { endable, useRuns, type ConfirmStep } from "../query/runsStore";
+import { useEditTableCache } from "../query/editTargetStore";
+import { useEdits } from "../query/editsStore";
 import { useTypes } from "../query/typesStore";
 import { useHistory } from "../history/historyStore";
 import { useSchema } from "../schema/schemaStore";
@@ -652,6 +654,9 @@ export async function enterProject(
   // 옛 프로젝트의 catalog 연결도 Rust가 이미 닫았다.
   useSchema.getState().reset();
   useTypes.getState().reset();
+  useEditTableCache.getState().reset();
+  // 고친 셀은 옛 프로젝트의 결과에 묶여 있다.
+  useEdits.getState().reset();
   // 기록은 프로젝트마다 따로다. 열려 있는 History 화면은 프로젝트가 바뀌면 다시 읽는다.
   useHistory.getState().reset();
   // 물어보던 파라미터 값과 기억한 값도 프로젝트마다 따로다.

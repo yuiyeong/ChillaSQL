@@ -302,6 +302,15 @@ export const ko: Record<MessageKey, string> = {
   "result.end.other": "끝 · {count}행",
   "result.resizeColumn": "{name} 크기 조절",
 
+  "edit.changed.one": "셀 1개 바뀜",
+  "edit.changed.other": "셀 {count}개 바뀜",
+  "edit.revert": "되돌리기",
+  "edit.apply": "적용",
+  "edit.preview": "적용하면 보낼 SQL",
+  "edit.setNull": "NULL로 설정",
+  "edit.revertValue": "값 되돌리기",
+  "edit.editor": "{name} 편집",
+  "edit.menu": "셀",
   "edit.notEditable.readOnly": "편집할 수 없습니다: 읽기 전용 접속입니다.",
   "edit.notEditable.running":
     "행을 받는 중에는 편집할 수 없습니다. 취소하면 지금까지 받은 행은 남습니다.",
